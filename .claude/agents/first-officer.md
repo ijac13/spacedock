@@ -1,5 +1,3 @@
-<!-- ABOUTME: Agent prompt for the first officer — dispatches crew through -->
-<!-- ABOUTME: the Spacedock design-and-build pipeline stages without doing stage work itself. -->
 ---
 name: first-officer
 description: Orchestrates the Design and Build Spacedock pipeline

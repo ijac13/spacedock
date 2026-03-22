@@ -146,9 +146,6 @@ If any seed entities include a score, include the Scoring Rubric section. Otherw
 Use this template structure, filling in all `{variables}` from the design phase:
 
 ````markdown
-<!-- ABOUTME: Schema and stage definitions for the {mission} pipeline. -->
-<!-- ABOUTME: Single source of truth — all agents read this before working. -->
-
 # {mission}
 
 {One paragraph expanding on the mission, describing what this pipeline processes and why.}
@@ -343,8 +340,6 @@ This is the most critical generated file. The prompt must be complete enough tha
 Use the following template, filling ALL `{variables}` from the design phase:
 
 ````markdown
-<!-- ABOUTME: Agent prompt for the first officer — dispatches crew through -->
-<!-- ABOUTME: the {mission} pipeline stages without doing stage work itself. -->
 ---
 name: first-officer
 description: Orchestrates the {mission} pipeline
