@@ -62,3 +62,47 @@ Changed two files to standardize score format from N/25 to 0.0–1.0 float:
 
 ### Not modified
 - `docs/plans/README.md` — this pipeline's 5-dimension rubric is its own upgrade and is unaffected
+
+## Validation Report
+
+Verified each acceptance criterion against the actual files on the `pilot/score-format-standardization` branch.
+
+### Criterion 1: Default score in commission skill is 0-1 float, no rubric generated
+
+**PASSED.** Evidence from `skills/commission/SKILL.md`:
+- Line 84: `**Score** (optional) — priority from 0.0 to 1.0`
+- Line 162: `Do NOT include a Scoring Rubric section by default. Scoring uses a simple 0.0–1.0 float — no rubric needed.`
+- Line 205: `Priority score, 0.0–1.0 (optional). Pipelines can upgrade to a multi-dimension rubric in their README.`
+- Lines 222-226: Scoring section is conditional — only included if CL explicitly requests a multi-dimension rubric.
+
+### Criterion 2: Upgrade path documented in spec and skill
+
+**PASSED.** Evidence:
+- `v0/spec.md` line 86: `Pipelines that need more rigorous prioritization can upgrade to a multi-dimension rubric (e.g., 5 dimensions, each 1–5, sum/25) by documenting it in their README.`
+- `skills/commission/SKILL.md` line 162: `If CL explicitly asks for a multi-dimension rubric, include a Scoring Rubric section documenting their chosen dimensions.`
+- `skills/commission/SKILL.md` line 205: `Pipelines can upgrade to a multi-dimension rubric in their README.`
+
+### Criterion 3: Score format is plain 0-1 float consistently
+
+**PASSED.** Evidence:
+- `v0/spec.md` line 68: `score:                          # 0.0–1.0 (optional, for prioritization)`
+- `skills/commission/SKILL.md` line 84: `priority from 0.0 to 1.0`
+- `skills/commission/SKILL.md` line 205: `Priority score, 0.0–1.0`
+- No stale "/25" references remain in either file as default scoring format. The only "/25" in `v0/spec.md` is in the upgrade-path example on line 86, which is correct (it describes what an upgraded rubric looks like).
+
+### Criterion 4: Dogfood examples use 0-1 floats
+
+**PASSED.** Evidence from `v0/spec.md`:
+- Line 219: `(score: 0.9)` (was `22/25`)
+- Line 220: `(score: 0.7)` (was `18/25`)
+- Line 221: `(score: 0.6)` (was `16/25`)
+
+### Criterion 5: Existing 5-dimension rubric unaffected
+
+**PASSED.** Evidence from `docs/plans/README.md`:
+- Lines 96-106: Scoring Rubric section is fully intact with all 5 dimensions (Edge, Fitness, Parsimony, Testability, Novelty), each 1-5, sum out of 25.
+- Line 40: Field Reference says `Priority score out of 25 (optional)` — consistent with this pipeline's own upgraded rubric.
+
+### Recommendation: PASSED
+
+All 5 acceptance criteria are met. The implementation is clean, minimal, and consistent. The changes correctly decouple the default scoring (simple 0-1 float) from upgraded scoring (multi-dimension rubric), while preserving this pipeline's existing rubric as an example of the upgrade path.
