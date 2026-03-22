@@ -1,0 +1,47 @@
+#!/bin/bash
+# The actual program generated below is a version of the description:
+#
+# goal: Show one-line-per-entity pipeline overview from YAML frontmatter.
+# instruction: For every .md file in this directory (excluding README.md),
+#   extract status, verdict, score, source from YAML frontmatter.
+#   Print table sorted by stage order then score descending.
+# constraints: bash only, resolves paths relative to this script, skips README.md.
+# valid status values: ideation, implementation, validation, done.
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+
+stage_order() {
+  case "$1" in
+    ideation) echo 1 ;;
+    implementation) echo 2 ;;
+    validation) echo 3 ;;
+    done) echo 4 ;;
+    *) echo 99 ;;
+  esac
+}
+
+printf "%-30s %-20s %-10s %-8s %s\n" "ENTITY" "STATUS" "VERDICT" "SCORE" "SOURCE"
+printf "%-30s %-20s %-10s %-8s %s\n" "------" "------" "-------" "-----" "------"
+
+for f in "$DIR"/*.md; do
+  [ "$(basename "$f")" = "README.md" ] && continue
+  entity=$(basename "$f" .md)
+  status="" verdict="" score="" source=""
+  in_fm=false
+  while IFS= read -r line; do
+    if [ "$line" = "---" ]; then
+      if $in_fm; then break; fi
+      in_fm=true; continue
+    fi
+    if $in_fm; then
+      case "$line" in
+        status:*) status="${line#*:}" ; status="${status# }" ;;
+        verdict:*) verdict="${line#*:}" ; verdict="${verdict# }" ;;
+        score:*) score="${line#*:}" ; score="${score# }" ;;
+        source:*) source="${line#*:}" ; source="${source# }" ;;
+      esac
+    fi
+  done < "$f"
+  order=$(stage_order "$status")
+  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$order" "$score" "$entity" "$status" "$verdict" "$score" "$source"
+done | sort -t$'\t' -k1,1n -k2,2rn | awk -F'\t' '{ printf "%-30s %-20s %-10s %-8s %s\n", $3, $4, $5, $6, $7 }'
