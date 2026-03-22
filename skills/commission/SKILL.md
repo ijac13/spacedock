@@ -3,6 +3,7 @@
 ---
 name: commission
 description: Interactively design and launch a PTP pipeline
+user-invocable: true
 ---
 
 # Commission a PTP Pipeline
