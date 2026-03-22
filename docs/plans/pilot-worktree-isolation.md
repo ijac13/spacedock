@@ -1,10 +1,10 @@
 ---
 title: Pilot Worktree Isolation
-status: validation
+status: done
 source: commission seed
 started: 2026-03-22T20:24:00Z
-completed:
-verdict:
+completed: 2026-03-22T20:46:00Z
+verdict: PASSED
 score: 16
 worktree:
 ---
