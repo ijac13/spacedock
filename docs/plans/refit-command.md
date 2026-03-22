@@ -154,3 +154,81 @@ Files created:
 | Parsimony | 2 | Three-way diff is inherently complex |
 | Testability | 3 | Can test with known before/after states |
 | Novelty | 4 | Applying three-way merge to agent prompt templates is interesting |
+
+## Validation Report
+
+Validated against acceptance criteria by reading the implemented skill at `skills/refit/SKILL.md` (252 lines) and cross-referencing against the design in this entity file.
+
+### Criterion 1: Design covers detection of commissioned version, per-file upgrade strategy, conflict resolution
+
+**PASSED.** Phase 1 (Discovery) in the skill covers version stamp extraction from all three files:
+- README: `<!-- commissioned-by: spacedock@X.Y.Z -->` (SKILL.md line 31)
+- Status: `# commissioned-by: spacedock@X.Y.Z` (line 32)
+- First-officer: YAML frontmatter `commissioned-by: spacedock@X.Y.Z` (line 33)
+- Current version from `plugin.json` (line 39)
+
+Per-file strategy is in Phase 2 (lines 49-71) with the classification table. Conflict resolution: README uses show-diff-only (line 57, "Too risky to auto-replace"), first-officer requires explicit y/n confirmation (line 173), status shows diff before replacing (line 146-151).
+
+### Criterion 2: Defines which files are "replace" vs "regenerate" vs "show diff for user review"
+
+**PASSED.** Phase 2 classification table (lines 53-57):
+- `status` = Replace
+- `first-officer.md` = Regenerate (with diff review)
+- `README.md` = Show diff (manual review)
+
+This matches the design exactly. The skill presents this table to CL and waits for confirmation before proceeding (line 71).
+
+### Criterion 3: Handles the case where no version stamp exists (degraded mode with stamp-only option)
+
+**PASSED.** Degraded Mode section (lines 219-243) covers:
+- Detection: Phase 1 Step 4 routes to degraded mode when no stamps found (line 44)
+- Two options presented: stamp-only (line 232-238) and full refit with review (line 240-242)
+- Stamp-only adds stamps without modifying content
+- Full refit shows diff for every file and requires explicit CL approval per file
+- Safety rule: "Never auto-replace without a version stamp" (line 249)
+
+### Criterion 4: Does not modify entity files
+
+**PASSED.** Multiple explicit safeguards:
+- Opening paragraph: "Entity files are never touched — only the scaffolding infrastructure: the status script, the first-officer agent, and the README." (line 11)
+- Safety Rules section: "Never modify entity files — only scaffolding (status, first-officer, README)." (line 248)
+- The skill operates exclusively on the three named scaffolding files throughout all phases.
+
+### Criterion 5: Skill definition is drafted (trigger phrases, inputs, outputs, interactive flow)
+
+**PASSED.** The YAML frontmatter (lines 3-7) provides:
+- `name: refit`
+- `description:` includes trigger phrases: "refit a pipeline", "upgrade a pipeline", "update pipeline scaffolding"
+- `user-invocable: true`
+
+Input: Pipeline directory path, requested in Phase 1 Step 1 (line 22). Output: Updated scaffolding files with summary (Phase 4, lines 198-216). Interactive flow: four sequential phases with explicit CL confirmation gates at Phase 2 (line 71), Phase 3b first-officer replacement (line 173), and Phase 3c README review (lines 188-193).
+
+### Criterion 6: Addresses the edge case of user-customized first-officer files
+
+**PASSED.** Phase 3b (lines 175-178) includes an explicit warning mechanism:
+> "Warning: The existing first-officer has custom sections that aren't in the standard template. These will be lost if you replace it: {list of custom section headings}"
+
+The skill shows a diff before replacement (line 166-168) and requires explicit y/n confirmation (line 173). The design's open question about renamed agent files is also addressed: refit looks at the canonical path and skips with a warning if not found (design line 129, implemented via "If a file doesn't exist, note it as missing and skip it" at SKILL.md line 35).
+
+### Criterion 7: Specifies how pipeline-specific values are extracted from existing files for regeneration
+
+**PASSED.** Phase 3 "Extract pipeline-specific values from README" section (lines 78-91) explicitly lists:
+1. Mission — from `# {title}` heading (line 81)
+2. Stages — from `## Stages` section, each `### \`{stage_name}\`` subsection (lines 82-85), including stage name, inputs, outputs, good, bad, and approval gate detection
+3. Schema fields — from `## Schema` section's YAML block (line 86)
+4. Entity description — from the first paragraph after H1 (line 87)
+5. Pipeline absolute path — from existing first-officer's `## Pipeline Path` section (line 91)
+
+Phase 3b (lines 155-162) further specifies the full list of values extracted for first-officer regeneration: mission, pipeline directory, stage list, approval gates, team name, stages as comma-separated list, first and last stage.
+
+### Additional Observations
+
+**Implementation summary accuracy:** The implementation summary (entity lines 133-146) claims the skill follows the four-phase structure — confirmed. It claims the status script template is embedded — confirmed (SKILL.md lines 101-143). It claims skills are auto-discovered by convention — this matches the commission skill pattern (both live under `skills/*/SKILL.md`), so no `plugin.json` changes needed. Verified `plugin.json` has no skills array.
+
+**Design fidelity:** The skill faithfully implements all four phases from the design, including the "show diff before all replacements" approach (even for status script, which the design classified as "replace"). This is actually stricter than the design required — the skill always shows diffs, per its Safety Rules (line 250: "Always show diffs — even for 'replace' strategy files").
+
+**No issues found.**
+
+### Recommendation: PASSED
+
+All seven acceptance criteria are met with specific evidence in the implementation. The skill is well-structured, follows the design faithfully, and includes appropriate safety guardrails.
