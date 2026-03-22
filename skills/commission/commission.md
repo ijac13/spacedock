@@ -259,7 +259,7 @@ Fill in the stage names and sort order values from the design phase. The `STAGE_
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
-declare -A STAGE_ORDER=({for each stage, in order: [{stage_name}]={position} })
+declare -A STAGE_ORDER=({for each stage, in order: [{stage_name}]={position} — e.g., [ideation]=1 [implementation]=2 [validation]=3 [done]=4})
 
 printf "%-30s %-20s %-10s %-8s %s\n" "ENTITY" "STATUS" "VERDICT" "SCORE" "SOURCE"
 printf "%-30s %-20s %-10s %-8s %s\n" "------" "------" "-------" "-----" "------"
@@ -276,10 +276,10 @@ for f in "$DIR"/*.md; do
     fi
     if $in_fm; then
       case "$line" in
-        status:*) status="${line#*: }" ;;
-        verdict:*) verdict="${line#*: }" ;;
-        score:*) score="${line#*: }" ;;
-        source:*) source="${line#*: }" ;;
+        status:*) status="${line#*:}" ; status="${status# }" ;;
+        verdict:*) verdict="${line#*:}" ; verdict="${verdict# }" ;;
+        score:*) score="${line#*:}" ; score="${score# }" ;;
+        source:*) source="${line#*:}" ; source="${source# }" ;;
       esac
     fi
   done < "$f"
