@@ -1,8 +1,9 @@
 ---
 title: Refit Command
-status: backlog
+status: ideation
 source: commission seed
-started:
+started: 2026-03-22T00:00:00Z
+worktree: .worktrees/pilot-refit-command
 completed:
 verdict:
 score: 15
