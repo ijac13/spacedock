@@ -6,7 +6,7 @@ started: 2026-03-22T20:24:00Z
 completed:
 verdict:
 score: 16
-worktree: .worktrees/pilot-worktree-isolation
+worktree:
 ---
 
 ## Problem
@@ -152,3 +152,45 @@ Five files changed:
    - `worktree:` field added to all schema templates (README, entity template, seed entity template).
 
 5. **`docs/plans/pilot-worktree-isolation.md`** — This implementation summary.
+
+## Validation Report
+
+### Criterion 1: `worktree:` field added to entity schema in pipeline README
+**PASS** — `docs/plans/README.md` has `worktree:` in all three locations: schema YAML block (line 26), field reference table (line 41, described as "Worktree path while a pilot is active, empty otherwise"), and entity template (line 132).
+
+### Criterion 2: `.worktrees/` added to `.gitignore`
+**PASS** — `.gitignore` contains `.worktrees/` as its sole entry.
+
+### Criterion 3: First-officer template in SKILL.md updated with worktree dispatch pattern
+**PASS** — Section 2d of `skills/commission/SKILL.md` contains the full dispatch lifecycle:
+- State change on main before dispatch (steps 4): sets `status` and `worktree` field, commits.
+- Worktree creation with stale-cleanup (step 5): `git worktree add`, with prior `--force` remove and `branch -D` for stale state.
+- Atomic merge+finalize (step 8): `git merge --no-commit`, frontmatter update, single commit.
+- Cleanup (step 9): `git worktree remove` and `git branch -d`.
+- Event loop (lines 440-448) updated to merge-then-verify flow.
+- Orphan detection section (lines 463-469) added.
+- `.gitignore` generation (lines 149-154) added to Phase 2.
+- `worktree:` field in all schema templates (README template, entity template, seed entity template).
+
+### Criterion 4: First-officer reference doc updated with worktree dispatch pattern
+**PASS** — `agents/first-officer.md` has a "Worktree Isolation" section (lines 23-43) documenting state ownership, the 5-step dispatch lifecycle, and orphan detection.
+
+### Criterion 5: Pilot prompt template instructs pilot to work in worktree path and not touch frontmatter
+**PASS** — The pilot prompt in SKILL.md step 6 (line 419) includes:
+- `Your working directory is {worktree_path}`
+- `All file reads and writes MUST use paths under {worktree_path}`
+- `Do NOT modify YAML frontmatter in entity files`
+- `Commit your work to your branch before sending completion message`
+
+### Criterion 6: Live validation — dispatch through worktree flow
+**PASS** — This validation itself is the live test. Evidence:
+- `pwd` = `/Users/clkao/git/spacedock/.worktrees/pilot-worktree-isolation` (pilot is in worktree)
+- `git branch --show-current` = `pilot/worktree-isolation` (on dedicated branch)
+- `git worktree list` shows both main (`40e08f0 [main]`) and worktree (`40e08f0 [pilot/worktree-isolation]`)
+- Main tree `git status` is clean — no uncommitted changes from pilot work
+- Entity frontmatter on main has `worktree: .worktrees/pilot-worktree-isolation` set (dispatch state change committed before pilot started)
+- Commit `40e08f0` ("dispatch: worktree-isolation entering validation") shows state change happened on main before pilot dispatch
+
+### Recommendation: PASSED
+
+All six acceptance criteria verified. The worktree isolation pattern is correctly implemented in the schema, skill template, reference doc, and pilot prompt. The live validation confirms the end-to-end flow works: worktree created, pilot works in isolation, main stays clean.
