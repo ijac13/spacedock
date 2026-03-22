@@ -1,4 +1,5 @@
 #!/bin/bash
+# commissioned-by: spacedock@0.1.0
 # The actual program generated below is a version of the description:
 #
 # goal: Show one-line-per-entity pipeline overview from YAML frontmatter.

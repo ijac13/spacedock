@@ -121,6 +121,17 @@ Wait for CL to confirm before proceeding to Phase 2. If CL wants changes, revisi
 
 ## Phase 2: Generate Pipeline Files
 
+### Read Spacedock Version
+
+Before generating any files, read the Spacedock plugin manifest to get the current version:
+
+1. Read `.claude-plugin/plugin.json` from the Spacedock plugin directory (the directory containing the `skills/` folder — resolve from your own plugin context).
+2. Extract the `version` field and store it as `{spacedock_version}`.
+
+This version will be embedded in each generated scaffolding file.
+
+### Generate Files
+
 Create the pipeline directory and generate four kinds of files. Use the design answers to fill all templates — no placeholder text should remain in generated files.
 
 ```
@@ -146,6 +157,8 @@ If any seed entities include a score, include the Scoring Rubric section. Otherw
 Use this template structure, filling in all `{variables}` from the design phase:
 
 ````markdown
+<!-- commissioned-by: spacedock@{spacedock_version} -->
+
 # {mission}
 
 {One paragraph expanding on the mission, describing what this pipeline processes and why.}
@@ -259,6 +272,7 @@ The script header MUST use the self-describing pattern shown below (# goal: / # 
 
 ````bash
 #!/bin/bash
+# commissioned-by: spacedock@{spacedock_version}
 # The actual program generated below is a version of the description:
 #
 # goal: Show one-line-per-entity pipeline overview from YAML frontmatter.
@@ -344,6 +358,7 @@ Use the following template, filling ALL `{variables}` from the design phase:
 name: first-officer
 description: Orchestrates the {mission} pipeline
 tools: Agent, TeamCreate, SendMessage, Read, Write, Edit, Bash, Glob, Grep
+commissioned-by: spacedock@{spacedock_version}
 ---
 
 # First Officer — {mission}

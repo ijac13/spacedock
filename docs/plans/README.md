@@ -1,3 +1,4 @@
+<!-- commissioned-by: spacedock@0.1.0 -->
 <!-- ABOUTME: Schema and stage definitions for the Spacedock design-and-build pipeline. -->
 <!-- ABOUTME: Single source of truth — all agents read this before working. -->
 
