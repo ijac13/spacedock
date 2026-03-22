@@ -1,9 +1,9 @@
 ---
 title: Score Format Standardization
-status: implementation
+status: validation
 source: commission seed
 started: 2026-03-22T00:00:00Z
-worktree: .worktrees/pilot-score-format-standardization
+worktree:
 completed:
 verdict:
 score: 19
