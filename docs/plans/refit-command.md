@@ -130,6 +130,21 @@ The `relative-paths-in-generated-configs` entity is related but not blocking. Re
 
 - **Q: Should refit handle stage additions/removals in the README?** A: No. Stage changes are user customizations. Refit upgrades scaffolding infrastructure (script logic, agent dispatch patterns), not pipeline semantics. If the user added stages, those will appear in the regenerated status script and first-officer because refit extracts stages from the current README.
 
+## Implementation Summary
+
+Created `skills/refit/SKILL.md` — the `/spacedock refit` skill definition. The skill follows the four-phase structure from the design:
+
+- **Phase 1 (Discovery):** Reads all three scaffolding files, extracts version stamps, compares against current Spacedock version from plugin.json.
+- **Phase 2 (Classification):** Presents the per-file upgrade strategy (status=replace, first-officer=regenerate with diff review, README=show diff only) and gets CL's confirmation.
+- **Phase 3 (Execution):** Extracts pipeline-specific values from existing README, generates updated files using the commission templates, shows diffs before all replacements, and requires explicit approval for first-officer and README changes.
+- **Phase 4 (Finalize):** Updates version stamps, shows summary, suggests commit.
+- **Degraded mode:** Offers stamp-only or full-refit-with-review when no version stamps are found.
+
+Skill registration: Skills are auto-discovered by convention (`skills/*/SKILL.md`), matching the existing commission skill pattern. No changes to `plugin.json` needed.
+
+Files created:
+- `skills/refit/SKILL.md` — the skill prompt (complete with embedded status script template for regeneration)
+
 ## Scoring Breakdown
 
 | Dimension | Score | Rationale |
