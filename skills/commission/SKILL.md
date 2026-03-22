@@ -87,7 +87,7 @@ Store as `{seed_entities}` — a list of objects with title, description, source
 
 ### Question 6 — Location
 
-Suggest a directory path based on the mission context (e.g., `./pipeline/` for a project-local pipeline).
+Suggest `docs/plans/` as the default pipeline location. The pipeline is a planning/tracking tool that lives within the project's documentation.
 
 Ask:
 
@@ -127,13 +127,13 @@ Create the pipeline directory and generate four kinds of files. Use the design a
 mkdir -p {dir}
 ```
 
-Also ensure the agents directory exists inside the pipeline:
+Also ensure the agents directory exists at the project root:
 
 ```
-mkdir -p {dir}/.claude/agents
+mkdir -p {project_root}/.claude/agents
 ```
 
-This keeps the pipeline self-contained — when Claude is invoked from `{dir}`, the agent is discoverable.
+Where `{project_root}` is the git root (or cwd if not in a git repo). The first-officer lives at the project root so it's discoverable when Claude runs from there.
 
 ### 2a. Generate `{dir}/README.md`
 
@@ -334,7 +334,7 @@ score: {score, or leave empty}
 
 ### 2d. Generate First-Officer Agent
 
-Write the first-officer agent to `{dir}/.claude/agents/first-officer.md`.
+Write the first-officer agent to `{project_root}/.claude/agents/first-officer.md`.
 
 IMPORTANT: All paths in the first-officer template must be absolute. Resolve `{dir}` to its absolute path before filling the template. For example, if `{dir}` is `./v0-test-1/`, resolve it to `/Users/clkao/git/spacedock/v0-test-1/` (or whatever the absolute path is).
 
@@ -426,7 +426,7 @@ After generating all files, verify before proceeding:
 - [ ] `{dir}/README.md` exists with mission, schema, all stage definitions, and entity template
 - [ ] `{dir}/status` exists and is executable
 - [ ] Each seed entity file exists at `{dir}/{slug}.md` with valid YAML frontmatter
-- [ ] `{dir}/.claude/agents/first-officer.md` exists with all sections
+- [ ] `{project_root}/.claude/agents/first-officer.md` exists with all sections
 
 ---
 
@@ -443,7 +443,7 @@ Tell CL what was generated:
 > - `{dir}/README.md` — pipeline schema and stage definitions
 > - `{dir}/status` — pipeline status viewer
 > - {for each seed entity: "`{dir}/{slug}.md` — {title}"}
-> - `{dir}/.claude/agents/first-officer.md` — pipeline orchestrator
+> - `{project_root}/.claude/agents/first-officer.md` — pipeline orchestrator
 >
 > Launching the first officer to run the pipeline...
 
