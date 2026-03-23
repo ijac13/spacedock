@@ -2,7 +2,7 @@
 # commissioned-by: spacedock@{spacedock_version}
 # The actual program generated below is a version of the description:
 #
-# goal: Show one-line-per-entity pipeline overview from YAML frontmatter.
+# goal: Show one-line-per-{entity_label} pipeline overview from YAML frontmatter.
 # instruction: For every .md file in this directory (excluding README.md),
 #   extract status, verdict, score, source from YAML frontmatter.
 #   Print table sorted by stage order then score descending.
