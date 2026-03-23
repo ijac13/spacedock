@@ -44,7 +44,9 @@ For each entity that is ready for its next stage:
    git worktree add .worktrees/pilot-{entity-slug} -b pilot/{entity-slug}
    ```
    If the entity already has an active worktree (continuing to validation), skip this step.
-6. **Dispatch pilot** — For ideation, the pilot works on main. For implementation and validation, the pilot works in the worktree:
+6. **Dispatch pilot** — For ideation, the pilot works on main. For implementation and validation, the pilot works in the worktree.
+
+**You MUST use the Agent tool to spawn each pilot. Do NOT use SendMessage to dispatch — pilots do not exist until you create them with Agent. SendMessage is only for communicating with already-running pilots.**
 
 For **ideation** (pilot works on main):
 

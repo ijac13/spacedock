@@ -353,6 +353,8 @@ For each entity that is ready for its next stage:
    If the entity already has an active worktree (continuing from a prior stage), skip this step.
 6. **Dispatch pilot** in the worktree:
 
+**You MUST use the Agent tool to spawn each pilot. Do NOT use SendMessage to dispatch — pilots do not exist until you create them with Agent. SendMessage is only for communicating with already-running pilots.**
+
 **You MUST use `subagent_type="general-purpose"` when dispatching pilots. NEVER use `subagent_type="first-officer"` — that clones yourself instead of dispatching a worker.**
 
 ```
