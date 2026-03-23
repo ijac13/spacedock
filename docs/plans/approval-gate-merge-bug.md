@@ -158,3 +158,34 @@ Two files changed:
 - **Event Loop step 2** changed from "Merge and finalize" to "Check gate and advance" — references the gate-aware procedure from steps 8-10.
 - **State Management** updated: `worktree` field is set when entity first leaves backlog, cleared only after final merge to main.
 - **Dispatching step 3** preserved: the initial-dispatch gate check remains for the startup case.
+
+## Validation Report
+
+Recommendation: **PASSED**
+
+All seven acceptance criteria verified against the implementation diffs in `agents/first-officer.md` and `skills/commission/SKILL.md`.
+
+### Criteria Results
+
+1. **Event Loop gate check** — PASS. Dispatching step 8 replaced unconditional merge with gate check. Event Loop step 2 references the gate-aware procedure (steps 8-10). Evidence: SKILL.md step 8 "Check approval gate — Determine the outbound transition..."; Event Loop step 2 "Check gate and advance."
+
+2. **Worktree preserved during gate wait** — PASS. Step 8: "Do NOT merge. Keep the worktree and branch alive — the branch is the evidence CL reviews." State Management: "worktree: — set when entity first leaves backlog. Cleared only after final merge to main (terminal stage)."
+
+3. **Rejection handling** — PASS. Step 8: "On rejection: ask CL whether to discard the branch or re-dispatch with feedback." Does not auto-decide.
+
+4. **Approval triggers merge** — PASS. Step 8 on approval at terminal stage: "proceed to step 9 (merge)." Step 9 explicitly gated: "Only when the entity has reached its terminal stage."
+
+5. **Non-gated transitions stay on branch** — PASS. Step 8: "If no approval gate applies and more stages remain, dispatch the next pilot in the same worktree (go back to step 6 — no merge, no new branch)." Step 5 made worktree-conditional: "first dispatch only...If the entity already has an active worktree, skip this step."
+
+6. **Both files updated** — PASS. `agents/first-officer.md` Dispatch Lifecycle rewritten with gate-aware steps 4-6. `skills/commission/SKILL.md` template steps 4-5, 8-10, Event Loop step 2, and State Management all updated consistently.
+
+7. **Dispatching step 3 preserved** — PASS. Step 3 unchanged in diff; still checks approval gates before initial dispatch.
+
+### One-Branch-Per-Entity Model
+
+The core lifecycle is correctly implemented across both files:
+- Worktree created once at first dispatch, persists through all stages.
+- No intermediate merges — non-terminal transitions loop back to dispatch (step 6).
+- Approval gates hold the merge and ask CL.
+- Merge to main only at terminal stage after approval.
+- Reference doc (`first-officer.md`) and operational template (`SKILL.md`) are consistent.
