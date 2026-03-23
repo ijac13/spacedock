@@ -119,3 +119,34 @@ Four changes made to `skills/commission/SKILL.md`:
 5. **Pilot dispatch prompt (line 361)**: Removed "(absolute path to .worktrees/pilot-{entity-slug})" parenthetical from the working directory reference.
 
 No changes to the `status` script (already self-resolving), worktree paths (already relative), or README template commands (already used `{dir}` which is now stored as relative).
+
+## Validation Report
+
+### Criterion 1: `{dir}` stored as repo-root-relative path
+**PASSED** — Line 100 of SKILL.md now reads: `Store the confirmed path as {dir} — a repo-root-relative path (e.g., docs/plans/).` The old "Resolve it to an absolute path" instruction is gone. Grep for "absolute" across the entire file returns zero matches.
+
+### Criterion 2: "resolve to absolute path" and "paths must be absolute" instructions removed
+**PASSED** — Grep for "Resolve it to an absolute", "paths must be absolute", and "absolute" all return zero matches in SKILL.md. The git diff confirms both instructions were removed:
+- Line 100: "Resolve it to an absolute path" replaced with repo-root-relative guidance.
+- Lines 302-304: The entire "IMPORTANT: All paths in the first-officer template must be absolute" paragraph was deleted.
+
+### Criterion 3: First-officer template contains zero absolute paths
+**PASSED** — Reviewed the full first-officer template (SKILL.md lines 308-432). All pipeline references use `{dir}/` (repo-root-relative). Specific changes verified:
+- Line 318: Pipeline declaration uses `{dir}/` (was `{dir_absolute}/`).
+- Line 361: Pilot dispatch prompt uses `{worktree_path}` without the "(absolute path to ...)" parenthetical.
+- Line 425: Pipeline Path section says "All paths are relative to the repo root: `{dir}/`" (was "All paths are absolute: `{dir_absolute}/`").
+- Grep for `{dir_absolute}` returns zero matches.
+- Grep for backtick-slash patterns (hardcoded absolute paths like `/Users/...`) returns zero matches.
+
+### Criterion 4: README template Pipeline State uses repo-root-relative paths
+**PASSED** — Lines 232-240 of SKILL.md show the README template uses `bash {dir}/status` and `grep -l "status: {stage_name}" {dir}/*.md`. Since `{dir}` is now stored as a repo-root-relative path, these commands will generate portable references.
+
+### Criterion 5: Status script unchanged
+**PASSED** — `git diff main -- templates/status` shows no changes to the status template. The status script was not modified.
+
+### Criterion 6: Portability across clone locations
+**Requires testflight validation** — The implementation removes all absolute path generation from SKILL.md. No machine-specific paths remain in any template. A pipeline commissioned after this change should produce files containing only repo-root-relative paths, which will work regardless of clone location. Full confirmation requires commissioning a pipeline and verifying the generated files in a different checkout.
+
+### Recommendation: PASSED
+
+All five verifiable acceptance criteria pass. Criterion 6 is noted as requiring testflight validation but the code inspection confirms no absolute paths remain in any generated template.
