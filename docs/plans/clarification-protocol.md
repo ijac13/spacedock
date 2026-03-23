@@ -99,6 +99,18 @@ No changes to the pipeline README schema are needed — clarification is an agen
 - No clarification history tracking in entity frontmatter. The clarification and its resolution are captured in the entity body as part of the normal stage work.
 - No structured message format. Agents ask naturally with enough context for CL to answer quickly.
 
+## Implementation Summary
+
+Three changes made:
+
+1. **`skills/commission/SKILL.md` — first-officer template**: Added a "Clarification" section between Dispatching and Event Loop. Covers when the first officer should ask CL directly (ambiguous descriptions before dispatch), how to relay pilot clarification requests (include pilot name), and follow-up/inconsistency handling. Includes explicit instruction not to block the pipeline while waiting.
+
+2. **`skills/commission/SKILL.md` — pilot prompt template**: Added a line in dispatch step 6's pilot prompt instructing pilots to ask for clarification via `SendMessage(to="team-lead")` rather than guessing, with guidance to describe what they understand and what's ambiguous.
+
+3. **`agents/first-officer.md`**: Added a "Clarification Protocol" section covering the first officer's own questions, relaying pilot questions, and follow-up/inconsistency handling.
+
+No new entity statuses, frontmatter fields, or structured message formats were introduced.
+
 ## Acceptance Criteria
 
 - [ ] First-officer template in SKILL.md includes instructions to evaluate entity clarity before dispatch and message CL when the description is too ambiguous

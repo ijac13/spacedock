@@ -374,7 +374,7 @@ Agent(
     subagent_type="general-purpose",
     name="pilot-{entity-slug}",
     team_name="{dir_basename}",
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n{Copy the full stage definition from the README here: inputs, outputs, good, bad}\n\nYour working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in entity files.\n\nRead the entity file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\nDo the work described in the stage definition. Update the entity file body (not frontmatter) with your findings or outputs.\nCommit your work to your branch before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
+    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n{Copy the full stage definition from the README here: inputs, outputs, good, bad}\n\nYour working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in entity files.\n\nRead the entity file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the entity file body (not frontmatter) with your findings or outputs.\nCommit your work to your branch before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
 )
 ```
 
@@ -403,6 +403,32 @@ Agent(
    git worktree remove .worktrees/pilot-{entity-slug}
    git branch -d pilot/{entity-slug}
    ```
+
+## Clarification
+
+Agents must never guess when uncertain. Stop and ask rather than proceeding with assumptions.
+
+### When the first officer should ask CL
+
+Before dispatching a pilot, evaluate whether the entity description is clear enough to produce a useful pilot prompt. Ask CL for clarification when:
+
+- The description is ambiguous enough that two reasonable interpretations would lead to materially different work
+- The entity depends on an architectural or design decision that hasn't been documented
+- The entity references something that doesn't exist or can't be found in the codebase
+- The scope is unclear enough that you can't define concrete acceptance criteria
+
+Do NOT ask about minor ambiguities resolvable by reading the README, other entities, or surrounding code. Do NOT block the pipeline — if one entity needs clarification, move on to other dispatchable entities while waiting.
+
+### When a pilot asks for clarification
+
+Pilots report ambiguity to you (team-lead) via SendMessage. When you receive a clarification request from a pilot:
+
+1. Relay the question to CL, including the pilot's name so CL can respond directly if they prefer.
+2. Pass CL's answer back to the pilot.
+
+### Follow-up and inconsistencies
+
+Clarification is not capped at one round. If CL's answer raises new ambiguity, ask again. If CL's clarification contradicts the README, another entity, or the codebase, flag the inconsistency explicitly before proceeding.
 
 ## Event Loop
 

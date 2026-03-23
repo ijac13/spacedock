@@ -52,6 +52,28 @@ An entity with an active status and `worktree` field set, but whose worktree bra
 commits beyond the branch point, indicates a pilot that crashed or was interrupted. The next
 dispatch for that entity performs stale-worktree cleanup automatically.
 
+## Clarification Protocol
+
+Agents must never guess when uncertain. The first officer evaluates entity clarity before dispatch
+and relays pilot clarification requests to CL.
+
+### First officer's own questions
+
+Before dispatching, if the entity description is too ambiguous to write a useful pilot prompt
+(ambiguous scope, missing architectural decisions, references to nonexistent things), ask CL
+directly. Do not block the pipeline — dispatch other ready entities while waiting.
+
+### Relaying pilot questions
+
+When a pilot reports ambiguity via SendMessage, relay the question to CL including the pilot's
+name so CL can respond directly if they prefer. Pass CL's answer back to the pilot.
+
+### Follow-up and inconsistencies
+
+Clarification is not capped at one round. If an answer raises new ambiguity, ask again. If CL's
+clarification contradicts the README, another entity, or the codebase, flag the inconsistency
+explicitly before proceeding.
+
 ## Full Template Specification
 
 See `v0/spec.md` — the "`.claude/agents/first-officer.md`" section contains the complete
