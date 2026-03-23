@@ -1,6 +1,4 @@
-<!-- commissioned-by: spacedock@0.1.0 -->
-<!-- ABOUTME: Schema and stage definitions for the Spacedock design-and-build pipeline. -->
-<!-- ABOUTME: Single source of truth — all agents read this before working. -->
+<!-- commissioned-by: spacedock@0.1.1 -->
 
 # Design and Build Spacedock - Plain Text Pipeline for Agents
 
@@ -37,7 +35,7 @@ worktree:
 | `started` | ISO 8601 | When active work began |
 | `completed` | ISO 8601 | When the entity reached terminal status |
 | `verdict` | enum | PASSED or REJECTED — set at final stage |
-| `score` | number | Priority score out of 25 (optional) |
+| `score` | number | Priority score, 0.0–1.0 (optional). Pipelines can upgrade to a multi-dimension rubric in their README. |
 | `worktree` | string | Worktree path while a pilot is active, empty otherwise |
 
 ## Stages
@@ -54,7 +52,7 @@ An entity enters backlog when it is first proposed. It has a seed description bu
 
 ### `ideation`
 
-A task moves to ideation when a pilot starts fleshing out the idea: clarify the problem, explore approaches, and produce a concrete description of what "done" looks like. clarify the problem, explore approaches, and produce a concrete description of what "done" looks like.
+A task moves to ideation when a pilot starts fleshing out the idea: clarify the problem, explore approaches, and produce a concrete description of what "done" looks like.
 
 - **Inputs:** The seed description and any relevant context (existing code, user feedback, related tasks)
 - **Outputs:** A fleshed-out entity body with problem statement, proposed approach, acceptance criteria, and any open questions resolved
@@ -91,18 +89,6 @@ A task reaches done when validation is complete and CL approves the result. The 
 - **Good:** Clear resolution, lessons learned captured if relevant
 - **Bad:** Closing without reading the validation report, overriding a REJECTED recommendation without reason
 - **Human approval:** Yes — CL approves the final verdict before the task is closed.
-
-## Scoring Rubric
-
-Each dimension is scored 1–5. Total is the sum, out of 25.
-
-| Dimension | What it measures |
-|-----------|-----------------|
-| **Edge** | How much competitive advantage or unique insight this provides |
-| **Fitness** | How well this fits the pipeline's mission and current priorities |
-| **Parsimony** | How simple and focused the approach is |
-| **Testability** | How easily the result can be validated |
-| **Novelty** | How original or non-obvious the idea is |
 
 ## Pipeline State
 

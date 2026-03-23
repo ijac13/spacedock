@@ -1,0 +1,13 @@
+#!/bin/bash
+# commissioned-by: spacedock@{spacedock_version}
+# The actual program generated below is a version of the description:
+#
+# goal: Show one-line-per-entity pipeline overview from YAML frontmatter.
+# instruction: For every .md file in this directory (excluding README.md),
+#   extract status, verdict, score, source from YAML frontmatter.
+#   Print table sorted by stage order then score descending.
+# constraints: bash only, resolves paths relative to this script, skips README.md.
+# valid status values: {stage1}, {stage2}, ..., {last_stage}.
+
+echo "Not compiled. Run with an LLM or add a pre-compiled dist." >&2
+exit 1

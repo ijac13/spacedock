@@ -264,62 +264,15 @@ Description of this entity and what it aims to achieve.
 
 ### 2b. Generate `{dir}/status`
 
-Write the status script and make it executable. This must be real, working bash — not pseudocode.
+Generate the status script from the reference template at `templates/status` (relative to the Spacedock plugin directory).
 
-Fill in the stage names and sort order values from the design phase. The `STAGE_ORDER` associative array maps each stage name to its position (1, 2, 3, ...).
-
-The script header MUST use the self-describing pattern shown below (# goal: / # instruction: / # constraints: / # valid status values:). Do NOT use ABOUTME comments — the self-describing header IS the PTP convention for view scripts.
-
-````bash
-#!/bin/bash
-# commissioned-by: spacedock@{spacedock_version}
-# The actual program generated below is a version of the description:
-#
-# goal: Show one-line-per-entity pipeline overview from YAML frontmatter.
-# instruction: For every .md file in this directory (excluding README.md),
-#   extract status, verdict, score, source from YAML frontmatter.
-#   Print table sorted by stage order then score descending.
-# constraints: bash only, resolves paths relative to this script, skips README.md.
-# valid status values: {stage1}, {stage2}, ..., {last_stage}.
-
-DIR="$(cd "$(dirname "$0")" && pwd)"
-
-declare -A STAGE_ORDER=({for each stage, in order: [{stage_name}]={position} — e.g., [ideation]=1 [implementation]=2 [validation]=3 [done]=4})
-
-printf "%-30s %-20s %-10s %-8s %s\n" "ENTITY" "STATUS" "VERDICT" "SCORE" "SOURCE"
-printf "%-30s %-20s %-10s %-8s %s\n" "------" "------" "-------" "-----" "------"
-
-for f in "$DIR"/*.md; do
-  [ "$(basename "$f")" = "README.md" ] && continue
-  entity=$(basename "$f" .md)
-  status="" verdict="" score="" source=""
-  in_fm=false
-  while IFS= read -r line; do
-    if [ "$line" = "---" ]; then
-      if $in_fm; then break; fi
-      in_fm=true; continue
-    fi
-    if $in_fm; then
-      case "$line" in
-        status:*) status="${line#*:}" ; status="${status# }" ;;
-        verdict:*) verdict="${line#*:}" ; verdict="${verdict# }" ;;
-        score:*) score="${line#*:}" ; score="${score# }" ;;
-        source:*) source="${line#*:}" ; source="${source# }" ;;
-      esac
-    fi
-  done < "$f"
-  order=${STAGE_ORDER[$status]:-99}
-  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$order" "$score" "$entity" "$status" "$verdict" "$score" "$source"
-done | sort -t$'\t' -k1,1n -k2,2rn | while IFS=$'\t' read -r _ _ entity status verdict score source; do
-  printf "%-30s %-20s %-10s %-8s %s\n" "$entity" "$status" "$verdict" "$score" "$source"
-done
-````
-
-After writing the file, run:
-
-```
-chmod +x {dir}/status
-```
+1. Read the template file.
+2. Fill in the two variable fields:
+   - `{spacedock_version}` — from plugin.json
+   - `{stage1}, {stage2}, ..., {last_stage}` — the pipeline's stage names in order
+3. Write the result to `{dir}/status`.
+4. Make it executable: `chmod +x {dir}/status`.
+5. **Materialize** — read back the description header (the `# goal:` / `# instruction:` / `# constraints:` comments) and replace the stub body with a working bash implementation that satisfies the description. The implementation must work on bash 3.2+ (no associative arrays, no bash 4+ features). Keep the description header intact — only replace everything after it.
 
 ### 2c. Generate Seed Entities
 

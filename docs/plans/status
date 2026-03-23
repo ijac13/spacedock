@@ -1,5 +1,5 @@
 #!/bin/bash
-# commissioned-by: spacedock@0.1.0
+# commissioned-by: spacedock@0.1.1
 # The actual program generated below is a version of the description:
 #
 # goal: Show one-line-per-entity pipeline overview from YAML frontmatter.
@@ -7,16 +7,17 @@
 #   extract status, verdict, score, source from YAML frontmatter.
 #   Print table sorted by stage order then score descending.
 # constraints: bash only, resolves paths relative to this script, skips README.md.
-# valid status values: ideation, implementation, validation, done.
+# valid status values: backlog, ideation, implementation, validation, done.
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 stage_order() {
   case "$1" in
-    ideation) echo 1 ;;
-    implementation) echo 2 ;;
-    validation) echo 3 ;;
-    done) echo 4 ;;
+    backlog) echo 1 ;;
+    ideation) echo 2 ;;
+    implementation) echo 3 ;;
+    validation) echo 4 ;;
+    done) echo 5 ;;
     *) echo 99 ;;
   esac
 }
@@ -45,4 +46,6 @@ for f in "$DIR"/*.md; do
   done < "$f"
   order=$(stage_order "$status")
   printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$order" "$score" "$entity" "$status" "$verdict" "$score" "$source"
-done | sort -t$'\t' -k1,1n -k2,2rn | awk -F'\t' '{ printf "%-30s %-20s %-10s %-8s %s\n", $3, $4, $5, $6, $7 }'
+done | sort -t$'\t' -k1,1n -k2,2rn | while IFS=$'\t' read -r _ _ entity status verdict score source; do
+  printf "%-30s %-20s %-10s %-8s %s\n" "$entity" "$status" "$verdict" "$score" "$source"
+done

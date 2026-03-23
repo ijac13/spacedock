@@ -89,66 +89,18 @@ Before generating any files, read `{dir}/README.md` and extract:
 Also extract from the existing first-officer (if present):
 - **Pipeline absolute path** — from the `## Pipeline Path` section.
 
-### 3a. Status Script (Replace)
+### 3a. Status Script (Replace + Materialize)
 
-1. Build the stage list and order from the extracted stages.
-2. Generate a new status script using the template from the commission skill (reproduced below for reference), filling in the extracted stage names and order.
-3. Replace `{dir}/status` with the new script.
-4. Preserve the executable bit (`chmod +x`).
+Generate the status script from the reference template at `templates/status` (relative to the Spacedock plugin directory).
 
-Use this template:
-
-````bash
-#!/bin/bash
-# commissioned-by: spacedock@{current_version}
-# The actual program generated below is a version of the description:
-#
-# goal: Show one-line-per-entity pipeline overview from YAML frontmatter.
-# instruction: For every .md file in this directory (excluding README.md),
-#   extract status, verdict, score, source from YAML frontmatter.
-#   Print table sorted by stage order then score descending.
-# constraints: bash only, resolves paths relative to this script, skips README.md.
-# valid status values: {stage1}, {stage2}, ..., {last_stage}.
-
-DIR="$(cd "$(dirname "$0")" && pwd)"
-
-declare -A STAGE_ORDER=({for each stage, in order: [{stage_name}]={position}})
-
-printf "%-30s %-20s %-10s %-8s %s\n" "ENTITY" "STATUS" "VERDICT" "SCORE" "SOURCE"
-printf "%-30s %-20s %-10s %-8s %s\n" "------" "------" "-------" "-----" "------"
-
-for f in "$DIR"/*.md; do
-  [ "$(basename "$f")" = "README.md" ] && continue
-  entity=$(basename "$f" .md)
-  status="" verdict="" score="" source=""
-  in_fm=false
-  while IFS= read -r line; do
-    if [ "$line" = "---" ]; then
-      if $in_fm; then break; fi
-      in_fm=true; continue
-    fi
-    if $in_fm; then
-      case "$line" in
-        status:*) status="${line#*:}" ; status="${status# }" ;;
-        verdict:*) verdict="${line#*:}" ; verdict="${verdict# }" ;;
-        score:*) score="${line#*:}" ; score="${score# }" ;;
-        source:*) source="${line#*:}" ; source="${source# }" ;;
-      esac
-    fi
-  done < "$f"
-  order=${STAGE_ORDER[$status]:-99}
-  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$order" "$score" "$entity" "$status" "$verdict" "$score" "$source"
-done | sort -t$'\t' -k1,1n -k2,2rn | while IFS=$'\t' read -r _ _ entity status verdict score source; do
-  printf "%-30s %-20s %-10s %-8s %s\n" "$entity" "$status" "$verdict" "$score" "$source"
-done
-````
-
-Show CL the diff between old and new status script before replacing:
-
-> **Status script changes:**
-> {diff output}
->
-> Replacing the status script.
+1. Read the template file.
+2. Fill in the two variable fields:
+   - `{current_version}` — the target Spacedock version
+   - `{stage1}, {stage2}, ..., {last_stage}` — the pipeline's stage names in order (extracted from README)
+3. Show CL the diff between the old status script's description header and the new one. (Only the header matters — the implementation will be regenerated regardless.)
+4. Replace `{dir}/status` with the filled-in template.
+5. Preserve the executable bit (`chmod +x`).
+6. **Materialize** — read back the description header and replace the stub body with a working bash implementation that satisfies the description. The implementation must work on bash 3.2+ (no associative arrays, no bash 4+ features). Keep the description header intact — only replace everything after it.
 
 ### 3b. First-Officer Agent (Regenerate)
 
