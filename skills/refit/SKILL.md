@@ -8,9 +8,9 @@ user-invocable: true
 
 # Refit a PTP Pipeline
 
-You are refitting (upgrading) an existing PTP pipeline's scaffolding files to match the current Spacedock version. Entity files are never touched — only the scaffolding infrastructure: the status script, the first-officer agent, and the README.
+You are refitting (upgrading) an existing PTP pipeline to match the current Spacedock version. This covers scaffolding files (status script, first-officer agent, README) and, when schema changes require it, migrating entity frontmatter data.
 
-Follow these four phases in order. Do not skip or combine phases.
+Follow these five phases in order. Do not skip or combine phases.
 
 ---
 
@@ -147,7 +147,51 @@ Do NOT auto-modify the README. CL decides what to adopt.
 
 ---
 
-## Phase 4: Finalize
+## Phase 4: Migrate Entity Data
+
+After upgrading scaffolding, check whether schema changes require migrating existing entity data.
+
+### Step 1 — Detect schema changes
+
+Compare the old README's `## Schema` and `### Field Reference` sections against the new version. Look for:
+
+- **Changed field types or ranges** (e.g., score changed from integer/25 to float/0.0–1.0)
+- **Renamed fields** (e.g., `priority` → `score`)
+- **Removed fields** (fields in entities that are no longer in the schema)
+- **New required fields** (fields added to the schema that existing entities lack)
+
+If no schema changes affect entity data, skip to Phase 5.
+
+### Step 2 — Scan entities
+
+For each detected schema change, scan all entity files in `{dir}/*.md` (excluding README.md) and identify which entities have values in the affected fields.
+
+Present findings to CL:
+
+> **Schema migration needed:**
+>
+> {description of what changed in the schema}
+>
+> **Affected entities:**
+> {list of entities with current values that need migration}
+>
+> **Proposed migration:**
+> {what the migration would do — e.g., "Convert score from /25 to 0.0–1.0 by dividing by 25"}
+>
+> Apply this migration? (y/n)
+
+### Step 3 — Execute migration
+
+On CL's approval, update the affected entity frontmatter fields. Use the Edit tool — never rewrite whole entity files. Only touch the specific fields identified in the migration plan.
+
+Show a summary of what was migrated:
+
+> **Migrated {N} entities:**
+> {list of entity: old_value → new_value}
+
+---
+
+## Phase 5: Finalize
 
 1. Update all version stamps to `{current_version}` in files that were replaced or regenerated.
 2. For the README (if CL didn't request changes), update only the version stamp comment: `<!-- commissioned-by: spacedock@{current_version} -->`.
@@ -197,7 +241,7 @@ Execute Phase 3, but show a full diff for every file (including status and first
 
 ## Safety Rules
 
-- **Never modify entity files** — only scaffolding (status, first-officer, README).
+- **Never modify entity file bodies** — only frontmatter, and only during an approved schema migration.
 - **Never auto-replace without a version stamp** — always enter degraded mode.
 - **Always show diffs** — even for "replace" strategy files, show the diff before replacing.
 - **Git is the safety net** — remind CL they can `git diff` or `git checkout` to recover.
