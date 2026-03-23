@@ -1,12 +1,12 @@
 ---
 title: Commission Speed — Reduce Time to Value
-status: ideation
+status: implementation
 source: CL feedback
 started: 2026-03-23T00:00:00Z
 completed:
 verdict:
 score: 0.80
-worktree:
+worktree: .worktrees/ensign-commission-speed
 ---
 
 The interactive commission flow asks 7 questions one at a time. This is the main bottleneck for time-to-value — a new user waits through a lengthy Q&A before seeing any output.
