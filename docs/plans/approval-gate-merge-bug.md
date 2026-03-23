@@ -1,12 +1,12 @@
 ---
 title: Approval Gate Merge Bug
-status: ideation
+status: implementation
 source: testflight-003
 started: 2026-03-22T21:17:00Z
 completed:
 verdict:
 score:
-worktree:
+worktree: .worktrees/pilot-approval-gate-merge-bug
 ---
 
 ## Problem
