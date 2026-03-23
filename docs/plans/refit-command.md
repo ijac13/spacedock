@@ -6,7 +6,7 @@ started: 2026-03-22T00:00:00Z
 worktree:
 completed: 2026-03-23T00:14:00Z
 verdict: PASSED
-score: 15
+score: 0.60
 ---
 
 ## Problem

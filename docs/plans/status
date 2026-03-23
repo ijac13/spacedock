@@ -46,6 +46,4 @@ for f in "$DIR"/*.md; do
   done < "$f"
   order=$(stage_order "$status")
   printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$order" "$score" "$entity" "$status" "$verdict" "$score" "$source"
-done | sort -t$'\t' -k1,1n -k2,2rn | while IFS=$'\t' read -r _ _ entity status verdict score source; do
-  printf "%-30s %-20s %-10s %-8s %s\n" "$entity" "$status" "$verdict" "$score" "$source"
-done
+done | sort -t$'\t' -k1,1n -k2,2rn | awk -F'\t' '{ printf "%-30s %-20s %-10s %-8s %s\n", $3, $4, $5, $6, $7 }'

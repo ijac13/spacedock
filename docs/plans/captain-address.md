@@ -5,7 +5,7 @@ source: commission seed
 started:
 completed:
 verdict:
-score: 17
+score: 0.68
 ---
 
 Generated agents (first-officer, pilots) currently inherit whatever the user's CLAUDE.md says about how to address the human partner. This leaks personal config into generated pipelines.

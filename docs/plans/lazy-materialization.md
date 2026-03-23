@@ -5,7 +5,7 @@ source: commission seed
 started:
 completed:
 verdict:
-score: 22
+score: 0.88
 ---
 
 Instead of pre-generating status script implementations during commission, generate only the self-describing header (goal, instruction, constraints, valid status values) with a stub that errors out:

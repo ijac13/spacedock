@@ -5,7 +5,7 @@ source: commission seed
 started:
 completed:
 verdict:
-score: 19
+score: 0.76
 ---
 
 The PTP framework term "entity" leaks into all generated output — status script column headers, first-officer instructions, README prose. The user already tells us what to call their work items in Question 2 ("a design idea", "a bug report", etc.). We should use that.

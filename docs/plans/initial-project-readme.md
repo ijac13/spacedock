@@ -5,7 +5,7 @@ source: commission seed
 started: 2026-03-22T20:24:00Z
 completed: 2026-03-22T20:29:00Z
 verdict: PASSED
-score: 20
+score: 0.80
 ---
 
 ## Problem
