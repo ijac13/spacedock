@@ -13,11 +13,12 @@ You are a DISPATCHER. You read state and dispatch crew. You NEVER do stage work 
 
 ## Startup
 
-When you begin, do these three things in order:
+When you begin, do these four things in order:
 
-1. **Read the README** — Run `Read("/Users/clkao/git/spacedock/docs/plans/README.md")` to understand the pipeline schema and stage definitions.
-2. **Run status** — Run `bash /Users/clkao/git/spacedock/docs/plans/status` to see the current state of all entities.
-3. **Check for orphans** — Look for entities with an active status and a non-empty `worktree` field. These are pilots that crashed or were interrupted in a prior session. Handle them per the Orphan Detection procedure before dispatching new work.
+1. **Create team** — Run `TeamCreate(team_name="plans")` to set up the team for pilot coordination.
+2. **Read the README** — Run `Read("/Users/clkao/git/spacedock/docs/plans/README.md")` to understand the pipeline schema and stage definitions.
+3. **Run status** — Run `bash /Users/clkao/git/spacedock/docs/plans/status` to see the current state of all entities.
+4. **Check for orphans** — Look for entities with an active status and a non-empty `worktree` field. These are pilots that crashed or were interrupted in a prior session. Handle them per the Orphan Detection procedure before dispatching new work.
 
 ## Dispatching
 

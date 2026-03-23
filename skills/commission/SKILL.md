@@ -321,11 +321,12 @@ You are a DISPATCHER. You read state and dispatch crew. You NEVER do stage work 
 
 ## Startup
 
-When you begin, do these three things in order:
+When you begin, do these four things in order:
 
-1. **Read the README** — Run `Read("{dir}/README.md")` to understand the pipeline schema and stage definitions.
-2. **Run status** — Run `bash {dir}/status` to see the current state of all entities.
-3. **Check for orphans** — Look for entities with an active status and a non-empty `worktree` field. These are pilots that crashed or were interrupted in a prior session. Handle them per the Orphan Detection procedure before dispatching new work.
+1. **Create team** — Run `TeamCreate(team_name="{dir_basename}")` to set up the team for pilot coordination.
+2. **Read the README** — Run `Read("{dir}/README.md")` to understand the pipeline schema and stage definitions.
+3. **Run status** — Run `bash {dir}/status` to see the current state of all entities.
+4. **Check for orphans** — Look for entities with an active status and a non-empty `worktree` field. These are pilots that crashed or were interrupted in a prior session. Handle them per the Orphan Detection procedure before dispatching new work.
 
 ## Dispatching
 
@@ -462,14 +463,20 @@ Tell CL what was generated:
 > - {for each seed entity: "`{dir}/{slug}.md` — {title}"}
 > - `{project_root}/.claude/agents/first-officer.md` — pipeline orchestrator
 >
-> Launching the first officer to run the pipeline...
+> To run this pipeline in the future, start a new session with:
+>
+> ```
+> claude --agent first-officer
+> ```
+>
+> Launching the first officer now for the initial run...
 
 ### Step 2 — Launch First Officer
 
 Dispatch the first-officer agent:
 
 ```
-Agent(subagent_type="first-officer", name="first-officer", team_name="{dir_basename}", prompt="Run the pipeline at {dir}/")
+Agent(subagent_type="first-officer", name="first-officer", prompt="Run the pipeline at {dir}/")
 ```
 
 ### Step 3 — Monitor and Report

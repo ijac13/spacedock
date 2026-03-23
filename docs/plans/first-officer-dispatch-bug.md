@@ -39,11 +39,13 @@ The worktree-isolation changes added between testflight-001 and testflight-002 m
 
 Secondary issue: The "idle" instruction says "report the current state to CL and wait for instructions" but has no de-duplication constraint, leading to repeated status messages while blocked at an approval gate.
 
-Third issue (testflight-005): The first officer used `SendMessage` to dispatch pilots instead of the `Agent` tool. Pilots never existed as running subagents — messages sat in inboxes of non-existent teammates. Three contributing factors:
+Third issue (testflight-005a): The first officer used `SendMessage` to dispatch pilots instead of the `Agent` tool. Pilots never existed as running subagents — messages sat in inboxes of non-existent teammates. Three contributing factors:
 
 1. **Agent() call looks like pseudocode.** It's inside a code fence with unfilled `{variables}`, making the agent interpret it as a pattern description rather than "invoke this tool."
 2. **SendMessage contamination from pilot prompt.** The `Agent()` prompt parameter ends with `SendMessage(to="team-lead", ...)`. The first officer sees this pattern and mirrors it for dispatching: `SendMessage(to="pilot-{slug}", ...)` — addressing agents that don't exist yet.
 3. **TeamCreate + SendMessage in tools list suggests team-messaging workflow.** The agent sees `team_name` in the Agent() parameters, has both `TeamCreate` and `SendMessage` available, and concludes the pattern is: create team → message members, skipping Agent entirely.
+
+Fourth issue (testflight-005b): The first officer fails to create its team on startup. The commission Phase 3 spawns the first-officer with `team_name="{dir_basename}"` in the Agent() call, which makes the commission agent the team leader. The first-officer is a member, not the leader, and can't spawn pilots into the team. When it tries TeamCreate, it hits "already leading" or "does not exist" errors depending on timing. Root cause: the first-officer template has no TeamCreate step in Startup, and the commission Phase 3 Agent() call shouldn't pass `team_name` — the first-officer should own its own team.
 
 ## Analysis
 
@@ -83,8 +85,10 @@ Third issue (testflight-005): The first officer used `SendMessage` to dispatch p
 | 2b | Add report-once note | `agents/first-officer.md` | Role section or Dispatch Lifecycle |
 | 3a | Add Agent-tool-required guardrail | `skills/commission/SKILL.md` | Section 2d, Dispatching step 6 guardrail block |
 | 3b | Add Agent-tool-required guardrail | `agents/first-officer.md` | Dispatch step |
+| 4a | Add TeamCreate to first-officer Startup | `skills/commission/SKILL.md` | Section 2d, Startup section |
+| 4b | Remove `team_name` from commission Agent() call | `skills/commission/SKILL.md` | Phase 3, Step 2 |
 
-Total: 6 surgical edits across 2 files. No structural changes.
+Total: 8 surgical edits across 2 files. No structural changes.
 
 ## Acceptance Criteria
 
@@ -97,6 +101,8 @@ Total: 6 surgical edits across 2 files. No structural changes.
 - [ ] First officer reports pipeline state once at an approval gate, then waits without re-reporting
 - [ ] SKILL.md template includes "MUST use the Agent tool to spawn each pilot" and "Do NOT use SendMessage to dispatch" guardrail
 - [ ] agents/first-officer.md includes the same Agent-tool-required guardrail
+- [ ] SKILL.md first-officer template Startup includes TeamCreate as step 1
+- [ ] Commission Phase 3 Agent() call does not pass `team_name`
 - [ ] Validated in a future testflight
 
 ## Implementation
