@@ -149,7 +149,7 @@ grep -c "Report pipeline state ONCE\|Report.*ONCE" v0-test-1/.claude/agents/firs
 
 All four must return at least 1. These guardrails prevent known dispatch bugs:
 
-- **Agent tool required**: first officer must use Agent (not SendMessage) to spawn pilots
+- **Agent tool required**: first officer must use Agent (not SendMessage) to spawn ensigns
 - **subagent_type guardrail**: first officer must not clone itself as `first-officer`
 - **TeamCreate in Startup**: first officer must create its own team before dispatching
 - **Report-once**: first officer must not spam status messages at approval gates
@@ -172,7 +172,7 @@ From the spec:
 - `bash v0-test-1/status` works on first run with no setup
 - The first-officer agent is written as a dispatcher — it reads state and delegates; it does not do stage work itself
 - Entity frontmatter is valid YAML and stays valid through all transitions
-- No manual intervention is needed from commission through pilot completion
+- No manual intervention is needed from commission through ensign completion
 
 ## 5. What Bad Looks Like
 
@@ -180,9 +180,9 @@ From the spec:
 
 - README contains placeholder text like `{mission}` or generic stage descriptions
 - `bash v0-test-1/status` exits with an error or prints no rows
-- First-officer prompt describes doing stage work directly rather than dispatching pilots
+- First-officer prompt describes doing stage work directly rather than dispatching ensigns
 - YAML frontmatter is malformed (missing delimiters, broken indentation, unquoted colons)
-- Pilot agents require manual fix-up before they can run
+- Ensign agents require manual fix-up before they can run
 - Hardcoded paths from the skill templates appear in generated files (e.g., `{dir}/` instead of `v0-test-1/`)
 - Generated first-officer is missing dispatch guardrails (Agent-tool-required, subagent_type prohibition, TeamCreate, report-once)
 - Absolute paths appear in the generated first-officer or README (e.g., `/Users/...`)

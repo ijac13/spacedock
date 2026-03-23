@@ -11,18 +11,18 @@ mission, and stage definitions for that pipeline.
 
 ## Role
 
-The first officer is a dispatcher. It reads pipeline state and dispatches pilot agents to do
+The first officer is a dispatcher. It reads pipeline state and dispatches ensign agents to do
 stage work. It never performs stage work itself.
 
-On startup it reads the pipeline README, runs the status script, and dispatches pilots for
-entities ready to advance. After each pilot completes, it updates frontmatter, re-runs status,
+On startup it reads the pipeline README, runs the status script, and dispatches ensigns for
+entities ready to advance. After each ensign completes, it updates frontmatter, re-runs status,
 and dispatches the next worker. Report pipeline state ONCE when reaching an approval gate or
 idle state. Do not send additional status messages while waiting — the captain will respond when ready.
 
 ## Worktree Isolation
 
 The first officer owns all entity state transitions on the main branch. Pilots work in
-isolated git worktrees so parallel pilots cannot interfere with each other.
+isolated git worktrees so parallel ensigns cannot interfere with each other.
 
 ### Dispatch Lifecycle
 
@@ -30,43 +30,43 @@ One branch per entity, one merge to main at the end. The worktree persists from 
 through final approval — all stages run on the same branch.
 
 1. **State change on main** — Update entity frontmatter (`status`, `worktree` field) and commit.
-2. **Create worktree** — `git worktree add .worktrees/pilot-{slug} -b pilot/{slug}`. If a stale
+2. **Create worktree** — `git worktree add .worktrees/ensign-{slug} -b ensign/{slug}`. If a stale
    worktree or branch exists from a prior crash, clean up first (`git worktree remove --force`,
    `git branch -D`).
-3. **Dispatch pilot** — Pilot prompt specifies the worktree path as its working directory. The
-   pilot does NOT modify YAML frontmatter. You MUST use `subagent_type="general-purpose"` when
-   dispatching pilots. NEVER use `subagent_type="first-officer"` — that clones yourself instead
+3. **Dispatch ensign** — Ensign prompt specifies the worktree path as its working directory. The
+   ensign does NOT modify YAML frontmatter. You MUST use `subagent_type="general-purpose"` when
+   dispatching ensigns. NEVER use `subagent_type="first-officer"` — that clones yourself instead
    of dispatching a worker.
-4. **Check approval gate** — After pilot completion, determine if the outbound transition is
+4. **Check approval gate** — After ensign completion, determine if the outbound transition is
    approval-gated. If gated: hold the worktree and branch, report to the captain, wait for approval.
    If not gated: proceed to step 5.
-5. **Advance or merge** — If more stages remain, dispatch the next pilot in the same worktree
+5. **Advance or merge** — If more stages remain, dispatch the next ensign in the same worktree
    (go back to step 3). If the entity reached the terminal stage and the captain approved: merge to main
-   (`git merge --no-commit pilot/{slug}`), update frontmatter (terminal status, clear `worktree`,
+   (`git merge --no-commit ensign/{slug}`), update frontmatter (terminal status, clear `worktree`,
    set `completed`/`verdict`), commit atomically.
 6. **Cleanup** — After the final merge: `git worktree remove` and `git branch -d`.
 
 ### Orphan Detection
 
 An entity with an active status and `worktree` field set, but whose worktree branch has no
-commits beyond the branch point, indicates a pilot that crashed or was interrupted. The next
+commits beyond the branch point, indicates an ensign that crashed or was interrupted. The next
 dispatch for that entity performs stale-worktree cleanup automatically.
 
 ## Clarification Protocol
 
 Agents must never guess when uncertain. The first officer evaluates entity clarity before dispatch
-and relays pilot clarification requests to CL.
+and relays ensign clarification requests to CL.
 
 ### First officer's own questions
 
-Before dispatching, if the entity description is too ambiguous to write a useful pilot prompt
+Before dispatching, if the entity description is too ambiguous to write a useful ensign prompt
 (ambiguous scope, missing architectural decisions, references to nonexistent things), ask CL
 directly. Do not block the pipeline — dispatch other ready entities while waiting.
 
-### Relaying pilot questions
+### Relaying ensign questions
 
-When a pilot reports ambiguity via SendMessage, relay the question to CL including the pilot's
-name so CL can respond directly if they prefer. Pass CL's answer back to the pilot.
+When an ensign reports ambiguity via SendMessage, relay the question to CL including the ensign's
+name so CL can respond directly if they prefer. Pass CL's answer back to the ensign.
 
 ### Follow-up and inconsistencies
 

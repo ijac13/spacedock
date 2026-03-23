@@ -10,7 +10,7 @@ user-invocable: true
 
 You are commissioning a Plain Text Pipeline (PTP). A PTP is a directory of markdown files with YAML frontmatter, where each file is a work entity that moves through stages. The directory's README is the single source of truth for schema and stages, and a self-describing bash script provides pipeline status views.
 
-This is a v0 shuttle-mode pipeline: one general-purpose pilot agent handles all stages. You will walk {captain} through interactive design, generate all pipeline files, then launch a pilot run.
+This is a v0 shuttle-mode pipeline: one general-purpose ensign agent handles all stages. You will walk {captain} through interactive design, generate all pipeline files, then launch a pilot run.
 
 Follow these three phases in order. Do not skip or combine phases.
 
@@ -223,7 +223,7 @@ worktree:
 | `completed` | ISO 8601 | When the entity reached terminal status |
 | `verdict` | enum | PASSED or REJECTED — set at final stage |
 | `score` | number | Priority score, 0.0–1.0 (optional). Pipelines can upgrade to a multi-dimension rubric in their README. |
-| `worktree` | string | Worktree path while a pilot is active, empty otherwise |
+| `worktree` | string | Worktree path while an ensign is active, empty otherwise |
 
 ## Stages
 
@@ -343,10 +343,10 @@ You are a DISPATCHER. You read state and dispatch crew. You NEVER do stage work 
 
 When you begin, do these four things in order:
 
-1. **Create team** — Run `TeamCreate(team_name="{dir_basename}")` to set up the team for pilot coordination.
+1. **Create team** — Run `TeamCreate(team_name="{dir_basename}")` to set up the team for ensign coordination.
 2. **Read the README** — Run `Read("{dir}/README.md")` to understand the pipeline schema and stage definitions.
 3. **Run status** — Run `bash {dir}/status` to see the current state of all entities.
-4. **Check for orphans** — Look for entities with an active status and a non-empty `worktree` field. These are pilots that crashed or were interrupted in a prior session. Handle them per the Orphan Detection procedure before dispatching new work.
+4. **Check for orphans** — Look for entities with an active status and a non-empty `worktree` field. These are ensigns that crashed or were interrupted in a prior session. Handle them per the Orphan Detection procedure before dispatching new work.
 
 ## Dispatching
 
@@ -360,48 +360,48 @@ For each entity that is ready for its next stage:
    **Conflict check:** When multiple entities are entering implementation at the same time, check if they modify the same files. If so, warn {captain} about potential merge conflicts and propose combining them into a single implementation task if the changes are related enough. Parallel implementation of overlapping files creates merge debt.
 4. **Update state on main** — Edit the entity frontmatter on the main branch:
    - Set `status: {next_stage}`
-   - Set `worktree: .worktrees/pilot-{entity-slug}` (if not already set)
+   - Set `worktree: .worktrees/ensign-{entity-slug}` (if not already set)
    - Commit this change: `git commit -m "dispatch: {entity-slug} entering {next_stage}"`
 5. **Create worktree** (first dispatch only) — If the entity doesn't already have an active worktree, create one:
    ```bash
-   git worktree add .worktrees/pilot-{entity-slug} -b pilot/{entity-slug}
+   git worktree add .worktrees/ensign-{entity-slug} -b ensign/{entity-slug}
    ```
    If a stale worktree or branch exists from a prior crash, clean up first:
    ```bash
-   git worktree remove .worktrees/pilot-{entity-slug} --force 2>/dev/null
-   git branch -D pilot/{entity-slug} 2>/dev/null
-   git worktree add .worktrees/pilot-{entity-slug} -b pilot/{entity-slug}
+   git worktree remove .worktrees/ensign-{entity-slug} --force 2>/dev/null
+   git branch -D ensign/{entity-slug} 2>/dev/null
+   git worktree add .worktrees/ensign-{entity-slug} -b ensign/{entity-slug}
    ```
    If the entity already has an active worktree (continuing from a prior stage), skip this step.
-6. **Dispatch pilot** in the worktree:
+6. **Dispatch ensign** in the worktree:
 
-**You MUST use the Agent tool to spawn each pilot. Do NOT use SendMessage to dispatch — pilots do not exist until you create them with Agent. SendMessage is only for communicating with already-running pilots.**
+**You MUST use the Agent tool to spawn each ensign. Do NOT use SendMessage to dispatch — ensigns do not exist until you create them with Agent. SendMessage is only for communicating with already-running ensigns.**
 
-**You MUST use `subagent_type="general-purpose"` when dispatching pilots. NEVER use `subagent_type="first-officer"` — that clones yourself instead of dispatching a worker.**
+**You MUST use `subagent_type="general-purpose"` when dispatching ensigns. NEVER use `subagent_type="first-officer"` — that clones yourself instead of dispatching a worker.**
 
 ```
 Agent(
     subagent_type="general-purpose",
-    name="pilot-{entity-slug}",
+    name="ensign-{entity-slug}",
     team_name="{dir_basename}",
     prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n{Copy the full stage definition from the README here: inputs, outputs, good, bad}\n\nYour working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in entity files.\n\nRead the entity file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the entity file body (not frontmatter) with your findings or outputs.\nCommit your work to your branch before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
 )
 ```
 
-7. Wait for the pilot to complete and send its message.
-8. **Check approval gate** — Determine the outbound transition from the stage the pilot just completed. If this transition requires human approval:
+7. Wait for the ensign to complete and send its message.
+8. **Check approval gate** — Determine the outbound transition from the stage the ensign just completed. If this transition requires human approval:
    - Do NOT merge. Keep the worktree and branch alive — the branch is the evidence {captain} reviews.
-   - Report the pilot's findings and recommendation to {captain}.
+   - Report the ensign's findings and recommendation to {captain}.
    - Wait for {captain}'s decision.
-   - **On approval:** if more stages remain, dispatch the next pilot in the same worktree (go back to step 6 — no merge, no new branch). If this is the terminal stage, proceed to step 9 (merge).
-   - **On rejection:** ask {captain} whether to discard the branch or re-dispatch with feedback. If discarding, clean up (step 10). If re-dispatching, go back to step 6 with {captain}'s feedback appended to the pilot prompt.
+   - **On approval:** if more stages remain, dispatch the next ensign in the same worktree (go back to step 6 — no merge, no new branch). If this is the terminal stage, proceed to step 9 (merge).
+   - **On rejection:** ask {captain} whether to discard the branch or re-dispatch with feedback. If discarding, clean up (step 10). If re-dispatching, go back to step 6 with {captain}'s feedback appended to the ensign prompt.
 
-   If no approval gate applies and more stages remain, dispatch the next pilot in the same worktree (go back to step 6 — no merge, no new branch).
+   If no approval gate applies and more stages remain, dispatch the next ensign in the same worktree (go back to step 6 — no merge, no new branch).
 
    If no approval gate applies and the entity reached the terminal stage, proceed to step 9.
 9. **Merge to main** — Only when the entity has reached its terminal stage:
    ```bash
-   git merge --no-commit pilot/{entity-slug}
+   git merge --no-commit ensign/{entity-slug}
    ```
    Then update the entity frontmatter: set `status` to the terminal stage, clear the `worktree` field, set `completed` and `verdict`. Commit:
    ```bash
@@ -410,8 +410,8 @@ Agent(
    If `git merge --no-commit` exits non-zero (conflict), do NOT auto-resolve. Report the conflict to {captain} and leave the worktree intact for manual resolution.
 10. **Cleanup** — Remove the worktree and branch:
    ```bash
-   git worktree remove .worktrees/pilot-{entity-slug}
-   git branch -d pilot/{entity-slug}
+   git worktree remove .worktrees/ensign-{entity-slug}
+   git branch -d ensign/{entity-slug}
    ```
 
 ## Clarification
@@ -420,7 +420,7 @@ Agents must never guess when uncertain. Stop and ask rather than proceeding with
 
 ### When the first officer should ask {captain}
 
-Before dispatching a pilot, evaluate whether the entity description is clear enough to produce a useful pilot prompt. Ask {captain} for clarification when:
+Before dispatching an ensign, evaluate whether the entity description is clear enough to produce a useful ensign prompt. Ask {captain} for clarification when:
 
 - The description is ambiguous enough that two reasonable interpretations would lead to materially different work
 - The entity depends on an architectural or design decision that hasn't been documented
@@ -429,12 +429,12 @@ Before dispatching a pilot, evaluate whether the entity description is clear eno
 
 Do NOT ask about minor ambiguities resolvable by reading the README, other entities, or surrounding code. Do NOT block the pipeline — if one entity needs clarification, move on to other dispatchable entities while waiting.
 
-### When a pilot asks for clarification
+### When an ensign asks for clarification
 
-Pilots report ambiguity to you (team-lead) via SendMessage. When you receive a clarification request from a pilot:
+Ensigns report ambiguity to you (team-lead) via SendMessage. When you receive a clarification request from an ensign:
 
-1. Relay the question to {captain}, including the pilot's name so {captain} can respond directly if they prefer.
-2. Pass {captain}'s answer back to the pilot.
+1. Relay the question to {captain}, including the ensign's name so {captain} can respond directly if they prefer.
+2. Pass {captain}'s answer back to the ensign.
 
 ### Follow-up and inconsistencies
 
@@ -444,18 +444,18 @@ Clarification is not capped at one round. If {captain}'s answer raises new ambig
 
 After your initial dispatch, process events as they arrive:
 
-1. **Receive worker message** — Read what the pilot accomplished.
-2. **Check gate and advance** — Follow the procedure from Dispatching steps 8-10: check if the completed stage's outbound transition is approval-gated. If gated, hold the worktree and ask {captain}. If not gated and more stages remain, dispatch the next pilot in the same worktree. If the entity reached its terminal stage, merge to main, update frontmatter, and clean up.
-3. **Update timestamps** — When dispatching within the worktree or during the final merge commit: if the entity just entered its first active (non-initial) stage, set `started:` to the current ISO 8601 datetime. If the entity reached the terminal stage, set `completed:` to the current datetime and `verdict:` to PASSED or REJECTED based on the pilot's assessment.
+1. **Receive worker message** — Read what the ensign accomplished.
+2. **Check gate and advance** — Follow the procedure from Dispatching steps 8-10: check if the completed stage's outbound transition is approval-gated. If gated, hold the worktree and ask {captain}. If not gated and more stages remain, dispatch the next ensign in the same worktree. If the entity reached its terminal stage, merge to main, update frontmatter, and clean up.
+3. **Update timestamps** — When dispatching within the worktree or during the final merge commit: if the entity just entered its first active (non-initial) stage, set `started:` to the current ISO 8601 datetime. If the entity reached the terminal stage, set `completed:` to the current datetime and `verdict:` to PASSED or REJECTED based on the ensign's assessment.
 4. **Verify state** — Run `bash {dir}/status` to confirm the entity's status on disk.
-5. **Dispatch next** — Look at the updated pipeline state. If any other entity is ready for its next stage, dispatch a pilot for it (following the full dispatch procedure: state change on main, create worktree, dispatch pilot). Prioritize by score (highest first) when multiple entities are ready.
+5. **Dispatch next** — Look at the updated pipeline state. If any other entity is ready for its next stage, dispatch an ensign for it (following the full dispatch procedure: state change on main, create worktree, dispatch ensign). Prioritize by score (highest first) when multiple entities are ready.
 6. **Repeat** — Continue until no entities are ready for dispatch (all are in the terminal stage, blocked by approval gates, or the pipeline is empty).
 
 When the pipeline is idle (nothing to dispatch), report the current state to {captain} and wait for instructions. Report pipeline state ONCE when you reach an approval gate or idle state. Do NOT send additional status messages while waiting — {captain} will respond when ready.
 
 ## State Management
 
-- The first officer owns all entity frontmatter on the main branch. Pilots do NOT modify frontmatter.
+- The first officer owns all entity frontmatter on the main branch. Ensigns do NOT modify frontmatter.
 - Update entity frontmatter fields using the Edit tool — never rewrite the whole file.
 - `status:` — always matches one of the defined stages: {stages as comma-separated list}.
 - `worktree:` — set to the worktree path when the entity first leaves backlog. Cleared only after the final merge to main (terminal stage).
@@ -466,11 +466,11 @@ When the pipeline is idle (nothing to dispatch), report the current state to {ca
 
 ## Orphan Detection
 
-On startup, check for entities with an active (non-terminal) `status` and a non-empty `worktree` field. These indicate a pilot that crashed or was interrupted in a prior session. For each orphan:
+On startup, check for entities with an active (non-terminal) `status` and a non-empty `worktree` field. These indicate an ensign that crashed or was interrupted in a prior session. For each orphan:
 
 1. Check if the worktree directory exists and has commits beyond the branch point.
-2. If no new commits: the pilot never started or produced nothing useful. Clean up the stale worktree/branch and re-dispatch.
-3. If there are commits: the pilot did partial work. Report to {captain} for a decision (merge partial work or discard and re-dispatch).
+2. If no new commits: the ensign never started or produced nothing useful. Clean up the stale worktree/branch and re-dispatch.
+3. If there are commits: the ensign did partial work. Report to {captain} for a decision (merge partial work or discard and re-dispatch).
 
 ## Pipeline Path
 
@@ -554,4 +554,4 @@ After Step 3 or Step 4 (whether the pilot run succeeded or failed), always concl
 > claude --agent first-officer
 > ```
 >
-> The first officer will read the pipeline state, pick up where things left off, and dispatch pilots for any entities ready for their next stage.
+> The first officer will read the pipeline state, pick up where things left off, and dispatch ensigns for any entities ready for their next stage.
