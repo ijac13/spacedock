@@ -84,3 +84,12 @@ Total: 4 surgical edits across 2 files. No structural changes.
 - [ ] Only one first-officer agent appears in the team UI
 - [ ] First officer reports pipeline state once at an approval gate, then waits without re-reporting
 - [ ] Validated in a future testflight
+
+## Implementation
+
+Four surgical edits across two files:
+
+1. **SKILL.md line 358** — Added bold negative guardrail warning immediately before the `Agent()` code block in Dispatching step 6: "You MUST use `subagent_type="general-purpose"` ... NEVER use `subagent_type="first-officer"`".
+2. **SKILL.md line 406** — Appended report-once constraint to the Event Loop idle paragraph: "Report pipeline state ONCE ... Do NOT send additional status messages while waiting."
+3. **agents/first-officer.md lines 37-39** — Added the same negative guardrail to Dispatch Lifecycle step 3.
+4. **agents/first-officer.md lines 19-20** — Added report-once note to the Role section's operational description.

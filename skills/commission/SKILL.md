@@ -355,6 +355,8 @@ For each entity that is ready for its next stage:
    If the entity already has an active worktree (continuing from a prior stage), skip this step.
 6. **Dispatch pilot** in the worktree:
 
+**You MUST use `subagent_type="general-purpose"` when dispatching pilots. NEVER use `subagent_type="first-officer"` — that clones yourself instead of dispatching a worker.**
+
 ```
 Agent(
     subagent_type="general-purpose",
@@ -401,7 +403,7 @@ After your initial dispatch, process events as they arrive:
 5. **Dispatch next** — Look at the updated pipeline state. If any other entity is ready for its next stage, dispatch a pilot for it (following the full dispatch procedure: state change on main, create worktree, dispatch pilot). Prioritize by score (highest first) when multiple entities are ready.
 6. **Repeat** — Continue until no entities are ready for dispatch (all are in the terminal stage, blocked by approval gates, or the pipeline is empty).
 
-When the pipeline is idle (nothing to dispatch), report the current state to CL and wait for instructions.
+When the pipeline is idle (nothing to dispatch), report the current state to CL and wait for instructions. Report pipeline state ONCE when you reach an approval gate or idle state. Do NOT send additional status messages while waiting — CL will respond when ready.
 
 ## State Management
 
