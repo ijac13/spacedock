@@ -1,0 +1,290 @@
+# ABOUTME: Executable test script for the commission skill.
+# ABOUTME: Runs batch-mode commission, validates output, reports PASS/FAIL per check.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+TEST_DIR="$(mktemp -d)"
+PIPELINE_DIR="$TEST_DIR/v0-test-1"
+FAILURES=0
+PASSES=0
+
+cleanup() {
+  rm -rf "$TEST_DIR"
+}
+trap cleanup EXIT
+
+pass() {
+  PASSES=$((PASSES + 1))
+  echo "  PASS: $1"
+}
+
+fail() {
+  FAILURES=$((FAILURES + 1))
+  echo "  FAIL: $1"
+}
+
+check() {
+  local label="$1"
+  shift
+  if "$@" >/dev/null 2>&1; then
+    pass "$label"
+  else
+    fail "$label"
+  fi
+}
+
+echo "=== Commission Skill Test ==="
+echo "Repo root:  $REPO_ROOT"
+echo "Test dir:   $TEST_DIR"
+echo ""
+
+# --- Phase 1: Run commission ---
+
+echo "--- Phase 1: Running commission (this takes ~30-60s) ---"
+
+PROMPT="/spacedock:commission
+
+All inputs for this pipeline:
+- Mission: Design and build Spacedock — a Claude Code plugin for creating PTP pipelines
+- Entity: A design idea or feature for Spacedock
+- Stages: ideation → implementation → validation → done
+- Approval gates: ideation → implementation (new features), validation → done (merging)
+- Seed entities:
+  1. full-cycle-test — Prove the full ideation → implementation → validation → done cycle works end-to-end (score: 22/25)
+  2. refit-command — Add /spacedock refit for examining and upgrading existing pipelines (score: 18/25)
+  3. multi-pipeline — Support multiple interconnected pipelines (shuttle feeding starship) (score: 16/25)
+- Location: ./v0-test-1/
+
+Skip interactive questions and confirmation — use these inputs directly. Make reasonable assumptions for anything not specified. Do NOT run the pilot phase — just generate the files and stop."
+
+cd "$TEST_DIR"
+
+CLAUDE_EXIT=0
+claude -p "$PROMPT" \
+  --plugin-dir "$REPO_ROOT" \
+  --permission-mode bypassPermissions \
+  --verbose \
+  --output-format stream-json \
+  2>&1 > "$TEST_DIR/test-log.jsonl" || CLAUDE_EXIT=$?
+
+echo ""
+if [ $CLAUDE_EXIT -ne 0 ]; then
+  echo "WARNING: claude exited with code $CLAUDE_EXIT"
+fi
+
+# --- Phase 2: Validate output ---
+
+echo "--- Phase 2: Validation ---"
+
+# -- File existence --
+echo ""
+echo "[File Existence]"
+check "README.md exists"              test -f "$PIPELINE_DIR/README.md"
+check "status script exists"          test -f "$PIPELINE_DIR/status"
+check "full-cycle-test.md exists"     test -f "$PIPELINE_DIR/full-cycle-test.md"
+check "refit-command.md exists"       test -f "$PIPELINE_DIR/refit-command.md"
+check "multi-pipeline.md exists"      test -f "$PIPELINE_DIR/multi-pipeline.md"
+check "first-officer.md exists"       test -f "$PIPELINE_DIR/.claude/agents/first-officer.md"
+
+# -- Status script --
+echo ""
+echo "[Status Script]"
+if [ -f "$PIPELINE_DIR/status" ]; then
+  STATUS_OUTPUT="$(bash "$PIPELINE_DIR/status" 2>&1)" || true
+  if [ -n "$STATUS_OUTPUT" ]; then
+    pass "status script produces output"
+  else
+    fail "status script produces output"
+  fi
+  if echo "$STATUS_OUTPUT" | grep -qi "ENTITY\|STATUS\|SCORE"; then
+    pass "status output contains header"
+  else
+    fail "status output contains header"
+  fi
+  ROW_COUNT=$(echo "$STATUS_OUTPUT" | grep -c "ideation" || true)
+  if [ "$ROW_COUNT" -ge 3 ]; then
+    pass "status shows 3 entities in ideation"
+  else
+    fail "status shows 3 entities in ideation (found $ROW_COUNT)"
+  fi
+else
+  fail "status script produces output (file missing)"
+  fail "status output contains header (file missing)"
+  fail "status shows 3 entities in ideation (file missing)"
+fi
+
+# -- Entity frontmatter --
+echo ""
+echo "[Entity Frontmatter]"
+for ENTITY in full-cycle-test refit-command multi-pipeline; do
+  ENTITY_FILE="$PIPELINE_DIR/$ENTITY.md"
+  if [ -f "$ENTITY_FILE" ]; then
+    # Check YAML delimiters
+    FIRST_LINE="$(head -1 "$ENTITY_FILE")"
+    if [ "$FIRST_LINE" = "---" ]; then
+      pass "$ENTITY.md has opening YAML delimiter"
+    else
+      fail "$ENTITY.md has opening YAML delimiter"
+    fi
+    # Check for title field
+    if head -10 "$ENTITY_FILE" | grep -q "^title:"; then
+      pass "$ENTITY.md has title field"
+    else
+      fail "$ENTITY.md has title field"
+    fi
+    # Check for status: ideation
+    if head -10 "$ENTITY_FILE" | grep -q "^status:.*ideation"; then
+      pass "$ENTITY.md has status: ideation"
+    else
+      fail "$ENTITY.md has status: ideation"
+    fi
+  else
+    fail "$ENTITY.md has opening YAML delimiter (file missing)"
+    fail "$ENTITY.md has title field (file missing)"
+    fail "$ENTITY.md has status: ideation (file missing)"
+  fi
+done
+
+# -- README completeness --
+echo ""
+echo "[README Completeness]"
+if [ -f "$PIPELINE_DIR/README.md" ]; then
+  README="$PIPELINE_DIR/README.md"
+  for SECTION in "File Naming" "Schema" "Stages" "Scoring" "Entity Template" "Commit"; do
+    if grep -qi "$SECTION" "$README"; then
+      pass "README contains '$SECTION' section"
+    else
+      fail "README contains '$SECTION' section"
+    fi
+  done
+  for STAGE in "ideation" "implementation" "validation" "done"; do
+    if grep -qi "$STAGE" "$README"; then
+      pass "README mentions stage '$STAGE'"
+    else
+      fail "README mentions stage '$STAGE'"
+    fi
+  done
+else
+  fail "README completeness checks (file missing)"
+fi
+
+# -- First-officer completeness --
+echo ""
+echo "[First-Officer Completeness]"
+FO="$PIPELINE_DIR/.claude/agents/first-officer.md"
+if [ -f "$FO" ]; then
+  # Frontmatter checks
+  if head -20 "$FO" | grep -q "name:.*first-officer"; then
+    pass "first-officer has name in frontmatter"
+  else
+    fail "first-officer has name in frontmatter"
+  fi
+  if head -20 "$FO" | grep -q "tools:"; then
+    pass "first-officer has tools in frontmatter"
+  else
+    fail "first-officer has tools in frontmatter"
+  fi
+  # Content checks
+  for KEYWORD in "DISPATCHER|dispatcher" "TeamCreate" "Agent\(\)" "Event Loop|event loop" "Pipeline Path|pipeline path|PIPELINE PATH" "AUTO-START|auto-start"; do
+    LABEL="$(echo "$KEYWORD" | sed 's/|/ or /g')"
+    if grep -qE "$KEYWORD" "$FO"; then
+      pass "first-officer contains '$LABEL'"
+    else
+      fail "first-officer contains '$LABEL'"
+    fi
+  done
+else
+  fail "first-officer completeness checks (file missing)"
+fi
+
+# -- First-officer guardrails --
+echo ""
+echo "[First-Officer Guardrails]"
+if [ -f "$FO" ]; then
+  if grep -c "MUST use the Agent tool" "$FO" | grep -qv "^0$"; then
+    pass "guardrail: Agent tool required"
+  else
+    fail "guardrail: Agent tool required"
+  fi
+  if grep -cE "NEVER use.*subagent_type.*first-officer|never.*subagent_type.*first-officer" "$FO" | grep -qv "^0$"; then
+    pass "guardrail: subagent_type prohibition"
+  else
+    fail "guardrail: subagent_type prohibition"
+  fi
+  if grep -c "TeamCreate" "$FO" | grep -qv "^0$"; then
+    pass "guardrail: TeamCreate in startup"
+  else
+    fail "guardrail: TeamCreate in startup"
+  fi
+  if grep -cE "Report.*ONCE|report.*once" "$FO" | grep -qv "^0$"; then
+    pass "guardrail: report-once"
+  else
+    fail "guardrail: report-once"
+  fi
+else
+  fail "guardrail: Agent tool required (file missing)"
+  fail "guardrail: subagent_type prohibition (file missing)"
+  fail "guardrail: TeamCreate in startup (file missing)"
+  fail "guardrail: report-once (file missing)"
+fi
+
+# -- No leaked template variables --
+echo ""
+echo "[No Leaked Template Variables]"
+if [ -d "$PIPELINE_DIR" ]; then
+  # Look for {variable_name} patterns (but not code like ${...} or JSON {..."key":})
+  LEAKED=$(grep -rE '\{[a-z_]+\}' "$PIPELINE_DIR" --include="*.md" 2>/dev/null | grep -vE '\$\{' || true)
+  if [ -z "$LEAKED" ]; then
+    pass "no leaked template variables"
+  else
+    fail "no leaked template variables"
+    echo "    Found: $LEAKED" | head -5
+  fi
+else
+  fail "no leaked template variables (directory missing)"
+fi
+
+# -- No absolute paths --
+echo ""
+echo "[No Absolute Paths]"
+if [ -d "$PIPELINE_DIR" ]; then
+  ABS_PATHS=$(grep -rE '/Users/|/home/|/tmp/' "$PIPELINE_DIR" --include="*.md" 2>/dev/null || true)
+  if [ -z "$ABS_PATHS" ]; then
+    pass "no absolute paths in generated files"
+  else
+    fail "no absolute paths in generated files"
+    echo "    Found: $ABS_PATHS" | head -5
+  fi
+  # Also check the status script
+  if [ -f "$PIPELINE_DIR/status" ]; then
+    ABS_IN_STATUS=$(grep -E '/Users/|/home/|/tmp/' "$PIPELINE_DIR/status" 2>/dev/null || true)
+    if [ -z "$ABS_IN_STATUS" ]; then
+      pass "no absolute paths in status script"
+    else
+      fail "no absolute paths in status script"
+      echo "    Found: $ABS_IN_STATUS" | head -5
+    fi
+  fi
+else
+  fail "no absolute paths (directory missing)"
+fi
+
+# --- Phase 3: Summary ---
+
+echo ""
+echo "=== Results ==="
+TOTAL=$((PASSES + FAILURES))
+echo "  $PASSES passed, $FAILURES failed (out of $TOTAL checks)"
+echo ""
+
+if [ $FAILURES -gt 0 ]; then
+  echo "RESULT: FAIL"
+  echo "Test log: $TEST_DIR/test-log.jsonl"
+  # Don't clean up on failure so logs can be inspected
+  trap - EXIT
+  exit 1
+else
+  echo "RESULT: PASS"
+  exit 0
+fi

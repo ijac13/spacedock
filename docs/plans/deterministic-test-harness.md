@@ -37,3 +37,15 @@ We added guardrail checks to `v0/test-harness.md` (TeamCreate, Agent-tool-requir
 - Checksums on invariant portions: frontmatter schema shape, stage names, approval gates should be byte-identical across runs
 - Test artifact storage: capture source skill SHA, model version, prompt hash alongside each test run for reproducibility
 - End-to-end runtime test: commission + launch first-officer + verify it dispatches a pilot correctly (not just generates correct files)
+
+## Implementation Summary
+
+Added `v0/test-commission.sh` — an executable bash script that automates the full test harness. The script:
+
+1. Runs batch-mode commission via `claude -p` with `--plugin-dir` in a temp directory
+2. Validates ~30 checks covering: file existence (6 files), status script output (header + 3 entity rows), entity frontmatter (YAML delimiters, title, status per entity), README section completeness, first-officer structure (frontmatter, dispatcher identity, startup sequence, Agent() call, event loop, pipeline path, auto-start), all 4 guardrails (Agent-tool-required, subagent_type prohibition, TeamCreate, report-once), leaked template variables, and absolute paths
+3. Reports PASS/FAIL per check with a final summary
+4. Cleans up on success; preserves test dir + logs on failure for inspection
+5. Exits 0 on all-pass, non-zero on any failure
+
+Updated `v0/test-harness.md` to reference the script at the top.
