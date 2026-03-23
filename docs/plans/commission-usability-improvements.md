@@ -1,9 +1,9 @@
 ---
 title: Commission Usability Improvements
-status: ideation
+status: implementation
 source: testflight-001 feedback
 started: 2026-03-22T21:17:00Z
-worktree:
+worktree: .worktrees/pilot-commission-usability-improvements
 completed:
 verdict:
 score:
