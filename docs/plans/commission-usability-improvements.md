@@ -63,3 +63,11 @@ This wording references the actual CLI flag (`--agent`) and the agent name (`fir
 - [ ] After Phase 3 completes (success or failure), the skill tells the user how to launch a fresh session with the first-officer agent
 - [ ] The post-completion guidance includes the exact CLI command: `claude --agent first-officer`
 - [ ] Both changes are prompt directives within SKILL.md (no code changes outside the skill file)
+
+## Implementation Summary
+
+Two prompt directive changes in `skills/commission/SKILL.md`:
+
+1. **Greeting block** (line 32): Added a directive at the top of Phase 1 that instructs the agent to greet CL with a welcome message explaining PTP and the three-phase process before asking Question 1. The directive explicitly says to skip the greeting in batch mode.
+
+2. **Post-completion guidance** (Step 5, line 502): Added a new Step 5 to Phase 3 that always runs after Step 3 or Step 4, telling the user how to continue working the pipeline with `claude --agent first-officer`. Includes a copy-pasteable command and a brief explanation of what the first officer does.

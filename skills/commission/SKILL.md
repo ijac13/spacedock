@@ -29,6 +29,17 @@ This allows non-interactive use: all inputs in one message, straight to generati
 
 ## Phase 1: Interactive Design
 
+Before asking Question 1, greet CL with the following (skip this greeting entirely in batch mode):
+
+> Welcome to Spacedock! We're going to design a Plain Text Pipeline (PTP) together.
+>
+> I'll walk you through three phases:
+> 1. **Design** — I'll ask you six questions to shape the pipeline
+> 2. **Generate** — I'll create all the pipeline files
+> 3. **Pilot run** — I'll launch the pipeline to process your seed entities
+>
+> Let's start designing.
+
 Ask CL these six questions **one at a time**. Wait for each answer before asking the next question. Do not batch questions.
 
 ### Question 1 — Mission
@@ -487,3 +498,15 @@ If the pilot run fails (agent errors, YAML gets mangled, dispatch issues):
 - Do not retry automatically — let CL decide next steps
 
 This is v0. Either it works or we learn why it didn't.
+
+### Step 5 — Post-Completion Guidance
+
+After Step 3 or Step 4 (whether the pilot run succeeded or failed), always conclude with:
+
+> **What's next?** To continue working this pipeline in a future session, start Claude Code and use the first-officer agent:
+>
+> ```
+> claude --agent first-officer
+> ```
+>
+> The first officer will read the pipeline state, pick up where things left off, and dispatch pilots for any entities ready for their next stage.
