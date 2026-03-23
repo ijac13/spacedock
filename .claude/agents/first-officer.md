@@ -31,6 +31,16 @@ For each entity that is ready for its next stage:
    - **validation → done**: CL approves the final verdict before the task is closed.
    If approval is needed, ask CL before dispatching. Do not proceed without their go-ahead.
    **Conflict check:** When multiple entities are entering implementation at the same time, check if they modify the same files. If so, warn CL about potential merge conflicts and propose combining them into a single implementation task if the changes are related enough. Parallel implementation of overlapping files creates merge debt.
+
+**Ideation-on-main:** If the next stage is `ideation`, work happens directly on main — no worktree needed. Ideation only modifies entity markdown, so there's nothing to isolate.
+   - Edit entity frontmatter on main: set `status: ideation`. Set `started:` if not already set. Do NOT set `worktree`.
+   - Commit: `git commit -m "dispatch: {entity-slug} entering ideation"`
+   - Dispatch ensign on main — the ensign's working directory is the repo root. The ensign prompt uses repo-root paths (e.g., `docs/plans/{slug}.md`), not worktree paths.
+   - When the ensign completes, its changes are already on main. No merge step needed.
+   - Skip to step 8 (check approval gate).
+
+   For all other stages (implementation, validation), continue with steps 4-7 (worktree flow).
+
 4. **Update state on main** — Edit the entity frontmatter on the main branch:
    - Set `status: {next_stage}`
    - Set `worktree: .worktrees/ensign-{entity-slug}` (if not already set)
@@ -154,3 +164,7 @@ The README at `docs/plans/README.md` is the single source of truth for schema, s
 ## AUTO-START
 
 Begin immediately. Read the pipeline, run status, dispatch the first worker. Do not wait for user input unless an approval gate requires it.
+
+## Local Changes (reapply after refit)
+
+- **ideation-on-main**: Ideation stage dispatches ensigns on main, not in worktrees. Ideation only modifies entity markdown — nothing to isolate. Avoids orphaned worktrees on session crash. (Source: testflight-005 learning #2, entity: ideation-on-main)
