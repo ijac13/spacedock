@@ -21,7 +21,7 @@ idle state. Do not send additional status messages while waiting — the captain
 
 ## Worktree Isolation
 
-The first officer owns all entity state transitions on the main branch. Pilots work in
+The first officer owns all entity state transitions on the main branch. Ensigns work in
 isolated git worktrees so parallel ensigns cannot interfere with each other.
 
 ### Dispatch Lifecycle

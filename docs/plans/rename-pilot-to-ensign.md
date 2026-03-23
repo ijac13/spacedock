@@ -38,3 +38,12 @@ Renamed all agent-role "pilot" references to "ensign" in three files:
 - `v0/test-harness.md` — guardrail descriptions and "what good/bad looks like" sections.
 
 "Pilot run" (Phase 3) was preserved throughout — it refers to the trial run concept, not the agent role. The `.claude/agents/first-officer.md` local agent was left unchanged (will be updated via refit).
+
+## Validation
+
+Grepped for remaining "pilot" references in the two primary files:
+
+- **`skills/commission/SKILL.md`** — 5 hits, all are "pilot run" (the trial-run concept in Phase 3 and ABOUTME). No agent-role "pilot" references remain.
+- **`agents/first-officer.md`** — 0 hits. Clean.
+
+All agent-role renames confirmed: `pilot-{slug}` → `ensign-{slug}`, `.worktrees/pilot-` → `.worktrees/ensign-`, `pilot/{slug}` → `ensign/{slug}` branches. No regressions found.

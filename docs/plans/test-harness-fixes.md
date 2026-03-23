@@ -26,3 +26,9 @@ Fixed all three issues in `v0/test-commission.sh` and updated `v0/test-harness.m
 2. **{slug} false positive**: Added `| grep -v 'slug'` to the leaked template variable check pipeline. The README File Naming section intentionally documents `{slug}.md` as the naming pattern — not a leaked template variable.
 
 3. **Scoring section**: Removed "Scoring" from the required README sections list. The SKILL.md template explicitly says to omit the Scoring section unless the captain requests a multi-dimension rubric, so it won't appear in default generation. Updated test harness doc to note Scoring is conditional.
+
+## Validation
+
+Test results before final fix: 41/42 passed, 1 failed. The single failure was the `Agent()` regex check in [First-Officer Completeness] — the pattern `Agent\(\)` looked for literal `Agent()` but the generated first-officer template contains `Agent(` with parameters (e.g., `Agent(\n    subagent_type=...`).
+
+Fix: changed the KEYWORD pattern from `Agent\(\)` to `Agent\(` so it matches `Agent(` regardless of what follows the opening parenthesis. With this fix, all 42 checks pass.
