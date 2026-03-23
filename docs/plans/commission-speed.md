@@ -5,7 +5,7 @@ source: CL feedback
 started:
 completed:
 verdict:
-score:
+score: 0.80
 worktree:
 ---
 

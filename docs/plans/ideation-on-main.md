@@ -5,7 +5,7 @@ source: testflight-004
 started:
 completed:
 verdict:
-score:
+score: 0.65
 worktree:
 ---
 

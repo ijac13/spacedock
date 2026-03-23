@@ -180,6 +180,14 @@ A: No. Defer until there's a distribution mechanism. Plugin.json is sufficient.
 **Q: Should the README be pre-built too?**
 A: No. README content is mission-specific (stage descriptions, quality criteria). It must be LLM-generated. Only the status script and first-officer are templated enough to pre-build.
 
+## Open Questions (from CL review)
+
+**Q: Are README sections well-defined enough for dist to capture?**
+The generated README has standard sections (Schema, Stages, Pipeline State, Entity Template, Commit Discipline) plus pipeline-local additions (Concurrency, Testing Resources). The dist approach only covers status and first-officer — README stays LLM-generated, so this is less of a concern there. But the first-officer dist template needs to account for optional sections that pipelines may add locally.
+
+**Q: How are local changes preserved across dist/refit?**
+The current first-officer.md has a "Local Changes (reapply after refit)" changelog section. When dist replaces the first-officer, local changes like ideation-on-main and concurrency limits would be lost. The dist/refit process needs a preservation mechanism — likely: detect the "Local Changes" section, extract it, append after substitution. Similarly, README sections like "Concurrency" that are local additions should survive refit. This needs to be addressed in the implementation design.
+
 ## Risks
 
 - **Template drift**: If the SKILL.md template (section 2d) is edited but dist isn't rebuilt, the release channel ships stale artifacts. Mitigation: the release skill always rebuilds from SKILL.md, and the test harness validates both channels.

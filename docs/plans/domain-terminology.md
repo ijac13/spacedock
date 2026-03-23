@@ -83,9 +83,18 @@ This costs one extra question but prevents bad labels. It can be combined with t
 
 ### Storage
 
-`{entity_label}` is a design-phase variable, same as `{mission}` or `{captain}`. It doesn't need persistent storage beyond the generation session. It gets baked into the generated files.
+`{entity_label}` is a design-phase variable, same as `{mission}` or `{captain}`. It gets baked into the generated files.
 
-For downstream use (e.g., if a refit or upgrade needs to know the label), embed it in the README as a comment: `<!-- entity-label: idea -->` next to the existing `<!-- commissioned-by: ... -->` header.
+For downstream use (refit, multi-entity support), store in the README frontmatter as a longer descriptive slug:
+
+```yaml
+<!-- commissioned-by: spacedock@0.1.2 -->
+<!-- entity-type: marketing_campaign_idea -->
+<!-- entity-label: idea -->
+<!-- entity-label-plural: ideas -->
+```
+
+The `entity-type` is a longer slug (snake_case, derived from the full description) that serves as a stable identifier for the entity type. This supports future multi-entity pipelines where a single pipeline might have multiple entity types (e.g., `bug_report` and `feature_request`). The short `entity-label` is for prose substitution; the longer `entity-type` is for programmatic identity.
 
 ### Substitution points
 
