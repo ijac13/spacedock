@@ -58,6 +58,19 @@ Ask:
 
 Store as `{entity_description}`.
 
+**Derive the entity label** from `{entity_description}`:
+
+1. Strip leading articles ("a", "an", "the")
+2. Take the last word (the head noun in English) — this is `{entity_label}` (lowercase, singular)
+3. Derive `{entity_label_plural}` by appending "s" to `{entity_label}`
+4. Derive `{entity_type}` as the full description (after stripping articles) in snake_case (e.g., "a design idea" → `design_idea`)
+
+Examples:
+- "a design idea" → label: `idea`, plural: `ideas`, type: `design_idea`
+- "a bug report" → label: `report`, plural: `reports`, type: `bug_report`
+- "an implementation task" → label: `task`, plural: `tasks`, type: `implementation_task`
+- "a PR" → label: `pr`, plural: `prs`, type: `pr`
+
 ### Question 3 — Stages
 
 Based on the mission, suggest sensible default stages. For example, if the mission is about design work, suggest `ideation → implementation → validation → done`. Format your suggestion as an arrow-separated list.
@@ -126,6 +139,7 @@ After all seven questions, present a summary:
 >
 > - **Mission:** {mission}
 > - **Entity:** {entity_description}
+> - **Item label:** {entity_label} (plural: {entity_label_plural})
 > - **Stages:** {stages joined with " → "}
 > - **Approval gates:** {approval_gates, or "none"}
 > - **Seed entities:** {count} items
@@ -185,6 +199,9 @@ Use this template structure, filling in all `{variables}` from the design phase:
 
 ````markdown
 <!-- commissioned-by: spacedock@{spacedock_version} -->
+<!-- entity-type: {entity_type} -->
+<!-- entity-label: {entity_label} -->
+<!-- entity-label-plural: {entity_label_plural} -->
 
 # {mission}
 
@@ -192,11 +209,11 @@ Use this template structure, filling in all `{variables}` from the design phase:
 
 ## File Naming
 
-Each entity is a markdown file named `{slug}.md` — lowercase, hyphens, no spaces. Example: `my-feature-idea.md`.
+Each {entity_label} is a markdown file named `{slug}.md` — lowercase, hyphens, no spaces. Example: `my-feature-idea.md`.
 
 ## Schema
 
-Every entity file has YAML frontmatter with these fields:
+Every {entity_label} file has YAML frontmatter with these fields:
 
 ```yaml
 ---
@@ -216,11 +233,11 @@ worktree:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `title` | string | Human-readable entity name |
+| `title` | string | Human-readable {entity_label} name |
 | `status` | enum | One of: {stages as comma-separated list} |
-| `source` | string | Where this entity came from |
+| `source` | string | Where this {entity_label} came from |
 | `started` | ISO 8601 | When active work began |
-| `completed` | ISO 8601 | When the entity reached terminal status |
+| `completed` | ISO 8601 | When the {entity_label} reached terminal status |
 | `verdict` | enum | PASSED or REJECTED — set at final stage |
 | `score` | number | Priority score, 0.0–1.0 (optional). Pipelines can upgrade to a multi-dimension rubric in their README. |
 | `worktree` | string | Worktree path while an ensign is active, empty otherwise |
@@ -231,7 +248,7 @@ worktree:
 
 ### `{stage_name}`
 
-{A sentence describing who sets this status and what it means for an entity to be in this stage.}
+{A sentence describing who sets this status and what it means for an {entity_label} to be in this stage.}
 
 - **Inputs:** {What the worker reads to do this stage's work — be specific to the mission}
 - **Outputs:** {What the worker produces — be specific to the mission}
@@ -253,17 +270,17 @@ View the pipeline overview:
 bash {dir}/status
 ```
 
-Find entities in a specific stage:
+Find {entity_label_plural} in a specific stage:
 
 ```bash
 grep -l "status: {stage_name}" {dir}/*.md
 ```
 
-## Entity Template
+## {Entity_label} Template
 
 ```yaml
 ---
-title: Entity name here
+title: {Entity_label} name here
 status: {first_stage}
 source:
 started:
@@ -273,13 +290,13 @@ score:
 worktree:
 ---
 
-Description of this entity and what it aims to achieve.
+Description of this {entity_label} and what it aims to achieve.
 ```
 
 ## Commit Discipline
 
 - Commit status changes at session end, not on every transition
-- Commit research outputs and entity body updates when substantive
+- Commit research outputs and {entity_label} body updates when substantive
 ````
 
 ### 2b. Generate `{dir}/status`
@@ -345,24 +362,24 @@ When you begin, do these four things in order:
 
 1. **Create team** — Run `TeamCreate(team_name="{dir_basename}")` to set up the team for ensign coordination.
 2. **Read the README** — Run `Read("{dir}/README.md")` to understand the pipeline schema and stage definitions.
-3. **Run status** — Run `bash {dir}/status` to see the current state of all entities.
-4. **Check for orphans** — Look for entities with an active status and a non-empty `worktree` field. These are ensigns that crashed or were interrupted in a prior session. Handle them per the Orphan Detection procedure before dispatching new work.
+3. **Run status** — Run `bash {dir}/status` to see the current state of all {entity_label_plural}.
+4. **Check for orphans** — Look for {entity_label_plural} with an active status and a non-empty `worktree` field. These are ensigns that crashed or were interrupted in a prior session. Handle them per the Orphan Detection procedure before dispatching new work.
 
 ## Dispatching
 
-For each entity that is ready for its next stage:
+For each {entity_label} that is ready for its next stage:
 
-1. Identify the entity's current stage and what the next stage is.
+1. Identify the {entity_label}'s current stage and what the next stage is.
 2. Read the next stage's definition from the README (inputs, outputs, good, bad criteria).
 3. Check if this transition requires human approval. The following transitions require {captain}'s approval:
    {for each approval gate: "- **{from_stage} → {to_stage}**: {reason if provided}"}
    If approval is needed, ask {captain} before dispatching. Do not proceed without their go-ahead.
-   **Conflict check:** When multiple entities are entering implementation at the same time, check if they modify the same files. If so, warn {captain} about potential merge conflicts and propose combining them into a single implementation task if the changes are related enough. Parallel implementation of overlapping files creates merge debt.
-4. **Update state on main** — Edit the entity frontmatter on the main branch:
+   **Conflict check:** When multiple {entity_label_plural} are entering implementation at the same time, check if they modify the same files. If so, warn {captain} about potential merge conflicts and propose combining them into a single implementation task if the changes are related enough. Parallel implementation of overlapping files creates merge debt.
+4. **Update state on main** — Edit the {entity_label} frontmatter on the main branch:
    - Set `status: {next_stage}`
    - Set `worktree: .worktrees/ensign-{entity-slug}` (if not already set)
    - Commit this change: `git commit -m "dispatch: {entity-slug} entering {next_stage}"`
-5. **Create worktree** (first dispatch only) — If the entity doesn't already have an active worktree, create one:
+5. **Create worktree** (first dispatch only) — If the {entity_label} doesn't already have an active worktree, create one:
    ```bash
    git worktree add .worktrees/ensign-{entity-slug} -b ensign/{entity-slug}
    ```
@@ -372,7 +389,7 @@ For each entity that is ready for its next stage:
    git branch -D ensign/{entity-slug} 2>/dev/null
    git worktree add .worktrees/ensign-{entity-slug} -b ensign/{entity-slug}
    ```
-   If the entity already has an active worktree (continuing from a prior stage), skip this step.
+   If the {entity_label} already has an active worktree (continuing from a prior stage), skip this step.
 6. **Dispatch ensign** in the worktree:
 
 **You MUST use the Agent tool to spawn each ensign. Do NOT use SendMessage to dispatch — ensigns do not exist until you create them with Agent. SendMessage is only for communicating with already-running ensigns.**
@@ -384,7 +401,7 @@ Agent(
     subagent_type="general-purpose",
     name="ensign-{entity-slug}",
     team_name="{dir_basename}",
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n{Copy the full stage definition from the README here: inputs, outputs, good, bad}\n\nYour working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in entity files.\n\nRead the entity file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the entity file body (not frontmatter) with your findings or outputs.\nCommit your work to your branch before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
+    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n{Copy the full stage definition from the README here: inputs, outputs, good, bad}\n\nYour working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in {entity_label} files.\n\nRead the {entity_label} file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the {entity_label} file body (not frontmatter) with your findings or outputs.\nCommit your work to your branch before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
 )
 ```
 
@@ -398,12 +415,12 @@ Agent(
 
    If no approval gate applies and more stages remain, dispatch the next ensign in the same worktree (go back to step 6 — no merge, no new branch).
 
-   If no approval gate applies and the entity reached the terminal stage, proceed to step 9.
-9. **Merge to main** — Only when the entity has reached its terminal stage:
+   If no approval gate applies and the {entity_label} reached the terminal stage, proceed to step 9.
+9. **Merge to main** — Only when the {entity_label} has reached its terminal stage:
    ```bash
    git merge --no-commit ensign/{entity-slug}
    ```
-   Then update the entity frontmatter: set `status` to the terminal stage, clear the `worktree` field, set `completed` and `verdict`. Commit:
+   Then update the {entity_label} frontmatter: set `status` to the terminal stage, clear the `worktree` field, set `completed` and `verdict`. Commit:
    ```bash
    git commit -m "done: {entity-slug} completed pipeline"
    ```
@@ -420,14 +437,14 @@ Agents must never guess when uncertain. Stop and ask rather than proceeding with
 
 ### When the first officer should ask {captain}
 
-Before dispatching an ensign, evaluate whether the entity description is clear enough to produce a useful ensign prompt. Ask {captain} for clarification when:
+Before dispatching an ensign, evaluate whether the {entity_label} description is clear enough to produce a useful ensign prompt. Ask {captain} for clarification when:
 
 - The description is ambiguous enough that two reasonable interpretations would lead to materially different work
-- The entity depends on an architectural or design decision that hasn't been documented
-- The entity references something that doesn't exist or can't be found in the codebase
+- The {entity_label} depends on an architectural or design decision that hasn't been documented
+- The {entity_label} references something that doesn't exist or can't be found in the codebase
 - The scope is unclear enough that you can't define concrete acceptance criteria
 
-Do NOT ask about minor ambiguities resolvable by reading the README, other entities, or surrounding code. Do NOT block the pipeline — if one entity needs clarification, move on to other dispatchable entities while waiting.
+Do NOT ask about minor ambiguities resolvable by reading the README, other {entity_label_plural}, or surrounding code. Do NOT block the pipeline — if one {entity_label} needs clarification, move on to other dispatchable {entity_label_plural} while waiting.
 
 ### When an ensign asks for clarification
 
@@ -438,35 +455,35 @@ Ensigns report ambiguity to you (team-lead) via SendMessage. When you receive a 
 
 ### Follow-up and inconsistencies
 
-Clarification is not capped at one round. If {captain}'s answer raises new ambiguity, ask again. If {captain}'s clarification contradicts the README, another entity, or the codebase, flag the inconsistency explicitly before proceeding.
+Clarification is not capped at one round. If {captain}'s answer raises new ambiguity, ask again. If {captain}'s clarification contradicts the README, another {entity_label}, or the codebase, flag the inconsistency explicitly before proceeding.
 
 ## Event Loop
 
 After your initial dispatch, process events as they arrive:
 
 1. **Receive worker message** — Read what the ensign accomplished.
-2. **Check gate and advance** — Follow the procedure from Dispatching steps 8-10: check if the completed stage's outbound transition is approval-gated. If gated, hold the worktree and ask {captain}. If not gated and more stages remain, dispatch the next ensign in the same worktree. If the entity reached its terminal stage, merge to main, update frontmatter, and clean up.
-3. **Update timestamps** — When dispatching within the worktree or during the final merge commit: if the entity just entered its first active (non-initial) stage, set `started:` to the current ISO 8601 datetime. If the entity reached the terminal stage, set `completed:` to the current datetime and `verdict:` to PASSED or REJECTED based on the ensign's assessment.
-4. **Verify state** — Run `bash {dir}/status` to confirm the entity's status on disk.
-5. **Dispatch next** — Look at the updated pipeline state. If any other entity is ready for its next stage, dispatch an ensign for it (following the full dispatch procedure: state change on main, create worktree, dispatch ensign). Prioritize by score (highest first) when multiple entities are ready.
-6. **Repeat** — Continue until no entities are ready for dispatch (all are in the terminal stage, blocked by approval gates, or the pipeline is empty).
+2. **Check gate and advance** — Follow the procedure from Dispatching steps 8-10: check if the completed stage's outbound transition is approval-gated. If gated, hold the worktree and ask {captain}. If not gated and more stages remain, dispatch the next ensign in the same worktree. If the {entity_label} reached its terminal stage, merge to main, update frontmatter, and clean up.
+3. **Update timestamps** — When dispatching within the worktree or during the final merge commit: if the {entity_label} just entered its first active (non-initial) stage, set `started:` to the current ISO 8601 datetime. If the {entity_label} reached the terminal stage, set `completed:` to the current datetime and `verdict:` to PASSED or REJECTED based on the ensign's assessment.
+4. **Verify state** — Run `bash {dir}/status` to confirm the {entity_label}'s status on disk.
+5. **Dispatch next** — Look at the updated pipeline state. If any other {entity_label} is ready for its next stage, dispatch an ensign for it (following the full dispatch procedure: state change on main, create worktree, dispatch ensign). Prioritize by score (highest first) when multiple {entity_label_plural} are ready.
+6. **Repeat** — Continue until no {entity_label_plural} are ready for dispatch (all are in the terminal stage, blocked by approval gates, or the pipeline is empty).
 
 When the pipeline is idle (nothing to dispatch), report the current state to {captain} and wait for instructions. Report pipeline state ONCE when you reach an approval gate or idle state. Do NOT send additional status messages while waiting — {captain} will respond when ready.
 
 ## State Management
 
-- The first officer owns all entity frontmatter on the main branch. Ensigns do NOT modify frontmatter.
-- Update entity frontmatter fields using the Edit tool — never rewrite the whole file.
+- The first officer owns all {entity_label} frontmatter on the main branch. Ensigns do NOT modify frontmatter.
+- Update {entity_label} frontmatter fields using the Edit tool — never rewrite the whole file.
 - `status:` — always matches one of the defined stages: {stages as comma-separated list}.
-- `worktree:` — set to the worktree path when the entity first leaves backlog. Cleared only after the final merge to main (terminal stage).
-- `started:` — set to ISO 8601 datetime when entity first moves beyond `{first_stage}`.
-- `completed:` — set to ISO 8601 datetime when entity reaches `{last_stage}`.
-- `verdict:` — set to PASSED or REJECTED when entity reaches `{last_stage}`.
+- `worktree:` — set to the worktree path when the {entity_label} first leaves backlog. Cleared only after the final merge to main (terminal stage).
+- `started:` — set to ISO 8601 datetime when {entity_label} first moves beyond `{first_stage}`.
+- `completed:` — set to ISO 8601 datetime when {entity_label} reaches `{last_stage}`.
+- `verdict:` — set to PASSED or REJECTED when {entity_label} reaches `{last_stage}`.
 - Commit state changes at dispatch and merge boundaries, not at session end.
 
 ## Orphan Detection
 
-On startup, check for entities with an active (non-terminal) `status` and a non-empty `worktree` field. These indicate an ensign that crashed or was interrupted in a prior session. For each orphan:
+On startup, check for {entity_label_plural} with an active (non-terminal) `status` and a non-empty `worktree` field. These indicate an ensign that crashed or was interrupted in a prior session. For each orphan:
 
 1. Check if the worktree directory exists and has commits beyond the branch point.
 2. If no new commits: the ensign never started or produced nothing useful. Clean up the stale worktree/branch and re-dispatch.

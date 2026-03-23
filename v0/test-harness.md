@@ -91,7 +91,7 @@ All six files must exist.
 bash v0-test-1/status
 ```
 
-Expected output: a table with header row `ENTITY STATUS VERDICT SCORE SOURCE` followed by three data rows. All three entities should show `status: ideation`.
+Expected output: a table with header row showing the entity label (uppercased), STATUS, VERDICT, SCORE, and SOURCE columns, followed by three data rows. All three entities should show `status: ideation`.
 
 ### Entity frontmatter is valid YAML
 
@@ -116,7 +116,7 @@ Open the file and verify these sections are present (not placeholder text):
 - Approval Gates (or gates noted inside each stage definition)
 - Scoring (only if captain requested a multi-dimension rubric)
 - Pipeline State
-- Entity Template
+- {Label} Template (e.g., "Feature Template" — uses the derived entity label)
 - Commit Discipline
 
 Each stage section must have specific, mission-relevant content in its Inputs, Outputs, Good, Bad, and Human approval fields — not generic boilerplate.

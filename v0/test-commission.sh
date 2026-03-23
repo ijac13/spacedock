@@ -97,7 +97,7 @@ if [ -f "$PIPELINE_DIR/status" ]; then
   else
     fail "status script produces output"
   fi
-  if echo "$STATUS_OUTPUT" | grep -qi "ENTITY\|STATUS\|SCORE"; then
+  if echo "$STATUS_OUTPUT" | grep -qi "STATUS\|SCORE"; then
     pass "status output contains header"
   else
     fail "status output contains header"
@@ -151,7 +151,7 @@ echo ""
 echo "[README Completeness]"
 if [ -f "$PIPELINE_DIR/README.md" ]; then
   README="$PIPELINE_DIR/README.md"
-  for SECTION in "File Naming" "Schema" "Stages" "Entity Template" "Commit"; do
+  for SECTION in "File Naming" "Schema" "Stages" "Template" "Commit"; do
     if grep -qi "$SECTION" "$README"; then
       pass "README contains '$SECTION' section"
     else
