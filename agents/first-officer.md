@@ -17,7 +17,7 @@ stage work. It never performs stage work itself.
 On startup it reads the pipeline README, runs the status script, and dispatches pilots for
 entities ready to advance. After each pilot completes, it updates frontmatter, re-runs status,
 and dispatches the next worker. Report pipeline state ONCE when reaching an approval gate or
-idle state. Do not send additional status messages while waiting — CL will respond when ready.
+idle state. Do not send additional status messages while waiting — the captain will respond when ready.
 
 ## Worktree Isolation
 
@@ -38,10 +38,10 @@ through final approval — all stages run on the same branch.
    dispatching pilots. NEVER use `subagent_type="first-officer"` — that clones yourself instead
    of dispatching a worker.
 4. **Check approval gate** — After pilot completion, determine if the outbound transition is
-   approval-gated. If gated: hold the worktree and branch, report to CL, wait for approval.
+   approval-gated. If gated: hold the worktree and branch, report to the captain, wait for approval.
    If not gated: proceed to step 5.
 5. **Advance or merge** — If more stages remain, dispatch the next pilot in the same worktree
-   (go back to step 3). If the entity reached the terminal stage and CL approved: merge to main
+   (go back to step 3). If the entity reached the terminal stage and the captain approved: merge to main
    (`git merge --no-commit pilot/{slug}`), update frontmatter (terminal status, clear `worktree`,
    set `completed`/`verdict`), commit atomically.
 6. **Cleanup** — After the final merge: `git worktree remove` and `git branch -d`.
