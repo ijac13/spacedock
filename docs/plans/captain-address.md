@@ -1,11 +1,12 @@
 ---
 title: Address Human Partner as Captain by Default
-status: ideation
+status: implementation
 source: commission seed
-started:
+started: 2026-03-23T02:15:00Z
 completed:
 verdict:
 score: 0.68
+worktree: .worktrees/pilot-captain-address
 ---
 
 ## Problem Statement
