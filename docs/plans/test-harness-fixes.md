@@ -1,12 +1,12 @@
 ---
 title: Fix test harness path and false positive issues
-status: backlog
+status: implementation
 source: testflight-005
-started:
+started: 2026-03-23T20:20:00Z
 completed:
 verdict:
 score:
-worktree:
+worktree: .worktrees/ensign-rename-and-test-fixes
 ---
 
 The test harness (`v0/test-commission.sh`) has three issues discovered when running against a branch with recent changes:

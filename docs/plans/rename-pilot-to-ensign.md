@@ -1,12 +1,12 @@
 ---
 title: Rename pilot to ensign throughout
-status: backlog
+status: implementation
 source: CL feedback
-started:
+started: 2026-03-23T20:20:00Z
 completed:
 verdict:
 score:
-worktree:
+worktree: .worktrees/ensign-rename-and-test-fixes
 ---
 
 "Pilot" doesn't fit the variety of stage work (ideation, implementation, validation). "Ensign" is a better match — junior officers assigned whatever task the ship needs.
