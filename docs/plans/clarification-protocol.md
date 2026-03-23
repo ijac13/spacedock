@@ -27,7 +27,11 @@ Concrete failure modes:
 
 The approval gate between ideation and implementation catches *some* of these, but only after the ideation work is done. Clarification should happen *before* or *early in* the work, not after.
 
-## Proposed Approach
+## Design (refined via brainstorming with CL)
+
+### Core principle
+
+Agents must never guess when uncertain. The protocol gives agents permission and instruction to stop and ask CL rather than proceeding with assumptions. No rigid message format — agents ask naturally, like a colleague would.
 
 ### When clarification happens
 
@@ -35,9 +39,7 @@ Clarification is relevant at two points:
 
 1. **Before dispatch (first officer)** — The first officer reads the entity description as part of dispatch. If the description is too ambiguous to write a useful pilot prompt, the first officer should ask CL before creating a worktree and dispatching.
 
-2. **Early in stage work (pilot)** — The pilot reads the entity and context, and may realize the requirements are unclear or depend on decisions outside its scope. The pilot should ask CL rather than guessing.
-
-Both cases use the same mechanism: message CL via `SendMessage` and wait for a response before continuing.
+2. **Early in stage work (pilot)** — The pilot reads the entity and context, and may realize the requirements are unclear or depend on decisions outside its scope. The pilot should ask rather than guessing.
 
 ### What triggers clarification
 
@@ -54,48 +56,39 @@ Agents should NOT request clarification for:
 - Implementation details they can decide themselves within the stated scope
 - Questions already answered in the pipeline README, entity body, or other pipeline entities
 
-### The protocol
+### Communication flow
 
-**First officer clarification (pre-dispatch):**
+**Default path: pilot → first officer → CL.** When a pilot hits ambiguity, it reports to team-lead (the first officer) via SendMessage. The first officer relays to CL and passes the answer back.
 
-1. First officer identifies an entity ready for dispatch
-2. First officer reads the entity and determines the description is too ambiguous to write a meaningful pilot prompt
-3. First officer sends a message to CL:
-   ```
-   SendMessage(to="user", message="Clarification needed for {entity title} before I dispatch a pilot.\n\n{specific questions}\n\nThe entity currently says: {quote seed description}")
-   ```
-4. First officer moves on to other dispatchable entities (does not block the pipeline)
-5. When CL responds, first officer updates the entity body with the clarification and proceeds with dispatch
+**Direct path: CL → pilot.** Since pilots are team members (dispatched via TeamCreate), CL can talk to any pilot directly at any time. The first officer includes the pilot's name when relaying a clarification request so CL knows who to address if they want to skip the relay.
 
-**Pilot clarification (mid-stage):**
+**First officer's own questions.** When the first officer identifies ambiguity before dispatch, it asks CL directly and moves on to other dispatchable entities (does not block the pipeline).
 
-1. Pilot reads the entity and supporting context
-2. Pilot identifies something that requires CL's input to proceed
-3. Pilot sends a message to the team lead (first officer), which surfaces to CL:
-   ```
-   SendMessage(to="team-lead", message="Clarification needed on {entity title} during {stage}.\n\n{specific questions}\n\nContext: {what the pilot has understood so far}")
-   ```
-4. Pilot waits for a response before continuing the ambiguous part of the work (it can continue on unambiguous parts if any)
-5. When CL responds (relayed by first officer), pilot incorporates the answer and continues
+Examples of good clarification:
 
-### What a clarification message contains
+> "The entity says 'fix the merge issue' but I see two open merge problems — the worktree merge conflict in the status script (#12) and the branch naming collision when two pilots target the same entity. Which one is this about?"
 
-Every clarification request must include:
+> "This entity asks for 'error handling' but doesn't specify scope. The status script has three failure points: missing files, malformed YAML, and permission errors. Should I cover all three or is there a specific one you care about?"
 
-- **Entity name** — which entity this is about
-- **Specific questions** — numbered list of concrete questions, not vague "what should I do?"
-- **Context** — what the agent understands so far, so CL can see where the confusion is
-- **Impact** — what the agent would do if it had to guess (so CL can say "yes, that's fine" or redirect)
+The key qualities: specific, shows what the agent already understands, and frames the ambiguity concretely so CL can answer quickly.
 
-This structure prevents agents from asking low-quality questions ("what do you want?") and gives CL enough context to answer quickly.
+### Follow-up clarification and inconsistencies
+
+Clarification is not capped at one round. If CL's answer raises new ambiguity, the agent must ask again rather than guessing. Agents should never skip clarification to avoid bothering CL — getting it right matters more than speed.
+
+If CL's clarification contradicts something in the README, another entity, or the codebase, the agent must flag the inconsistency explicitly. Example:
+
+> "Your answer says to use associative arrays, but the README constraints say bash 3.2+ only (no bash 4 features). Which takes precedence?"
+
+CL's response resolves the conflict. If the resolution means the README or another entity needs updating, the agent notes this in its work output.
 
 ### Where this lives in the generated artifacts
 
 The clarification protocol belongs in two places:
 
-1. **First-officer template (SKILL.md section 2d)** — Add a "Clarification" section to the generated first-officer agent prompt, between Dispatching and Event Loop. This instructs the first officer to evaluate entity clarity before dispatch and message CL when needed.
+1. **First-officer template (SKILL.md section 2d)** — Add a "Clarification" section to the generated first-officer agent prompt, between Dispatching and Event Loop. This instructs the first officer to evaluate entity clarity before dispatch and to relay pilot clarification requests to CL.
 
-2. **Pilot prompt template (SKILL.md section 2d, dispatch step 6)** — Add a line to the pilot prompt instructing the pilot to ask for clarification via SendMessage rather than guessing when requirements are unclear.
+2. **Pilot prompt template (SKILL.md section 2d, dispatch step 6)** — Add a line to the pilot prompt instructing the pilot to ask for clarification via SendMessage to team-lead rather than guessing when requirements are unclear.
 
 No changes to the pipeline README schema are needed — clarification is an agent behavior protocol, not an entity state.
 
@@ -104,12 +97,15 @@ No changes to the pipeline README schema are needed — clarification is an agen
 - No new entity status (like "blocked" or "needs-clarification"). Clarification is a transient interaction, not a pipeline state. The entity stays in its current status while the agent waits.
 - No automated ambiguity detection. The agent uses judgment, same as a human would.
 - No clarification history tracking in entity frontmatter. The clarification and its resolution are captured in the entity body as part of the normal stage work.
+- No structured message format. Agents ask naturally with enough context for CL to answer quickly.
 
 ## Acceptance Criteria
 
 - [ ] First-officer template in SKILL.md includes instructions to evaluate entity clarity before dispatch and message CL when the description is too ambiguous
-- [ ] Pilot prompt template in SKILL.md includes instructions to ask for clarification via SendMessage rather than guessing on unclear requirements
-- [ ] Clarification message format is specified (entity name, specific questions, context, what-I'd-guess)
+- [ ] First-officer template includes instructions to relay pilot clarification requests to CL, including the pilot's name so CL can respond directly
+- [ ] Pilot prompt template in SKILL.md includes instructions to ask for clarification via SendMessage to team-lead rather than guessing on unclear requirements
 - [ ] First-officer reference doc (`agents/first-officer.md`) updated with clarification protocol
+- [ ] Agents are instructed to ask follow-up questions if CL's answer creates new ambiguity (no cap on rounds)
+- [ ] Agents are instructed to flag inconsistencies between CL's clarification and existing docs/code
 - [ ] Protocol does not introduce new entity statuses or frontmatter fields
 - [ ] Protocol does not block the pipeline — first officer can dispatch other entities while waiting for clarification

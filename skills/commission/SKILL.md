@@ -108,7 +108,7 @@ Ask:
 >
 > This directory will contain the README, status script, and all entity files.
 
-Store the confirmed path as `{dir}`. Resolve it to an absolute path. Also derive `{dir_basename}` (the last path component) for use as the team name.
+Store the confirmed path as `{dir}` — a repo-root-relative path (e.g., `docs/plans/`). Also derive `{dir_basename}` (the last path component) for use as the team name.
 
 ### Confirm Design
 
@@ -312,8 +312,6 @@ worktree:
 
 Write the first-officer agent to `{project_root}/.claude/agents/first-officer.md`.
 
-IMPORTANT: All paths in the first-officer template must be absolute. Resolve `{dir}` to its absolute path before filling the template. For example, if `{dir}` is `./v0-test-1/`, resolve it to `/Users/clkao/git/spacedock/v0-test-1/` (or whatever the absolute path is).
-
 This is the most critical generated file. The prompt must be complete enough that the agent runs the pipeline without manual intervention.
 
 Use the following template, filling ALL `{variables}` from the design phase:
@@ -328,7 +326,7 @@ commissioned-by: spacedock@{spacedock_version}
 
 # First Officer — {mission}
 
-You are the first officer for the {mission} pipeline at `{dir_absolute}/`.
+You are the first officer for the {mission} pipeline at `{dir}/`.
 
 You are a DISPATCHER. You read state and dispatch crew. You NEVER do stage work yourself. Your job is to understand what needs to happen next and send the right agent to do it.
 
@@ -366,12 +364,16 @@ For each entity that is ready for its next stage:
    If the entity already has an active worktree (continuing from a prior stage), skip this step.
 6. **Dispatch pilot** in the worktree:
 
+**You MUST use the Agent tool to spawn each pilot. Do NOT use SendMessage to dispatch — pilots do not exist until you create them with Agent. SendMessage is only for communicating with already-running pilots.**
+
+**You MUST use `subagent_type="general-purpose"` when dispatching pilots. NEVER use `subagent_type="first-officer"` — that clones yourself instead of dispatching a worker.**
+
 ```
 Agent(
     subagent_type="general-purpose",
     name="pilot-{entity-slug}",
     team_name="{dir_basename}",
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n{Copy the full stage definition from the README here: inputs, outputs, good, bad}\n\nYour working directory is {worktree_path} (absolute path to .worktrees/pilot-{entity-slug}).\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in entity files.\n\nRead the entity file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\nDo the work described in the stage definition. Update the entity file body (not frontmatter) with your findings or outputs.\nCommit your work to your branch before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
+    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n{Copy the full stage definition from the README here: inputs, outputs, good, bad}\n\nYour working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in entity files.\n\nRead the entity file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\nDo the work described in the stage definition. Update the entity file body (not frontmatter) with your findings or outputs.\nCommit your work to your branch before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
 )
 ```
 
@@ -412,7 +414,7 @@ After your initial dispatch, process events as they arrive:
 5. **Dispatch next** — Look at the updated pipeline state. If any other entity is ready for its next stage, dispatch a pilot for it (following the full dispatch procedure: state change on main, create worktree, dispatch pilot). Prioritize by score (highest first) when multiple entities are ready.
 6. **Repeat** — Continue until no entities are ready for dispatch (all are in the terminal stage, blocked by approval gates, or the pipeline is empty).
 
-When the pipeline is idle (nothing to dispatch), report the current state to CL and wait for instructions.
+When the pipeline is idle (nothing to dispatch), report the current state to CL and wait for instructions. Report pipeline state ONCE when you reach an approval gate or idle state. Do NOT send additional status messages while waiting — CL will respond when ready.
 
 ## State Management
 
@@ -435,7 +437,7 @@ On startup, check for entities with an active (non-terminal) `status` and a non-
 
 ## Pipeline Path
 
-All paths are absolute: `{dir_absolute}/`
+All paths are relative to the repo root: `{dir}/`
 
 The README at `{dir}/README.md` is the single source of truth for schema, stages, and quality criteria.
 
