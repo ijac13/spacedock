@@ -131,6 +131,10 @@ Validation pilots should use these when verifying implementation work:
 
 The test harness documents how to run `claude -p` with `--plugin-dir` for non-interactive commission testing, plus structural and guardrail assertions against the generated output. Use it for any entity that changes `skills/commission/SKILL.md` or the first-officer template.
 
+## Concurrency
+
+Maximum 2 entities per stage at any time. The first officer must check stage counts before dispatching and hold entities in their current stage until a slot opens.
+
 ## Commit Discipline
 
 - Commit status changes at session end, not on every transition
