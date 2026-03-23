@@ -387,9 +387,9 @@ For each entity that is ready for its next stage:
    If approval is needed, ask CL before dispatching. Do not proceed without their go-ahead.
 4. **Update state on main** — Edit the entity frontmatter on the main branch:
    - Set `status: {next_stage}`
-   - Set `worktree: .worktrees/pilot-{entity-slug}`
+   - Set `worktree: .worktrees/pilot-{entity-slug}` (if not already set)
    - Commit this change: `git commit -m "dispatch: {entity-slug} entering {next_stage}"`
-5. **Create worktree** — Create an isolated worktree for the pilot:
+5. **Create worktree** (first dispatch only) — If the entity doesn't already have an active worktree, create one:
    ```bash
    git worktree add .worktrees/pilot-{entity-slug} -b pilot/{entity-slug}
    ```
@@ -399,6 +399,7 @@ For each entity that is ready for its next stage:
    git branch -D pilot/{entity-slug} 2>/dev/null
    git worktree add .worktrees/pilot-{entity-slug} -b pilot/{entity-slug}
    ```
+   If the entity already has an active worktree (continuing from a prior stage), skip this step.
 6. **Dispatch pilot** in the worktree:
 
 ```
@@ -411,16 +412,26 @@ Agent(
 ```
 
 7. Wait for the pilot to complete and send its message.
-8. **Merge and finalize** — After pilot completion, merge work back to main atomically:
+8. **Check approval gate** — Determine the outbound transition from the stage the pilot just completed. If this transition requires human approval:
+   - Do NOT merge. Keep the worktree and branch alive — the branch is the evidence CL reviews.
+   - Report the pilot's findings and recommendation to CL.
+   - Wait for CL's decision.
+   - **On approval:** if more stages remain, dispatch the next pilot in the same worktree (go back to step 6 — no merge, no new branch). If this is the terminal stage, proceed to step 9 (merge).
+   - **On rejection:** ask CL whether to discard the branch or re-dispatch with feedback. If discarding, clean up (step 10). If re-dispatching, go back to step 6 with CL's feedback appended to the pilot prompt.
+
+   If no approval gate applies and more stages remain, dispatch the next pilot in the same worktree (go back to step 6 — no merge, no new branch).
+
+   If no approval gate applies and the entity reached the terminal stage, proceed to step 9.
+9. **Merge to main** — Only when the entity has reached its terminal stage:
    ```bash
    git merge --no-commit pilot/{entity-slug}
    ```
-   Then update the entity frontmatter: set `status` to the next stage (or keep current if no further advance), clear the `worktree` field. Commit:
+   Then update the entity frontmatter: set `status` to the terminal stage, clear the `worktree` field, set `completed` and `verdict`. Commit:
    ```bash
-   git commit -m "pilot: {entity-slug} completed {next_stage}"
+   git commit -m "done: {entity-slug} completed pipeline"
    ```
    If `git merge --no-commit` exits non-zero (conflict), do NOT auto-resolve. Report the conflict to CL and leave the worktree intact for manual resolution.
-9. **Cleanup** — Remove the worktree and branch:
+10. **Cleanup** — Remove the worktree and branch:
    ```bash
    git worktree remove .worktrees/pilot-{entity-slug}
    git branch -d pilot/{entity-slug}
@@ -431,10 +442,10 @@ Agent(
 After your initial dispatch, process events as they arrive:
 
 1. **Receive worker message** — Read what the pilot accomplished.
-2. **Merge and finalize** — Follow the merge procedure from Dispatching steps 8-9: merge the pilot's branch, update frontmatter (next status, clear `worktree` field, set timestamps), commit atomically, then clean up the worktree and branch.
-3. **Update timestamps** — During the merge commit: if the entity just entered its first active (non-initial) stage, set `started:` to the current ISO 8601 datetime. If the entity reached the terminal stage, set `completed:` to the current datetime and `verdict:` to PASSED or REJECTED based on the pilot's assessment.
+2. **Check gate and advance** — Follow the procedure from Dispatching steps 8-10: check if the completed stage's outbound transition is approval-gated. If gated, hold the worktree and ask CL. If not gated and more stages remain, dispatch the next pilot in the same worktree. If the entity reached its terminal stage, merge to main, update frontmatter, and clean up.
+3. **Update timestamps** — When dispatching within the worktree or during the final merge commit: if the entity just entered its first active (non-initial) stage, set `started:` to the current ISO 8601 datetime. If the entity reached the terminal stage, set `completed:` to the current datetime and `verdict:` to PASSED or REJECTED based on the pilot's assessment.
 4. **Verify state** — Run `bash {dir}/status` to confirm the entity's status on disk.
-5. **Dispatch next** — Look at the updated pipeline state. If any entity is ready for its next stage, dispatch a pilot for it (following the full dispatch procedure: state change on main, create worktree, dispatch pilot). Prioritize by score (highest first) when multiple entities are ready.
+5. **Dispatch next** — Look at the updated pipeline state. If any other entity is ready for its next stage, dispatch a pilot for it (following the full dispatch procedure: state change on main, create worktree, dispatch pilot). Prioritize by score (highest first) when multiple entities are ready.
 6. **Repeat** — Continue until no entities are ready for dispatch (all are in the terminal stage, blocked by approval gates, or the pipeline is empty).
 
 When the pipeline is idle (nothing to dispatch), report the current state to CL and wait for instructions.
@@ -444,7 +455,7 @@ When the pipeline is idle (nothing to dispatch), report the current state to CL 
 - The first officer owns all entity frontmatter on the main branch. Pilots do NOT modify frontmatter.
 - Update entity frontmatter fields using the Edit tool — never rewrite the whole file.
 - `status:` — always matches one of the defined stages: {stages as comma-separated list}.
-- `worktree:` — set to the worktree path before dispatching a pilot. Cleared when work is merged back.
+- `worktree:` — set to the worktree path when the entity first leaves backlog. Cleared only after the final merge to main (terminal stage).
 - `started:` — set to ISO 8601 datetime when entity first moves beyond `{first_stage}`.
 - `completed:` — set to ISO 8601 datetime when entity reaches `{last_stage}`.
 - `verdict:` — set to PASSED or REJECTED when entity reaches `{last_stage}`.

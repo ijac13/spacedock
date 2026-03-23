@@ -142,3 +142,18 @@ The embedded first-officer template in `skills/commission/SKILL.md` (lines 357-4
 5. **Non-gated transitions stay on branch**: Transitions without approval gates dispatch the next pilot in the same worktree. No merge to main.
 6. **Both files updated**: Both `agents/first-officer.md` (reference doc) and `skills/commission/SKILL.md` (template that generates per-pipeline agents) reflect the fix.
 7. **Dispatching step 3 preserved**: The initial-dispatch gate check remains for the startup case where the first officer encounters entities that need gated transitions on first run.
+
+## Implementation Summary
+
+Two files changed:
+
+**`agents/first-officer.md`** — The Dispatch Lifecycle section (lines 28-44) now describes the one-branch model: create worktree once, check approval gate after each pilot, dispatch next pilot in the same worktree for non-terminal transitions, merge to main only at the terminal stage.
+
+**`skills/commission/SKILL.md`** — The embedded first-officer template (section 2d) received the substantive rewrite:
+
+- **Dispatching step 8** replaced the unconditional merge with a gate-aware decision point. After pilot completion, it checks the outbound transition. If gated: hold, report, wait for CL. If not gated and more stages remain: dispatch next pilot in same worktree (back to step 6). Only proceeds to merge (step 9) when the entity reaches its terminal stage.
+- **Dispatching step 9** is now "Merge to main" — only reachable at the terminal stage. Merges atomically, updates frontmatter (terminal status, clear worktree, set completed/verdict).
+- **Dispatching step 10** is cleanup (worktree remove, branch delete) — unchanged logic, renumbered.
+- **Event Loop step 2** changed from "Merge and finalize" to "Check gate and advance" — references the gate-aware procedure from steps 8-10.
+- **State Management** updated: `worktree` field is set when entity first leaves backlog, cleared only after final merge to main.
+- **Dispatching step 3** preserved: the initial-dispatch gate check remains for the startup case.
