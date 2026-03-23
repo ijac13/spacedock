@@ -93,3 +93,68 @@ Four surgical edits across two files:
 2. **SKILL.md line 406** — Appended report-once constraint to the Event Loop idle paragraph: "Report pipeline state ONCE ... Do NOT send additional status messages while waiting."
 3. **agents/first-officer.md lines 37-39** — Added the same negative guardrail to Dispatch Lifecycle step 3.
 4. **agents/first-officer.md lines 19-20** — Added report-once note to the Role section's operational description.
+
+## Validation
+
+### Criterion 1: SKILL.md negative guardrail before Agent() call — PASS
+
+`skills/commission/SKILL.md` line 358, immediately before the `Agent()` code block in Dispatching step 6:
+
+> **You MUST use `subagent_type="general-purpose"` when dispatching pilots. NEVER use `subagent_type="first-officer"` — that clones yourself instead of dispatching a worker.**
+
+Bold text, explicit prohibition, positioned directly before the code block.
+
+### Criterion 2: SKILL.md report-once instruction in Event Loop — PASS
+
+`skills/commission/SKILL.md` line 406, Event Loop idle paragraph:
+
+> When the pipeline is idle (nothing to dispatch), report the current state to CL and wait for instructions. Report pipeline state ONCE when you reach an approval gate or idle state. Do NOT send additional status messages while waiting — CL will respond when ready.
+
+Both the report-once instruction and the "do NOT send additional" prohibition are present.
+
+### Criterion 3: agents/first-officer.md negative guardrail in Dispatch Lifecycle step 3 — PASS
+
+`agents/first-officer.md` lines 36-39:
+
+> 3. **Dispatch pilot** — Pilot prompt specifies the worktree path as its working directory. The pilot does NOT modify YAML frontmatter. You MUST use `subagent_type="general-purpose"` when dispatching pilots. NEVER use `subagent_type="first-officer"` — that clones yourself instead of dispatching a worker.
+
+Same guardrail text, integrated into step 3.
+
+### Criterion 4: agents/first-officer.md report-once note — PASS
+
+`agents/first-officer.md` lines 19-20:
+
+> Report pipeline state ONCE when reaching an approval gate or idle state. Do not send additional status messages while waiting — CL will respond when ready.
+
+Present in the Role section's operational description.
+
+### Criterion 5: Pilots dispatched as general-purpose with distinct names — PASS
+
+`skills/commission/SKILL.md` lines 361-363 show the Agent() call template with `subagent_type="general-purpose"` and `name="pilot-{entity-slug}"`, producing distinct per-entity names.
+
+### Criterion 6: Only one first-officer in team UI — REQUIRES TESTFLIGHT
+
+Cannot validate statically. The negative guardrail should prevent self-cloning, but runtime confirmation is needed.
+
+### Criterion 7: Report-once at approval gate — REQUIRES TESTFLIGHT
+
+Cannot validate statically. The report-once instruction is present in both files, but runtime behavior must be confirmed.
+
+### Criterion 8: Validated in a future testflight — DEFERRED
+
+Awaiting next testflight session.
+
+### Summary
+
+| # | Criterion | Result |
+|---|-----------|--------|
+| 1 | SKILL.md negative guardrail | PASS |
+| 2 | SKILL.md report-once | PASS |
+| 3 | first-officer.md negative guardrail | PASS |
+| 4 | first-officer.md report-once | PASS |
+| 5 | general-purpose dispatch with distinct names | PASS |
+| 6 | Single first-officer in UI | Requires testflight |
+| 7 | Report-once at approval gate | Requires testflight |
+| 8 | Testflight validation | Deferred |
+
+**Recommendation: PASSED** — All 5 statically verifiable criteria pass. The 3 runtime criteria require testflight confirmation but the textual guardrails are correctly placed.
