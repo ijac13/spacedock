@@ -107,3 +107,15 @@ A: Worktree paths are already relative (`.worktrees/pilot-{slug}`). The pilot pr
 ## Scope
 
 This is a documentation/template change only — the modifications are confined to `skills/commission/SKILL.md`. No runtime code changes. No changes to the `status` script, `agents/first-officer.md` (reference doc), or `v0/spec.md` (though the spec's example template in the "Pipeline Path" section says "All paths relative to: `{dir}/`" which is already correct — the skill template diverged from the spec).
+
+## Implementation Summary
+
+Four changes made to `skills/commission/SKILL.md`:
+
+1. **Question 6 (line 100)**: Replaced "Resolve it to an absolute path" with guidance to store `{dir}` as a repo-root-relative path (e.g., `docs/plans/`).
+2. **Section 2d (lines 302-304)**: Removed the "IMPORTANT: All paths in the first-officer template must be absolute" paragraph and its absolute-resolution instruction.
+3. **First-officer template (line 318)**: Changed pipeline path declaration from `{dir_absolute}/` to `{dir}/`.
+4. **Pipeline Path section (line 425)**: Changed from "All paths are absolute: `{dir_absolute}/`" to "All paths are relative to the repo root: `{dir}/`".
+5. **Pilot dispatch prompt (line 361)**: Removed "(absolute path to .worktrees/pilot-{entity-slug})" parenthetical from the working directory reference.
+
+No changes to the `status` script (already self-resolving), worktree paths (already relative), or README template commands (already used `{dir}` which is now stored as relative).
