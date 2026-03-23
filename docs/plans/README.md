@@ -1,4 +1,4 @@
-<!-- commissioned-by: spacedock@0.1.1 -->
+<!-- commissioned-by: spacedock@0.1.2 -->
 
 # Design and Build Spacedock - Plain Text Pipeline for Agents
 
@@ -36,7 +36,7 @@ worktree:
 | `completed` | ISO 8601 | When the entity reached terminal status |
 | `verdict` | enum | PASSED or REJECTED — set at final stage |
 | `score` | number | Priority score, 0.0–1.0 (optional). Pipelines can upgrade to a multi-dimension rubric in their README. |
-| `worktree` | string | Worktree path while a pilot is active, empty otherwise |
+| `worktree` | string | Worktree path while an ensign is active, empty otherwise |
 
 ## Stages
 

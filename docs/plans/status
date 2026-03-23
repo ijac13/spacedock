@@ -1,12 +1,12 @@
 #!/bin/bash
-# commissioned-by: spacedock@0.1.1
+# commissioned-by: spacedock@0.1.2
 # The actual program generated below is a version of the description:
 #
 # goal: Show one-line-per-entity pipeline overview from YAML frontmatter.
 # instruction: For every .md file in this directory (excluding README.md),
 #   extract status, verdict, score, source from YAML frontmatter.
 #   Print table sorted by stage order then score descending.
-# constraints: bash only, resolves paths relative to this script, skips README.md.
+# constraints: bash 3.2+ (no associative arrays), resolves paths relative to this script, skips README.md.
 # valid status values: backlog, ideation, implementation, validation, done.
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
