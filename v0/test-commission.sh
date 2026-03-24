@@ -34,9 +34,17 @@ check() {
   fi
 }
 
+CHANNEL="unknown"
+if [ -f "$REPO_ROOT/dist/status" ] && [ -f "$REPO_ROOT/dist/first-officer.md" ]; then
+  CHANNEL="release"
+else
+  CHANNEL="dev"
+fi
+
 echo "=== Commission Skill Test ==="
 echo "Repo root:  $REPO_ROOT"
 echo "Test dir:   $TEST_DIR"
+echo "Channel:    $CHANNEL"
 echo ""
 
 # --- Phase 1: Run commission ---
@@ -243,6 +251,32 @@ if [ -d "$PIPELINE_DIR" ]; then
   fi
 else
   fail "no leaked template variables (directory missing)"
+fi
+
+# -- No leaked dist template markers (release channel) --
+echo ""
+echo "[No Leaked Dist Markers]"
+if [ "$CHANNEL" = "release" ]; then
+  if [ -f "$PIPELINE_DIR/status" ]; then
+    LEAKED_STATUS=$(grep -E '\{\{[a-z_]+\}\}' "$PIPELINE_DIR/status" 2>/dev/null || true)
+    if [ -z "$LEAKED_STATUS" ]; then
+      pass "status script has no {{variable}} markers"
+    else
+      fail "status script has no {{variable}} markers"
+      echo "    Found: $LEAKED_STATUS" | head -5
+    fi
+  fi
+  if [ -f "$FO" ]; then
+    LEAKED_FO=$(grep -E '\{\{[a-z_]+\}\}' "$FO" 2>/dev/null || true)
+    if [ -z "$LEAKED_FO" ]; then
+      pass "first-officer has no {{variable}} markers"
+    else
+      fail "first-officer has no {{variable}} markers"
+      echo "    Found: $LEAKED_FO" | head -5
+    fi
+  fi
+else
+  echo "  SKIP: dev channel — dist marker checks not applicable"
 fi
 
 # -- No absolute paths --

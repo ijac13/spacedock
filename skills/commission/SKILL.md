@@ -168,6 +168,19 @@ Before generating any files, read the Spacedock plugin manifest to get the curre
 
 This version will be embedded in each generated scaffolding file.
 
+### Channel Detection
+
+Before generating files, determine which channel to use:
+
+1. Resolve the Spacedock plugin directory (the directory containing `skills/`).
+2. Check if `dist/` exists in that directory and contains both `status` and `first-officer.md`.
+3. If both exist: use the **release channel** — copy from dist and substitute variables.
+4. Otherwise: use the **dev channel** — LLM-generate from template descriptions (current behavior).
+
+Store the channel as `{channel}` ("release" or "dev") and the dist directory path as `{dist_dir}`.
+
+Sections 2a (README) and 2c (seed entities) are LLM-generated regardless of channel. Only sections 2b (status) and 2d (first-officer) differ by channel.
+
 ### Generate Files
 
 Create the pipeline directory and generate four kinds of files. Use the design answers to fill all templates — no placeholder text should remain in generated files.
@@ -314,6 +327,25 @@ stage until a slot opens.
 
 ### 2b. Generate `{dir}/status`
 
+#### Release channel
+
+1. Read `{dist_dir}/status`.
+2. Replace `{{spacedock_version}}` with `{spacedock_version}`.
+3. Replace `{{stage_list}}` with the pipeline's stage names as a comma-separated list.
+4. Replace the block between `# === STAGES BEGIN ===` and `# === STAGES END ===` (inclusive of the markers) with the pipeline's stage-order case entries:
+   ```
+   # === STAGES BEGIN ===
+       {stage1}) echo 1 ;;
+       {stage2}) echo 2 ;;
+       ...
+       {last_stage}) echo N ;;
+   # === STAGES END ===
+   ```
+5. Write the result to `{dir}/status`.
+6. Make it executable: `chmod +x {dir}/status`.
+
+#### Dev channel
+
 Generate the status script from the reference template at `templates/status` (relative to the Spacedock plugin directory).
 
 1. Read the template file.
@@ -352,6 +384,23 @@ worktree:
 Write the first-officer agent to `{project_root}/.claude/agents/first-officer.md`.
 
 This is the most critical generated file. The prompt must be complete enough that the agent runs the pipeline without manual intervention.
+
+#### Release channel
+
+1. Read `{dist_dir}/first-officer.md`.
+2. Replace all `{{variable}}` placeholders with their values:
+   - `{{spacedock_version}}` → `{spacedock_version}`
+   - `{{mission}}` → `{mission}`
+   - `{{dir}}` → `{dir}`
+   - `{{dir_basename}}` → `{dir_basename}`
+   - `{{entity_label}}` → `{entity_label}`
+   - `{{entity_label_plural}}` → `{entity_label_plural}`
+   - `{{captain}}` → `{captain}`
+   - `{{first_stage}}` → `{first_stage}`
+   - `{{last_stage}}` → `{last_stage}`
+3. Write the result to `{project_root}/.claude/agents/first-officer.md`.
+
+#### Dev channel
 
 Use the following template, filling ALL `{variables}` from the design phase:
 
