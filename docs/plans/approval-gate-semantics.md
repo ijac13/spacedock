@@ -1,12 +1,12 @@
 ---
 title: Fix approval gate placement and ensign lifecycle at gates
-status: implementation
+status: done
 source: testflight sd6-test observation
 started: 2026-03-24T03:30:00Z
-completed:
-verdict:
+completed: 2026-03-24T05:15:00Z
+verdict: PASSED
 score: 0.88
-worktree: .worktrees/ensign-approval-gate-semantics
+worktree:
 ---
 
 Two related issues with approval gate behavior observed in sd6-test commission.
@@ -147,3 +147,43 @@ No changes to the status script, seed entity generation, or Phase 1/3 of the com
 5. **Redo sends feedback to same ensign:** On rejection + redo, the first-officer sends feedback via `SendMessage` to the existing ensign (not a fresh spawn).
 6. **Redo re-enters gate check:** After an ensign completes a redo, the gate check runs again (captain reviews the revised work).
 7. **Existing tests pass:** No regressions in commission or first-officer behavior for pipelines without approval gates.
+
+## Validation Report
+
+Validated against SKILL.md implementation. Method: code review of sections 2a (README template) and 2d (first-officer template).
+
+### AC1: Gate placement correctness — PASS
+
+SKILL.md line 262: `Approval gate: {If this stage is the SOURCE in an approval_gates transition (i.e., this_stage -> next_stage): "Yes ..."}`. For `A -> B`, stage A (source) gets the annotation. Semantics correctly flipped from target to source.
+
+### AC2: First-officer reads gates correctly — PASS
+
+Dispatching step 6a (line 457): "Read the `Approval gate` field of the stage the ensign just completed." The old pre-dispatch check (checking next stage before dispatch) is removed — no approval-related logic exists in steps 1-5. Event Loop step 2 (line 524) also references "completed stage's `Approval gate` field." Startup step 3 (line 380) parses `Approval gate` (not `Human approval`).
+
+### AC3: Ensign shutdown on non-gated completion — PASS
+
+Step 6b (line 460): `SendMessage(to="ensign-{slug}", message={ type: "shutdown_request", reason: "Stage complete, no gate" })`. Explicit shutdown_request sent when no gate applies.
+
+### AC4: Ensign kept alive at gates — PASS
+
+Step 6c (lines 465-466): "Do NOT shut down the ensign. Keep it alive for potential redo." Ensign remains running while captain reviews. Shutdown only sent on explicit approve or reject+discard decisions.
+
+### AC5: Redo sends feedback to same ensign — PASS
+
+Step 6c reject+redo (line 470): `SendMessage(to="ensign-{slug}", message="Redo requested. Feedback: ...")`. Uses SendMessage to existing ensign, not Agent() to spawn a new one. Ensign retains full work context.
+
+### AC6: Redo re-enters gate check — PASS
+
+End of reject+redo instruction (line 470): "When the ensign completes the redo, re-enter this step (6a)." Step 6a is the gate check, so captain reviews revised work before pipeline advances.
+
+### AC7: No regressions — PASS
+
+Test harness: 42/42 passed.
+
+### Bonus: No stale "Human approval" references — PASS
+
+Grep for "Human approval" in SKILL.md: zero matches. All five occurrences of `Approval gate` are correct (design summary, README template, startup parsing, post-completion check, event loop).
+
+### Recommendation: PASSED
+
+All 7 acceptance criteria met. Implementation is clean and complete.

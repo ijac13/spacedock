@@ -259,7 +259,7 @@ worktree:
 - **Good:** {Quality criteria for work done in this stage}
 - **Bad:** {Anti-patterns to avoid in this stage}
 - **Worktree:** {Yes if this stage modifies code or produces artifacts beyond the entity file; No if it only modifies entity markdown}
-- **Human approval:** {If the transition INTO this stage is in approval_gates: "Yes — {reason} before entering this stage." Otherwise: "No"}
+- **Approval gate:** {If this stage is the SOURCE in an approval_gates transition (i.e., this_stage -> next_stage): "Yes — captain reviews output before advancing to next_stage." Otherwise: "No"}
 
 {End of per-stage sections.}
 
@@ -377,7 +377,7 @@ When you begin, do these things in order:
 2. **Read the README** — Run `Read("{dir}/README.md")` to understand the pipeline schema and stage definitions.
 3. **Parse stage properties** — For each stage defined in the README, extract:
    - **Worktree:** `Yes` or `No` (default `Yes` if field is missing)
-   - **Human approval:** `Yes` or `No`
+   - **Approval gate:** `Yes` or `No`
    Record these so you can reference them during dispatch.
 4. **Read concurrency limit** — Find the `## Concurrency` section in the README. Extract the maximum number of {entity_label_plural} allowed in any single active stage. Default to 2 if the section is missing.
 5. **Run status** — Run `bash {dir}/status` to see the current state of all {entity_label_plural}.
@@ -390,9 +390,8 @@ For each {entity_label} that is ready for its next stage:
 1. Identify the {entity_label}'s current stage and what the next stage is.
 2. Read the next stage's definition from the README (inputs, outputs, good, bad criteria).
 3. **Check concurrency** — Count how many {entity_label_plural} currently have their status set to the target stage. If the count equals the concurrency limit, hold this {entity_label} in its current stage and move to the next dispatchable {entity_label}.
-4. **Check human approval** — Read the next stage's `Human approval` field from the README. If it says `Yes`, ask {captain} before dispatching. Do not proceed without their go-ahead.
-5. **Conflict check** — When multiple {entity_label_plural} are entering a worktree stage simultaneously, check if they modify the same files. If so, warn {captain} about potential merge conflicts and propose sequencing them.
-6. Read the next stage's `Worktree` field from the README. Branch on its value:
+4. **Conflict check** — When multiple {entity_label_plural} are entering a worktree stage simultaneously, check if they modify the same files. If so, warn {captain} about potential merge conflicts and propose sequencing them.
+5. Read the next stage's `Worktree` field from the README. Branch on its value:
 
 ### Dispatch on main (Worktree: No)
 
@@ -453,17 +452,25 @@ d. Wait for the ensign to complete and send its message.
 
 ### After dispatch (both paths)
 
-7. **Check approval gate** — Determine the outbound transition from the stage the ensign just completed. Read the next stage's `Human approval` field from the README. If it says `Yes`:
-   - If the {entity_label} is in a worktree: do NOT merge. Keep the worktree and branch alive — the branch is the evidence {captain} reviews.
-   - Report the ensign's findings and recommendation to {captain}.
-   - Wait for {captain}'s decision.
-   - **On approval:** if more stages remain, dispatch the next ensign (re-enter step 1 for this {entity_label}). If this is the terminal stage, proceed to step 8 (merge).
-   - **On rejection:** ask {captain} whether to discard the branch or re-dispatch with feedback. If discarding, clean up (step 9). If re-dispatching, go back to step 6 with {captain}'s feedback appended to the ensign prompt.
+6. **Ensign lifecycle and approval gate** — When the ensign sends its completion message:
 
-   If no approval gate applies and more stages remain, dispatch the next ensign (re-enter step 1 for this {entity_label}).
+   a. Read the `Approval gate` field of the stage the ensign just completed.
 
-   If no approval gate applies and the {entity_label} reached the terminal stage, proceed to step 8.
-8. **Merge to main** — Only when the {entity_label} has reached its terminal stage AND was in a worktree:
+   b. **If no approval gate:**
+      - Send shutdown to the ensign: `SendMessage(to="ensign-{slug}", message={ type: "shutdown_request", reason: "Stage complete, no gate" })`
+      - If more stages remain, dispatch a new ensign for the next stage (re-enter step 1 for this {entity_label}).
+      - If terminal stage, proceed to step 7 (merge).
+
+   c. **If approval gate applies:**
+      - Do NOT shut down the ensign. Keep it alive for potential redo.
+      - If the {entity_label} is in a worktree: do NOT merge. The branch is the evidence {captain} reviews.
+      - Report the ensign's findings and recommendation to {captain}.
+      - Wait for {captain}'s decision:
+        - **Approve:** Send shutdown to the ensign: `SendMessage(to="ensign-{slug}", message={ type: "shutdown_request", reason: "Gate approved" })`. If more stages remain, dispatch a new ensign for the next stage. If terminal, proceed to step 7 (merge).
+        - **Reject + redo:** Send feedback to the same ensign: `SendMessage(to="ensign-{slug}", message="Redo requested. Feedback: {captain's feedback}. Revise your work for the {stage} stage addressing this feedback. Commit and send a new completion message when done.")` When the ensign completes the redo, re-enter this step (6a).
+        - **Reject + discard:** Send shutdown to the ensign: `SendMessage(to="ensign-{slug}", message={ type: "shutdown_request", reason: "Gate rejected, discarding" })`. Clean up worktree/branch if applicable (step 8). Re-dispatch a fresh ensign or ask {captain} for direction.
+
+7. **Merge to main** — Only when the {entity_label} has reached its terminal stage AND was in a worktree:
    ```bash
    git merge --no-commit ensign/{slug}
    ```
@@ -477,7 +484,7 @@ d. Wait for the ensign to complete and send its message.
    ```bash
    git commit -m "done: {slug} completed pipeline"
    ```
-9. **Cleanup** — Remove the worktree and branch (only if one exists):
+8. **Cleanup** — Remove the worktree and branch (only if one exists):
    ```bash
    git worktree remove .worktrees/ensign-{slug}
    git branch -d ensign/{slug}
@@ -514,7 +521,7 @@ Clarification is not capped at one round. If {captain}'s answer raises new ambig
 After your initial dispatch, process events as they arrive:
 
 1. **Receive worker message** — Read what the ensign accomplished.
-2. **Check gate and advance** — Follow the procedure from Dispatching step 7 onward: check if the completed stage's outbound transition is approval-gated. If gated, hold and ask {captain}. If not gated and more stages remain, dispatch the next ensign (respecting the Worktree field for the next stage). If the {entity_label} reached its terminal stage, merge to main (if in a worktree), update frontmatter, and clean up.
+2. **Ensign lifecycle and gate check** — Follow the procedure from Dispatching step 6: check the completed stage's `Approval gate` field, manage ensign shutdown or keep-alive, handle approval/rejection.
 3. **Update timestamps** — When dispatching or during the final merge commit: if the {entity_label} just entered its first active (non-initial) stage, set `started:` to the current ISO 8601 datetime. If the {entity_label} reached the terminal stage, set `completed:` to the current datetime and `verdict:` to PASSED or REJECTED based on the ensign's assessment.
 4. **Verify state** — Run `bash {dir}/status` to confirm the {entity_label}'s status on disk.
 5. **Dispatch next** — Look at the updated pipeline state. If any other {entity_label} is ready for its next stage, dispatch an ensign for it (following the full dispatch procedure). Prioritize by score (highest first) when multiple {entity_label_plural} are ready.
