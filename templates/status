@@ -3,10 +3,30 @@
 # The actual program generated below is a version of the description:
 #
 # goal: Show one-line-per-{entity_label} pipeline overview from YAML frontmatter.
+#
 # instruction: For every .md file in this directory (excluding README.md),
-#   extract slug (filename without .md), status, verdict, score, source from YAML frontmatter.
-#   Print table with columns: SLUG, STATUS, TITLE, SCORE, SOURCE.
-#   Sorted by stage order then score descending.
+#   extract slug (filename without .md), status, title, score, source from YAML frontmatter.
+#   Print aligned table with columns: SLUG, STATUS, TITLE, SCORE, SOURCE.
+#   Sorted by stage order ascending, then score descending.
+#
+# YAML parsing: Read lines between the first and second "---" delimiters.
+#   For each field, use pattern: case "$line" in field:*) val="${line#*:}"; val="${val# }" ;;
+#   This handles both "field: value" and "field:" (empty). Do NOT use sed/awk for extraction.
+#
+# Empty field handling: YAML frontmatter fields may be empty (e.g., "score:" with nothing
+#   after the colon). After extraction with ${line#*:}, empty fields yield an empty string.
+#   Display empty fields as blank (empty string), NOT as "-" or "0" or the field name.
+#   For sort purposes, treat empty scores as lowest priority (sort after all scored items).
+#
+# Stage ordering: Map each status to a numeric order using a case statement.
+#   Unknown statuses get order 99 (sort last).
+#
+# Output format: Use printf with fixed column widths. Header row, then separator row
+#   of dashes, then data rows. Example:
+#     SLUG                 STATUS         TITLE                     SCORE  SOURCE
+#     ----                 ------         -----                     -----  ------
+#     my-feature           backlog        My Feature Idea           0.85   user feedback
+#
 # constraints: bash 3.2+ (no associative arrays), resolves paths relative to this script, skips README.md.
 # valid status values: {stage1}, {stage2}, ..., {last_stage}.
 
