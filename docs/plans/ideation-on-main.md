@@ -1,10 +1,10 @@
 ---
 title: Stage-specific worktree requirements in pipeline schema
-status: backlog
+status: done
 source: testflight-004
-started:
-completed:
-verdict:
+started: 2026-03-24T01:00:00Z
+completed: 2026-03-24T03:00:00Z
+verdict: PASSED
 score: 0.65
 worktree:
 ---
