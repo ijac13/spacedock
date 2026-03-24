@@ -38,6 +38,8 @@ Before asking Question 1, greet {captain} with the following (skip this greeting
 > 2. **Generate** — I'll create all the pipeline files
 > 3. **Pilot run** — I'll launch the pipeline to process your seed entities
 >
+> Throughout this pipeline, you'll be addressed as **{captain}** (the pipeline operator).
+>
 > Let's start designing.
 
 ### Args Extraction
