@@ -1,8 +1,8 @@
 ---
 title: Validation pilots must run the test harness
-status: backlog
+status: ideation
 source: testflight-005
-started:
+started: 2026-03-24T00:00:00Z
 completed:
 verdict:
 score: 0.72
