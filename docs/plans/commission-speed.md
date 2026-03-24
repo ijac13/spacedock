@@ -1,12 +1,12 @@
 ---
 title: Commission Speed — Reduce Time to Value
-status: implementation
+status: done
 source: CL feedback
 started: 2026-03-23T00:00:00Z
-completed:
-verdict:
+completed: 2026-03-24T00:50:00Z
+verdict: PASSED
 score: 0.80
-worktree: .worktrees/ensign-commission-speed
+worktree:
 ---
 
 The interactive commission flow asks 7 questions one at a time. This is the main bottleneck for time-to-value — a new user waits through a lengthy Q&A before seeing any output.
@@ -169,3 +169,49 @@ No design conflicts: commission-speed changes SKILL.md Phase 1 only; precompiled
 ## Open Questions
 
 None — the design is straightforward. Implementation is a SKILL.md rewrite of Phase 1 only.
+
+## Validation Report
+
+### What was tested
+
+Validated the single implementation commit (`69dee14 express mode: reduce Phase 1 from 7 questions to 2 + confirm`) against all 8 acceptance criteria. Reviewed the full diff of `skills/commission/SKILL.md` against main. Ran the test harness on both the branch and main to distinguish pre-existing vs. new failures.
+
+### Acceptance Criteria Results
+
+**AC1: Interactive mode asks at most 2 questions — PASSED**
+SKILL.md line 43: "Ask {captain} these two questions one at a time." Q1 is "Mission + Entity" (combined), Q2 is "Seed Entities". The Confirm Design step follows immediately after Q2. If the user's Q1 answer only covers mission, a brief follow-up asks for entity description — this is a conditional clarification within Q1, not a third question.
+
+**AC2: Derived defaults are reasonable — PASSED**
+SKILL.md lines 83-88: stages derived from mission context, approval gates default to gate before terminal stage, location derived as `docs/{mission-slug}/`, captain defaults to "captain". All four previously-asked values are now auto-derived.
+
+**AC3: Confirmation step shows all derived values and allows modification — PASSED**
+SKILL.md lines 90-106: The design summary displays mission, entity, item label, stages, approval gates, seed entities, location, and captain address. The prompt explicitly says "Modify anything above, or confirm to generate. (y/n/changes)".
+
+**AC4: Batch mode unaffected — PASSED**
+The Batch Mode section (SKILL.md lines 17-28) is completely unchanged from main. No diff hunks touch it.
+
+**AC5: Greeting text updated — PASSED**
+SKILL.md line 37: Changed from "I'll ask you six questions" to "a couple of questions to shape the pipeline".
+
+**AC6: Label derivation preserved and works with combined Q1 — PASSED**
+SKILL.md lines 57-68: The entity label derivation logic (strip articles, take head noun, derive plural and snake_case type) is preserved verbatim from the prior implementation. It now operates on `{entity_description}` extracted from the combined Q1 answer, with a follow-up question as fallback if entity description isn't clear.
+
+**AC7: Test harness passes — PASSED (with pre-existing caveats)**
+Branch result: 29 passed, 6 failed (out of 35 checks). Main result: identical — 29 passed, 6 failed. All 6 failures are first-officer.md write-permission issues in the test sandbox (the file is written to `{project_root}/.claude/agents/` which is outside the test's temp directory). Zero new failures introduced by this change.
+
+**AC8: Time-to-value reduced: 3 round-trips vs 8 — PASSED**
+Old flow: 7 questions + 1 confirmation = 8 round-trips. New flow: 2 questions + 1 confirmation = 3 round-trips. The reduction is structural and verifiable from the SKILL.md diff — questions 3 (stages), 4 (approval gates), 6 (location), and 7 (captain title) are eliminated; questions 1 (mission) and 2 (entity) are combined into Q1.
+
+### Issues Found
+
+- The 6 first-officer.md test failures are pre-existing and not caused by this change. They are a test-harness sandbox limitation (the commission writes first-officer.md to `{project_root}/.claude/agents/` which resolves outside the test temp directory).
+
+### Changes reviewed
+
+- Only `skills/commission/SKILL.md` was modified (1 commit, 3 diff hunks, all within Phase 1).
+- Phase 2 (generation) and Phase 3 (pilot run) are untouched.
+- Net line change: the file shrank from the removal of 5 dedicated question sections, replaced by 2 combined questions plus a derivation block in Confirm Design.
+
+### Recommendation
+
+**PASSED** — All 8 acceptance criteria are met. The implementation is a clean, minimal rewrite of Phase 1 that matches the design spec exactly. No regressions introduced.

@@ -34,29 +34,25 @@ Before asking Question 1, greet {captain} with the following (skip this greeting
 > Welcome to Spacedock! We're going to design a Plain Text Pipeline (PTP) together.
 >
 > I'll walk you through three phases:
-> 1. **Design** — I'll ask you six questions to shape the pipeline
+> 1. **Design** — a few questions to shape the pipeline
 > 2. **Generate** — I'll create all the pipeline files
 > 3. **Pilot run** — I'll launch the pipeline to process your seed entities
 >
 > Let's start designing.
 
-Ask {captain} these seven questions **one at a time**. Wait for each answer before asking the next question. Do not batch questions.
+Ask {captain} these three questions **one at a time**. Wait for each answer before asking the next question. Do not batch questions.
 
-### Question 1 — Mission
-
-Ask:
-
-> What's this pipeline for?
-
-Expect a one-sentence answer describing the pipeline's purpose. Store as `{mission}`.
-
-### Question 2 — Entity
+### Question 1 — Mission + Entity
 
 Ask:
 
-> What does each work item represent? (e.g., "a design idea", "a bug report", "a candidate feature")
+> What's this pipeline for, and what does each work item represent?
+>
+> Example: "Track design ideas through review stages" — the pipeline is for tracking, each item is a design idea.
 
-Store as `{entity_description}`.
+Extract `{mission}` and `{entity_description}` from the answer. If the answer clearly covers both mission and entity, proceed. If only the mission is clear, ask a brief follow-up:
+
+> Got it. What does each work item in this pipeline represent? (e.g., "a design idea", "a bug report", "a candidate feature")
 
 **Derive the entity label** from `{entity_description}`:
 
@@ -71,69 +67,38 @@ Examples:
 - "an implementation task" → label: `task`, plural: `tasks`, type: `implementation_task`
 - "a PR" → label: `pr`, plural: `prs`, type: `pr`
 
-### Question 3 — Stages
+### Question 2 — Stages
 
-Based on the mission, suggest sensible default stages. For example, if the mission is about design work, suggest `ideation → implementation → validation → done`. Format your suggestion as an arrow-separated list.
+Based on the mission, suggest default stages. Present them as an itemized list and ask {captain} to review:
 
-Ask:
-
-> What stages does an entity go through? Here's my suggestion based on your mission:
+> Based on your mission, here are the stages I'd suggest:
 >
-> `{suggested_stages}`
+> {for each stage: "1. **{stage_name}** — {one-line description}"}
 >
-> Want to modify these, or are they good?
+> Would you like to modify, add, or remove any stages? (confirm or describe changes)
 
-Store the final agreed-upon ordered list as `{stages}`. The first stage is `{first_stage}` and the last is `{last_stage}`.
+Store the confirmed stages as `{stages}`. The first stage is `{first_stage}` and the last is `{last_stage}`.
 
-### Question 4 — Approval Gates
-
-List every stage transition (e.g., `ideation → implementation`, `implementation → validation`, etc.) and ask:
-
-> Which of these transitions need your approval before proceeding?
->
-> {list each transition with a checkbox}
->
-> Mark the ones that should require human approval.
-
-Store the approval-gated transitions as `{approval_gates}`.
-
-### Question 5 — Seed Entities
+### Question 3 — Seed Entities
 
 Ask:
 
 > Give me 2–3 starting items to seed the pipeline. For each, provide:
 > - **Title** — short name
 > - **Description** — a sentence or two about what this entity is
-> - **Source** (optional) — where the idea came from
 > - **Score** (optional) — priority from 0.0 to 1.0
 
-Store as `{seed_entities}` — a list of objects with title, description, source, and score.
-
-### Question 6 — Location
-
-Suggest `docs/plans/` as the default pipeline location. The pipeline is a planning/tracking tool that lives within the project's documentation.
-
-Ask:
-
-> Where should I create this pipeline? My suggestion:
->
-> `{suggested_path}`
->
-> This directory will contain the README, status script, and all entity files.
-
-Store the confirmed path as `{dir}` — a repo-root-relative path (e.g., `docs/plans/`). Also derive `{dir_basename}` (the last path component) for use as the team name.
-
-### Question 7 — Captain Title
-
-Ask:
-
-> The first officer will address you as **captain** (fitting the nautical theme). If you'd prefer a different title, just say so — otherwise we'll go with "captain".
-
-Store the response as `{captain}`. If the user accepts the default or doesn't specify, use `captain`.
+Store as `{seed_entities}` — a list of objects with title, description, and score. Default `source` to "commission seed" for all seed entities.
 
 ### Confirm Design
 
-After all seven questions, present a summary:
+After collecting answers, derive all remaining values from the mission context:
+
+- `{approval_gates}` — default: gate before the terminal stage (e.g., `validation → done`).
+- `{dir}` — `docs/{mission-slug}/` where `{mission-slug}` is the mission condensed to a short lowercase hyphenated directory name. Also derive `{dir_basename}` (the last path component) for use as the team name.
+- `{captain}` — "captain".
+
+Present the full summary with all derived values:
 
 > **Pipeline Design Summary**
 >
@@ -147,9 +112,9 @@ After all seven questions, present a summary:
 > - **Location:** `{dir}`
 > - **Address:** {captain}
 >
-> Ready to generate? (y/n)
+> Modify anything above, or confirm to generate. (y/n/changes)
 
-Wait for {captain} to confirm before proceeding to Phase 2. If {captain} wants changes, revisit the relevant questions.
+Wait for {captain} to confirm before proceeding to Phase 2. If {captain} wants changes, apply them and re-present the summary.
 
 ---
 
@@ -527,25 +492,26 @@ Tell {captain} what was generated:
 > - {for each seed entity: "`{dir}/{slug}.md` — {title}"}
 > - `{project_root}/.claude/agents/first-officer.md` — pipeline orchestrator
 >
-> To run this pipeline in the future, start a new session with:
+> To run this pipeline in future sessions, start Claude Code with:
 >
 > ```
 > claude --agent first-officer
 > ```
 >
-> Launching the first officer now for the initial run...
+> Starting the initial run now...
 
-### Step 2 — Launch First Officer
+### Step 2 — Assume First-Officer Role
 
-Dispatch the first-officer agent:
+Do not spawn a subagent. Instead, the commission skill itself takes on the first-officer role for the initial run:
 
-```
-Agent(subagent_type="first-officer", name="first-officer", prompt="Run the pipeline at {dir}/")
-```
+1. Read the generated first-officer agent file at `{project_root}/.claude/agents/first-officer.md`.
+2. Follow its instructions: read the pipeline README, run the status script, and dispatch ensigns for entities ready to advance.
+
+Execute the first-officer startup procedure directly. You are now the first officer for the remainder of this session.
 
 ### Step 3 — Monitor and Report
 
-Wait for the first officer to process entities. When it completes or pauses at an approval gate, report the results to {captain}:
+Process entities following the first-officer event loop. When the pipeline reaches an idle state or pauses at an approval gate, report the results to {captain}:
 
 > **Pilot Run Results**
 >
@@ -565,7 +531,7 @@ This is v0. Either it works or we learn why it didn't.
 
 After Step 3 or Step 4 (whether the pilot run succeeded or failed), always conclude with:
 
-> **What's next?** To continue working this pipeline in a future session, start Claude Code and use the first-officer agent:
+> **What's next?** To continue working this pipeline in a future session, start Claude Code with:
 >
 > ```
 > claude --agent first-officer
