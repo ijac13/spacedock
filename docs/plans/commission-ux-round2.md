@@ -1,8 +1,8 @@
 ---
 title: Commission UX — Round 2 fixes from testflight observation
-status: backlog
+status: ideation
 source: testflight sd5-test observation
-started:
+started: 2026-03-24T01:00:00Z
 completed:
 verdict:
 score: 0.90
