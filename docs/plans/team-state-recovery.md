@@ -1,12 +1,12 @@
 ---
 title: Team state recovery on startup
-status: implementation
+status: done
 source: testflight-005
 started: 2026-03-24T16:00:00Z
-completed:
-verdict:
+completed: 2026-03-24T16:15:00Z
+verdict: PASSED
 score: 0.75
-worktree: .worktrees/ensign-team-state-recovery
+worktree:
 ---
 
 The first officer should check for stale team state before calling TeamCreate. If a prior session crashed or was resumed, `~/.claude/teams/{team_name}/` may exist on disk with orphaned inbox files but no live team leader. TeamCreate then fails with conflicting errors ("already leading" from in-memory state vs "doesn't exist" from missing config.json).
