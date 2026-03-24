@@ -34,13 +34,13 @@ Before asking Question 1, greet {captain} with the following (skip this greeting
 > Welcome to Spacedock! We're going to design a Plain Text Pipeline (PTP) together.
 >
 > I'll walk you through three phases:
-> 1. **Design** — a couple of questions to shape the pipeline
+> 1. **Design** — a few questions to shape the pipeline
 > 2. **Generate** — I'll create all the pipeline files
 > 3. **Pilot run** — I'll launch the pipeline to process your seed entities
 >
 > Let's start designing.
 
-Ask {captain} these two questions **one at a time**. Wait for each answer before asking the next question. Do not batch questions.
+Ask {captain} these three questions **one at a time**. Wait for each answer before asking the next question. Do not batch questions.
 
 ### Question 1 — Mission + Entity
 
@@ -67,7 +67,19 @@ Examples:
 - "an implementation task" → label: `task`, plural: `tasks`, type: `implementation_task`
 - "a PR" → label: `pr`, plural: `prs`, type: `pr`
 
-### Question 2 — Seed Entities
+### Question 2 — Stages
+
+Based on the mission, suggest default stages. Present them as an itemized list and ask {captain} to review:
+
+> Based on your mission, here are the stages I'd suggest:
+>
+> {for each stage: "1. **{stage_name}** — {one-line description}"}
+>
+> Would you like to modify, add, or remove any stages? (confirm or describe changes)
+
+Store the confirmed stages as `{stages}`. The first stage is `{first_stage}` and the last is `{last_stage}`.
+
+### Question 3 — Seed Entities
 
 Ask:
 
@@ -82,7 +94,6 @@ Store as `{seed_entities}` — a list of objects with title, description, and sc
 
 After collecting answers, derive all remaining values from the mission context:
 
-- `{stages}` — suggest sensible default stages based on the mission. For example, if the mission is about design work, use `ideation → implementation → validation → done`. The first stage is `{first_stage}` and the last is `{last_stage}`.
 - `{approval_gates}` — default: gate before the terminal stage (e.g., `validation → done`).
 - `{dir}` — `docs/{mission-slug}/` where `{mission-slug}` is the mission condensed to a short lowercase hyphenated directory name. Also derive `{dir_basename}` (the last path component) for use as the team name.
 - `{captain}` — "captain".
@@ -481,25 +492,26 @@ Tell {captain} what was generated:
 > - {for each seed entity: "`{dir}/{slug}.md` — {title}"}
 > - `{project_root}/.claude/agents/first-officer.md` — pipeline orchestrator
 >
-> To run this pipeline in the future, start a new session with:
+> To run this pipeline in future sessions, start Claude Code with:
 >
 > ```
 > claude --agent first-officer
 > ```
 >
-> Launching the first officer now for the initial run...
+> Starting the initial run now...
 
-### Step 2 — Launch First Officer
+### Step 2 — Assume First-Officer Role
 
-Dispatch the first-officer agent:
+Do not spawn a subagent. Instead, the commission skill itself takes on the first-officer role for the initial run:
 
-```
-Agent(subagent_type="first-officer", name="first-officer", prompt="Run the pipeline at {dir}/")
-```
+1. Read the generated first-officer agent file at `{project_root}/.claude/agents/first-officer.md`.
+2. Follow its instructions: read the pipeline README, run the status script, and dispatch ensigns for entities ready to advance.
+
+Execute the first-officer startup procedure directly. You are now the first officer for the remainder of this session.
 
 ### Step 3 — Monitor and Report
 
-Wait for the first officer to process entities. When it completes or pauses at an approval gate, report the results to {captain}:
+Process entities following the first-officer event loop. When the pipeline reaches an idle state or pauses at an approval gate, report the results to {captain}:
 
 > **Pilot Run Results**
 >
@@ -519,7 +531,7 @@ This is v0. Either it works or we learn why it didn't.
 
 After Step 3 or Step 4 (whether the pilot run succeeded or failed), always conclude with:
 
-> **What's next?** To continue working this pipeline in a future session, start Claude Code and use the first-officer agent:
+> **What's next?** To continue working this pipeline in a future session, start Claude Code with:
 >
 > ```
 > claude --agent first-officer
