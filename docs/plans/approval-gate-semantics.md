@@ -1,12 +1,12 @@
 ---
 title: Fix approval gate placement and ensign lifecycle at gates
-status: ideation
+status: implementation
 source: testflight sd6-test observation
 started: 2026-03-24T03:30:00Z
 completed:
 verdict:
 score: 0.88
-worktree:
+worktree: .worktrees/ensign-approval-gate-semantics
 ---
 
 Two related issues with approval gate behavior observed in sd6-test commission.
