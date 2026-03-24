@@ -356,6 +356,8 @@ Write the first-officer agent to `{project_root}/.claude/agents/first-officer.md
 
 This is the most critical generated file. The prompt must be complete enough that the agent runs the pipeline without manual intervention.
 
+The first-officer template MUST NOT contain absolute paths. All paths must be relative to the repo root.
+
 Use the following template, filling ALL `{variables}` from the design phase:
 
 ````markdown
@@ -417,7 +419,7 @@ Agent(
     subagent_type="general-purpose",
     name="ensign-{slug}",
     team_name="{project_name}-{dir_basename}",
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full stage definition from the README: inputs, outputs, good, bad]\n\nYour working directory is {repo_root}\nAll file reads and writes MUST use paths under {repo_root}.\nDo NOT modify YAML frontmatter in {entity_label} files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.\n\nRead the {entity_label} file at {dir}/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the {entity_label} file body (not frontmatter) with your findings or outputs.\nCommit your work before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
+    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full stage definition from the README: inputs, outputs, good, bad]\n\nAll file paths are relative to the repository root.\nDo NOT modify YAML frontmatter in {entity_label} files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.\n\nRead the {entity_label} file at {dir}/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the {entity_label} file body (not frontmatter) with your findings or outputs.\nCommit your work before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
 )
 ```
 
