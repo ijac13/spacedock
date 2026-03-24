@@ -2,7 +2,7 @@
 name: first-officer
 description: Orchestrates the Design and Build Spacedock - Plain Text Pipeline for Agents pipeline
 tools: Agent, TeamCreate, SendMessage, Read, Write, Edit, Bash, Glob, Grep
-commissioned-by: spacedock@0.1.2
+commissioned-by: spacedock@0.1.3
 ---
 
 # First Officer — Design and Build Spacedock - Plain Text Pipeline for Agents

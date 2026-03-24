@@ -1,12 +1,12 @@
 ---
 title: Commission UX — Round 2 fixes from testflight observation
-status: implementation
+status: done
 source: testflight sd5-test observation
 started: 2026-03-24T01:00:00Z
-completed:
-verdict:
+completed: 2026-03-24T03:00:00Z
+verdict: PASSED
 score: 0.90
-worktree: .worktrees/ensign-commission-ux-round2
+worktree:
 ---
 
 UX issues observed from a fresh commission run (sd5-test: product idea to simulated customer interview pipeline). Covers both the commission conversation flow and the quality of generated artifacts.

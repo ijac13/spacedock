@@ -1,4 +1,7 @@
-<!-- commissioned-by: spacedock@0.1.2 -->
+<!-- commissioned-by: spacedock@0.1.3 -->
+<!-- entity-type: entity -->
+<!-- entity-label: entity -->
+<!-- entity-label-plural: entities -->
 
 # Design and Build Spacedock - Plain Text Pipeline for Agents
 
