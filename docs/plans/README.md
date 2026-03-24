@@ -1,4 +1,4 @@
-<!-- commissioned-by: spacedock@0.1.3 -->
+<!-- commissioned-by: spacedock@0.1.4 -->
 <!-- entity-type: entity -->
 <!-- entity-label: entity -->
 <!-- entity-label-plural: entities -->
@@ -51,6 +51,7 @@ An entity enters backlog when it is first proposed. It has a seed description bu
 - **Outputs:** A seed entity file with title, source, and brief description
 - **Good:** Clear enough to understand what the entity is about
 - **Bad:** N/A — backlog is a holding state, not an action
+- **Worktree:** No
 - **Human approval:** No
 
 ### `ideation`
@@ -61,6 +62,7 @@ A task moves to ideation when a pilot starts fleshing out the idea: clarify the 
 - **Outputs:** A fleshed-out entity body with problem statement, proposed approach, acceptance criteria, and any open questions resolved
 - **Good:** Clearly scoped, actionable, addresses a real need, considers edge cases
 - **Bad:** Vague hand-waving, scope creep, solving problems that don't exist yet, no clear definition of done
+- **Worktree:** No
 - **Human approval:** No
 
 ### `implementation`
@@ -71,6 +73,7 @@ A task moves to implementation once its design is approved. The work here is to 
 - **Outputs:** Working code or artifacts committed to the repo, with a summary of what was built and where
 - **Good:** Minimal changes that satisfy acceptance criteria, clean code, tests where appropriate
 - **Bad:** Over-engineering, unrelated refactoring, skipping tests, ignoring edge cases identified in ideation
+- **Worktree:** Yes
 - **Human approval:** Yes — CL approves the design before implementation begins.
 
 ### `validation`
@@ -81,6 +84,7 @@ A task moves to validation after implementation is complete. The work here is to
 - **Outputs:** A validation report: what was tested, what passed, what failed, and a PASSED/REJECTED recommendation
 - **Good:** Thorough testing against acceptance criteria, clear evidence of pass/fail, honest assessment
 - **Bad:** Rubber-stamping without actually testing, ignoring failing edge cases, validating against wrong criteria
+- **Worktree:** Yes
 - **Human approval:** No
 
 ### `done`
@@ -91,6 +95,7 @@ A task reaches done when validation is complete and CL approves the result. The 
 - **Outputs:** Final verdict set in frontmatter, completed timestamp recorded
 - **Good:** Clear resolution, lessons learned captured if relevant
 - **Bad:** Closing without reading the validation report, overriding a REJECTED recommendation without reason
+- **Worktree:** No
 - **Human approval:** Yes — CL approves the final verdict before the task is closed.
 
 ## Pipeline State
@@ -100,6 +105,8 @@ View the pipeline overview:
 ```bash
 bash docs/plans/status
 ```
+
+Output columns: SLUG, STATUS, TITLE, SCORE, SOURCE.
 
 Find entities in a specific stage:
 
@@ -136,9 +143,9 @@ The test harness documents how to run `claude -p` with `--plugin-dir` for non-in
 
 ## Concurrency
 
-Maximum 2 entities per stage at any time. The first officer must check stage counts before dispatching and hold entities in their current stage until a slot opens.
+Maximum 2 entities in any single active stage at a time. The first officer checks stage counts before dispatching and holds entities in their current stage until a slot opens.
 
 ## Commit Discipline
 
-- Commit status changes at session end, not on every transition
-- Commit research outputs and entity body updates when substantive
+- Commit status changes at dispatch and merge boundaries
+- Commit entity body updates when substantive
