@@ -1,8 +1,27 @@
-<!-- commissioned-by: spacedock@0.1.4 -->
-<!-- entity-type: entity -->
-<!-- entity-label: entity -->
-<!-- entity-label-plural: entities -->
-<!-- id-style: sequential -->
+---
+commissioned-by: spacedock@0.2.1
+entity-type: entity
+entity-label: entity
+entity-label-plural: entities
+id-style: sequential
+stages:
+  defaults:
+    worktree: false
+    concurrency: 2
+  states:
+    - name: backlog
+      initial: true
+    - name: ideation
+      gate: true
+    - name: implementation
+      worktree: true
+    - name: validation
+      worktree: true
+      fresh: true
+      gate: true
+    - name: done
+      terminal: true
+---
 
 # Design and Build Spacedock - Plain Text Pipeline for Agents
 
@@ -56,8 +75,6 @@ An entity enters backlog when it is first proposed. It has a seed description bu
 - **Outputs:** A seed entity file with title, source, and brief description
 - **Good:** Clear enough to understand what the entity is about
 - **Bad:** N/A — backlog is a holding state, not an action
-- **Worktree:** No
-- **Human approval:** No
 
 ### `ideation`
 
@@ -67,8 +84,6 @@ A task moves to ideation when a pilot starts fleshing out the idea: clarify the 
 - **Outputs:** A fleshed-out entity body with problem statement, proposed approach, acceptance criteria, and any open questions resolved
 - **Good:** Clearly scoped, actionable, addresses a real need, considers edge cases
 - **Bad:** Vague hand-waving, scope creep, solving problems that don't exist yet, no clear definition of done
-- **Worktree:** No
-- **Human approval:** No
 
 ### `implementation`
 
@@ -78,8 +93,6 @@ A task moves to implementation once its design is approved. The work here is to 
 - **Outputs:** Working code or artifacts committed to the repo, with a summary of what was built and where
 - **Good:** Minimal changes that satisfy acceptance criteria, clean code, tests where appropriate
 - **Bad:** Over-engineering, unrelated refactoring, skipping tests, ignoring edge cases identified in ideation
-- **Worktree:** Yes
-- **Human approval:** Yes — CL approves the design before implementation begins.
 
 ### `validation`
 
@@ -89,8 +102,6 @@ A task moves to validation after implementation is complete. The work here is to
 - **Outputs:** A validation report: what was tested, what passed, what failed, and a PASSED/REJECTED recommendation
 - **Good:** Thorough testing against acceptance criteria, clear evidence of pass/fail, honest assessment
 - **Bad:** Rubber-stamping without actually testing, ignoring failing edge cases, validating against wrong criteria
-- **Worktree:** Yes
-- **Human approval:** No
 
 ### `done`
 
@@ -100,8 +111,6 @@ A task reaches done when validation is complete and CL approves the result. The 
 - **Outputs:** Final verdict set in frontmatter, completed timestamp recorded
 - **Good:** Clear resolution, lessons learned captured if relevant
 - **Bad:** Closing without reading the validation report, overriding a REJECTED recommendation without reason
-- **Worktree:** No
-- **Human approval:** Yes — CL approves the final verdict before the task is closed.
 
 ## Pipeline State
 
@@ -152,10 +161,6 @@ Validation pilots should use these when verifying implementation work:
 | Commission test harness | `v0/test-harness.md` | Batch-mode commission invocation, generated file validation, guardrail checks |
 
 The test harness documents how to run `claude -p` with `--plugin-dir` for non-interactive commission testing, plus structural and guardrail assertions against the generated output. Use it for any entity that changes `skills/commission/SKILL.md` or the first-officer template.
-
-## Concurrency
-
-Maximum 2 entities in any single active stage at a time. The first officer checks stage counts before dispatching and holds entities in their current stage until a slot opens.
 
 ## Commit Discipline
 
