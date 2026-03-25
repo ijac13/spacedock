@@ -1,12 +1,12 @@
 ---
 title: Make pipeline entities more organizable
-status: ideation
+status: implementation
 source: CL
 started: 2026-03-25T05:00:00Z
 completed:
 verdict:
 score: 0.60
-worktree:
+worktree: .worktrees/ensign-entity-organization
 ---
 
 As pipelines grow (this one has 30+ entities), the flat directory of markdown files gets messy. Need a way to keep entities organized and navigable.
