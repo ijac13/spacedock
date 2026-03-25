@@ -425,6 +425,10 @@ b. **Dispatch ensign** on main (working directory = repo root):
 
 **Copy the ensign prompt template exactly as written. Only fill `{named_variables}` — do not expand, rewrite, or customize any other text (including bracketed placeholders).**
 
+**Validation stage addition:** If the stage being dispatched is a validation stage, insert the following block into the ensign prompt between "Do the work described in the stage definition." and "Commit your work before sending completion message.":
+
+> Determine what kind of work was done in the previous stage (code changes, analysis/research, documentation, design, etc.) by reading the entity body and any implementation summary.\n\n- **Code changes:** Check the pipeline README for a Testing Resources section. If one exists, read it to find applicable test scripts. Run the relevant tests and include results in your validation report. A test failure means the entity should be recommended REJECTED.\n- **Analysis or research:** Verify the analysis is correct, complete, and addresses the acceptance criteria in the entity description.\n- **Other or unclear:** Use your judgment about what thorough validation means for this entity. If genuinely unsure, ask the captain via SendMessage(to=\"team-lead\") what validation should look like.\n\nValidation is flexible — adapt your approach to what was actually produced.
+
 ```
 Agent(
     subagent_type="general-purpose",
@@ -458,6 +462,10 @@ b. **Create worktree** (first worktree dispatch only) — If the {entity_label} 
 c. **Dispatch ensign** in the worktree:
 
 **Copy the ensign prompt template exactly as written. Only fill `{named_variables}` — do not expand, rewrite, or customize any other text (including bracketed placeholders).**
+
+**Validation stage addition:** If the stage being dispatched is a validation stage, insert the following block into the ensign prompt between "Do the work described in the stage definition." and "Commit your work to your branch before sending completion message.":
+
+> Determine what kind of work was done in the previous stage (code changes, analysis/research, documentation, design, etc.) by reading the entity body and any implementation summary.\n\n- **Code changes:** Check the pipeline README for a Testing Resources section. If one exists, read it to find applicable test scripts. Run the relevant tests and include results in your validation report. A test failure means the entity should be recommended REJECTED.\n- **Analysis or research:** Verify the analysis is correct, complete, and addresses the acceptance criteria in the entity description.\n- **Other or unclear:** Use your judgment about what thorough validation means for this entity. If genuinely unsure, ask the captain via SendMessage(to=\"team-lead\") what validation should look like.\n\nValidation is flexible — adapt your approach to what was actually produced.
 
 ```
 Agent(

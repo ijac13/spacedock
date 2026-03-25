@@ -1,12 +1,12 @@
 ---
 title: Validation pilots must run the test harness
-status: validation
+status: done
 source: testflight-005
 started: 2026-03-24T00:00:00Z
-completed:
-verdict:
+completed: 2026-03-25T05:15:00Z
+verdict: PASSED
 score: 0.72
-worktree: .worktrees/ensign-validation-test-requirement
+worktree:
 ---
 
 ## Problem
@@ -59,3 +59,50 @@ The ensign prompt should reference the README's Testing Resources section generi
 - Modify the first-officer template in `skills/commission/SKILL.md` (both main and worktree dispatch paths).
 - No changes to the README template, test harness, or `agents/first-officer.md` reference doc.
 - No new files needed.
+
+## Validation Report
+
+### Test Harness Results
+
+Ran `bash v0/test-commission.sh` — **42 passed, 0 failed** (out of 42 checks). No regressions.
+
+All check categories passed: File Existence (6), Status Script (3), Entity Frontmatter (9), README Completeness (9), First-Officer Completeness (8), First-Officer Guardrails (4), No Leaked Template Variables (1), No Absolute Paths (2).
+
+### Acceptance Criteria Assessment
+
+**1. Validation ensign prompt includes instruction to check Testing Resources and run tests.**
+PASS — Both dispatch paths (main at line 428, worktree at line 466) contain a "Validation stage addition" block that instructs the ensign to "Check the pipeline README for a Testing Resources section. If one exists, read it to find applicable test scripts. Run the relevant tests."
+
+**2. Instruction is only for validation-stage dispatches.**
+PASS — Both blocks are gated by "If the stage being dispatched is a validation stage" — a conditional the first officer evaluates at dispatch time. Non-validation stages do not receive this block.
+
+**3. Instruction tells ensign to include test results and recommend REJECTED on failure.**
+PASS — The block states: "Run the relevant tests and include results in your validation report. A test failure means the entity should be recommended REJECTED."
+
+**4. Generated first-officer template includes this conditional logic.**
+PASS — The validation-stage addition instructions are embedded in the first-officer template within SKILL.md (both "Dispatch on main" and "Dispatch in worktree" sections). The first officer reads and applies this conditional at dispatch time without manual intervention.
+
+**5. Existing test harness passes (no regression).**
+PASS — 42/42 checks pass. The commission generates all expected files with correct structure, no leaked template variables, no absolute paths.
+
+**6. Instruction references the README generically (no hardcoded script path).**
+PASS — The block says "Check the pipeline README for a Testing Resources section" — no mention of `v0/test-commission.sh` or any specific script path. Works for any pipeline with a Testing Resources section.
+
+### CL's Smart Validation Requirement
+
+The implementation handles three cases as CL directed:
+
+- **Code changes:** "Check the pipeline README for a Testing Resources section. If one exists, read it to find applicable test scripts. Run the relevant tests and include results in your validation report."
+- **Analysis or research:** "Verify the analysis is correct, complete, and addresses the acceptance criteria in the entity description."
+- **Uncertain:** "Use your judgment about what thorough validation means for this entity. If genuinely unsure, ask the captain via SendMessage(to=\"team-lead\") what validation should look like."
+
+The block begins with "Determine what kind of work was done in the previous stage (code changes, analysis/research, documentation, design, etc.) by reading the entity body and any implementation summary" — so the ensign reads context before choosing which validation path to follow. Ends with "Validation is flexible — adapt your approach to what was actually produced."
+
+### Additional Observations
+
+- Both dispatch paths (main and worktree) have identical validation blocks, differing only in the insertion point reference ("Commit your work before sending completion message" vs "Commit your work to your branch before sending completion message"), which correctly matches each path's ensign prompt template.
+- Only `skills/commission/SKILL.md` was modified — no changes to README template, test harness, or `agents/first-officer.md`.
+
+### Recommendation
+
+**PASSED** — All 6 acceptance criteria met. Test harness shows no regressions (42/42). Smart validation logic handles code, analysis, and uncertain cases as CL specified.
