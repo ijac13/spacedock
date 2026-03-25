@@ -1,8 +1,8 @@
 ---
 title: Test Spacedock with Codex
-status: backlog
+status: ideation
 source: CL
-started:
+started: 2026-03-24T00:00:00Z
 completed:
 verdict:
 score:
