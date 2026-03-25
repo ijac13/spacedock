@@ -81,16 +81,44 @@ The `[ -f "$f" ] || continue` guard handles both "done/ doesn't exist" and "done
 
 **Cross-references in entity bodies are a non-issue.** Entity bodies are prose documentation. If one mentions `codex-compatibility.md`, the meaning is clear regardless of which directory it lives in. The slug is the lookup key, not the relative path. `git log --follow` handles rename history.
 
-## Recommendation
+## CL's Design Direction (overrides debate recommendation)
 
-Implement a `done/` subdirectory for terminal entities with the following specification:
+The engineer debate recommended `done/` scoped to terminal entities. CL broadened the scope:
 
-1. **`done/` subdirectory** for terminal entities (both PASSED and REJECTED verdict)
-2. **Slug unchanged** — filename minus `.md`, regardless of directory location
-3. **First-officer moves files** to `done/` as part of the done transition, atomic with the merge commit (`git mv {slug}.md done/{slug}.md`)
-4. **Status script updated** to scan both `$DIR/*.md` and `$DIR/done/*.md` with `[ -f "$f" ] || continue` guard for bash 3.2 compatibility
-5. **One-time migration** of existing 25 done entities via batch `git mv`
-6. **Do NOT generalize** to other status subdirectories — `done/` is scoped to the terminal state only
-7. **Slug uniqueness enforced** across both directories when creating entities
-8. **Commission template updated** with the `done/` convention, the `git mv` step in the dispatch lifecycle, and updated grep examples
-9. **README "File Naming" section updated** to note that terminal entities live in `done/` but the naming convention is the same: "Each entity is a markdown file named `{slug}.md` — lowercase, hyphens, no spaces. Terminal entities (status: done) are moved to `done/` to keep the active working set clean. The slug remains the filename minus `.md` regardless of directory location."
+### `_archive/` instead of `done/`
+
+`_archive/` is a general decluttering mechanism, not coupled to pipeline state. Any entity can be archived — done entities, stalled ideation, parked backlog items. The underscore prefix sorts it to the bottom in directory listings.
+
+Key differences from the debate's `done/` proposal:
+- **Not status-coupled**: archived entities keep their original frontmatter status. An archived backlog item is still `status: backlog`, just out of the active view.
+- **Resurrection**: entities can be moved back to the main directory when needed. `git mv _archive/{slug}.md {slug}.md` brings it back.
+- **First officer ignores `_archive/`**: the first officer only dispatches from the main directory. Archived entities are invisible to the pipeline.
+
+### Status script changes
+
+- Default: scan `$DIR/*.md` only (excludes `_archive/`)
+- `--archived` flag: also scan `$DIR/_archive/*.md`
+- Bash 3.2 compatible: two globs with `[ -f "$f" ] || continue` guard
+
+### Entity identifier (future cross-referencing)
+
+A short stable identifier per entity, assigned at creation, never changes. Not necessarily in the filename — could be a frontmatter field (`id: a3f`). Enables:
+- Cross-system references (e.g., Linear: `SD-a3f`)
+- Dependency tracking between entities (`depends: [a3f, b72]`)
+- Future in-place DB for state search and reference
+- Beads-style variable-length truncation: starts short, grows as entity count increases
+
+This is lower priority than `_archive/` but should be designed together so the archive mechanism works with identifiers.
+
+## Revised Specification
+
+1. **`_archive/` subdirectory** for any entity the captain wants out of the active view
+2. **Slug unchanged** — filename minus `.md`, regardless of directory
+3. **First-officer moves done entities** to `_archive/` as part of the done transition, atomic with merge commit. Captain can also manually archive stalled entities.
+4. **First officer ignores `_archive/`** — only dispatches from main directory
+5. **Status script** scans `$DIR/*.md` by default; `--archived` flag adds `$DIR/_archive/*.md`
+6. **One-time migration** of existing done entities via batch `git mv`
+7. **Slug uniqueness enforced** across both directories
+8. **Commission template updated** with `_archive/` convention and the `git mv` step
+9. **README "File Naming" section** documents the convention
+10. **(Stretch) Entity identifier** — `id:` field in frontmatter schema, assigned at creation. Design the format (variable-length truncated UUID or similar) but implementation can be a follow-up.
