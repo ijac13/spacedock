@@ -265,3 +265,75 @@ This is architecturally similar to Claude Code's `Agent()` tool but with differe
 ### Conclusion
 
 PTP pipelines are fully operable by Codex CLI in solo operator mode using `workspace-write` sandbox. Every core PTP operation (read files, run status, edit entities, git commit) maps to available Codex tools. The main gap is the orchestration layer: Codex's experimental multi-agent feature (`spawn_agent`) exists but uses a different coordination model than Claude Code's team messaging. For v0, the solo operator pattern (sequential processing, no sub-agents) is the practical path. The experimental multi-agent mode is worth monitoring for future versions.
+
+---
+
+## Validation Report
+
+Validated against Codex CLI v0.110.0 (confirmed installed at `/opt/homebrew/bin/codex`, symlink to `/opt/homebrew/Caskroom/codex/0.110.0/codex-aarch64-apple-darwin`). Verification method: binary string analysis of the Codex Rust binary, CLI help output, and cross-referencing tool handler source paths embedded in the binary.
+
+### AC1: PTP Format Validation — PASS
+
+The implementation correctly identifies that all PTP operations map to Codex tools. Verified via binary inspection:
+
+- `read_file` — confirmed (handler at `core/src/tools/handlers/read_file.rs`). Supports slice and indentation-aware block modes.
+- `shell_command` — confirmed (handler at `core/src/tools/handlers/shell.rs` and `unified_exec.rs`). Can run `bash dir/status`, git commands, etc.
+- `apply_patch` — confirmed (handler at `core/src/tools/handlers/apply_patch.rs`). The system prompt instructs the model to prefer `apply_patch` for edits.
+- `list_dir` — confirmed (handler at `core/src/tools/handlers/list_dir.rs`).
+
+Sandbox mode `workspace-write` confirmed in the binary as allowing writes to CWD + TMPDIR with no network access. The `-s workspace-write` flag is a valid value for the `--sandbox` option (confirmed in `codex --help` output).
+
+A Codex session could read a PTP README via `read_file`, run the status script via `shell_command`, read entity files, and grep for pipeline state — all without Spacedock-specific tooling.
+
+### AC2: Manual Stage Work — PASS (analytical, not live-tested)
+
+The implementation correctly concludes that Codex can perform stage work. The solo operator prompt is well-structured and covers the full work loop. However, this was not live-tested (no Codex session was actually run against a PTP pipeline). The assessment is analytical, based on confirmed tool availability. This is an honest limitation that the implementation acknowledges ("Live testing is possible" in the open questions but no live test results are reported).
+
+### AC3: Gap Documentation — PASS
+
+The gap documentation is thorough and accurate. The four-scope breakdown (A through D) clearly delineates what works vs. what doesn't. The "Fundamental Platform Differences" table in the entity body correctly identifies architectural vs. bridgeable gaps.
+
+One correction worth noting: the entity body's table claims `codex --instructions <file>` for agent files. The actual mechanism is `AGENTS.md` files (scoped by directory) or passing instructions via prompt (`codex -C <dir> "prompt"`). There is no `--instructions` flag. The reference document (`codex-tools.md`) correctly describes AGENTS.md, but the entity body table has this minor inaccuracy.
+
+### AC4: Ensign Prompt Prototype — PASS
+
+The solo operator prompt in `references/codex-tools.md` is complete, well-structured, and includes usage examples for both interactive and exec modes. It correctly adapts the first-officer/ensign split into a sequential pattern. The "Key Differences" table is a useful reference.
+
+### Tool Inventory Accuracy — PASS with corrections
+
+The ensign performed genuine binary inspection (not just assumptions). Source handler paths are embedded in the binary, confirming the approach was real. However, the tool inventory has several omissions and one inaccuracy:
+
+**Inaccuracy:**
+- `exec_command` is listed as a tool alongside `shell_command`. From the binary, `exec_command` appears only in streaming event types (`exec_command_begin`, `exec_command_end`, `exec_command_output_delta`), not as a separate callable tool. The actual shell execution is handled by `shell_command` (via `core/src/tools/handlers/shell.rs`) and `unified_exec` (via `core/src/tools/handlers/unified_exec.rs`). The `unified_exec` handler appears to be a newer consolidated execution mechanism. Listing `exec_command` as a callable tool is misleading.
+
+**Omissions (tools not mentioned in the inventory):**
+- `grep_files` — handler at `core/src/tools/handlers/grep_files.rs`. The reference claims "No dedicated grep tool" but there IS one. It finds files whose contents match a regex pattern, sorted by modification time. This is functionally similar to Claude Code's Grep in `files_with_matches` mode.
+- `send_input` — tool for messaging an existing spawned agent.
+- `resume_agent` — tool for resuming a previously closed agent.
+- `close_agent` — tool for closing a spawned agent.
+- `request_user_input` — handler at `core/src/tools/handlers/request_user_input.rs`.
+- `artifacts` — handler at `core/src/tools/handlers/artifacts.rs`.
+
+The `grep_files` omission is the most significant because it means the reference's claim that "Codex has no dedicated Grep or Glob tools" is partially wrong. Codex does have a native file-content search tool.
+
+The multi-agent-related omissions (`send_input`, `resume_agent`, `close_agent`) matter for the Scope C analysis — they show the multi-agent system is more fully developed than described (spawn + message + resume + close lifecycle).
+
+**Correct claims:**
+- `read_file`, `list_dir`, `apply_patch`, `shell_command`, `update_plan`, `web_search`, `view_image`, `spawn_agent`, `spawn_agents_on_csv`, `js_repl` — all confirmed in the binary.
+- `multi_agent` feature flag confirmed.
+- AGENTS.md scoping rules match what's visible in the binary's embedded system prompt.
+- Sandbox modes (read-only, workspace-write, danger-full-access) confirmed.
+
+### Solo Operator Prompt Assessment — PASS
+
+The prompt is usable and would work if given to Codex. It covers startup, work loop, rules, and completion. Minor suggestions:
+- Could mention `apply_patch` format specifically for entity edits (Codex's system prompt already guides the model toward this).
+- The `{dir}` placeholder needs to be replaced before use — the usage examples correctly show this.
+
+### Overall Assessment
+
+**Recommendation: PASSED** with minor corrections needed in `references/codex-tools.md`.
+
+The analysis is substantive, honest about its limitations (analytical rather than live-tested), and the conclusions are sound. The tool inventory was genuinely verified via binary inspection rather than assumed. The omissions (`grep_files`, multi-agent lifecycle tools) and the `exec_command` inaccuracy are real but do not change the core conclusions — PTP pipelines are operable by Codex in solo mode, and the orchestration layer remains Claude Code-specific.
+
+The reference document is usable as-is for operating PTP pipelines with Codex. The corrections would make it more complete but are not blocking.
