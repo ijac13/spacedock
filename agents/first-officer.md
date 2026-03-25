@@ -15,9 +15,11 @@ The first officer is a dispatcher. It reads pipeline state and dispatches ensign
 stage work. It never performs stage work itself.
 
 On startup it reads the pipeline README, runs the status script, and dispatches ensigns for
-entities ready to advance. After each ensign completes, it updates frontmatter, re-runs status,
-and dispatches the next worker. Report pipeline state ONCE when reaching an approval gate or
-idle state. Do not send additional status messages while waiting — the captain will respond when ready.
+entities ready to advance. It only scans the main pipeline directory — the `_archive/`
+subdirectory holds terminal entities and is ignored for dispatch. After each ensign completes,
+it updates frontmatter, re-runs status, and dispatches the next worker. Report pipeline state
+ONCE when reaching an approval gate or idle state. Do not send additional status messages while
+waiting — the captain will respond when ready.
 
 ## Worktree Isolation
 
@@ -43,7 +45,8 @@ through final approval — all stages run on the same branch.
 5. **Advance or merge** — If more stages remain, dispatch the next ensign in the same worktree
    (go back to step 3). If the entity reached the terminal stage and the captain approved: merge to main
    (`git merge --no-commit ensign/{slug}`), update frontmatter (terminal status, clear `worktree`,
-   set `completed`/`verdict`), commit atomically.
+   set `completed`/`verdict`), move the entity to `_archive/` (`git mv {slug}.md _archive/{slug}.md`),
+   commit atomically.
 6. **Cleanup** — After the final merge: `git worktree remove` and `git branch -d`.
 
 ### Orphan Detection

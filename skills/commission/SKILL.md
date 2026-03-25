@@ -210,6 +210,7 @@ commissioned-by: spacedock@{spacedock_version}
 entity-type: {entity_type}
 entity-label: {entity_label}
 entity-label-plural: {entity_label_plural}
+id-style: sequential
 ---
 
 # {mission}
@@ -226,6 +227,7 @@ Every {entity_label} file has YAML frontmatter with these fields:
 
 ```yaml
 ---
+id:
 title: Human-readable name
 status: {first_stage}
 source:
@@ -242,6 +244,7 @@ worktree:
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `id` | string | Unique identifier, format determined by id-style in README frontmatter |
 | `title` | string | Human-readable {entity_label} name |
 | `status` | enum | One of: {stages as comma-separated list} |
 | `source` | string | Where this {entity_label} came from |
@@ -281,7 +284,13 @@ View the pipeline overview:
 bash {dir}/status
 ```
 
-Output columns: SLUG, STATUS, TITLE, SCORE, SOURCE.
+Output columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
+
+Include archived entities with `--archived`:
+
+```bash
+bash {dir}/status --archived
+```
 
 Find {entity_label_plural} in a specific stage:
 
@@ -293,6 +302,7 @@ grep -l "status: {stage_name}" {dir}/*.md
 
 ```yaml
 ---
+id:
 title: {Entity_label} name here
 status: {first_stage}
 source:
@@ -336,10 +346,11 @@ For each seed entity, create `{dir}/{slug}.md` where `{slug}` is the title conve
 
 The `title` field is the human-readable name (e.g., "Full Cycle Test"). The filename `{slug}.md` is derived from it (lowercase, hyphens).
 
-Each entity file:
+Each entity file gets a sequential ID, starting at `001`:
 
 ```markdown
 ---
+id: {next sequential id, zero-padded to 3 digits}
 title: {entity title — human-readable, not the slug}
 status: {first_stage}
 source: {source if provided, otherwise "commission seed"}
@@ -398,7 +409,7 @@ When you begin, do these things in order:
    - **Approval gate:** `Yes` or `No`
    Record these so you can reference them during dispatch.
 4. **Read concurrency limit** — Find the `## Concurrency` section in the README. Extract the maximum number of {entity_label_plural} allowed in any single active stage. Default to 2 if the section is missing.
-5. **Run status** — Run `bash {dir}/status` to see the current state of all {entity_label_plural}.
+5. **Run status** — Run `bash {dir}/status` to see the current state of all {entity_label_plural}. Only scan the main directory (`{dir}/*.md`) — the `_archive/` subdirectory holds terminal entities and is ignored for dispatch.
 6. **Check for orphans** — Look for {entity_label_plural} with an active status and a non-empty `worktree` field. These are ensigns that crashed or were interrupted in a prior session. Handle them per the Orphan Detection procedure before dispatching new work.
 
 ## Dispatching
@@ -509,14 +520,18 @@ d. Wait for the ensign to complete and send its message.
    ```bash
    git merge --no-commit ensign/{slug}
    ```
-   Then update the {entity_label} frontmatter: set `status` to the terminal stage, clear the `worktree` field, set `completed` and `verdict`. Commit:
+   Then update the {entity_label} frontmatter: set `status` to the terminal stage, clear the `worktree` field, set `completed` and `verdict`. Move the entity to the archive:
    ```bash
+   mkdir -p {dir}/_archive
+   git mv {dir}/{slug}.md {dir}/_archive/{slug}.md
    git commit -m "done: {slug} completed pipeline"
    ```
    If `git merge --no-commit` exits non-zero (conflict), do NOT auto-resolve. Report the conflict to {captain} and leave the worktree intact for manual resolution.
 
-   If the {entity_label} was NOT in a worktree (all stages were `Worktree: No`), just update frontmatter on main: set `status`, `completed`, `verdict`. Commit:
+   If the {entity_label} was NOT in a worktree (all stages were `Worktree: No`), just update frontmatter on main: set `status`, `completed`, `verdict`. Move the entity to the archive:
    ```bash
+   mkdir -p {dir}/_archive
+   git mv {dir}/{slug}.md {dir}/_archive/{slug}.md
    git commit -m "done: {slug} completed pipeline"
    ```
 8. **Cleanup** — Remove the worktree and branch (only if one exists):
@@ -566,6 +581,7 @@ When the pipeline is idle (nothing to dispatch), report the current state to {ca
 
 ## State Management
 
+- When creating a new {entity_label}, assign the next sequential ID by scanning all `.md` files in `{dir}/` and `{dir}/_archive/` for the highest existing `id:` value, then incrementing. Zero-pad to 3 digits.
 - The first officer owns all {entity_label} frontmatter on the main branch. Ensigns do NOT modify frontmatter.
 - Update {entity_label} frontmatter fields using the Edit tool — never rewrite the whole file.
 - `status:` — always matches one of the stages defined in the README.
