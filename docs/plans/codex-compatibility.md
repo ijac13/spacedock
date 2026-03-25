@@ -10,3 +10,119 @@ worktree:
 ---
 
 Test Spacedock (the commission skill and generated first-officer pipeline) with OpenAI Codex CLI to verify cross-platform compatibility.
+
+## Problem Statement
+
+Spacedock is currently a Claude Code plugin. CL wants to know whether PTP pipelines can work with OpenAI's Codex CLI — a terminal-based coding agent using OpenAI models. This ideation analyzes what's platform-specific vs. platform-agnostic in Spacedock, and what "works with Codex" realistically means.
+
+## Architecture Analysis: Claude Code-Specific vs. Platform-Agnostic
+
+### Platform-Agnostic (the PTP format itself)
+
+The core PTP format has zero Claude Code dependency:
+
+- **Entity files** — markdown with YAML frontmatter. Any tool can read/write these.
+- **README as schema** — a plain markdown file defining stages, fields, quality criteria. Human- and machine-readable.
+- **Status script** — a bash script. Runs anywhere with bash 3.2+.
+- **Git worktree isolation** — standard git. Any agent that can run `git worktree add` can use this.
+- **Pipeline state** — lives on disk as files. `grep -l "status: ideation" docs/plans/*.md` works in any shell.
+
+This is by design — PTP is "plain text". The format is the interface. Any agent that can read markdown, parse YAML frontmatter, edit files, and run bash can operate a PTP pipeline.
+
+### Claude Code-Specific (the orchestration layer)
+
+The commission skill and first-officer agent are deeply Claude Code-specific:
+
+| Component | Claude Code Dependency | Notes |
+|-----------|----------------------|-------|
+| **Plugin system** (`plugin.json`, `/spacedock commission`) | Hard dependency | Codex has no plugin/skill system. Commission can't be invoked as `/spacedock commission`. |
+| **Agent tool** (`Agent(subagent_type=..., prompt=...)`) | Hard dependency | First-officer dispatches ensigns via Claude Code's Agent tool. Codex has no equivalent sub-agent spawning mechanism. |
+| **TeamCreate / SendMessage** | Hard dependency | First-officer creates a team and communicates with ensigns via messaging. Codex has no team/messaging model. |
+| **Agent files** (`.claude/agents/first-officer.md`) | Hard dependency | `claude --agent first-officer` is a Claude Code convention. Codex doesn't read `.claude/agents/`. |
+| **Plan mode** (`plan_mode_required`) | Claude Code feature | Not directly used in v0, but referenced in the agent file frontmatter tool list. |
+| **Tool names** (Read, Write, Edit, Glob, Grep, Bash) | Partially portable | Codex has similar file-operation capabilities but different tool names/APIs. The model can adapt if prompted. |
+
+### Assessment: Two Distinct Layers
+
+Spacedock has two cleanly separable layers:
+
+1. **PTP format** — fully portable. A directory of markdown files with a README schema and bash status script.
+2. **Claude Code orchestration** — not portable. The commission skill, first-officer agent, team coordination, and sub-agent dispatch all rely on Claude Code's specific features.
+
+## What Would "Works with Codex" Mean?
+
+There are several possible scopes, from least to most ambitious:
+
+### Scope A: Manual pipeline operation (trivially works today)
+
+A human (or any agent) can already operate a PTP pipeline manually:
+- Read the README to understand stages
+- Run `bash {dir}/status` to see state
+- Edit entity frontmatter to advance stages
+- Do stage work as described in the README
+
+This works because PTP is plain text. Codex can do this today with no changes to Spacedock.
+
+### Scope B: Codex as an ensign (partial — most realistic target)
+
+An ensign's job is narrow: read an entity file, do stage work, update the entity body, commit. The ensign prompt is self-contained text — it doesn't reference Claude Code-specific tools by name (it says things like "Read the entity file" and "Commit your work"). An ensign doesn't use Agent, TeamCreate, or SendMessage (except for the completion message).
+
+**What would need to change:** The ensign prompt currently ends with `SendMessage(to="team-lead", ...)`. For Codex, completion signaling would need a different mechanism (e.g., write to a file, or just commit and exit). The first-officer would still need to be Claude Code to dispatch Codex ensigns, which brings us to...
+
+**Feasibility:** Moderate. The ensign prompt is mostly platform-agnostic prose. The hard part is the dispatch and completion signaling protocol.
+
+### Scope C: Codex as first-officer (not feasible for v0)
+
+The first-officer relies on:
+- `Agent()` to spawn sub-agents
+- `TeamCreate()` and `SendMessage()` for coordination
+- `.claude/agents/` convention for discovery
+
+Codex has none of these. A Codex first-officer would need a completely different orchestration mechanism — probably a loop-based approach where one Codex process manages everything sequentially instead of dispatching parallel sub-agents.
+
+**Feasibility:** Would require a fundamentally different first-officer architecture. Not a testing task — it's a design and implementation task.
+
+### Scope D: Codex-native commission (not feasible for v0)
+
+Replacing the commission skill requires a Codex plugin/skill equivalent (doesn't exist) or embedding commission logic in a different invocation pattern. Far out of scope.
+
+## Fundamental Platform Differences
+
+| Feature | Claude Code | Codex CLI | Gap |
+|---------|------------|-----------|-----|
+| Sub-agent spawning | `Agent()` tool | None — single-process | Architectural |
+| Team messaging | `TeamCreate` + `SendMessage` | None | Architectural |
+| Plugin/skill system | `plugin.json` + skill files | None | Architectural |
+| Agent files | `.claude/agents/*.md` | `codex --instructions <file>` | Bridgeable |
+| File operations | Read/Write/Edit/Glob/Grep tools | Shell commands (sandbox) | Bridgeable |
+| Interactive conversation | Full multi-turn | Full multi-turn | Compatible |
+| Bash execution | `Bash()` tool | Shell execution (sandboxed) | Compatible |
+| Git operations | Via Bash tool | Via shell | Compatible |
+
+The architectural gaps (sub-agents, teams, plugins) are not things that can be shimmed or adapted — they're fundamental differences in agent capability model.
+
+## Proposed Approach
+
+Given the analysis, the realistic scope for this entity is **Scope A + partial Scope B**: verify that PTP pipelines are operable by Codex as a manual operator, and explore what an ensign prompt for Codex would look like.
+
+### Acceptance Criteria
+
+1. **PTP format validation**: Confirm that a Codex CLI session can read a PTP pipeline README, run the status script, read entity files, and understand the pipeline state — without any Spacedock-specific tooling.
+
+2. **Manual stage work**: Confirm that Codex can perform stage work on an entity (read the entity, do the work described in the stage definition, update the entity body, commit) when given appropriate instructions.
+
+3. **Gap documentation**: Document the specific Claude Code dependencies that prevent full automation (Agent dispatch, team messaging, plugin invocation) and what alternatives Codex would need.
+
+4. **Ensign prompt prototype**: Draft what an ensign-equivalent prompt for Codex would look like, noting where the completion signaling differs.
+
+### What "Done" Looks Like
+
+- A written assessment (in this entity body) of what works, what doesn't, and what the realistic path to Codex compatibility would be.
+- Concrete evidence from testing (if CL has Codex available) or detailed analysis of Codex's documented capabilities.
+- Honest conclusion: is cross-platform PTP operation worth pursuing in v0, or should it wait for a later version?
+
+### Open Questions
+
+1. **Does CL have Codex CLI installed and available for testing?** If not, this is a document-analysis task rather than a hands-on testing task.
+2. **Is the goal "Codex can use PTP pipelines" or "Spacedock generates pipelines that work with Codex"?** The former is mostly true already; the latter requires significant new work.
+3. **Priority relative to core Spacedock features**: Is this exploratory research, or does it need to drive implementation decisions for v0?
