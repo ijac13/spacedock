@@ -211,6 +211,26 @@ entity-type: {entity_type}
 entity-label: {entity_label}
 entity-label-plural: {entity_label_plural}
 id-style: sequential
+stages:
+  defaults:
+    worktree: false
+    concurrency: 2
+  states:
+    - name: {first_stage}
+      initial: true
+    {For each middle stage, add an entry with per-stage overrides only when different from defaults:}
+    - name: {stage_name}
+      {worktree: true — only if the stage modifies code or produces artifacts beyond the entity file}
+      {fresh: true — only if an independent perspective matters, e.g., validation}
+      {gate: true — if this stage is the SOURCE in an approval_gates transition}
+    - name: {last_stage}
+      terminal: true
+  transitions:
+    {Omit this block entirely for linear pipelines.}
+    {For non-linear flows, add explicit edges:}
+    - from: {source_stage}
+      to: {target_stage}
+      label: {human-readable label}
 ---
 
 # {mission}
@@ -266,9 +286,6 @@ worktree:
 - **Outputs:** {What the worker produces — be specific to the mission}
 - **Good:** {Quality criteria for work done in this stage}
 - **Bad:** {Anti-patterns to avoid in this stage}
-- **Worktree:** {ONLY include this line if the stage modifies code or produces artifacts beyond the entity file. Set to "Yes". OMIT this line entirely for stages that only modify entity markdown.}
-- **Fresh:** {ONLY include this line for stages where an independent perspective matters, e.g., validation. Set to "Yes". OMIT for stages that benefit from retained context.}
-- **Approval gate:** {If this stage is the SOURCE in an approval_gates transition (i.e., this_stage -> next_stage): "Yes — captain reviews output before advancing to next_stage." Otherwise: "No"}
 
 {End of per-stage sections.}
 
@@ -315,12 +332,6 @@ worktree:
 
 Description of this {entity_label} and what it aims to achieve.
 ```
-
-## Concurrency
-
-Maximum 2 {entity_label_plural} in any single active stage at a time. The first officer
-checks stage counts before dispatching and holds {entity_label_plural} in their current
-stage until a slot opens.
 
 ## Commit Discipline
 
@@ -403,24 +414,19 @@ When you begin, do these things in order:
 
 1. **Create team** — Run `TeamCreate(team_name="{project_name}-{dir_basename}")`. If it fails due to stale team state from a prior crashed session, clean up with `rm -rf ~/.claude/teams/{project_name}-{dir_basename}/` and retry TeamCreate.
 2. **Read the README** — Run `Read("{dir}/README.md")` to understand the pipeline schema and stage definitions.
-3. **Parse stage properties** — For each stage defined in the README, extract:
-   - **Worktree:** `Yes` or `No` (default `No` if field is missing)
-   - **Fresh:** `Yes` or `No` (default `No` if field is missing)
-   - **Approval gate:** `Yes` or `No`
-   Record these so you can reference them during dispatch.
-4. **Read concurrency limit** — Find the `## Concurrency` section in the README. Extract the maximum number of {entity_label_plural} allowed in any single active stage. Default to 2 if the section is missing.
-5. **Run status** — Run `bash {dir}/status` to see the current state of all {entity_label_plural}. Only scan the main directory (`{dir}/*.md`) — the `_archive/` subdirectory holds terminal entities and is ignored for dispatch.
-6. **Check for orphans** — Look for {entity_label_plural} with an active status and a non-empty `worktree` field. These are ensigns that crashed or were interrupted in a prior session. Handle them per the Orphan Detection procedure before dispatching new work.
+3. **Read stage properties** — Read the `stages` block from the README frontmatter. This gives you the state machine: stage names, ordering, per-stage properties (`worktree`, `fresh`, `gate`, `concurrency`), defaults, and any non-linear transitions. The `defaults` block sets baseline values; per-state entries override them. If the README has no `stages` block in frontmatter, fall back to parsing stage properties from prose sections (`Worktree`, `Fresh`, `Approval gate` / `Human approval` bullets) and read concurrency from the `## Concurrency` section (default 2).
+4. **Run status** — Run `bash {dir}/status` to see the current state of all {entity_label_plural}. Only scan the main directory (`{dir}/*.md`) — the `_archive/` subdirectory holds terminal entities and is ignored for dispatch.
+5. **Check for orphans** — Look for {entity_label_plural} with an active status and a non-empty `worktree` field. These are ensigns that crashed or were interrupted in a prior session. Handle them per the Orphan Detection procedure before dispatching new work.
 
 ## Dispatching
 
 For each {entity_label} that is ready for its next stage:
 
 1. Identify the {entity_label}'s current stage and what the next stage is.
-2. Read the next stage's full subsection from the README — everything under the `### stage_name` heading until the next `###` heading. This includes the standard bullets (Inputs, Outputs, Good, Bad, Worktree, Fresh, Approval gate) and any additional context the README provides for that stage.
+2. Read the next stage's prose subsection from the README (Inputs, Outputs, Good, Bad) for the ensign prompt. Read the stage's dispatch properties (`worktree`, `fresh`, `gate`, `concurrency`) from the `stages` frontmatter block.
 3. **Check concurrency** — Count how many {entity_label_plural} currently have their status set to the target stage. If the count equals the concurrency limit, hold this {entity_label} in its current stage and move to the next dispatchable {entity_label}.
 4. **Conflict check** — When multiple {entity_label_plural} are entering a worktree stage simultaneously, check if they modify the same files. If so, warn {captain} about potential merge conflicts and propose sequencing them.
-5. Read the next stage's `Worktree` field from the README. Branch on its value:
+5. Read the next stage's `worktree` property from the `stages` frontmatter block. Branch on its value:
 
 ### Dispatch on main (Worktree: No)
 
@@ -495,13 +501,13 @@ d. Wait for the ensign to complete and send its message.
 
 6. **Ensign lifecycle and approval gate** — When the ensign sends its completion message:
 
-   a. Read the `Approval gate` field of the stage the ensign just completed.
+   a. Read the `gate` property of the completed stage from the `stages` frontmatter block.
 
    b. **If no approval gate:**
       - If terminal stage: send shutdown to the ensign and proceed to step 7 (merge).
       - If more stages remain, determine whether to reuse the ensign or dispatch fresh:
-        - **Reuse** if: next stage has the same `Worktree` mode as the completed stage AND next stage does NOT have `Fresh: Yes`.
-        - **Fresh dispatch** otherwise (worktree mode changes, or next stage has `Fresh: Yes`).
+        - **Reuse** if: next stage has the same `worktree` mode as the completed stage AND next stage does NOT have `fresh: true` in frontmatter.
+        - **Fresh dispatch** otherwise (worktree mode changes, or next stage has `fresh: true`).
       - If **reusing**: update frontmatter on main (set `status` to next stage, commit), then send the next stage's work to the existing ensign:
         `SendMessage(to="ensign-{slug}", message="Next stage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nContinue working on {entity title}. Do the work described in the stage definition. Update the {entity_label} file body (not frontmatter) with your findings or outputs.\nCommit your work before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description}.\")\n\nPlain text only. Never send JSON.")`
         When the ensign completes, re-enter this step (6a).
@@ -512,7 +518,7 @@ d. Wait for the ensign to complete and send its message.
       - If the {entity_label} is in a worktree: do NOT merge. The branch is the evidence {captain} reviews.
       - Report the ensign's findings and recommendation to {captain}.
       - Wait for {captain}'s decision:
-        - **Approve:** Determine reuse vs fresh dispatch using the same rule as step 6b (same `Worktree` mode AND no `Fresh: Yes` on next stage). If **reusing** and more stages remain: update frontmatter on main, send the next stage to the existing ensign via the SendMessage format in step 6b. If **fresh dispatch** or terminal: send shutdown to the ensign. If more stages remain, dispatch a new ensign for the next stage. If terminal, proceed to step 7 (merge).
+        - **Approve:** Determine reuse vs fresh dispatch using the same rule as step 6b (same `worktree` mode AND no `fresh: true` on next stage). If **reusing** and more stages remain: update frontmatter on main, send the next stage to the existing ensign via the SendMessage format in step 6b. If **fresh dispatch** or terminal: send shutdown to the ensign. If more stages remain, dispatch a new ensign for the next stage. If terminal, proceed to step 7 (merge).
         - **Reject + redo:** Send feedback to the same ensign: `SendMessage(to="ensign-{slug}", message="Redo requested. Feedback: {captain's feedback}. Revise your work for the {stage} stage addressing this feedback. Commit and send a new completion message when done.")` When the ensign completes the redo, re-enter this step (6a).
         - **Reject + discard:** Send shutdown to the ensign: `SendMessage(to="ensign-{slug}", message={ type: "shutdown_request", reason: "Gate rejected, discarding" })`. Clean up worktree/branch if applicable (step 8). Re-dispatch a fresh ensign or ask {captain} for direction.
 
@@ -571,7 +577,7 @@ Clarification is not capped at one round. If {captain}'s answer raises new ambig
 After your initial dispatch, process events as they arrive:
 
 1. **Receive worker message** — Read what the ensign accomplished.
-2. **Ensign lifecycle and gate check** — Follow the procedure from Dispatching step 6: check the completed stage's `Approval gate` field, manage ensign shutdown or keep-alive, handle approval/rejection.
+2. **Ensign lifecycle and gate check** — Follow the procedure from Dispatching step 6: check the completed stage's `gate` property from frontmatter, manage ensign shutdown or keep-alive, handle approval/rejection.
 3. **Update timestamps** — When dispatching or during the final merge commit: if the {entity_label} just entered its first active (non-initial) stage, set `started:` to the current ISO 8601 datetime. If the {entity_label} reached the terminal stage, set `completed:` to the current datetime and `verdict:` to PASSED or REJECTED based on the ensign's assessment.
 4. **Verify state** — Run `bash {dir}/status` to confirm the {entity_label}'s status on disk.
 5. **Dispatch next** — Look at the updated pipeline state. If any other {entity_label} is ready for its next stage, dispatch an ensign for it (following the full dispatch procedure). Prioritize by score (highest first) when multiple {entity_label_plural} are ready.
@@ -585,7 +591,7 @@ When the pipeline is idle (nothing to dispatch), report the current state to {ca
 - The first officer owns all {entity_label} frontmatter on the main branch. Ensigns do NOT modify frontmatter.
 - Update {entity_label} frontmatter fields using the Edit tool — never rewrite the whole file.
 - `status:` — always matches one of the stages defined in the README.
-- `worktree:` — set to the worktree path when dispatching into a worktree stage. Cleared after the final merge to main. NOT set for stages with `Worktree: No`.
+- `worktree:` — set to the worktree path when dispatching into a worktree stage. Cleared after the final merge to main. NOT set for stages with `worktree: false`.
 - `started:` — set to ISO 8601 datetime when {entity_label} first moves beyond `{first_stage}`.
 - `completed:` — set to ISO 8601 datetime when {entity_label} reaches `{last_stage}`.
 - `verdict:` — set to PASSED or REJECTED when {entity_label} reaches `{last_stage}`.

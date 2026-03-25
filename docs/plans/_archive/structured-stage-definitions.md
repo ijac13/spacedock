@@ -1,13 +1,13 @@
 ---
 title: Structured stage definitions in README frontmatter
 id: 034
-status: validation
+status: done
 source: email-triage feature request + CL
 started: 2026-03-25T19:00:00Z
-completed:
-verdict:
+completed: 2026-03-25T21:00:00Z
+verdict: PASSED
 score: 0.75
-worktree: .worktrees/ensign-stage-defs
+worktree:
 ---
 
 Move stage properties (worktree, gate, concurrency, fresh, terminal) from prose bullet points in README stage sections into structured YAML in the README frontmatter. The first officer currently parses prose to extract boolean dispatch properties — fragile and mixes concerns.
@@ -317,3 +317,86 @@ Example: validation has `gate: true`. If captain approves, the entity follows th
 - Update refit skill (`skills/refit/SKILL.md`) to read from frontmatter
 - Add backward-compatibility fallback for pipelines without `stages` block
 - Test harness updates for the new README format
+
+## Implementation Summary
+
+### Changes made
+
+**`skills/commission/SKILL.md`** (AC1-AC5, AC7):
+- Added `stages` block to the README frontmatter template with `defaults` (worktree, concurrency), `states` list (with per-stage property overrides for worktree, fresh, gate, initial, terminal), and `transitions` block (omitted for linear pipelines)
+- Removed dispatch-property bullets (Worktree, Fresh, Approval gate) from per-stage prose template — prose now has only Inputs, Outputs, Good, Bad
+- Removed the separate `## Concurrency` section from the README template
+- Updated first-officer template startup: merged steps 3+4 into step 3 ("Read stage properties" from frontmatter `stages` block), renumbered subsequent steps
+- Added backward-compatibility fallback in first-officer startup step 3: if no `stages` block in frontmatter, fall back to parsing prose sections and `## Concurrency`
+- Updated dispatching step 2 to read prose for ensign prompt and dispatch properties from frontmatter
+- Updated dispatching step 5 to read `worktree` from frontmatter
+- Updated step 6a to read `gate` from frontmatter instead of `Approval gate` from prose
+- Updated ensign reuse logic references from `Fresh: Yes`/`Worktree` to `fresh: true`/`worktree` frontmatter properties
+- Updated Event Loop step 2 and State Management references
+
+**`docs/plans/README.md`** (AC6):
+- Converted HTML comment frontmatter to YAML frontmatter with `stages` block
+- Updated `commissioned-by` from `spacedock@0.1.4` to `spacedock@0.2.1`
+- Fixed gate semantics: gates now on ideation and validation (the stages whose output needs captain approval before advancing), not on implementation and done
+- Removed Worktree/Human approval bullets from all stage prose sections
+- Removed the `## Concurrency` section
+
+### Not changed (per CL direction)
+
+- `.claude/agents/first-officer.md` deployed instance — belongs to the refit process
+- Refit skill (`skills/refit/SKILL.md`) — does not exist yet, out of scope
+
+## Validation Report
+
+### Test harness
+
+Ran `bash v0/test-commission.sh` — **42 passed, 0 failed** out of 42 checks. All file existence, status script, entity frontmatter, README completeness, first-officer completeness, guardrails, template variable leaks, and absolute path checks pass.
+
+### AC1: README frontmatter schema — PASSED
+
+The `stages` block is present in the SKILL.md README generation template (lines 214-233) with the exact structure specified: `defaults` (worktree, concurrency), `states` list with per-stage property overrides (worktree, fresh, gate, initial, terminal), and `transitions` block (omitted for linear pipelines). Boolean values use YAML `true`/`false`. Per-state properties are only written when they differ from defaults.
+
+### AC2: SKILL.md README generation template changes — PASSED
+
+- Dispatch-property bullets (`**Worktree:**`, `**Fresh:**`, `**Approval gate:**`) are completely absent from the per-stage prose template. Grep confirms zero matches in SKILL.md.
+- The stage prose template (lines 281-288) has only Inputs, Outputs, Good, Bad.
+- The `## Concurrency` section is removed from the README template. The only mention of "Concurrency" in the entire SKILL.md is in the backward-compatibility fallback text on line 417.
+
+### AC3: SKILL.md first-officer template changes — PASSED
+
+- **Startup step 3** (line 417): Reads the `stages` block from README frontmatter for the state machine. Steps 3+4 merged into step 3. Includes fallback for pipelines without `stages` block (AC7).
+- **Startup step 4** (line 418): Now "Run status" — the old "Read concurrency" step was merged into step 3. Steps renumbered (was 5 steps, now 5 steps with different numbering).
+- **Dispatching step 2** (line 426): Reads prose for ensign prompt (Inputs, Outputs, Good, Bad) and dispatch properties from the `stages` frontmatter block.
+- **Dispatching step 5** (line 429): Reads `worktree` property from the `stages` frontmatter block.
+- **Step 6a** (line 504): Reads `gate` property of the completed stage from the `stages` frontmatter block.
+- **Ensign reuse logic** (lines 509-510): References `fresh: true` in frontmatter and `worktree` mode from frontmatter properties.
+
+### AC4: Prose stage sections — PASSED
+
+The SKILL.md stage section template (lines 279-290) retains only:
+- `### {stage_name}` heading with description
+- `- **Inputs:** ...`
+- `- **Outputs:** ...`
+- `- **Good:** ...`
+- `- **Bad:** ...`
+
+No dispatch-property bullets (Worktree, Fresh, Approval gate) in the prose template.
+
+### AC5: Commission interview changes — PASSED
+
+The interview flow is unchanged: Question 1 (Mission + Entity), Question 2 (Stages), Question 3 (Seed Entities), Confirm Design. No new questions were added. The `{approval_gates}` derivation still happens in Confirm Design.
+
+### AC6: Migration — PASSED
+
+`docs/plans/README.md` has:
+- YAML frontmatter (not HTML comments) with `stages` block (lines 1-24)
+- `commissioned-by: spacedock@0.2.1`
+- Gates on ideation and validation (the stages whose output needs captain approval), NOT on implementation and done — correct gate semantics per the entity design
+- All five stage prose sections have only Inputs/Outputs/Good/Bad — zero matches for `**Worktree:**`, `**Fresh:**`, `**Approval gate:**`, or `**Human approval:**`
+- No `## Concurrency` section
+
+### AC7: Backward compatibility — PASSED
+
+The first-officer template startup step 3 (line 417) includes an explicit fallback: "If the README has no `stages` block in frontmatter, fall back to parsing stage properties from prose sections (`Worktree`, `Fresh`, `Approval gate` / `Human approval` bullets) and read concurrency from the `## Concurrency` section (default 2)."
+
+### Recommendation: PASSED

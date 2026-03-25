@@ -229,6 +229,115 @@ else
   fail "guardrail: report-once (file missing)"
 fi
 
+# -- README frontmatter: stages block --
+echo ""
+echo "[README Frontmatter]"
+if [ -f "$PIPELINE_DIR/README.md" ]; then
+  README="$PIPELINE_DIR/README.md"
+  # Extract frontmatter (between first and second --- delimiters)
+  FM=$(awk 'NR==1{next} /^---$/{exit} {print}' "$README")
+  if echo "$FM" | grep -q "^stages:"; then
+    pass "README frontmatter has stages block"
+  else
+    fail "README frontmatter has stages block"
+  fi
+  if echo "$FM" | grep -q "id-style:"; then
+    pass "README frontmatter has id-style"
+  else
+    fail "README frontmatter has id-style"
+  fi
+  if echo "$FM" | grep -q "defaults:"; then
+    pass "stages block has defaults"
+  else
+    fail "stages block has defaults"
+  fi
+  if echo "$FM" | grep -q "states:"; then
+    pass "stages block has states list"
+  else
+    fail "stages block has states list"
+  fi
+  if echo "$FM" | grep -q "initial: true"; then
+    pass "stages has initial state marker"
+  else
+    fail "stages has initial state marker"
+  fi
+  if echo "$FM" | grep -q "terminal: true"; then
+    pass "stages has terminal state marker"
+  else
+    fail "stages has terminal state marker"
+  fi
+  if echo "$FM" | grep -q "gate: true"; then
+    pass "stages has at least one gate"
+  else
+    fail "stages has at least one gate"
+  fi
+  # Verify dispatch-property bullets are NOT in prose stage sections
+  PROSE_WORKTREE=$(grep -c "^\- \*\*Worktree:\*\*" "$README" || true)
+  if [ "$PROSE_WORKTREE" -eq 0 ]; then
+    pass "no Worktree bullets in prose stage sections"
+  else
+    fail "no Worktree bullets in prose stage sections (found $PROSE_WORKTREE)"
+  fi
+  PROSE_GATE=$(grep -cE "^\- \*\*(Approval gate|Human approval):\*\*" "$README" || true)
+  if [ "$PROSE_GATE" -eq 0 ]; then
+    pass "no approval gate bullets in prose stage sections"
+  else
+    fail "no approval gate bullets in prose stage sections (found $PROSE_GATE)"
+  fi
+else
+  fail "README frontmatter checks (file missing)"
+fi
+
+# -- Entity frontmatter: id field --
+echo ""
+echo "[Entity ID Field]"
+for ENTITY in full-cycle-test refit-command multi-pipeline; do
+  ENTITY_FILE="$PIPELINE_DIR/$ENTITY.md"
+  if [ -f "$ENTITY_FILE" ]; then
+    if head -15 "$ENTITY_FILE" | grep -q "^id:"; then
+      pass "$ENTITY.md has id field"
+    else
+      fail "$ENTITY.md has id field"
+    fi
+  else
+    fail "$ENTITY.md has id field (file missing)"
+  fi
+done
+
+# -- First-officer: frontmatter stages reading --
+echo ""
+echo "[First-Officer Stages Support]"
+if [ -f "$FO" ]; then
+  if grep -qi "stages.*frontmatter\|frontmatter.*stages\|stages.*block\|Read.*stages" "$FO"; then
+    pass "first-officer reads stages from frontmatter"
+  else
+    fail "first-officer reads stages from frontmatter"
+  fi
+  # Backward-compatible fallback for pre-stages pipelines is a refit concern,
+  # not a commission concern. New commissions always generate the stages block.
+  # No check needed here.
+  if grep -qi "fresh\|Fresh" "$FO"; then
+    pass "first-officer supports Fresh stage property"
+  else
+    fail "first-officer supports Fresh stage property"
+  fi
+  if grep -qi "reuse.*ensign\|ensign.*reuse\|SendMessage.*next stage\|same.*ensign" "$FO"; then
+    pass "first-officer supports ensign reuse"
+  else
+    fail "first-officer supports ensign reuse"
+  fi
+  if grep -qi "validation.*test\|Testing Resources\|run.*test\|test.*harness" "$FO"; then
+    pass "first-officer has smart validation instructions"
+  else
+    fail "first-officer has smart validation instructions"
+  fi
+  if grep -qi "_archive\|archive" "$FO"; then
+    pass "first-officer references _archive convention"
+  else
+    fail "first-officer references _archive convention"
+  fi
+fi
+
 # -- No leaked template variables --
 echo ""
 echo "[No Leaked Template Variables]"
