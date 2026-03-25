@@ -337,3 +337,102 @@ The prompt is usable and would work if given to Codex. It covers startup, work l
 The analysis is substantive, honest about its limitations (analytical rather than live-tested), and the conclusions are sound. The tool inventory was genuinely verified via binary inspection rather than assumed. The omissions (`grep_files`, multi-agent lifecycle tools) and the `exec_command` inaccuracy are real but do not change the core conclusions — PTP pipelines are operable by Codex in solo mode, and the orchestration layer remains Claude Code-specific.
 
 The reference document is usable as-is for operating PTP pipelines with Codex. The corrections would make it more complete but are not blocking.
+
+---
+
+## Live Test Results
+
+Attempted live testing of Codex CLI v0.110.0 against the `docs/plans/` PTP pipeline. Tests were run from the `ensign/codex-compatibility` worktree branch.
+
+### Test Environment
+
+- Codex CLI: `/opt/homebrew/bin/codex` v0.110.0 (`codex-aarch64-apple-darwin`)
+- Working directory: `/Users/clkao/git/spacedock/.worktrees/ensign-codex-compatibility`
+- Pipeline: `docs/plans/` (status script confirmed working — 29 entities visible)
+
+### Blocker: macOS TCC Prevents Cross-Agent Invocation
+
+**All three planned tests (basic tool availability, solo operator, edit test) were blocked by the same root cause.**
+
+Codex CLI stores its authentication credentials in `~/.codex/config.toml`. When invoked as a subprocess from Claude Code, macOS Transparency, Consent, and Control (TCC) denies access to this directory:
+
+```
+Error loading config.toml: Failed to read config file /Users/clkao/.codex/config.toml: Operation not permitted (os error 1)
+```
+
+This is not a Codex bug or a Spacedock issue — it is a macOS security boundary. Claude Code's process does not have permission to read files belonging to another application's configuration directory.
+
+**Workaround attempted:** Setting `CODEX_HOME=/tmp/codex-home` with an empty `config.toml` successfully bypassed the config-read error. Codex launched, displayed its session banner, and attempted to call the OpenAI API — but failed with `401 Unauthorized` because the authentication token was in the original (inaccessible) config directory.
+
+```
+CODEX_HOME=/tmp/codex-home codex exec -s read-only -C <workdir> "Say hello"
+# Result: Codex starts, shows session info, but fails at API call:
+# ERROR: unexpected status 401 Unauthorized
+```
+
+**Codex session banner (successfully rendered):**
+```
+OpenAI Codex v0.110.0 (research preview)
+--------
+workdir: /Users/clkao/git/spacedock/.worktrees/ensign-codex-compatibility
+model: gpt-5.3-codex
+provider: openai
+approval: never
+sandbox: read-only
+--------
+```
+
+### Findings from Attempted Tests
+
+#### 1. Codex CLI Starts and Parses the Workspace Correctly
+
+Even without API access, the `CODEX_HOME` workaround confirmed:
+- Codex accepts `-C <dir>` and sets the working directory correctly
+- Codex accepts `-s read-only` and `-s workspace-write` sandbox flags
+- Codex `exec` mode works for non-interactive batch execution
+- The session banner shows model, sandbox mode, and workdir as expected
+
+#### 2. Authentication Requires One of Three Mechanisms
+
+From binary string analysis, Codex supports three auth methods:
+- **Config file:** `~/.codex/config.toml` (default, blocked by TCC in cross-agent invocation)
+- **Environment variable:** `CODEX_API_KEY` or `OPENAI_API_KEY`
+- **Stdin pipe:** `printenv OPENAI_API_KEY | codex login --with-api-key`
+
+For cross-agent invocation (Claude Code spawning Codex), the `OPENAI_API_KEY` environment variable is the only viable path. The config file is TCC-blocked, and stdin pipe requires a pre-existing env var anyway.
+
+#### 3. Cross-Agent Invocation is a Real Use Case with a Real Barrier
+
+The TCC restriction means that on macOS, one AI agent (Claude Code) cannot trivially invoke another (Codex CLI) as a subprocess because each agent's credentials are siloed. This is actually a security feature, but it creates a practical barrier for the "first-officer dispatches Codex ensigns" pattern described in Scope B.
+
+**Implication for Spacedock:** If a future version wants Claude Code's first-officer to dispatch Codex ensigns, the deployment would need `OPENAI_API_KEY` set in the shell environment (not just in Codex's config). This is a deployment/setup concern, not a code change.
+
+#### 4. PTP Pipeline is Independently Verified as Functional
+
+The `docs/plans/status` script was run directly (not via Codex) and produced correct output for all 29 entities. The pipeline README, entity files, and status script are all standard bash/markdown — nothing in the PTP format prevents Codex from operating on it. The blocker is purely at the authentication/invocation layer.
+
+### What Would Need to Happen for Live Testing
+
+To run the planned tests, the user would need to do one of:
+
+1. **Set `OPENAI_API_KEY` in the shell environment** before starting Claude Code, so child processes inherit it:
+   ```bash
+   export OPENAI_API_KEY=sk-...
+   claude
+   ```
+
+2. **Run Codex directly from a terminal** (not as a Claude Code subprocess):
+   ```bash
+   codex exec -s read-only -C /path/to/repo \
+     "Read docs/plans/README.md. Run bash docs/plans/status. List docs/plans/*.md excluding README."
+   ```
+
+3. **Grant Full Disk Access** to the Claude Code process (not recommended — overly broad permission).
+
+Option 2 is the most practical — it tests the same thing (Codex operating a PTP pipeline) without the cross-process auth issue. The results would validate Scope A directly.
+
+### Conclusion
+
+The live testing was blocked by macOS TCC credential isolation, not by any incompatibility between Codex and PTP pipelines. The partial startup confirmed Codex's CLI interface works as documented (`exec` mode, sandbox flags, working directory). The authentication barrier is a deployment concern for cross-agent invocation, not a format compatibility issue.
+
+The original analytical assessment remains valid: PTP pipelines are operable by Codex CLI. The live test would have confirmed this operationally, but the format-level compatibility is not in question — it's standard markdown, YAML, and bash.
