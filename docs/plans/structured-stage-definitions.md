@@ -345,3 +345,58 @@ Example: validation has `gate: true`. If captain approves, the entity follows th
 
 - `.claude/agents/first-officer.md` deployed instance — belongs to the refit process
 - Refit skill (`skills/refit/SKILL.md`) — does not exist yet, out of scope
+
+## Validation Report
+
+### Test harness
+
+Ran `bash v0/test-commission.sh` — **42 passed, 0 failed** out of 42 checks. All file existence, status script, entity frontmatter, README completeness, first-officer completeness, guardrails, template variable leaks, and absolute path checks pass.
+
+### AC1: README frontmatter schema — PASSED
+
+The `stages` block is present in the SKILL.md README generation template (lines 214-233) with the exact structure specified: `defaults` (worktree, concurrency), `states` list with per-stage property overrides (worktree, fresh, gate, initial, terminal), and `transitions` block (omitted for linear pipelines). Boolean values use YAML `true`/`false`. Per-state properties are only written when they differ from defaults.
+
+### AC2: SKILL.md README generation template changes — PASSED
+
+- Dispatch-property bullets (`**Worktree:**`, `**Fresh:**`, `**Approval gate:**`) are completely absent from the per-stage prose template. Grep confirms zero matches in SKILL.md.
+- The stage prose template (lines 281-288) has only Inputs, Outputs, Good, Bad.
+- The `## Concurrency` section is removed from the README template. The only mention of "Concurrency" in the entire SKILL.md is in the backward-compatibility fallback text on line 417.
+
+### AC3: SKILL.md first-officer template changes — PASSED
+
+- **Startup step 3** (line 417): Reads the `stages` block from README frontmatter for the state machine. Steps 3+4 merged into step 3. Includes fallback for pipelines without `stages` block (AC7).
+- **Startup step 4** (line 418): Now "Run status" — the old "Read concurrency" step was merged into step 3. Steps renumbered (was 5 steps, now 5 steps with different numbering).
+- **Dispatching step 2** (line 426): Reads prose for ensign prompt (Inputs, Outputs, Good, Bad) and dispatch properties from the `stages` frontmatter block.
+- **Dispatching step 5** (line 429): Reads `worktree` property from the `stages` frontmatter block.
+- **Step 6a** (line 504): Reads `gate` property of the completed stage from the `stages` frontmatter block.
+- **Ensign reuse logic** (lines 509-510): References `fresh: true` in frontmatter and `worktree` mode from frontmatter properties.
+
+### AC4: Prose stage sections — PASSED
+
+The SKILL.md stage section template (lines 279-290) retains only:
+- `### {stage_name}` heading with description
+- `- **Inputs:** ...`
+- `- **Outputs:** ...`
+- `- **Good:** ...`
+- `- **Bad:** ...`
+
+No dispatch-property bullets (Worktree, Fresh, Approval gate) in the prose template.
+
+### AC5: Commission interview changes — PASSED
+
+The interview flow is unchanged: Question 1 (Mission + Entity), Question 2 (Stages), Question 3 (Seed Entities), Confirm Design. No new questions were added. The `{approval_gates}` derivation still happens in Confirm Design.
+
+### AC6: Migration — PASSED
+
+`docs/plans/README.md` has:
+- YAML frontmatter (not HTML comments) with `stages` block (lines 1-24)
+- `commissioned-by: spacedock@0.2.1`
+- Gates on ideation and validation (the stages whose output needs captain approval), NOT on implementation and done — correct gate semantics per the entity design
+- All five stage prose sections have only Inputs/Outputs/Good/Bad — zero matches for `**Worktree:**`, `**Fresh:**`, `**Approval gate:**`, or `**Human approval:**`
+- No `## Concurrency` section
+
+### AC7: Backward compatibility — PASSED
+
+The first-officer template startup step 3 (line 417) includes an explicit fallback: "If the README has no `stages` block in frontmatter, fall back to parsing stage properties from prose sections (`Worktree`, `Fresh`, `Approval gate` / `Human approval` bullets) and read concurrency from the `## Concurrency` section (default 2)."
+
+### Recommendation: PASSED
