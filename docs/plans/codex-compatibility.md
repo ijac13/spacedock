@@ -176,3 +176,92 @@ Note the differences from the Claude Code first-officer:
 2. **Is the goal "Codex can use PTP pipelines" or "Spacedock generates pipelines that work with Codex"?** The former is mostly true already; the latter requires significant new work.
 3. **Priority relative to core Spacedock features**: Is this exploratory research, or does it need to drive implementation decisions for v0?
 4. **Codex sandbox restrictions**: Does Codex's file-write sandbox allow editing files in place and running git commands? The solo operator needs both.
+
+---
+
+## Implementation Findings
+
+Analysis performed against Codex CLI v0.110.0 (installed locally at `/opt/homebrew/bin/codex`). Tool capabilities determined via binary string analysis of the Codex Rust binary and CLI help output.
+
+### Codex CLI Tool Inventory
+
+Codex CLI provides these tools to the underlying model:
+
+| Tool | Purpose | Equivalent Claude Code Tool |
+|------|---------|---------------------------|
+| `read_file` | Read file contents | Read |
+| `list_dir` | List directory contents | Glob (partial) |
+| `apply_patch` | Edit files via unified diff patches | Edit / Write |
+| `shell_command` / `exec_command` | Run shell commands in sandbox | Bash |
+| `update_plan` | Track and display plan steps to user | N/A (no equivalent) |
+| `web_search` | Live web search (opt-in) | N/A |
+| `view_image` | Display images | N/A |
+| `spawn_agent` | Spawn sub-agent (experimental) | Agent |
+| `spawn_agents_on_csv` | Batch spawn agents (experimental) | N/A |
+| `js_repl` | Persistent Node.js REPL (experimental) | N/A |
+
+Key observation: Codex's system prompt explicitly tells the model to use `rg` (ripgrep) via shell for searching and `rg --files` for file discovery. There are no dedicated Grep or Glob tools — these operations happen through `shell_command`.
+
+### Tool Mapping for PTP Operations
+
+| PTP Operation | Claude Code | Codex CLI | Works? |
+|--------------|------------|-----------|--------|
+| Read README | `Read` tool | `read_file` or `cat` via shell | Yes |
+| Run status script | `Bash("bash dir/status")` | `shell_command("bash dir/status")` | Yes |
+| Read entity files | `Read` tool | `read_file` or `cat` via shell | Yes |
+| Find entities by status | `Grep("status: ideation", glob="*.md")` | `rg "status: ideation" *.md` via shell | Yes |
+| Edit entity frontmatter | `Edit` tool (exact string replace) | `apply_patch` (unified diff) | Yes |
+| Edit entity body | `Edit` tool | `apply_patch` | Yes |
+| Create new files | `Write` tool | `cat > file` or `apply_patch` via shell | Yes |
+| Git commit | `Bash("git commit ...")` | `shell_command("git commit ...")` | Yes |
+| Git worktree add/remove | `Bash("git worktree ...")` | `shell_command("git worktree ...")` | Yes (if under CWD) |
+| Dispatch sub-agents | `Agent(subagent_type=..., prompt=...)` | `spawn_agent` (experimental) | Partial |
+| Team messaging | `SendMessage(to=...)` | Collab events (experimental) | Partial |
+
+### Instruction Loading
+
+Codex uses `AGENTS.md` files instead of `.claude/agents/*.md`:
+
+- `AGENTS.md` can appear anywhere in the repo.
+- Each `AGENTS.md` governs its containing directory and all descendants.
+- Deeper files override shallower ones on conflict.
+- Root `AGENTS.md` is automatically loaded into the developer message.
+- The `-C <dir>` flag sets the working directory.
+- `developer_instructions` in `~/.codex/config.toml` provides global instructions.
+- `model_instructions_file` in config.toml can point to a file for per-project instructions.
+
+### Sandbox Analysis
+
+Codex has three sandbox modes:
+
+- **read-only**: No file writes. Can read files, run status script. Cannot edit entities or commit.
+- **workspace-write** (`--full-auto`): Can write within CWD + TMPDIR. All PTP operations work. No network access.
+- **danger-full-access**: Full access. Not needed for PTP.
+
+**`workspace-write` is sufficient for all PTP pipeline operations**, including running the status script, editing entities via `apply_patch`, and running `git commit`. The `--full-auto` convenience flag sets both `-a on-request` (model decides when to ask approval) and `--sandbox workspace-write`.
+
+### Experimental Multi-Agent Mode
+
+Codex v0.110.0 has a `multi_agent` feature flag (enable via `/experimental` in interactive mode). When enabled:
+
+- The model can call `spawn_agent` to create sub-agents in separate threads.
+- There is `spawn_agents_on_csv` for batch spawning.
+- Coordination uses "collab" events (`collab_agent_spawn_begin/end`, `collab_agent_interaction_begin/end`, `collab_waiting_begin/end`, `collab_close_begin/end`).
+- Sub-agents run in their own thread context with their own sandbox.
+
+This is architecturally similar to Claude Code's `Agent()` tool but with different coordination semantics. If this feature stabilizes, a closer equivalent to the first-officer/ensign pattern becomes possible.
+
+### Answers to Open Questions
+
+1. **Codex CLI is installed** (v0.110.0 via Homebrew cask). Live testing is possible.
+2. **Sandbox answer**: Yes, `workspace-write` mode allows file edits and git commands within CWD. All PTP operations are feasible.
+3. **Multi-agent**: Experimental `spawn_agent` exists but the coordination model differs from Claude Code's team messaging. Not production-ready.
+4. **AGENTS.md vs .claude/agents/**: Different convention but functionally similar for instruction loading. An `AGENTS.md` in the pipeline directory can serve as the solo operator instructions.
+
+### Deliverables
+
+- `references/codex-tools.md`: Full tool mapping table, instruction loading comparison, sandbox analysis, solo operator prompt, and assessment of Codex's experimental multi-agent capabilities. Ready for use as a reference when operating PTP pipelines with Codex CLI.
+
+### Conclusion
+
+PTP pipelines are fully operable by Codex CLI in solo operator mode using `workspace-write` sandbox. Every core PTP operation (read files, run status, edit entities, git commit) maps to available Codex tools. The main gap is the orchestration layer: Codex's experimental multi-agent feature (`spawn_agent`) exists but uses a different coordination model than Claude Code's team messaging. For v0, the solo operator pattern (sequential processing, no sub-agents) is the practical path. The experimental multi-agent mode is worth monitoring for future versions.
