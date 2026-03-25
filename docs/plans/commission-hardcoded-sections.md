@@ -1,12 +1,12 @@
 ---
 title: Commission hardcodes pipeline-specific section names in first-officer template
-status: validation
+status: done
 source: email-triage testflight
 started: 2026-03-25T02:20:00Z
-completed:
-verdict:
+completed: 2026-03-25T05:15:00Z
+verdict: PASSED
 score: 0.55
-worktree: .worktrees/ensign-commission-fixes
+worktree:
 ---
 
 ## Problem Statement
@@ -92,3 +92,31 @@ The ensign reuse change adds a SendMessage-based reuse path alongside the existi
 3. The guardrail comment explicitly prohibits pipeline-specific dispatch logic and custom section references.
 4. No pipeline-specific section names appear anywhere in the first-officer template.
 5. The changes work with the ensign reuse SendMessage path (same copy instruction applies).
+
+## Implementation Summary
+
+All changes in `skills/commission/SKILL.md`:
+
+1. **Dispatching step 2** (line 409): Replaced "Read the next stage's definition from the README (inputs, outputs, good, bad criteria)" with explicit instruction to copy everything under the `### stage_name` heading until the next `###` heading, including standard bullets and any additional context.
+2. **[STAGE_DEFINITION] placeholder** (lines 435, 469, 487): Changed from "copy the full stage definition from the README: inputs, outputs, good, bad" to "copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading". Updated in all three locations: main dispatch, worktree dispatch, and the ensign reuse SendMessage.
+3. **Guardrail comments** (lines 428, 462): Added sentence prohibiting pipeline-specific dispatch logic: "Do NOT add pipeline-specific dispatch logic, custom section references, or per-stage conditionals — the [STAGE_DEFINITION] placeholder handles all stage-specific context at runtime."
+
+## Validation Report
+
+### Test Harness
+
+The integration test (`v0/test-commission.sh`) could not be run — it invokes `claude -p` to execute the full commission skill, which requires a standalone Claude CLI session. Manual validation was performed instead.
+
+### Acceptance Criteria Results
+
+| # | Criterion | Result | Evidence |
+|---|-----------|--------|----------|
+| 1 | Dispatching step 2 describes copying full ### stage_name subsection | PASS | SKILL.md line 409: "Read the next stage's full subsection from the README — everything under the `### stage_name` heading until the next `###` heading" |
+| 2 | [STAGE_DEFINITION] placeholder says "copy full ### stage subsection verbatim" | PASS | Lines 435, 469, 487 all say "copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading" |
+| 3 | Guardrail comment prohibits pipeline-specific dispatch logic | PASS | Lines 428, 462: "Do NOT add pipeline-specific dispatch logic, custom section references, or per-stage conditionals" |
+| 4 | No pipeline-specific section names in the template | PASS | Grep for intake/triage/review/screening found zero pipeline-specific references in the first-officer template. All `###` headings are structural (Dispatch on main, Dispatch in worktree, After dispatch, etc.) |
+| 5 | Changes work with ensign reuse SendMessage path | PASS | Line 487 uses the same `[STAGE_DEFINITION]` pattern as lines 435 and 469. Step 2's copy instruction (line 409) applies to both dispatch and reuse paths |
+
+### Recommendation: PASSED
+
+All five acceptance criteria are met. The template is now explicit about copying full stage subsections verbatim, with no pipeline-specific section names anywhere in the generated first-officer prompt.

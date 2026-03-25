@@ -264,6 +264,7 @@ worktree:
 - **Good:** {Quality criteria for work done in this stage}
 - **Bad:** {Anti-patterns to avoid in this stage}
 - **Worktree:** {ONLY include this line if the stage modifies code or produces artifacts beyond the entity file. Set to "Yes". OMIT this line entirely for stages that only modify entity markdown.}
+- **Fresh:** {ONLY include this line for stages where an independent perspective matters, e.g., validation. Set to "Yes". OMIT for stages that benefit from retained context.}
 - **Approval gate:** {If this stage is the SOURCE in an approval_gates transition (i.e., this_stage -> next_stage): "Yes — captain reviews output before advancing to next_stage." Otherwise: "No"}
 
 {End of per-stage sections.}
@@ -393,6 +394,7 @@ When you begin, do these things in order:
 2. **Read the README** — Run `Read("{dir}/README.md")` to understand the pipeline schema and stage definitions.
 3. **Parse stage properties** — For each stage defined in the README, extract:
    - **Worktree:** `Yes` or `No` (default `No` if field is missing)
+   - **Fresh:** `Yes` or `No` (default `No` if field is missing)
    - **Approval gate:** `Yes` or `No`
    Record these so you can reference them during dispatch.
 4. **Read concurrency limit** — Find the `## Concurrency` section in the README. Extract the maximum number of {entity_label_plural} allowed in any single active stage. Default to 2 if the section is missing.
@@ -404,7 +406,7 @@ When you begin, do these things in order:
 For each {entity_label} that is ready for its next stage:
 
 1. Identify the {entity_label}'s current stage and what the next stage is.
-2. Read the next stage's definition from the README (inputs, outputs, good, bad criteria).
+2. Read the next stage's full subsection from the README — everything under the `### stage_name` heading until the next `###` heading. This includes the standard bullets (Inputs, Outputs, Good, Bad, Worktree, Fresh, Approval gate) and any additional context the README provides for that stage.
 3. **Check concurrency** — Count how many {entity_label_plural} currently have their status set to the target stage. If the count equals the concurrency limit, hold this {entity_label} in its current stage and move to the next dispatchable {entity_label}.
 4. **Conflict check** — When multiple {entity_label_plural} are entering a worktree stage simultaneously, check if they modify the same files. If so, warn {captain} about potential merge conflicts and propose sequencing them.
 5. Read the next stage's `Worktree` field from the README. Branch on its value:
@@ -423,7 +425,7 @@ b. **Dispatch ensign** on main (working directory = repo root):
 
 **You MUST use `subagent_type="general-purpose"` when dispatching ensigns. NEVER use `subagent_type="first-officer"` — that clones yourself instead of dispatching a worker.**
 
-**Copy the ensign prompt template exactly as written. Only fill `{named_variables}` — do not expand, rewrite, or customize any other text (including bracketed placeholders).**
+**Copy the ensign prompt template exactly as written. Only fill `{named_variables}` — do not expand, rewrite, or customize any other text (including bracketed placeholders). Do NOT add pipeline-specific dispatch logic, custom section references, or per-stage conditionals — the [STAGE_DEFINITION] placeholder handles all stage-specific context at runtime.**
 
 **Validation stage addition:** If the stage being dispatched is a validation stage, insert the following block into the ensign prompt between "Do the work described in the stage definition." and "Commit your work before sending completion message.":
 
@@ -434,7 +436,7 @@ Agent(
     subagent_type="general-purpose",
     name="ensign-{slug}",
     team_name="{project_name}-{dir_basename}",
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full stage definition from the README: inputs, outputs, good, bad]\n\nAll file paths are relative to the repository root.\nDo NOT modify YAML frontmatter in {entity_label} files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.\n\nRead the {entity_label} file at {dir}/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the {entity_label} file body (not frontmatter) with your findings or outputs.\nCommit your work before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
+    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nAll file paths are relative to the repository root.\nDo NOT modify YAML frontmatter in {entity_label} files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.\n\nRead the {entity_label} file at {dir}/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the {entity_label} file body (not frontmatter) with your findings or outputs.\nCommit your work before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
 )
 ```
 
@@ -461,7 +463,7 @@ b. **Create worktree** (first worktree dispatch only) — If the {entity_label} 
    If the {entity_label} already has an active worktree (continuing from a prior stage), skip this step.
 c. **Dispatch ensign** in the worktree:
 
-**Copy the ensign prompt template exactly as written. Only fill `{named_variables}` — do not expand, rewrite, or customize any other text (including bracketed placeholders).**
+**Copy the ensign prompt template exactly as written. Only fill `{named_variables}` — do not expand, rewrite, or customize any other text (including bracketed placeholders). Do NOT add pipeline-specific dispatch logic, custom section references, or per-stage conditionals — the [STAGE_DEFINITION] placeholder handles all stage-specific context at runtime.**
 
 **Validation stage addition:** If the stage being dispatched is a validation stage, insert the following block into the ensign prompt between "Do the work described in the stage definition." and "Commit your work to your branch before sending completion message.":
 
@@ -472,7 +474,7 @@ Agent(
     subagent_type="general-purpose",
     name="ensign-{slug}",
     team_name="{project_name}-{dir_basename}",
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full stage definition from the README: inputs, outputs, good, bad]\n\nYour working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in {entity_label} files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.\n\nRead the {entity_label} file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the {entity_label} file body (not frontmatter) with your findings or outputs.\nCommit your work to your branch before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
+    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nYour working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in {entity_label} files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.\n\nRead the {entity_label} file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the {entity_label} file body (not frontmatter) with your findings or outputs.\nCommit your work to your branch before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
 )
 ```
 
@@ -485,16 +487,21 @@ d. Wait for the ensign to complete and send its message.
    a. Read the `Approval gate` field of the stage the ensign just completed.
 
    b. **If no approval gate:**
-      - Send shutdown to the ensign: `SendMessage(to="ensign-{slug}", message={ type: "shutdown_request", reason: "Stage complete, no gate" })`
-      - If more stages remain, dispatch a new ensign for the next stage (re-enter step 1 for this {entity_label}).
-      - If terminal stage, proceed to step 7 (merge).
+      - If terminal stage: send shutdown to the ensign and proceed to step 7 (merge).
+      - If more stages remain, determine whether to reuse the ensign or dispatch fresh:
+        - **Reuse** if: next stage has the same `Worktree` mode as the completed stage AND next stage does NOT have `Fresh: Yes`.
+        - **Fresh dispatch** otherwise (worktree mode changes, or next stage has `Fresh: Yes`).
+      - If **reusing**: update frontmatter on main (set `status` to next stage, commit), then send the next stage's work to the existing ensign:
+        `SendMessage(to="ensign-{slug}", message="Next stage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nContinue working on {entity title}. Do the work described in the stage definition. Update the {entity_label} file body (not frontmatter) with your findings or outputs.\nCommit your work before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description}.\")\n\nPlain text only. Never send JSON.")`
+        When the ensign completes, re-enter this step (6a).
+      - If **fresh dispatch**: send shutdown to the ensign, then dispatch a new ensign for the next stage (re-enter step 1 for this {entity_label}).
 
    c. **If approval gate applies:**
       - Do NOT shut down the ensign. Keep it alive for potential redo.
       - If the {entity_label} is in a worktree: do NOT merge. The branch is the evidence {captain} reviews.
       - Report the ensign's findings and recommendation to {captain}.
       - Wait for {captain}'s decision:
-        - **Approve:** Send shutdown to the ensign: `SendMessage(to="ensign-{slug}", message={ type: "shutdown_request", reason: "Gate approved" })`. If more stages remain, dispatch a new ensign for the next stage. If terminal, proceed to step 7 (merge).
+        - **Approve:** Determine reuse vs fresh dispatch using the same rule as step 6b (same `Worktree` mode AND no `Fresh: Yes` on next stage). If **reusing** and more stages remain: update frontmatter on main, send the next stage to the existing ensign via the SendMessage format in step 6b. If **fresh dispatch** or terminal: send shutdown to the ensign. If more stages remain, dispatch a new ensign for the next stage. If terminal, proceed to step 7 (merge).
         - **Reject + redo:** Send feedback to the same ensign: `SendMessage(to="ensign-{slug}", message="Redo requested. Feedback: {captain's feedback}. Revise your work for the {stage} stage addressing this feedback. Commit and send a new completion message when done.")` When the ensign completes the redo, re-enter this step (6a).
         - **Reject + discard:** Send shutdown to the ensign: `SendMessage(to="ensign-{slug}", message={ type: "shutdown_request", reason: "Gate rejected, discarding" })`. Clean up worktree/branch if applicable (step 8). Re-dispatch a fresh ensign or ask {captain} for direction.
 
