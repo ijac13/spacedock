@@ -4,13 +4,21 @@
 #
 # goal: Show one-line-per-entity pipeline overview from YAML frontmatter.
 # instruction: For every .md file in this directory (excluding README.md),
-#   extract slug (filename without .md), status, verdict, score, source from YAML frontmatter.
-#   Print table with columns: SLUG, STATUS, TITLE, SCORE, SOURCE.
+#   extract slug (filename without .md), id, status, title, score, source from YAML frontmatter.
+#   Print table with columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
 #   Sorted by stage order then score descending.
+#   Default: scan only $DIR/*.md. With --archived, also scan $DIR/_archive/*.md.
 # constraints: bash 3.2+ (no associative arrays), resolves paths relative to this script, skips README.md.
 # valid status values: backlog, ideation, implementation, validation, done.
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
+
+INCLUDE_ARCHIVE=false
+for arg in "$@"; do
+  case "$arg" in
+    --archived) INCLUDE_ARCHIVE=true ;;
+  esac
+done
 
 stage_order() {
   case "$1" in
@@ -23,13 +31,15 @@ stage_order() {
   esac
 }
 
-printf "%-30s %-20s %-30s %-8s %s\n" "SLUG" "STATUS" "TITLE" "SCORE" "SOURCE"
-printf "%-30s %-20s %-30s %-8s %s\n" "----" "------" "-----" "-----" "------"
+printf "%-6s %-30s %-20s %-30s %-8s %s\n" "ID" "SLUG" "STATUS" "TITLE" "SCORE" "SOURCE"
+printf "%-6s %-30s %-20s %-30s %-8s %s\n" "--" "----" "------" "-----" "-----" "------"
 
+{
 for f in "$DIR"/*.md; do
+  [ -f "$f" ] || continue
   [ "$(basename "$f")" = "README.md" ] && continue
   slug=$(basename "$f" .md)
-  status="" title="" score="" source=""
+  id="" st="" title="" score="" source=""
   in_fm=false
   while IFS= read -r line; do
     if [ "$line" = "---" ]; then
@@ -38,13 +48,42 @@ for f in "$DIR"/*.md; do
     fi
     if $in_fm; then
       case "$line" in
-        status:*) status="${line#*:}" ; status="${status# }" ;;
+        id:*) id="${line#*:}" ; id="${id# }" ;;
+        status:*) st="${line#*:}" ; st="${st# }" ;;
         title:*) title="${line#*:}" ; title="${title# }" ;;
         score:*) score="${line#*:}" ; score="${score# }" ;;
         source:*) source="${line#*:}" ; source="${source# }" ;;
       esac
     fi
   done < "$f"
-  order=$(stage_order "$status")
-  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$order" "$score" "$slug" "$status" "$title" "$score" "$source"
-done | sort -t$'\t' -k1,1n -k2,2rn | awk -F'\t' '{ printf "%-30s %-20s %-30s %-8s %s\n", $3, $4, $5, $6, $7 }'
+  order=$(stage_order "$st")
+  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$order" "$score" "$id" "$slug" "$st" "$title" "$score" "$source"
+done
+
+if $INCLUDE_ARCHIVE; then
+  for f in "$DIR"/_archive/*.md; do
+    [ -f "$f" ] || continue
+    [ "$(basename "$f")" = "README.md" ] && continue
+    slug=$(basename "$f" .md)
+    id="" st="" title="" score="" source=""
+    in_fm=false
+    while IFS= read -r line; do
+      if [ "$line" = "---" ]; then
+        if $in_fm; then break; fi
+        in_fm=true; continue
+      fi
+      if $in_fm; then
+        case "$line" in
+          id:*) id="${line#*:}" ; id="${id# }" ;;
+          status:*) st="${line#*:}" ; st="${st# }" ;;
+          title:*) title="${line#*:}" ; title="${title# }" ;;
+          score:*) score="${line#*:}" ; score="${score# }" ;;
+          source:*) source="${line#*:}" ; source="${source# }" ;;
+        esac
+      fi
+    done < "$f"
+    order=$(stage_order "$st")
+    printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$order" "$score" "$id" "$slug" "$st" "$title" "$score" "$source"
+  done
+fi
+} | sort -t$'\t' -k1,1n -k2,2rn | awk -F'\t' '{ printf "%-6s %-30s %-20s %-30s %-8s %s\n", $3, $4, $5, $6, $7, $8 }'
