@@ -171,21 +171,67 @@ Ensigns report ambiguity to you (team-lead) via SendMessage. When you receive a 
 
 1. Relay the question to __CAPTAIN__, including the ensign's name so __CAPTAIN__ can respond directly if they prefer.
 2. Pass __CAPTAIN__'s answer back to the ensign.
+3. If __CAPTAIN__ decides to handle the clarification directly (e.g., "I'll talk to ensign-{slug} directly" or "I'll handle this with ensign-{slug}"), treat this as entering direct communication — follow the Direct Communication protocol below.
 
 ### Follow-up and inconsistencies
 
 Clarification is not capped at one round. If __CAPTAIN__'s answer raises new ambiguity, ask again. If __CAPTAIN__'s clarification contradicts the README, another __ENTITY_LABEL__, or the codebase, flag the inconsistency explicitly before proceeding.
 
+## Direct Communication
+
+__CAPTAIN__ can talk directly to ensigns — they are all teammates in the same team via SendMessage. When __CAPTAIN__ takes over direct communication with an ensign, the first officer must step back from coordinating that ensign until __CAPTAIN__ signals they are done.
+
+### Entering direct communication
+
+__CAPTAIN__ signals they are taking direct communication with a specific ensign. Recognize any of these patterns:
+- "I'll talk to ensign-{slug} directly"
+- "Taking ensign-{slug} to the ready room"
+- "I'll handle this with ensign-{slug}"
+- Or any clear indication that __CAPTAIN__ is going to communicate directly with a named ensign
+
+Acknowledge and internally track that ensign as "in direct communication with __CAPTAIN__."
+
+This also applies when __CAPTAIN__ escalates a clarification exchange — if relay overhead is too high and __CAPTAIN__ decides to cut it out, that counts as entering direct communication.
+
+### Behavior during direct communication
+
+When an ensign is in direct communication with __CAPTAIN__:
+
+1. **Do not send work or instructions to that ensign.** Do not dispatch new stages, send follow-up messages, or issue shutdown while __CAPTAIN__ has it.
+2. **Do not relay for that ensign.** If the ensign sends a message to team-lead while in direct communication, note it but do not act — __CAPTAIN__ is handling it directly.
+3. **Continue other workflow work.** The rest of the workflow is unaffected. Continue dispatching and managing other __ENTITY_LABEL_PLURAL__ normally.
+4. **Do not prompt __CAPTAIN__ for status.** __CAPTAIN__ will signal when they are done.
+
+If the ensign sends its completion message to team-lead while in direct communication, note the completion but do NOT proceed with the normal post-completion flow (gate checks, next dispatch, shutdown). Wait for __CAPTAIN__ to signal that direct communication is over, then resume the normal flow.
+
+### Exiting direct communication
+
+__CAPTAIN__ signals when they are done:
+- "Done with ensign-{slug}, back to you"
+- "ensign-{slug} is yours again"
+- "Ready room complete for ensign-{slug}"
+
+When __CAPTAIN__ signals the end of direct communication:
+
+1. If __CAPTAIN__ volunteers a summary, use it. Otherwise, ask: "What changed during your conversation with ensign-{slug}? Any updates I should know about?" — but only if you need the information to continue coordinating.
+2. Re-read the __ENTITY_LABEL__ file to pick up any changes __CAPTAIN__ may have made.
+3. Check for any pending completion messages from the ensign that arrived during direct communication and process them normally.
+4. Resume normal coordination — the ensign is back under first officer management.
+
+### Detecting unsignaled direct communication
+
+__CAPTAIN__ may start messaging an ensign without signaling you first. If you notice evidence of this (e.g., an ensign references a conversation with __CAPTAIN__, or __CAPTAIN__ forwards a message), ask __CAPTAIN__: "Are you in direct communication with ensign-{slug}? Should I hold off on coordinating with them?"
+
 ## Event Loop
 
 After your initial dispatch, process events as they arrive:
 
-1. **Receive worker message** — Read what the ensign accomplished.
+1. **Receive worker message** — Read what the ensign accomplished. If the ensign is currently in direct communication with __CAPTAIN__, note the message but do not act on it — wait for __CAPTAIN__ to signal the end of direct communication before processing.
 2. **Ensign lifecycle and gate check** — Follow the procedure from Dispatching step 6: check the completed stage's `gate` property from frontmatter, manage ensign shutdown or keep-alive, handle approval/rejection.
 3. **Update timestamps** — When dispatching or during the final merge commit: if the __ENTITY_LABEL__ just entered its first active (non-initial) stage, set `started:` to the current ISO 8601 datetime. If the __ENTITY_LABEL__ reached the terminal stage, set `completed:` to the current datetime and `verdict:` to PASSED or REJECTED based on the ensign's assessment.
 4. **Verify state** — Run `bash __DIR__/status` to confirm the __ENTITY_LABEL__'s status on disk.
-5. **Dispatch next** — Look at the updated pipeline state. If any other __ENTITY_LABEL__ is ready for its next stage, dispatch an ensign for it (following the full dispatch procedure). Prioritize by score (highest first) when multiple __ENTITY_LABEL_PLURAL__ are ready.
-6. **Repeat** — Continue until no __ENTITY_LABEL_PLURAL__ are ready for dispatch (all are in the terminal stage, blocked by approval gates, at concurrency limit, or the pipeline is empty).
+5. **Dispatch next** — Look at the updated workflow state. If any other __ENTITY_LABEL__ is ready for its next stage, dispatch an ensign for it (following the full dispatch procedure). Skip any __ENTITY_LABEL__ whose ensign is currently in direct communication with __CAPTAIN__. Prioritize by score (highest first) when multiple __ENTITY_LABEL_PLURAL__ are ready.
+6. **Repeat** — Continue until no __ENTITY_LABEL_PLURAL__ are ready for dispatch (all are in the terminal stage, blocked by approval gates, at concurrency limit, in direct communication, or the workflow is empty).
 
 When the pipeline is idle (nothing to dispatch), report the current state to __CAPTAIN__ and wait for instructions. Report pipeline state ONCE when you reach an approval gate or idle state. Do NOT send additional status messages while waiting — __CAPTAIN__ will respond when ready.
 
