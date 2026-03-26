@@ -39,7 +39,7 @@ Looking at the Spacedock pipeline itself (42 tasks processed), the practical gap
 
 ## Proposed Approach
 
-### Two optional frontmatter fields
+### Part 1: Cross-reference fields (this task)
 
 Add `issue` and `pr` as optional fields to the entity schema:
 
@@ -62,97 +62,114 @@ pr:
 - **`issue`** — A GitHub issue reference (e.g., `#42` or `owner/repo#42`). Set manually when creating a task from an issue, or by the captain at any time. Never auto-created.
 - **`pr`** — A GitHub PR reference (e.g., `#57` or `owner/repo#57`). Set when a PR is created for the task's worktree branch. Can be set by the first officer or manually.
 
-Both fields are plain strings. No validation, no API calls to verify they exist. The value is human-readable cross-reference, not programmatic integration.
+Both fields are plain strings. No validation, no API calls to verify they exist. The value is human-readable cross-reference, not programmatic integration. Actions on issues/PRs (closing, commenting) are left to the captain or future automation — not prescribed here.
 
-### PR creation at the merge boundary
+### Part 2: PR workflow via lieutenant agents (depends on task 035)
 
-Currently, the first officer's merge step (step 7) does:
+Rather than a pipeline-level `pr-workflow: true` flag with PR logic hardcoded into the first officer, the PR workflow is handled by a **stage-specialized lieutenant agent** (see task 035). The stage declares which agent to dispatch, and the agent contains the full methodology.
 
-```bash
-git merge --no-commit ensign/{slug}
-# update frontmatter, archive, commit
-git worktree remove ...
-git branch -d ...
-```
+#### How it works
 
-The proposed change adds an optional PR path. When the pipeline's README frontmatter includes `pr-workflow: true`, the first officer's merge step changes to:
-
-1. **Push the branch**: `git push origin ensign/{slug}`
-2. **Create the PR**: `gh pr create --base main --head ensign/{slug} --title "{entity title}" --body "..."`
-3. **Record the PR**: Set the `pr` field in frontmatter to the PR number.
-4. **Do NOT merge locally**. The PR is the merge mechanism now. The first officer reports the PR to the captain and waits.
-5. **After PR is merged** (detected by polling or on next session startup): clean up the worktree and branch, archive the entity.
-
-This replaces the local `git merge --no-commit` path when PR workflow is enabled.
-
-### Interaction with approval gates
-
-The validation stage has `gate: true`, meaning the captain must approve before the entity advances to `done`. When PR workflow is enabled:
-
-- The validation gate and the PR review can be the **same review**. The captain reviews the PR on GitHub (sees the diff, CI results, etc.) and either merges or requests changes.
-- If the captain merges the PR, that signals approval. The first officer detects the merge and advances the entity to `done`.
-- If the captain requests changes, the first officer can relay this to the ensign (if still alive) or re-dispatch for a redo.
-
-This means the approval gate for the terminal transition becomes "PR merged" rather than "captain says approved in the conversation." The pipeline still tracks the transition — it just uses PR state as the signal.
-
-### Pipeline-level opt-in
-
-The `pr-workflow` setting goes in the README frontmatter:
+A stage in the README frontmatter references a lieutenant:
 
 ```yaml
 stages:
-  defaults:
-    worktree: false
-    concurrency: 2
-  pr-workflow: true
   states:
-    ...
+    - name: implementation
+      worktree: true
+      agent: pr-lieutenant
+    - name: validation
+      worktree: true
+      fresh: true
+      gate: true
 ```
 
-When `pr-workflow: false` (default), the pipeline works exactly as it does today — local merge, no PRs, no GitHub dependency.
+The `pr-lieutenant` agent file (`.claude/agents/pr-lieutenant.md`) contains the methodology for:
+
+1. **Doing the implementation work** (same as a generic ensign today)
+2. **Pushing the branch**: `git push origin ensign/{slug}`
+3. **Creating the PR**: `gh pr create --base main --head ensign/{slug} --title "{entity title}" --body "..."`
+4. **Setting the `pr` field** in the entity frontmatter (or reporting it to the first officer to set)
+5. **Responding to PR review comments** — the lieutenant can read review comments via `gh pr view` and address them with additional commits
+
+The first officer doesn't need to know about GitHub at all. It dispatches the lieutenant per the stage's `agent` property. The lieutenant handles the full PR lifecycle.
+
+#### Why this is better than a pipeline flag
+
+- **Same extensibility mechanism as everything else** — stages reference agents, agents contain methodology. No special-case flags.
+- **The PR behavior is in the agent, not the orchestrator** — the first officer stays a pure dispatcher. Different pipelines can use different PR agents (one that creates draft PRs early, one that also runs CI, one that handles specific review conventions).
+- **Composable** — a pipeline could use `pr-lieutenant` for implementation but a different agent for validation. Or skip it entirely for stages that don't produce code.
+
+#### Merge boundary change
+
+When a stage uses a PR lieutenant, the first officer's merge step (step 7) changes: instead of `git merge --no-commit`, it checks whether a PR exists for the entity (the `pr` field is set). If so:
+
+- Check PR merge status: `gh pr view {pr_number} --json state`
+- If merged: clean up worktree/branch, archive entity
+- If open: report to captain, wait
+- If not yet created (lieutenant didn't create one): fall back to local merge
+
+On startup, the first officer checks all entities with non-empty `pr` fields for merged PRs — this handles the case where PRs were merged between sessions.
+
+#### Approval gate unification
+
+When PR workflow is active, the validation gate and PR review can be the **same review**:
+
+- Captain reviews on GitHub (sees diff, CI results)
+- Merging the PR signals approval — the first officer detects this and advances to `done`
+- Requesting changes signals rejection — the first officer can re-dispatch or relay feedback
+
+This is optional behavior, not enforced. The captain can still approve via the conversation if they prefer.
+
+### Scenarios
+
+**Spacedock's own development:** Commission with `agent: pr-lieutenant` on the implementation stage. Ensign does the work in a worktree, pushes the branch, creates a PR. CL reviews on GitHub, merges. Next session, the first officer detects the merge and archives the entity.
+
+**Incoming GitHub issue:** CL creates a task with `issue: "#23"`. The connection is documented in frontmatter. When the entity reaches `done`, CL closes the issue (or a future lieutenant could auto-close it).
+
+**Incoming PR from a contributor (future):** CL creates a task with `pr: "#45"` pointing at the contributor's PR. A specialized lieutenant checks out the PR branch, runs validation, and reports. This inverts the normal flow (PR already exists, pipeline reviews it) and needs a different dispatch pattern — out of scope for this task.
 
 ### What changes where
 
 | Component | Change |
 |-----------|--------|
 | **README schema** | Add `issue` and `pr` as optional fields in the entity template. Document them in the Field Reference. |
-| **README frontmatter** | Add `pr-workflow` as an optional pipeline-level setting (default: false). |
-| **First-officer template** | Add PR creation step in the merge procedure when `pr-workflow: true`. Add PR state detection on startup (check if PRs were merged while offline). |
-| **Commission SKILL.md** | Add `issue` and `pr` to generated entity template. Ask or infer `pr-workflow` setting during commission (default: false unless the mission suggests team collaboration). |
-| **Status script** | No change needed — `issue` and `pr` are optional display fields that can be added later if useful. |
+| **First-officer template** | Add PR-aware merge step: check `pr` field, detect merged PRs on startup, fall back to local merge when no PR exists. |
+| **Commission SKILL.md** | Add `issue` and `pr` to generated entity template. |
+| **Status script** | No change needed. |
 
-## Scope Control
+The `pr-lieutenant` agent file and the `agent` stage property are part of task 035 (lieutenant agents), not this task. This task provides the schema fields and the first officer's awareness of PRs.
 
-**In scope (minimal useful integration):**
-- `issue` and `pr` frontmatter fields (passive references)
-- `pr-workflow` pipeline-level opt-in
-- First officer creates PR instead of local merge when `pr-workflow: true`
-- First officer detects merged PRs on startup to advance entities
+## Scope
 
-**Out of scope:**
-- Automatic GitHub issue creation from tasks
-- Bidirectional issue-task sync
-- PR review comment parsing for automated redo dispatch
+**This task:**
+- `issue` and `pr` frontmatter fields (passive cross-references)
+- First officer checks `pr` field at merge boundary — if set, check PR state instead of local merge
+- First officer detects merged PRs on startup
+- Commission generates `issue` and `pr` fields in entity template
+
+**Task 035 (lieutenant agents):**
+- `agent` stage property in README frontmatter
+- PR lieutenant agent file with push/create-PR/review-comments methodology
+- Commission generates lieutenant agent files
+
+**Future (not scoped):**
+- Inbound PR workflow (contributor opens PR, pipeline reviews it)
+- Auto-close issues when entities reach terminal
+- PR review comment parsing for automated redo
 - CI status checks as validation input
-- Issue/PR fields in the status script output
 
 ## Acceptance Criteria
 
 - [ ] Entity schema includes optional `issue` and `pr` string fields
-- [ ] README frontmatter supports `pr-workflow: true/false` (default false)
-- [ ] First-officer template pushes branch and creates PR at merge boundary when `pr-workflow: true`
+- [ ] First-officer template checks `pr` field at merge boundary: if set and PR is merged, skip local merge; if set and PR is open, wait; if unset, local merge as today
 - [ ] First-officer template detects merged PRs on startup and advances entities to terminal stage
 - [ ] Commission skill generates `issue` and `pr` fields in entity template
-- [ ] Commission skill asks about or infers `pr-workflow` setting
-- [ ] Existing pipelines with `pr-workflow: false` (or unset) continue to work unchanged
-- [ ] PR body includes entity title and a link back to the entity file
+- [ ] Existing pipelines continue to work unchanged (no PR field = local merge)
+- [ ] PR body (when created by a lieutenant, not this task) includes entity title and link back to entity file
 
 ## Open Questions
 
-1. **Should `pr-workflow` be per-stage or per-pipeline?** Per-pipeline is simpler and covers the main use case (all worktree work goes through PRs, or none does). Per-stage would allow e.g. implementation goes through PRs but validation doesn't — but that seems unlikely. Leaning toward: per-pipeline.
+1. **`gh` CLI availability** — The first officer's PR state checking requires `gh`. If `gh` is not available and `pr` is set, should it warn and skip, or error? Leaning toward: warn and fall back to asking the captain for manual status.
 
-2. **How does the first officer detect a merged PR on startup?** It can run `gh pr list --state merged --head ensign/{slug}` for each entity with a non-empty `pr` field and an active status. If the PR is merged, advance to done. This is polling, not webhook-based, which is fine for session-based operation.
-
-3. **What about draft PRs?** The first officer could create draft PRs early (at implementation dispatch) so CI runs against in-progress work. This is a nice-to-have but adds complexity — the first officer would need to push branch updates during the ensign's work, not just at the end. Leaning toward: v0 creates non-draft PRs only at the merge boundary. Draft PRs can be a follow-up.
-
-4. **What if `gh` CLI isn't available?** Fall back to local merge. The first officer should check for `gh` availability before attempting PR creation and warn the captain if it's missing.
+2. **PR number format** — Should the `pr` field store just the number (`57`), the GitHub shorthand (`#57`), or a full reference (`owner/repo#57`)? The shorthand `#57` is most natural for single-repo use. Full reference is needed for cross-repo. Leaning toward: accept any format, parse as needed when calling `gh`.
