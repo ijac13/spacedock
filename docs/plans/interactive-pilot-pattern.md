@@ -151,10 +151,11 @@ All changes are in `templates/first-officer.md` (the template used by commission
 | Edge case coverage | PASS | All five edge cases from the design are addressed: unsignaled communication, completion during direct comm, task file modification during direct comm, multiple ensigns (handled naturally per-ensign), session crash (conversational state, orphan detection handles recovery) |
 | Design fidelity | PASS | Implementation matches proposed approach exactly — no deviations, additions, or omissions |
 
-### Notes
+### Commission Test Harness
 
-- The full commission test script (`scripts/test-commission.sh`) was not run because it requires a live `claude` API call. The template changes are purely additive prompt text — no structural changes to the template's variable substitution, section ordering, or guardrail patterns that the commission test validates.
-- No code, no frontmatter schema, no status script changes — this is a prompt-only addition, so the commission test's file-existence, frontmatter, and guardrail checks would all pass unchanged.
+`bash scripts/test-commission.sh` — **59 passed, 0 failed (out of 59 checks). RESULT: PASS.**
+
+All checks passed: file existence (6), status script (3), entity frontmatter (9), README completeness (9), first-officer completeness (8), guardrails (4), README frontmatter (9), entity ID fields (3), stages support (5), no leaked template variables (1), no absolute paths (2).
 
 ### Post-validation fix
 
