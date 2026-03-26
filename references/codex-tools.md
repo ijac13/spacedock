@@ -1,7 +1,7 @@
-<!-- ABOUTME: Tool mapping between Claude Code and Codex CLI for PTP pipeline operation. -->
-<!-- ABOUTME: Includes solo operator prompt for running PTP pipelines with Codex. -->
+<!-- ABOUTME: Tool mapping between Claude Code and Codex CLI for plain text workflow operation. -->
+<!-- ABOUTME: Includes solo operator prompt for running plain text workflows with Codex. -->
 
-# Codex CLI Tool Mapping and PTP Solo Operator
+# Codex CLI Tool Mapping and Solo Operator
 
 Based on analysis of Codex CLI v0.110.0 (binary inspection + CLI help).
 
@@ -57,11 +57,11 @@ Codex runs shell commands in a sandbox. Three modes:
 | `workspace-write` | `-s workspace-write` or `--full-auto` | CWD + TMPDIR | No | Yes (within CWD) |
 | `danger-full-access` | `-s danger-full-access` | Anywhere | Yes | Yes |
 
-For PTP pipeline operation, `workspace-write` is sufficient for all operations (reading files, running status script, editing entities, git commit) as long as the pipeline directory is within the workspace.
+For workflow operation, `workspace-write` is sufficient for all operations (reading files, running status script, editing entities, git commit) as long as the workflow directory is within the workspace.
 
-## PTP Operation Feasibility
+## Workflow Operation Feasibility
 
-| PTP Operation | Codex Capability | Sandbox Requirement | Works? |
+| Workflow Operation | Codex Capability | Sandbox Requirement | Works? |
 |--------------|-----------------|-------------------|--------|
 | Read README and entity files | `read_file` or `cat` | Any | Yes |
 | Run `bash {dir}/status` | `shell_command` | Any | Yes |
@@ -89,11 +89,11 @@ codex exec -s workspace-write -C /path/to/project "$(cat references/codex-solo-o
 ### Prompt
 
 ```
-You are operating a PTP (Plain Text Pipeline) at `{dir}/`.
+You are operating a plain text workflow at `{dir}/`.
 
 ## Startup
 
-1. Read `{dir}/README.md` to understand the pipeline schema, stages, and quality criteria.
+1. Read `{dir}/README.md` to understand the workflow schema, stages, and quality criteria.
 2. Run `bash {dir}/status` to see the current state of all entities.
 3. List entity files: `ls {dir}/*.md | grep -v README`
 
@@ -121,7 +121,7 @@ For each entity ready for its next stage (prioritize by score descending, then a
 - Never skip approval gates. If a transition says "Human approval: yes", stop and ask.
 - Keep entity frontmatter as valid YAML at all times.
 - One commit per stage transition. Commit message format: "advance: {slug} to {stage}"
-- If anything is unclear about the pipeline schema or an entity, ask rather than guess.
+- If anything is unclear about the workflow schema or an entity, ask rather than guess.
 - Work sequentially through entities. Do not try to parallelize.
 
 ## When Done
@@ -153,4 +153,4 @@ Codex v0.110.0 has an experimental `multi_agent` feature (enable via `/experimen
 - Coordination happens via collab events, not explicit message passing.
 - There is also `spawn_agents_on_csv` for batch spawning.
 
-This is architecturally closer to Claude Code's `Agent()` tool but with a different coordination model. If this feature stabilizes, a multi-agent PTP operator (closer to the first-officer/ensign pattern) becomes feasible on Codex.
+This is architecturally closer to Claude Code's `Agent()` tool but with a different coordination model. If this feature stabilizes, a multi-agent workflow operator (closer to the first-officer/ensign pattern) becomes feasible on Codex.
