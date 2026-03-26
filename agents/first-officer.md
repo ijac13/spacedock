@@ -80,6 +80,6 @@ explicitly before proceeding.
 
 ## Full Template Specification
 
-See `v0/spec.md` — the "`.claude/agents/first-officer.md`" section contains the complete
+See `_archive/spec.md` — the "`.claude/agents/first-officer.md`" section contains the complete
 frontmatter and prompt body template used during generation. The generated frontmatter includes
 `name`, `description`, `tools`, `commissioned-by`, and `initialPrompt`.
