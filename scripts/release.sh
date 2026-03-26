@@ -74,20 +74,10 @@ if [ -f "$SELF_HOSTED_PIPELINE/README.md" ]; then
     echo "REFIT: Self-hosted pipeline ($SELF_HOSTED_PIPELINE)"
     echo "=========================================="
     echo ""
-    echo "Run refit manually in a separate terminal:"
-    echo ""
-    echo "  claude /spacedock:refit $SELF_HOSTED_PIPELINE"
-    echo ""
-    echo "The refit will show diffs and ask for confirmation."
-    echo "Come back here when done."
+    echo "Running refit (interactive)..."
     echo ""
 
-    read -p "Has refit completed? [y/N] " -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Release paused. Version bump commit remains — amend or reset if needed."
-        exit 0
-    fi
+    claude "/spacedock:refit $SELF_HOSTED_PIPELINE" --plugin-dir "$REPO_ROOT"
 
     # Commit any refit changes
     if ! git diff-index --quiet HEAD --; then
