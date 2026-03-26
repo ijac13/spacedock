@@ -60,3 +60,16 @@ Generate a changelog from git log between the previous tag and HEAD. The agentlo
 4. Script is interactive (confirm before tagging)
 5. Clean error handling (dirty tree, existing tag, bad version format)
 6. GitHub release URL points to clkao/spacedock (not agentlore)
+
+## Implementation
+
+Created `scripts/release.sh` with the full release flow:
+
+1. Validates semver format, checks tag doesn't exist, checks clean working tree
+2. Bumps version in both `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` using python3 JSON manipulation (preserves formatting)
+3. Commits the version bump as `release: spacedock@X.Y.Z`
+4. Generates changelog via `claude -p` if available, falls back to raw `git log --oneline`
+5. Shows changelog and prompts for confirmation
+6. Creates annotated tag with changelog as message
+7. Pushes branch and tag to origin
+8. Prints GitHub release URL pointing to clkao/spacedock
