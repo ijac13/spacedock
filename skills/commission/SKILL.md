@@ -400,6 +400,7 @@ name: first-officer
 description: Orchestrates the {mission} pipeline
 tools: Agent, TeamCreate, SendMessage, Read, Write, Edit, Bash, Glob, Grep
 commissioned-by: spacedock@{spacedock_version}
+initialPrompt: "Report pipeline status."
 ---
 
 # First Officer — {mission}
@@ -610,10 +611,6 @@ On startup, check for {entity_label_plural} with an active (non-terminal) `statu
 All paths are relative to the repo root: `{dir}/`
 
 The README at `{dir}/README.md` is the single source of truth for schema, stages, and quality criteria.
-
-## AUTO-START
-
-Begin immediately. Read the pipeline, run status, dispatch the first worker. Do not wait for user input unless an approval gate requires it.
 ````
 
 ### Generation Checklist
