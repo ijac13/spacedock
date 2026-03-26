@@ -73,3 +73,30 @@ Created `scripts/release.sh` with the full release flow:
 6. Creates annotated tag with changelog as message
 7. Pushes branch and tag to origin
 8. Prints GitHub release URL pointing to clkao/spacedock
+
+## Validation
+
+Tested against acceptance criteria on 2026-03-25.
+
+### Results
+
+| # | Criterion | Result | Evidence |
+|---|-----------|--------|----------|
+| 1 | Version bumping in both JSON files | PASS | Script uses python3 to update `plugin.json` (line 45-53) and all entries in `marketplace.json` plugins array (line 55-64). Python3 parsing verified against actual files. |
+| 2 | Versions stay in sync | PASS | Both files updated in same script run and committed together (`git add` + `git commit` on lines 66-67). No path where one updates without the other. |
+| 3 | Changelog from git history | PASS | Lines 70-92: uses `git log` between previous tag and HEAD, summarized via `claude -p` when available, falls back to raw git log. |
+| 4 | Interactive confirmation | PASS | Line 103: `read -p` with y/N prompt. Cancellation exits cleanly with informative message (line 107). |
+| 5 | Error handling | PASS | All four error paths tested and verified: no args (exit 1, usage), bad version format (exit 1), existing tag (exit 1), dirty tree (exit 1). Also tested edge cases: `v0.4.0`, `1.2`, `1.2.3.4` all correctly rejected. |
+| 6 | GitHub URL points to clkao/spacedock | PASS | Line 122: `https://github.com/clkao/spacedock/releases/tag/$TAG` |
+
+### Additional checks
+
+- **Executable bit**: Confirmed (`-rwxr-xr-x`)
+- **ABOUTME comments**: Present on lines 2-3
+- **set -euo pipefail**: Present (line 4), ensures script fails fast on errors
+- **Temp file cleanup**: `trap 'rm -f "$CHANGELOG_FILE"' EXIT` on line 71
+- **No top-level version in marketplace.json**: Requirement 1 mentions "both top-level metadata and the plugin entry" but `marketplace.json` has no top-level `version` field (confirmed on main branch). The script correctly handles the actual file structure by updating only plugin array entries.
+
+### Recommendation
+
+**PASSED** — All six acceptance criteria are met. Script is clean, well-structured, and handles edge cases properly.
