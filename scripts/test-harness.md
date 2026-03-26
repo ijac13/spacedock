@@ -194,3 +194,159 @@ From the spec:
 ```bash
 rm -rf v0-test-1/
 ```
+
+---
+
+## 7. Checklist Protocol — E2E Runtime Test
+
+The commission test (sections 1-6) validates that the generated template is structurally correct. This test validates that the checklist protocol works at runtime: the first officer dispatches an ensign with a checklist, the ensign reports back with structured DONE/SKIPPED/FAILED items, and the first officer reviews the report.
+
+This is a separate script from `test-commission.sh`. Run from the repo root:
+
+```bash
+bash scripts/test-checklist-e2e.sh
+```
+
+### How validation works
+
+The first officer's `--output-format stream-json` log captures all tool calls and model output as newline-delimited JSON. We extract two things from it:
+
+1. **The Agent dispatch prompt** — contains the `### Completion checklist` section with numbered items assembled from stage requirements and entity acceptance criteria.
+2. **The first officer's text output** — contains the checklist review (item statuses, completeness assessment) performed after the ensign reports back.
+
+Note: the first officer may call `TeamDelete` before the script can read the team inbox files. The stream-json log is the reliable validation source.
+
+### Phase 1: Commission a test pipeline
+
+Commission a minimal pipeline in an isolated temp directory. Uses the same `claude -p --plugin-dir` approach as the commission test.
+
+```bash
+TEST_DIR="$(mktemp -d)"
+cd "$TEST_DIR"
+git init test-project && cd test-project
+
+PROMPT="/spacedock:commission
+
+All inputs for this workflow:
+- Mission: Track tasks through stages
+- Entity: A task
+- Stages: backlog → work → done
+- Approval gates: none
+- Seed entities:
+  1. test-checklist — Verify checklist protocol works (score: 25/25)
+- Location: ./checklist-test/
+
+Skip interactive questions and confirmation.
+Do NOT run the pilot phase — just generate the files."
+
+claude -p "$PROMPT" \
+  --plugin-dir "$REPO_ROOT" \
+  --permission-mode bypassPermissions \
+  --verbose --output-format stream-json \
+  2>&1 > "$TEST_DIR/commission-log.jsonl"
+```
+
+Key design choices:
+- **No gates.** Stages are `backlog → work → done` with no approval gates. The first officer processes the entity without blocking for captain input, so `claude -p` completes naturally.
+- **One entity.** Minimal scope — one entity goes through one stage.
+- **Fresh git repo.** Isolation from the real spacedock repo.
+
+After commission, add acceptance criteria to the test entity so the checklist has entity-level items:
+
+```bash
+cat >> "$TEST_DIR/test-project/checklist-test/test-checklist.md" << 'AC'
+
+## Acceptance Criteria
+
+1. The output file contains the word "hello"
+2. The output file is valid UTF-8
+AC
+```
+
+Then commit so the first officer has a clean working tree:
+
+```bash
+cd "$TEST_DIR/test-project"
+git add -A && git commit -m "commission: initial pipeline"
+```
+
+### Phase 2: Run the first officer
+
+```bash
+cd "$TEST_DIR/test-project"
+
+claude -p "Process all entities through the pipeline." \
+  --agent first-officer \
+  --permission-mode bypassPermissions \
+  --verbose --output-format stream-json \
+  --max-budget-usd 2.00 \
+  2>&1 > "$TEST_DIR/fo-log.jsonl"
+```
+
+Flag reference:
+- `--agent first-officer` — loads the generated `.claude/agents/first-officer.md`
+- `--max-budget-usd 2.00` — safety cap to prevent runaway spending
+- `--permission-mode bypassPermissions` — the first officer needs to create files, run bash, and use Agent/TeamCreate without prompts
+
+The first officer will:
+1. Create team, read README, run status
+2. Find `test-checklist` in backlog, dispatch an ensign into `work`
+3. The ensign does the work, sends a completion message with checklist
+4. First officer does checklist review
+5. No gate on `work`, so it proceeds to terminal stage
+6. Session completes
+
+### Phase 3: Validate from the stream-json log
+
+Extract the Agent dispatch prompt and first officer text output from the log using python3, then run grep checks against the extracted data.
+
+**Check 1: Dispatch prompt contains `### Completion checklist` section.**
+
+Verifies the first officer assembled a checklist and included it in the ensign prompt.
+
+**Check 2: Dispatch prompt has DONE/SKIPPED/FAILED instructions.**
+
+Verifies the ensign was told to report each item's status.
+
+**Check 3: Dispatch prompt includes entity acceptance criteria.**
+
+Verifies the first officer extracted items from the entity body (e.g., "hello", "UTF-8").
+
+**Check 4: Dispatch prompt includes stage requirement items.**
+
+Verifies the first officer extracted items from the README stage definition's Outputs bullets.
+
+**Check 5: First officer performed checklist review.**
+
+Verifies the first officer's text output mentions reviewing the checklist after the ensign completed.
+
+**Check 6: First officer review references item statuses.**
+
+Verifies the first officer mentions DONE/SKIPPED/FAILED in its review, not just a generic "looks good."
+
+**Check 7: Dispatch prompt has structured completion message template.**
+
+Verifies the ensign prompt includes `### Checklist` and `### Summary` sections in the completion message format.
+
+### Cleanup
+
+```bash
+rm -rf "$TEST_DIR"
+```
+
+### What this catches
+
+In the incident that motivated the checklist protocol, an ensign skipped the test harness and reported PASSED in free-form prose. The first officer didn't catch it. Under the checklist protocol:
+
+1. The ensign receives a numbered checklist with explicit DONE/SKIPPED/FAILED instructions — Checks 1-2 verify this.
+2. Entity-level acceptance criteria appear in the checklist — Check 3 verifies the first officer assembled items from both sources.
+3. The first officer reviews the checklist before proceeding — Checks 5-6 verify the review step ran with substantive assessment.
+
+The test does not verify that the first officer pushes back on weak skip rationales (that would require priming the ensign to skip with a bad excuse). It verifies the structural prerequisites: the ensign receives the right instructions, and the first officer reviews the report.
+
+### Operational notes
+
+- **Run time:** ~2-3 minutes (commission ~30-60s, first officer + ensign ~60-120s).
+- **Cost:** ~$0.50-$1.00 per run. The `--max-budget-usd` cap prevents surprises.
+- **Determinism:** LLM output varies. The checks are lenient (keyword grep, not exact strings). A test that passes 19/20 runs is still useful as a smoke test.
+- **Team directory cleanup:** The first officer typically calls `TeamDelete` before the session ends, cleaning up its own team directory. The test validates from the stream-json log, which persists regardless.

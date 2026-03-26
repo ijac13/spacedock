@@ -28,9 +28,14 @@ For each __ENTITY_LABEL__ that is ready for its next stage:
 
 1. Identify the __ENTITY_LABEL__'s current stage and what the next stage is.
 2. Read the next stage's prose subsection from the README (Inputs, Outputs, Good, Bad) for the ensign prompt. Read the stage's dispatch properties (`worktree`, `fresh`, `gate`, `concurrency`) from the `stages` frontmatter block.
-3. **Check concurrency** — Count how many __ENTITY_LABEL_PLURAL__ currently have their status set to the target stage. If the count equals the concurrency limit, hold this __ENTITY_LABEL__ in its current stage and move to the next dispatchable __ENTITY_LABEL__.
-4. **Conflict check** — When multiple __ENTITY_LABEL_PLURAL__ are entering a worktree stage simultaneously, check if they modify the same files. If so, warn __CAPTAIN__ about potential merge conflicts and propose sequencing them.
-5. Read the next stage's `worktree` property from the `stages` frontmatter block. Branch on its value:
+3. **Assemble completion checklist** — Build a numbered checklist for the ensign from two sources:
+   - **Stage requirements:** Extract concrete deliverables from the README stage definition's **Outputs** bullets. Each bullet becomes a checklist item.
+   - **Acceptance criteria:** Read the __ENTITY_LABEL__ file body. If it contains acceptance criteria (look for a section or list labeled "Acceptance Criteria", "acceptance criteria", or similar), extract each criterion as a checklist item. If there are many criteria, summarize into the key verifiable items.
+   **Maximum 5 items total** (stage-level + entity-level combined). If the combined list exceeds 5, consolidate related items.
+   Number items sequentially across both sources. If the __ENTITY_LABEL__ body has no explicit acceptance criteria, include only the stage requirements and note the absence when reporting at gate stages.
+4. **Check concurrency** — Count how many __ENTITY_LABEL_PLURAL__ currently have their status set to the target stage. If the count equals the concurrency limit, hold this __ENTITY_LABEL__ in its current stage and move to the next dispatchable __ENTITY_LABEL__.
+5. **Conflict check** — When multiple __ENTITY_LABEL_PLURAL__ are entering a worktree stage simultaneously, check if they modify the same files. If so, warn __CAPTAIN__ about potential merge conflicts and propose sequencing them.
+6. Read the next stage's `worktree` property from the `stages` frontmatter block. Branch on its value:
 
 ### Dispatch on main (Worktree: No)
 
@@ -57,7 +62,7 @@ Agent(
     subagent_type="general-purpose",
     name="ensign-{slug}",
     team_name="__PROJECT_NAME__-__DIR_BASENAME__",
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nAll file paths are relative to the repository root.\nDo NOT modify YAML frontmatter in __ENTITY_LABEL__ files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.\n\nRead the __ENTITY_LABEL__ file at __DIR__/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the __ENTITY_LABEL__ file body (not frontmatter) with your findings or outputs.\nCommit your work before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
+    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nAll file paths are relative to the repository root.\nDo NOT modify YAML frontmatter in __ENTITY_LABEL__ files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.\n\nRead the __ENTITY_LABEL__ file at __DIR__/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the __ENTITY_LABEL__ file body (not frontmatter) with your findings or outputs.\nCommit your work before sending completion message.\n\n### Completion checklist\n\nReport the status of each item when you send your completion message.\nMark each: DONE, SKIPPED (with rationale), or FAILED (with details).\n\n[CHECKLIST — at dispatch time, insert the numbered checklist assembled in step 3]\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}.\n\n### Checklist\n\n{numbered checklist with each item followed by — DONE, SKIPPED: rationale, or FAILED: details}\n\n### Summary\n{brief description of what was accomplished}\")\n\nEvery checklist item must appear in your report. Do not omit items.\nPlain text only. Never send JSON."
 )
 ```
 
@@ -95,7 +100,7 @@ Agent(
     subagent_type="general-purpose",
     name="ensign-{slug}",
     team_name="__PROJECT_NAME__-__DIR_BASENAME__",
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nYour working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in __ENTITY_LABEL__ files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.\n\nRead the __ENTITY_LABEL__ file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the __ENTITY_LABEL__ file body (not frontmatter) with your findings or outputs.\nCommit your work to your branch before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description of what was accomplished}.\")\n\nPlain text only. Never send JSON."
+    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nYour working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in __ENTITY_LABEL__ files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.\n\nRead the __ENTITY_LABEL__ file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the __ENTITY_LABEL__ file body (not frontmatter) with your findings or outputs.\nCommit your work to your branch before sending completion message.\n\n### Completion checklist\n\nReport the status of each item when you send your completion message.\nMark each: DONE, SKIPPED (with rationale), or FAILED (with details).\n\n[CHECKLIST — at dispatch time, insert the numbered checklist assembled in step 3]\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}.\n\n### Checklist\n\n{numbered checklist with each item followed by — DONE, SKIPPED: rationale, or FAILED: details}\n\n### Summary\n{brief description of what was accomplished}\")\n\nEvery checklist item must appear in your report. Do not omit items.\nPlain text only. Never send JSON."
 )
 ```
 
@@ -103,30 +108,47 @@ d. Wait for the ensign to complete and send its message.
 
 ### After dispatch (both paths)
 
-6. **Ensign lifecycle and approval gate** — When the ensign sends its completion message:
+7. **Checklist review** — When the ensign sends its completion message, review the checklist before proceeding:
+
+   a. **Completeness check** — Verify every item from the dispatched checklist appears in the report. If any items are missing, send the ensign back to account for them:
+      `SendMessage(to="ensign-{slug}", message="Your completion report is missing checklist items: {list missing items}. Account for every item — mark each DONE, SKIPPED with rationale, or FAILED with details.")`
+
+   b. **Skip review** — For each SKIPPED item, evaluate the rationale. Is the skip genuinely acceptable, or is the ensign rationalizing? If the rationale is weak (e.g., "seemed unnecessary", "ran out of time", "not applicable" without explanation), push back:
+      `SendMessage(to="ensign-{slug}", message="Weak skip rationale for item {N}: '{rationale}'. Either complete the item or provide a stronger justification for skipping it.")`
+
+   c. **Failure triage** — For FAILED items, determine whether the failure blocks progression. In gate stages, any failure typically means REJECTED. In non-gate stages, failures may be acceptable depending on context — escalate to __CAPTAIN__ if unclear.
+
+   Once the checklist passes review (all items accounted for, skip rationales acceptable), proceed to step 8.
+
+8. **Ensign lifecycle and approval gate** — After checklist review:
 
    a. Read the `gate` property of the completed stage from the `stages` frontmatter block.
 
    b. **If no approval gate:**
-      - If terminal stage: send shutdown to the ensign and proceed to step 7 (merge).
+      - If terminal stage: send shutdown to the ensign and proceed to step 9 (merge).
       - If more stages remain, determine whether to reuse the ensign or dispatch fresh:
         - **Reuse** if: next stage has the same `worktree` mode as the completed stage AND next stage does NOT have `fresh: true` in frontmatter.
         - **Fresh dispatch** otherwise (worktree mode changes, or next stage has `fresh: true`).
-      - If **reusing**: update frontmatter on main (set `status` to next stage, commit), then send the next stage's work to the existing ensign:
-        `SendMessage(to="ensign-{slug}", message="Next stage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nContinue working on {entity title}. Do the work described in the stage definition. Update the __ENTITY_LABEL__ file body (not frontmatter) with your findings or outputs.\nCommit your work before sending completion message.\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}. Summary: {brief description}.\")\n\nPlain text only. Never send JSON.")`
-        When the ensign completes, re-enter this step (6a).
+      - If **reusing**: update frontmatter on main (set `status` to next stage, commit), assemble a new checklist for the next stage (following step 3), then send the next stage's work to the existing ensign:
+        `SendMessage(to="ensign-{slug}", message="Next stage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nContinue working on {entity title}. Do the work described in the stage definition. Update the __ENTITY_LABEL__ file body (not frontmatter) with your findings or outputs.\nCommit your work before sending completion message.\n\n### Completion checklist\n\nReport the status of each item when you send your completion message.\nMark each: DONE, SKIPPED (with rationale), or FAILED (with details).\n\n[CHECKLIST — insert the numbered checklist assembled for this stage]\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}.\n\n### Checklist\n\n{numbered checklist with each item followed by — DONE, SKIPPED: rationale, or FAILED: details}\n\n### Summary\n{brief description}.\")\n\nEvery checklist item must appear in your report. Do not omit items.\nPlain text only. Never send JSON.")`
+        When the ensign completes, re-enter step 7 (checklist review).
       - If **fresh dispatch**: send shutdown to the ensign, then dispatch a new ensign for the next stage (re-enter step 1 for this __ENTITY_LABEL__).
 
    c. **If approval gate applies:**
       - Do NOT shut down the ensign. Keep it alive for potential redo.
       - If the __ENTITY_LABEL__ is in a worktree: do NOT merge. The branch is the evidence __CAPTAIN__ reviews.
-      - Report the ensign's findings and recommendation to __CAPTAIN__.
+      - Report to __CAPTAIN__ with the checklist and the first officer's assessment. Include:
+        - The ensign's checklist (all items with their status)
+        - For any SKIPPED items: the first officer's judgment on whether the skip rationale is valid
+        - For any FAILED items: impact assessment
+        - If the __ENTITY_LABEL__ had no acceptance criteria, note this explicitly
+        - The first officer's overall recommendation (approve/reject)
       - Wait for __CAPTAIN__'s decision:
-        - **Approve:** Determine reuse vs fresh dispatch using the same rule as step 6b (same `worktree` mode AND no `fresh: true` on next stage). If **reusing** and more stages remain: update frontmatter on main, send the next stage to the existing ensign via the SendMessage format in step 6b. If **fresh dispatch** or terminal: send shutdown to the ensign. If more stages remain, dispatch a new ensign for the next stage. If terminal, proceed to step 7 (merge).
-        - **Reject + redo:** Send feedback to the same ensign: `SendMessage(to="ensign-{slug}", message="Redo requested. Feedback: {captain's feedback}. Revise your work for the {stage} stage addressing this feedback. Commit and send a new completion message when done.")` When the ensign completes the redo, re-enter this step (6a).
-        - **Reject + discard:** Send shutdown to the ensign: `SendMessage(to="ensign-{slug}", message={ type: "shutdown_request", reason: "Gate rejected, discarding" })`. Clean up worktree/branch if applicable (step 8). Re-dispatch a fresh ensign or ask __CAPTAIN__ for direction.
+        - **Approve:** Determine reuse vs fresh dispatch using the same rule as step 8b (same `worktree` mode AND no `fresh: true` on next stage). If **reusing** and more stages remain: update frontmatter on main, assemble a new checklist for the next stage (following step 3), send the next stage to the existing ensign via the SendMessage format in step 8b. If **fresh dispatch** or terminal: send shutdown to the ensign. If more stages remain, dispatch a new ensign for the next stage. If terminal, proceed to step 9 (merge).
+        - **Reject + redo:** Send feedback to the same ensign: `SendMessage(to="ensign-{slug}", message="Redo requested. Feedback: {captain's feedback}. Revise your work for the {stage} stage addressing this feedback. Commit and send a new completion message with the updated checklist when done.")` When the ensign completes the redo, re-enter step 7 (checklist review).
+        - **Reject + discard:** Send shutdown to the ensign: `SendMessage(to="ensign-{slug}", message={ type: "shutdown_request", reason: "Gate rejected, discarding" })`. Clean up worktree/branch if applicable (step 10). Re-dispatch a fresh ensign or ask __CAPTAIN__ for direction.
 
-7. **Merge to main** — Only when the __ENTITY_LABEL__ has reached its terminal stage AND was in a worktree:
+9. **Merge to main** — Only when the __ENTITY_LABEL__ has reached its terminal stage AND was in a worktree:
    ```bash
    git merge --no-commit ensign/{slug}
    ```
@@ -144,7 +166,7 @@ d. Wait for the ensign to complete and send its message.
    git mv __DIR__/{slug}.md __DIR__/_archive/{slug}.md
    git commit -m "done: {slug} completed pipeline"
    ```
-8. **Cleanup** — Remove the worktree and branch (only if one exists):
+10. **Cleanup** — Remove the worktree and branch (only if one exists):
    ```bash
    git worktree remove .worktrees/ensign-{slug}
    git branch -d ensign/{slug}
@@ -227,11 +249,12 @@ __CAPTAIN__ may start messaging an ensign without signaling you first. If you no
 After your initial dispatch, process events as they arrive:
 
 1. **Receive worker message** — Read what the ensign accomplished. If the ensign is currently in direct communication with __CAPTAIN__, note the message but do not act on it — wait for __CAPTAIN__ to signal the end of direct communication before processing.
-2. **Ensign lifecycle and gate check** — Follow the procedure from Dispatching step 6: check the completed stage's `gate` property from frontmatter, manage ensign shutdown or keep-alive, handle approval/rejection.
-3. **Update timestamps** — When dispatching or during the final merge commit: if the __ENTITY_LABEL__ just entered its first active (non-initial) stage, set `started:` to the current ISO 8601 datetime. If the __ENTITY_LABEL__ reached the terminal stage, set `completed:` to the current datetime and `verdict:` to PASSED or REJECTED based on the ensign's assessment.
-4. **Verify state** — Run `bash __DIR__/status` to confirm the __ENTITY_LABEL__'s status on disk.
-5. **Dispatch next** — Look at the updated workflow state. If any other __ENTITY_LABEL__ is ready for its next stage, dispatch an ensign for it (following the full dispatch procedure). Skip any __ENTITY_LABEL__ whose ensign is currently in direct communication with __CAPTAIN__. Prioritize by score (highest first) when multiple __ENTITY_LABEL_PLURAL__ are ready.
-6. **Repeat** — Continue until no __ENTITY_LABEL_PLURAL__ are ready for dispatch (all are in the terminal stage, blocked by approval gates, at concurrency limit, in direct communication, or the workflow is empty).
+2. **Checklist review** — Follow the procedure from Dispatching step 7: verify completeness, review skip rationales, triage failures. Send the ensign back if the checklist is incomplete or rationales are weak.
+3. **Ensign lifecycle and gate check** — Follow the procedure from Dispatching step 8: check the completed stage's `gate` property from frontmatter, manage ensign shutdown or keep-alive, handle approval/rejection.
+4. **Update timestamps** — When dispatching or during the final merge commit: if the __ENTITY_LABEL__ just entered its first active (non-initial) stage, set `started:` to the current ISO 8601 datetime. If the __ENTITY_LABEL__ reached the terminal stage, set `completed:` to the current datetime and `verdict:` to PASSED or REJECTED based on the ensign's assessment.
+5. **Verify state** — Run `bash __DIR__/status` to confirm the __ENTITY_LABEL__'s status on disk.
+6. **Dispatch next** — Look at the updated workflow state. If any other __ENTITY_LABEL__ is ready for its next stage, dispatch an ensign for it (following the full dispatch procedure). Skip any __ENTITY_LABEL__ whose ensign is currently in direct communication with __CAPTAIN__. Prioritize by score (highest first) when multiple __ENTITY_LABEL_PLURAL__ are ready.
+7. **Repeat** — Continue until no __ENTITY_LABEL_PLURAL__ are ready for dispatch (all are in the terminal stage, blocked by approval gates, at concurrency limit, in direct communication, or the workflow is empty).
 
 When the pipeline is idle (nothing to dispatch), report the current state to __CAPTAIN__ and wait for instructions. Report pipeline state ONCE when you reach an approval gate or idle state. Do NOT send additional status messages while waiting — __CAPTAIN__ will respond when ready.
 

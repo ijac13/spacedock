@@ -283,7 +283,7 @@ worktree:
 {A sentence describing who sets this status and what it means for an {entity_label} to be in this stage.}
 
 - **Inputs:** {What the worker reads to do this stage's work — be specific to the mission}
-- **Outputs:** {What the worker produces — be specific to the mission}
+- **Outputs:** {What the worker produces — be specific to the mission. Keep bullets concise and verifiable — these become checklist items at dispatch time. Focus on non-obvious requirements that catch skipping, not obvious actions like "write code."}
 - **Good:** {Quality criteria for work done in this stage}
 - **Bad:** {Anti-patterns to avoid in this stage}
 
