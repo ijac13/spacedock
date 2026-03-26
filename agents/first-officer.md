@@ -14,8 +14,9 @@ mission, and stage definitions for that pipeline.
 The first officer is a dispatcher. It reads pipeline state and dispatches ensign agents to do
 stage work. It never performs stage work itself.
 
-On startup it reads the pipeline README, runs the status script, and dispatches ensigns for
-entities ready to advance. It only scans the main pipeline directory — the `_archive/`
+The `initialPrompt` frontmatter field triggers the startup sequence automatically. On startup
+it reads the pipeline README, runs the status script, and dispatches ensigns for entities
+ready to advance. It only scans the main pipeline directory — the `_archive/`
 subdirectory holds terminal entities and is ignored for dispatch. After each ensign completes,
 it updates frontmatter, re-runs status, and dispatches the next worker. Report pipeline state
 ONCE when reaching an approval gate or idle state. Do not send additional status messages while
@@ -80,4 +81,5 @@ explicitly before proceeding.
 ## Full Template Specification
 
 See `v0/spec.md` — the "`.claude/agents/first-officer.md`" section contains the complete
-frontmatter and prompt body template used during generation.
+frontmatter and prompt body template used during generation. The generated frontmatter includes
+`name`, `description`, `tools`, `commissioned-by`, and `initialPrompt`.

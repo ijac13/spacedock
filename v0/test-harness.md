@@ -136,7 +136,7 @@ Open the file and verify these sections are present:
 - Event Loop
 - State Management
 - Pipeline Path (with a repo-root-relative path, not an absolute path or template variable)
-- AUTO-START instruction
+- `initialPrompt` in frontmatter
 
 ### First-officer guardrails
 
