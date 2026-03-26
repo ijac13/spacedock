@@ -79,18 +79,37 @@ Existing commissioned pipelines that already have the `## AUTO-START` body secti
 
 ## Acceptance Criteria
 
-1. Generated first-officer frontmatter includes `initialPrompt: "Begin pipeline dispatch."`
+1. Generated first-officer frontmatter includes `initialPrompt: "Report pipeline status."`
 2. Generated first-officer body does NOT contain an `## AUTO-START` section
 3. `agents/first-officer.md` reference doc reflects the new `initialPrompt` approach
 4. Test harness checks for `initialPrompt` instead of `AUTO-START`
 5. All existing test checks still pass (the other guardrails are unchanged)
+6. The first-officer file is generated deterministically (not LLM-generated prose)
 
 ## Implementation Summary
 
-Three files changed:
+### Done
 
-1. **`skills/commission/SKILL.md`** — Added `initialPrompt: "Report pipeline status."` to the generated first-officer frontmatter (after `commissioned-by`). Removed the `## AUTO-START` section from the generated body.
+1. **`skills/commission/SKILL.md`** — Added `initialPrompt: "Report pipeline status."` to the generated first-officer frontmatter. Removed the `## AUTO-START` section from the body. Refactored the template to use `${VAR}` bash variable substitution for commission-time variables (mission, dir, entity_label, etc.) while runtime variables (`{slug}`, `{next_stage}`) pass through unchanged.
 
-2. **`agents/first-officer.md`** — Updated the Role section to note that `initialPrompt` triggers the startup sequence. Added the full list of generated frontmatter fields (`name`, `description`, `tools`, `commissioned-by`, `initialPrompt`) to the Full Template Specification section.
+2. **`agents/first-officer.md`** — Updated to note that `initialPrompt` triggers the startup sequence.
 
-3. **`v0/test-commission.sh`** — Replaced `"AUTO-START|auto-start"` with `"initialPrompt"` in the keyword completeness check loop (line 189).
+3. **`v0/test-commission.sh`** — Replaced `AUTO-START` check with `initialPrompt` check.
+
+### Blocking issue: commission LLM ignores the heredoc template
+
+The commission LLM rewrites the first-officer content instead of using the bash heredoc with variable substitution, even with explicit "do NOT rewrite" instructions. The generated first-officer is missing `initialPrompt`, `commissioned-by`, and `TeamCreate` in tools — the LLM writes its own version.
+
+This is the same root cause as the dispatch-embellishment problem, but worse: guardrail comments can prevent expansion of placeholders, but they can't force the LLM to use a heredoc instead of writing content directly.
+
+### Proposed solution: extract template to a separate file
+
+Extract the first-officer template from SKILL.md into a standalone file (e.g., `skills/commission/first-officer.tmpl`). The commission skill tells the LLM to:
+
+1. Set bash variables from the design phase
+2. Run `sed` substitutions on the template file
+3. Write the result to `.claude/agents/first-officer.md`
+
+The LLM's only job is computing variable VALUES, not touching template CONTENT. The template file is copied verbatim with mechanical substitution — no LLM involvement in the output.
+
+This is architecturally equivalent to treating commission as a compiler: the template is a binary format, the LLM handles the frontend (gathering inputs), and sed/bash handles the backend (emitting output).
