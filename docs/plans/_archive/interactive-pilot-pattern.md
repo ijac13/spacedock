@@ -1,13 +1,13 @@
 ---
 id: 019
 title: Design a pattern for pilots that interact directly with the captain
-status: validation
+status: done
 source: testflight-005
 started: 2026-03-24T00:00:00Z
-completed:
-verdict:
+completed: 2026-03-26T19:16:00Z
+verdict: PASSED
 score: 0.50
-worktree: .worktrees/ensign-interactive-pilot-pattern
+worktree:
 ---
 
 ## Problem Statement
