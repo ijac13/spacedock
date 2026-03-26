@@ -1,1 +1,4 @@
 .worktrees/
+.private-journal/
+testflight-*/
+.claude/settings.local.json

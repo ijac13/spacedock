@@ -1,5 +1,9 @@
 {
   "name": "spacedock",
-  "description": "Build and launch PTP pipelines",
-  "version": "0.3.0"
+  "version": "0.3.0",
+  "description": "Turn directories of markdown files into structured workflows operated by AI agents",
+  "author": { "name": "CL Kao" },
+  "repository": "https://github.com/clkao/spacedock",
+  "license": "Apache-2.0",
+  "keywords": ["workflow", "pipeline", "agents", "markdown", "automation"]
 }

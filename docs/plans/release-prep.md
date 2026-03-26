@@ -54,3 +54,42 @@ Stay at 0.3.0 — metadata-only changes don't warrant a bump.
 5. Those paths are removed from git tracking and git history
 6. No active branches broken by history rewrite
 7. `git tag v0.3.0` on the release commit
+
+## Implementation Summary
+
+### Committed in this branch
+
+1. **LICENSE** — Apache-2.0 full text at repo root
+2. **`.claude-plugin/plugin.json`** — added marketplace fields: author, repository, license, keywords
+3. **`.gitignore`** — added `.private-journal/`, `testflight-*/`, `.claude/settings.local.json`
+
+### History cleanup (run on main after merge)
+
+These commands remove `.private-journal/`, `testflight-*/`, and `.claude/settings.local.json` from all git history. They must be run on the main repo (not a worktree) with no other branches active.
+
+**Using git-filter-repo** (install: `pip install git-filter-repo`):
+
+```bash
+# Back up first
+cp -r .git .git-backup
+
+# Remove paths from entire history
+git filter-repo \
+  --invert-paths \
+  --path-glob '.private-journal/' \
+  --path-glob 'testflight-*/' \
+  --path '.claude/settings.local.json' \
+  --force
+
+# Re-add remote and force push
+git remote add origin https://github.com/clkao/spacedock.git
+git push --force --all
+git push --force --tags
+```
+
+**Tag the release** (after history rewrite and force push):
+
+```bash
+git tag v0.3.0
+git push origin v0.3.0
+```
