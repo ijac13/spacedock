@@ -1,7 +1,7 @@
 ---
 id: 019
 title: Design a pattern for pilots that interact directly with the captain
-status: implementation
+status: validation
 source: testflight-005
 started: 2026-03-24T00:00:00Z
 completed:
