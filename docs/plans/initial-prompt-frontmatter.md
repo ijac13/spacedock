@@ -1,13 +1,13 @@
 ---
 title: Use initialPrompt frontmatter for first-officer auto-start
 id: 033
-status: ideation
+status: implementation
 source: Claude Code changelog
 started: 2026-03-25T19:00:00Z
 completed:
 verdict:
 score: 0.45
-worktree:
+worktree: .worktrees/ensign-init-prompt
 ---
 
 ## Problem
