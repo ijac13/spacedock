@@ -41,3 +41,45 @@ The codebase uses "PTP (Plain Text Pipeline)" as the core term, but the project 
 4. Refit skill description uses "workflow" not "PTP pipeline"
 5. Test harness and test script updated to match
 6. Commission test harness still passes (59 checks)
+
+## Implementation Summary
+
+Updated 5 files, 80 line replacements (balanced insertions/deletions):
+
+### `skills/commission/SKILL.md`
+- ABOUTME: "PTP pipeline" -> "plain text workflow"
+- Skill description: removed PTP references, uses "workflow" throughout
+- Heading: "Commission a PTP Pipeline" -> "Commission a Plain Text Workflow"
+- Greeting: "Plain Text Pipeline (PTP)" -> "plain text workflow"
+- All user-facing prose: "pipeline" -> "workflow" (design phases, questions, confirm, generate, pilot)
+- README template (section 2a): "Pipeline State" -> "Workflow State", "pipeline" -> "workflow" in prose, "Pipelines can upgrade" -> "Workflows can upgrade"
+- Template variables like `{entity_label}` already used throughout — no hardcoded "entity" instances found in the template prose
+
+### `skills/refit/SKILL.md`
+- ABOUTME: "PTP pipeline" -> "workflow"
+- Skill description: "PTP pipeline" -> "workflow"
+- Heading: "Refit a PTP Pipeline" -> "Refit a Workflow"
+- All prose references: "pipeline directory" -> "workflow directory", "Pipeline-specific" -> "Workflow-specific", etc.
+- Preserved `## Pipeline Path` section reference (points to first-officer template section name)
+
+### `v0/test-commission.sh`
+- Test prompt: "PTP pipelines" -> "plain text workflows"
+- Seed entity descriptions: "existing pipelines" -> "existing workflows", "interconnected pipelines" -> "interconnected workflows"
+- Comment: "pre-stages pipelines" -> "pre-stages workflows"
+
+### `v0/test-harness.md`
+- Test prompt: same changes as test-commission.sh
+- Section reference: "Pipeline State" -> "Workflow State"
+- Prose: "follow the pipeline" -> "follow the workflow"
+
+### `references/codex-tools.md`
+- ABOUTME: "PTP pipeline" -> "plain text workflow"
+- Heading: removed "PTP" from title
+- All PTP references replaced with "workflow"
+- Solo operator prompt: "pipeline schema" -> "workflow schema"
+
+### Not modified (per scope)
+- `v0/spec.md` — historical spec
+- `templates/first-officer.md` — not in scope; still uses "pipeline" in template text
+- `.claude/agents/` — excluded per instructions
+- Archived entities
