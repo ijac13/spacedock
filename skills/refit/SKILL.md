@@ -1,14 +1,14 @@
 <!-- ABOUTME: Skill prompt for /spacedock refit — guides Claude through -->
-<!-- ABOUTME: upgrading existing PTP pipeline scaffolding to the current Spacedock version. -->
+<!-- ABOUTME: upgrading existing workflow scaffolding to the current Spacedock version. -->
 ---
 name: refit
-description: "This skill should be used when the user asks to \"refit a pipeline\", \"upgrade a pipeline\", \"update pipeline scaffolding\", or wants to bring an existing PTP pipeline's scaffolding files up to date with the current Spacedock version."
+description: "This skill should be used when the user asks to \"refit a workflow\", \"upgrade a workflow\", \"update workflow scaffolding\", or wants to bring an existing workflow's scaffolding files up to date with the current Spacedock version."
 user-invocable: true
 ---
 
-# Refit a PTP Pipeline
+# Refit a Workflow
 
-You are refitting (upgrading) an existing PTP pipeline to match the current Spacedock version. This covers scaffolding files (status script, first-officer agent, README) and, when schema changes require it, migrating entity frontmatter data.
+You are refitting (upgrading) an existing workflow to match the current Spacedock version. This covers scaffolding files (status script, first-officer agent, README) and, when schema changes require it, migrating entity frontmatter data.
 
 Follow these five phases in order. Do not skip or combine phases.
 
@@ -16,11 +16,11 @@ Follow these five phases in order. Do not skip or combine phases.
 
 ## Phase 1: Discovery
 
-### Step 1 — Identify the pipeline
+### Step 1 — Identify the workflow
 
-The user must provide a pipeline directory path. If they didn't, ask:
+The user must provide a workflow directory path. If they didn't, ask:
 
-> Which pipeline directory should I refit?
+> Which workflow directory should I refit?
 
 Store the confirmed path as `{dir}`. Resolve it to an absolute path. Also derive `{project_root}` (git root or cwd) and `{dir_basename}` (last path component).
 
@@ -40,7 +40,7 @@ Read `.claude-plugin/plugin.json` from the Spacedock plugin directory (the direc
 
 ### Step 4 — Evaluate
 
-- If all found stamps match `{current_version}`: report "Pipeline is already up to date." and stop.
+- If all found stamps match `{current_version}`: report "Workflow is already up to date." and stop.
 - If no stamps were found on any file: enter **Degraded Mode** (see below).
 - Otherwise: proceed to Phase 2 with the list of outdated files.
 
@@ -52,8 +52,8 @@ Each scaffolding file gets a specific upgrade strategy based on how safe it is t
 
 | File | Strategy | Rationale |
 |------|----------|-----------|
-| `status` | **Replace** | Mechanical script. Pipeline-specific content (stage names) is extracted from the README. Users rarely customize beyond what's generated. |
-| `first-officer.md` | **Regenerate** | Standard template structure with pipeline-specific values extracted from the existing README and agent. Show diff and ask CL for confirmation before replacing. |
+| `status` | **Replace** | Mechanical script. Workflow-specific content (stage names) is extracted from the README. Users rarely customize beyond what's generated. |
+| `first-officer.md` | **Regenerate** | Standard template structure with workflow-specific values extracted from the existing README and agent. Show diff and ask CL for confirmation before replacing. |
 | `README.md` | **Show diff** | Users customize stages, schema fields, quality criteria. Too risky to auto-replace. Show what the current template would produce and let CL decide. |
 
 Present the classification to CL:
@@ -74,7 +74,7 @@ Wait for CL to confirm before proceeding.
 
 ## Phase 3: Execute Upgrades
 
-### Extract pipeline-specific values from README
+### Extract workflow-specific values from README
 
 Before generating any files, read `{dir}/README.md` and extract:
 
@@ -87,7 +87,7 @@ Before generating any files, read `{dir}/README.md` and extract:
 4. **Entity description** — from the first paragraph after the H1.
 
 Also extract from the existing first-officer (if present):
-- **Pipeline absolute path** — from the `## Pipeline Path` section.
+- **Workflow absolute path** — from the `## Pipeline Path` section.
 
 ### 3a. Status Script (Replace + Materialize)
 
@@ -96,7 +96,7 @@ Generate the status script from the reference template at `templates/status` (re
 1. Read the template file.
 2. Fill in the two variable fields:
    - `{current_version}` — the target Spacedock version
-   - `{stage1}, {stage2}, ..., {last_stage}` — the pipeline's stage names in order (extracted from README)
+   - `{stage1}, {stage2}, ..., {last_stage}` — the workflow's stage names in order (extracted from README)
 3. Show CL the diff between the old status script's description header and the new one. (Only the header matters — the implementation will be regenerated regardless.)
 4. Replace `{dir}/status` with the filled-in template.
 5. Preserve the executable bit (`chmod +x`).
@@ -104,9 +104,9 @@ Generate the status script from the reference template at `templates/status` (re
 
 ### 3b. First-Officer Agent (Regenerate)
 
-1. Extract pipeline-specific values:
+1. Extract workflow-specific values:
    - **Mission** — from README H1
-   - **Pipeline directory** — `{dir}` (absolute path)
+   - **Workflow directory** — `{dir}` (absolute path)
    - **Stage list** — from README stage sections
    - **Approval gates** — from README stage sections (transitions where "Human approval: Yes")
    - **Team name** — `{dir_basename}`
@@ -131,7 +131,7 @@ If the user added custom sections to the first-officer (sections not in the stan
 
 ### 3c. README (Show Diff)
 
-1. Generate what the current commission template would produce for this pipeline, using the extracted values (mission, stages, schema, etc.).
+1. Generate what the current commission template would produce for this workflow, using the extracted values (mission, stages, schema, etc.).
 2. Diff it against the user's current README.
 3. Present the diff to CL, noting which differences are likely template changes vs user customizations:
 
@@ -207,7 +207,7 @@ Show a summary of what was migrated:
 >
 > Suggest committing:
 > ```
-> git commit -m "refit: upgrade pipeline scaffolding to spacedock@{current_version}"
+> git commit -m "refit: upgrade workflow scaffolding to spacedock@{current_version}"
 > ```
 
 ---
@@ -216,7 +216,7 @@ Show a summary of what was migrated:
 
 When no version stamps are found on any scaffolding file, the original baseline cannot be determined. Inform CL and offer two options:
 
-> **No version stamps found.** This pipeline was commissioned before version stamping was implemented, or the stamps were removed. I can't determine what the original scaffolding looked like.
+> **No version stamps found.** This workflow was commissioned before version stamping was implemented, or the stamps were removed. I can't determine what the original scaffolding looked like.
 >
 > Two options:
 >

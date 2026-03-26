@@ -1,16 +1,16 @@
 <!-- ABOUTME: Skill prompt for /spacedock commission — guides Claude through -->
-<!-- ABOUTME: interactive PTP pipeline design, file generation, and pilot run. -->
+<!-- ABOUTME: interactive plain text workflow design, file generation, and pilot run. -->
 ---
 name: commission
-description: "This skill should be used when the user asks to \"commission a pipeline\", \"create a PTP pipeline\", \"design a pipeline\", \"launch a pipeline\", or wants to interactively design and generate a Plain Text Pipeline with stages, entities, and a first-officer agent."
+description: "This skill should be used when the user asks to \"commission a workflow\", \"create a workflow\", \"design a workflow\", \"launch a workflow\", or wants to interactively design and generate a plain text workflow with stages, entities, and a first-officer agent."
 user-invocable: true
 ---
 
-# Commission a PTP Pipeline
+# Commission a Plain Text Workflow
 
-You are commissioning a Plain Text Pipeline (PTP). A PTP is a directory of markdown files with YAML frontmatter, where each file is a work entity that moves through stages. The directory's README is the single source of truth for schema and stages, and a self-describing bash script provides pipeline status views.
+You are commissioning a plain text workflow. A plain text workflow is a directory of markdown files with YAML frontmatter, where each file is a work entity that moves through stages. The directory's README is the single source of truth for schema and stages, and a self-describing bash script provides workflow status views.
 
-This is a v0 shuttle-mode pipeline: one general-purpose ensign agent handles all stages. You will walk {captain} through interactive design, generate all pipeline files, then launch a pilot run.
+This is a v0 shuttle-mode workflow: one general-purpose ensign agent handles all stages. You will walk {captain} through interactive design, generate all workflow files, then launch a pilot run.
 
 Follow these three phases in order. Do not skip or combine phases.
 
@@ -31,14 +31,14 @@ This allows non-interactive use: all inputs in one message, straight to generati
 
 Before asking Question 1, greet {captain} with the following (skip this greeting entirely in batch mode):
 
-> Welcome to Spacedock! We're going to design a Plain Text Pipeline (PTP) together.
+> Welcome to Spacedock! We're going to design a plain text workflow together.
 >
 > I'll walk you through three phases:
-> 1. **Design** — a few questions to shape the pipeline
-> 2. **Generate** — I'll create all the pipeline files
-> 3. **Pilot run** — I'll launch the pipeline to process your seed entities
+> 1. **Design** — a few questions to shape the workflow
+> 2. **Generate** — I'll create all the workflow files
+> 3. **Pilot run** — I'll launch the workflow to process your seed entities
 >
-> Throughout this pipeline, you'll be addressed as **{captain}** (the pipeline operator).
+> Throughout this workflow, you'll be addressed as **{captain}** (the workflow operator).
 >
 > Let's start designing.
 
@@ -52,11 +52,11 @@ that text as the mission statement.
 - Proceed to Question 1 but present the extracted mission for confirmation
   rather than asking from scratch:
 
-  > I'll use this as the pipeline mission: "{extracted_mission}"
+  > I'll use this as the workflow mission: "{extracted_mission}"
   >
   > What does each work item represent?
 
-This skips the "what's this pipeline for?" half of Q1 and goes straight to
+This skips the "what's this workflow for?" half of Q1 and goes straight to
 the entity-type follow-up.
 
 Ask {captain} the remaining questions **one at a time**. Wait for each answer before asking the next question. Do not batch questions.
@@ -65,13 +65,13 @@ Ask {captain} the remaining questions **one at a time**. Wait for each answer be
 
 Ask:
 
-> What's this pipeline for, and what does each work item represent?
+> What's this workflow for, and what does each work item represent?
 >
-> Example: "Track design ideas through review stages" — the pipeline is for tracking, each item is a design idea.
+> Example: "Track design ideas through review stages" — the workflow is for tracking, each item is a design idea.
 
 Extract `{mission}` and `{entity_description}` from the answer. If the answer clearly covers both mission and entity, proceed. If only the mission is clear, ask a brief follow-up:
 
-> Got it. What does each work item in this pipeline represent? (e.g., "a design idea", "a bug report", "a candidate feature")
+> Got it. What does each work item in this workflow represent? (e.g., "a design idea", "a bug report", "a candidate feature")
 
 **Derive the entity label** from `{entity_description}`:
 
@@ -90,7 +90,7 @@ Examples:
 
 Based on the mission, suggest default stages. Present them as an itemized list and ask {captain} to review:
 
-> Based on your mission, here are the stages I'd suggest:
+> Based on your workflow mission, here are the stages I'd suggest:
 >
 > {for each stage: "1. **{stage_name}** — {one-line description}"}
 >
@@ -102,7 +102,7 @@ Store the confirmed stages as `{stages}`. The first stage is `{first_stage}` and
 
 Ask:
 
-> Give me 2–3 starting items to seed the pipeline. For each, provide:
+> Give me 2–3 starting items to seed the workflow. For each, provide:
 > - **Title** — short name
 > - **Description** — a sentence or two about what this entity is
 > - **Score** (optional) — priority from 0.0 to 1.0
@@ -127,7 +127,7 @@ After collecting answers, derive all remaining values from the mission context:
 
 Present the full summary with all derived values:
 
-> **Pipeline Design Summary**
+> **Workflow Design Summary**
 >
 > - **Mission:** {mission}
 > - **Entity:** {entity_description}
@@ -145,7 +145,7 @@ Wait for {captain} to confirm before proceeding to Phase 2. If {captain} wants c
 
 ---
 
-## Phase 2: Generate Pipeline Files
+## Phase 2: Generate Workflow Files
 
 ### Ensure Git Repository
 
@@ -153,11 +153,11 @@ Before generating files, ensure the project has a git repository:
 
 1. Check if the current directory is inside a git repo (`git rev-parse --git-dir`).
 2. If not, initialize one silently: `git init && git add -A && git commit --allow-empty -m "initial commit"`.
-3. Do NOT ask {captain} for permission — a pipeline requires git.
+3. Do NOT ask {captain} for permission — a workflow requires git.
 
 ### Generation Discipline
 
-Generate all pipeline files without creating tasks or updating progress trackers.
+Generate all workflow files without creating tasks or updating progress trackers.
 Do NOT use TaskCreate, TaskUpdate, or TodoWrite during file generation — these
 create visible noise in {captain}'s UI. The generation checklist at the end of
 Phase 2 is sufficient for tracking completion.
@@ -173,7 +173,7 @@ This version will be embedded in each generated scaffolding file.
 
 ### Generate Files
 
-Create the pipeline directory and generate four kinds of files. Use the design answers to fill all templates — no placeholder text should remain in generated files.
+Create the workflow directory and generate four kinds of files. Use the design answers to fill all templates — no placeholder text should remain in generated files.
 
 ```
 mkdir -p {dir}
@@ -198,7 +198,7 @@ grep -qxF '.worktrees/' {project_root}/.gitignore 2>/dev/null || echo '.worktree
 
 Write the README with ALL of the following sections. Every section is required — do not omit any.
 
-Craft thoughtful, mission-specific content for each stage definition. The inputs, outputs, quality criteria, and anti-patterns should be specific to what this pipeline actually does — not generic placeholders.
+Craft thoughtful, mission-specific content for each stage definition. The inputs, outputs, quality criteria, and anti-patterns should be specific to what this workflow actually does — not generic placeholders.
 
 Do NOT include a Scoring Rubric section by default. Scoring uses a simple 0.0–1.0 float — no rubric needed. If {captain} explicitly asks for a multi-dimension rubric, include a Scoring Rubric section documenting their chosen dimensions.
 
@@ -226,7 +226,7 @@ stages:
     - name: {last_stage}
       terminal: true
   transitions:
-    {Omit this block entirely for linear pipelines.}
+    {Omit this block entirely for linear workflows.}
     {For non-linear flows, add explicit edges:}
     - from: {source_stage}
       to: {target_stage}
@@ -235,7 +235,7 @@ stages:
 
 # {mission}
 
-{One paragraph expanding on the mission, describing what this pipeline processes and why.}
+{One paragraph expanding on the mission, describing what this workflow processes and why.}
 
 ## File Naming
 
@@ -271,7 +271,7 @@ worktree:
 | `started` | ISO 8601 | When active work began |
 | `completed` | ISO 8601 | When the {entity_label} reached terminal status |
 | `verdict` | enum | PASSED or REJECTED — set at final stage |
-| `score` | number | Priority score, 0.0–1.0 (optional). Pipelines can upgrade to a multi-dimension rubric in their README. |
+| `score` | number | Priority score, 0.0–1.0 (optional). Workflows can upgrade to a multi-dimension rubric in their README. |
 | `worktree` | string | Worktree path while an ensign is active, empty otherwise |
 
 ## Stages
@@ -293,9 +293,9 @@ worktree:
 
 {ONLY include this section if {captain} explicitly requests a multi-dimension rubric. Otherwise omit entirely — the 0.0–1.0 float is self-explanatory from the schema.}
 
-## Pipeline State
+## Workflow State
 
-View the pipeline overview:
+View the workflow overview:
 
 ```bash
 bash {dir}/status
@@ -303,7 +303,7 @@ bash {dir}/status
 
 Output columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
 
-Include archived entities with `--archived`:
+Include archived {entity_label_plural} with `--archived`:
 
 ```bash
 bash {dir}/status --archived
@@ -346,7 +346,7 @@ Generate the status script from the reference template at `templates/status` (re
 1. Read the template file.
 2. Fill in the two variable fields:
    - `{spacedock_version}` — from plugin.json
-   - `{stage1}, {stage2}, ..., {last_stage}` — the pipeline's stage names in order
+   - `{stage1}, {stage2}, ..., {last_stage}` — the workflow's stage names in order
 3. Write the result to `{dir}/status`.
 4. Make it executable: `chmod +x {dir}/status`.
 5. **Materialize** — read back the description header (the `# goal:` / `# instruction:` / `# constraints:` comments) and replace the stub body with a working bash implementation that satisfies the description. The implementation must work on bash 3.2+ (no associative arrays, no bash 4+ features). Keep the description header intact — only replace everything after it.
@@ -411,7 +411,7 @@ The template uses `__VAR__` markers (double-underscore delimited) for commission
 
 After generating all files, verify before proceeding:
 
-- [ ] `{dir}/README.md` exists with mission, schema, all stage definitions, and entity template
+- [ ] `{dir}/README.md` exists with mission, schema, all stage definitions, and {entity_label} template
 - [ ] `{dir}/status` exists and is executable
 - [ ] Each seed entity file exists at `{dir}/{slug}.md` with valid YAML frontmatter
 - [ ] `{project_root}/.claude/agents/first-officer.md` exists with all sections
@@ -427,14 +427,14 @@ After all files are generated and verified, launch the pilot run.
 
 Tell {captain} what was generated:
 
-> Pipeline generated! Here's what I created:
+> Workflow generated! Here's what I created:
 >
-> - `{dir}/README.md` — pipeline schema and stage definitions
-> - `{dir}/status` — pipeline status viewer
+> - `{dir}/README.md` — workflow schema and stage definitions
+> - `{dir}/status` — workflow status viewer
 > - {for each seed entity: "`{dir}/{slug}.md` — {title}"}
-> - `{project_root}/.claude/agents/first-officer.md` — pipeline orchestrator
+> - `{project_root}/.claude/agents/first-officer.md` — workflow orchestrator
 >
-> To run this pipeline in future sessions, start Claude Code with:
+> To run this workflow in future sessions, start Claude Code with:
 >
 > ```
 > claude --agent first-officer
@@ -447,13 +447,13 @@ Tell {captain} what was generated:
 Do not spawn a subagent. Instead, the commission skill itself takes on the first-officer role for the initial run:
 
 1. Read the generated first-officer agent file at `{project_root}/.claude/agents/first-officer.md`.
-2. Follow its instructions: read the pipeline README, run the status script, and dispatch ensigns for entities ready to advance.
+2. Follow its instructions: read the workflow README, run the status script, and dispatch ensigns for entities ready to advance.
 
 Execute the first-officer startup procedure directly. You are now the first officer for the remainder of this session.
 
 ### Step 3 — Monitor and Report
 
-Process entities following the first-officer event loop. When the pipeline reaches an idle state or pauses at an approval gate, report the results to {captain}:
+Process entities following the first-officer event loop. When the workflow reaches an idle state or pauses at an approval gate, report the results to {captain}:
 
 > **Pilot Run Results**
 >
@@ -464,7 +464,7 @@ Process entities following the first-officer event loop. When the pipeline reach
 If the pilot run fails (agent errors, YAML gets mangled, dispatch issues):
 
 - Report exactly what happened, including any error messages
-- Show the current state of the pipeline (`bash {dir}/status`)
+- Show the current state of the workflow (`bash {dir}/status`)
 - Do not retry automatically — let {captain} decide next steps
 
 This is v0. Either it works or we learn why it didn't.
@@ -473,10 +473,10 @@ This is v0. Either it works or we learn why it didn't.
 
 After Step 3 or Step 4 (whether the pilot run succeeded or failed), always conclude with:
 
-> **What's next?** To continue working this pipeline in a future session, start Claude Code with:
+> **What's next?** To continue working this workflow in a future session, start Claude Code with:
 >
 > ```
 > claude --agent first-officer
 > ```
 >
-> The first officer will read the pipeline state, pick up where things left off, and dispatch ensigns for any entities ready for their next stage.
+> The first officer will read the workflow state, pick up where things left off, and dispatch ensigns for any entities ready for their next stage.

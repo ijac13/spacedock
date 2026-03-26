@@ -45,15 +45,15 @@ echo "--- Phase 1: Running commission (this takes ~30-60s) ---"
 
 PROMPT="/spacedock:commission
 
-All inputs for this pipeline:
-- Mission: Design and build Spacedock — a Claude Code plugin for creating PTP pipelines
+All inputs for this workflow:
+- Mission: Design and build Spacedock — a Claude Code plugin for creating plain text workflows
 - Entity: A design idea or feature for Spacedock
 - Stages: ideation → implementation → validation → done
 - Approval gates: ideation → implementation (new features), validation → done (merging)
 - Seed entities:
   1. full-cycle-test — Prove the full ideation → implementation → validation → done cycle works end-to-end (score: 22/25)
-  2. refit-command — Add /spacedock refit for examining and upgrading existing pipelines (score: 18/25)
-  3. multi-pipeline — Support multiple interconnected pipelines (shuttle feeding starship) (score: 16/25)
+  2. refit-command — Add /spacedock refit for examining and upgrading existing workflows (score: 18/25)
+  3. multi-pipeline — Support multiple interconnected workflows (shuttle feeding starship) (score: 16/25)
 - Location: ./v0-test-1/
 
 Skip interactive questions and confirmation — use these inputs directly. Make reasonable assumptions for anything not specified. Do NOT run the pilot phase — just generate the files and stop."
@@ -313,7 +313,7 @@ if [ -f "$FO" ]; then
   else
     fail "first-officer reads stages from frontmatter"
   fi
-  # Backward-compatible fallback for pre-stages pipelines is a refit concern,
+  # Backward-compatible fallback for pre-stages workflows is a refit concern,
   # not a commission concern. New commissions always generate the stages block.
   # No check needed here.
   if grep -qi "fresh\|Fresh" "$FO"; then

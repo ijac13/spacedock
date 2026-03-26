@@ -9,10 +9,10 @@ How to run the commission skill non-interactively and validate the output.
 
 ## Automated Test Script
 
-All the checks documented below are automated in `v0/test-commission.sh`. Run from the repo root:
+All the checks documented below are automated in `scripts/test-commission.sh`. Run from the repo root:
 
 ```bash
-bash v0/test-commission.sh
+bash scripts/test-commission.sh
 ```
 
 The script runs commission in a temp directory, validates all checks, reports PASS/FAIL per check, and exits 0 on all-pass / non-zero on any failure. Requires `claude` CLI in PATH.
@@ -52,15 +52,15 @@ This prompt exercises the canonical dogfood test from the spec:
 ```
 /spacedock:commission
 
-All inputs for this pipeline:
-- Mission: Design and build Spacedock — a Claude Code plugin for creating PTP pipelines
+All inputs for this workflow:
+- Mission: Design and build Spacedock — a Claude Code plugin for creating plain text workflows
 - Entity: A design idea or feature for Spacedock
 - Stages: ideation → implementation → validation → done
 - Approval gates: ideation → implementation (new features), validation → done (merging)
 - Seed entities:
   1. full-cycle-test — Prove the full ideation → implementation → validation → done cycle works end-to-end (score: 22/25)
-  2. refit-command — Add /spacedock refit for examining and upgrading existing pipelines (score: 18/25)
-  3. multi-pipeline — Support multiple interconnected pipelines (shuttle feeding starship) (score: 16/25)
+  2. refit-command — Add /spacedock refit for examining and upgrading existing workflows (score: 18/25)
+  3. multi-pipeline — Support multiple interconnected workflows (shuttle feeding starship) (score: 16/25)
 - Location: ./v0-test-1/
 
 Skip interactive questions and confirmation — use these inputs directly. Make reasonable assumptions for anything not specified. Do NOT run the pilot phase — just generate the files and stop.
@@ -115,7 +115,7 @@ Open the file and verify these sections are present (not placeholder text):
 - Stages — with one subsection each for `ideation`, `implementation`, `validation`, `done`
 - Approval Gates (or gates noted inside each stage definition)
 - Scoring (only if captain requested a multi-dimension rubric)
-- Pipeline State
+- Workflow State
 - {Label} Template (e.g., "Feature Template" — uses the derived entity label)
 - Commit Discipline
 
@@ -168,7 +168,7 @@ Any match containing `{variable_name}` style text is a failure. Generated files 
 
 From the spec:
 
-- The generated README is complete enough to follow the pipeline without the plugin installed
+- The generated README is complete enough to follow the workflow without the plugin installed
 - `bash v0-test-1/status` works on first run with no setup
 - The first-officer agent is written as a dispatcher — it reads state and delegates; it does not do stage work itself
 - Entity frontmatter is valid YAML and stays valid through all transitions

@@ -158,7 +158,7 @@ Validation pilots should use these when verifying implementation work:
 
 | Resource | Path | Covers |
 |----------|------|--------|
-| Commission test harness | `v0/test-harness.md` | Batch-mode commission invocation, generated file validation, guardrail checks |
+| Commission test harness | `scripts/test-harness.md` | Batch-mode commission invocation, generated file validation, guardrail checks |
 
 The test harness documents how to run `claude -p` with `--plugin-dir` for non-interactive commission testing, plus structural and guardrail assertions against the generated output. Use it for any task that changes `skills/commission/SKILL.md` or the first-officer template.
 
