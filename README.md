@@ -29,10 +29,11 @@ You are the **captain**. You define the mission, commission the ship, and make t
 
 ## Quick Start
 
-Install from the Claude Code plugin marketplace:
+Add the Spacedock marketplace and install:
 
 ```
-/install github.com/clkao/spacedock
+claude plugin marketplace add github.com/clkao/spacedock
+claude plugin install spacedock
 ```
 
 Then commission a workflow:
