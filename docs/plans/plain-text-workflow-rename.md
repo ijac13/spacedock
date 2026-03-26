@@ -1,7 +1,7 @@
 ---
 id: 041
 title: Rename PTP to plain text workflow throughout codebase
-status: implementation
+status: validation
 source: CL
 started: 2026-03-26T17:10:00Z
 completed:
