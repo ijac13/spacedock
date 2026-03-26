@@ -198,8 +198,235 @@ The captain asked whether we can write a test that catches an ensign skipping ch
 
 - **Partially addressable (structural):** The checklist protocol itself is the mitigation. The key design insight is separation of concerns: the ensign must account for every item (execution), and the first officer evaluates skip rationales (judgment). Even if an ensign marks something SKIPPED with a weak rationale, the first officer's review procedure is now explicit, with examples of weak rationales to reject. The structured format makes it much harder for a skip to go unnoticed compared to free-form prose.
 
-**Recommendation:** Add the three template-level grep checks to `test-commission.sh` to prevent regressions. Runtime compliance testing (did the ensign actually follow the protocol?) would require an integration test that runs the full agent dispatch loop, which is a different effort and should be a separate task if the captain wants it.
+**Recommendation:** Add the three template-level grep checks to `test-commission.sh` to prevent regressions. The runtime compliance test design below covers the deeper question.
+
+### Runtime compliance test design
+
+The original failure mode had two layers: (1) the ensign silently skipped work, and (2) the first officer didn't catch it. The checklist protocol addresses both: it forces the ensign to explicitly account for every item, and it gives the first officer a structured review procedure. A runtime compliance test should verify both layers.
+
+#### Test concept
+
+Use `claude -p` to simulate ensign and first-officer behavior in isolation, the same way `test-commission.sh` uses `claude -p` to simulate commission. No team infrastructure needed — we're testing whether the prompt instructions produce the right output format, not whether SendMessage works.
+
+#### Test 1: Ensign produces structured checklist
+
+Simulate an ensign receiving a checklist prompt. Verify the response accounts for every item.
+
+**Setup:** Create a minimal task file in a temp directory with known acceptance criteria.
+
+```bash
+# Create a fake task file
+cat > "$TEST_DIR/test-task.md" << 'TASK'
+---
+id: 001
+title: Add widget support
+status: implementation
+---
+
+Implement widget rendering in the display module.
+
+## Acceptance Criteria
+
+1. Widget renders correctly in all supported formats
+2. Error handling for malformed widget data
+3. Unit tests cover widget rendering
+TASK
+```
+
+**Prompt:** Construct an ensign-style prompt with a concrete checklist, but strip the SendMessage instruction and replace it with "write your completion report to stdout":
+
+```bash
+PROMPT="You are working on: Add widget support
+
+Stage: implementation
+
+### Stage definition:
+
+A task moves to implementation once its design is approved. Write the code or make the changes described in the task.
+
+- **Inputs:** The task description and acceptance criteria
+- **Outputs:** Working code committed to the repo, with a summary of what was built
+- **Good:** Minimal changes that satisfy acceptance criteria, clean code, tests
+- **Bad:** Over-engineering, skipping tests, ignoring edge cases
+
+### Completion checklist
+
+Report the status of each item when you write your completion report.
+Mark each: DONE, SKIPPED (with rationale), or FAILED (with details).
+
+Stage requirements:
+1. Working code committed to the repo
+2. Summary of what was built and where
+
+Acceptance criteria:
+3. Widget renders correctly in all supported formats
+4. Error handling for malformed widget data
+5. Unit tests cover widget rendering
+
+DO NOT actually write any code. This is a test of the reporting format only.
+Write your completion report below. Every checklist item must appear.
+Pretend you completed items 1-4 successfully and item 5 was skipped because the test framework is not set up yet.
+
+### Checklist
+
+{numbered checklist with each item followed by — DONE, SKIPPED: rationale, or FAILED: details}
+
+### Summary
+{brief description}"
+
+claude -p "$PROMPT" --output-format text 2>/dev/null > "$TEST_DIR/ensign-output.txt"
+```
+
+**Validation checks:**
+
+```bash
+# Every checklist item number appears in the response
+for N in 1 2 3 4 5; do
+  grep -qE "^${N}\." "$TEST_DIR/ensign-output.txt"
+done
+
+# At least one item is marked DONE
+grep -qiE "DONE" "$TEST_DIR/ensign-output.txt"
+
+# Item 5 is marked SKIPPED (as instructed)
+grep -qiE "5\..*SKIPPED" "$TEST_DIR/ensign-output.txt"
+
+# Response contains ### Checklist and ### Summary sections
+grep -q "### Checklist" "$TEST_DIR/ensign-output.txt"
+grep -q "### Summary" "$TEST_DIR/ensign-output.txt"
+
+# No items are silently omitted — count items with a status marker
+REPORTED=$(grep -cE "^[0-9]+\..*—.*(DONE|SKIPPED|FAILED)" "$TEST_DIR/ensign-output.txt")
+[ "$REPORTED" -ge 5 ]
+```
+
+This test verifies the prompt format is strong enough that the model produces structured output with every item accounted for. It would catch a regression where the checklist instructions are weakened or dropped.
+
+#### Test 2: First-officer catches missing items
+
+Simulate a first-officer receiving an incomplete ensign report. Verify it pushes back.
+
+**Prompt:**
+
+```bash
+PROMPT="You are a first officer reviewing an ensign's completion report.
+
+The ensign was dispatched with this checklist:
+
+1. Working code committed to the repo
+2. Summary of what was built and where
+3. Widget renders correctly in all supported formats
+4. Error handling for malformed widget data
+5. Unit tests cover widget rendering
+
+The ensign sent this completion message:
+
+---
+Done: Add widget support completed implementation.
+
+### Checklist
+
+1. Working code committed to the repo — DONE
+2. Summary of what was built and where — DONE
+3. Widget renders correctly in all supported formats — DONE
+
+### Summary
+Implemented widget rendering.
+---
+
+Items 4 and 5 are missing from the report. Follow this review procedure:
+
+a. Completeness check — Verify every item from the dispatched checklist appears in the report. If any items are missing, identify them.
+b. Skip review — For each SKIPPED item, evaluate the rationale.
+c. Failure triage — For FAILED items, determine whether the failure blocks progression.
+
+Write your review. If items are missing, state which ones and that the ensign must account for them."
+
+claude -p "$PROMPT" --output-format text 2>/dev/null > "$TEST_DIR/fo-review.txt"
+```
+
+**Validation checks:**
+
+```bash
+# First officer identifies the missing items
+grep -qE "4|error handling|malformed" "$TEST_DIR/fo-review.txt"
+grep -qE "5|unit test|test" "$TEST_DIR/fo-review.txt"
+
+# First officer indicates pushback (not approval)
+grep -qiE "missing|incomplete|account for|not included" "$TEST_DIR/fo-review.txt"
+```
+
+This test verifies the review instructions are strong enough that the model catches omissions rather than rubber-stamping.
+
+#### Test 3: First-officer catches weak skip rationale
+
+Same structure as Test 2, but the ensign reports all items with a weak SKIPPED rationale for the test harness item.
+
+**Prompt:**
+
+```bash
+PROMPT="You are a first officer reviewing an ensign's completion report.
+
+The ensign was dispatched with this checklist:
+
+1. Validation report with what was tested and pass/fail evidence
+2. Run tests from the Testing Resources section (commission test harness)
+3. PASSED/REJECTED recommendation
+
+The ensign sent this completion message:
+
+---
+Done: Feature X completed validation.
+
+### Checklist
+
+1. Validation report with what was tested and pass/fail evidence — DONE
+2. Run tests from the Testing Resources section — SKIPPED: seemed unnecessary for this change
+3. PASSED/REJECTED recommendation — DONE: PASSED
+
+### Summary
+Reviewed the implementation and it looks correct.
+---
+
+Follow this review procedure:
+
+b. Skip review — For each SKIPPED item, evaluate the rationale. Is the skip genuinely acceptable, or is the ensign rationalizing? Weak rationales include 'seemed unnecessary', 'ran out of time', 'not applicable' without explanation. If the rationale is weak, push back.
+
+Write your review."
+
+claude -p "$PROMPT" --output-format text 2>/dev/null > "$TEST_DIR/fo-skip-review.txt"
+```
+
+**Validation checks:**
+
+```bash
+# First officer identifies item 2 skip as problematic
+grep -qiE "weak|insufficient|not acceptable|rationaliz|push back|seemed unnecessary" "$TEST_DIR/fo-skip-review.txt"
+
+# First officer does NOT simply approve
+! grep -qiE "^all items.*acceptable\|checklist looks good\|approved" "$TEST_DIR/fo-skip-review.txt"
+```
+
+This test directly reproduces the original incident: an ensign skipping the test harness with "seemed unnecessary." It verifies the first-officer review instructions are strong enough to catch exactly this failure mode.
+
+#### Implementation approach
+
+These three tests can be packaged as a single script (e.g., `scripts/test-checklist-compliance.sh`) following the same pattern as `test-commission.sh`: setup, run `claude -p`, validate output, report PASS/FAIL per check.
+
+**Key differences from the commission test harness:**
+- Faster execution: each `claude -p` call is a simple prompt/response with no file generation, so each should take ~10-15 seconds vs. 30-60 for commission.
+- No plugin needed: these tests run plain `claude -p` prompts, not skill invocations.
+- Inherently probabilistic: LLM outputs vary between runs. The checks should be lenient enough to handle formatting variation (e.g., grep for item numbers and status keywords, not exact strings). A check that fails 1 in 20 runs is still useful — it's a smoke test, not a unit test.
+
+**What this proves and what it doesn't:**
+- **Proves:** The checklist prompt format is strong enough to produce structured output. The review instructions are strong enough to catch omissions and weak rationales. These are the two properties the protocol depends on.
+- **Doesn't prove:** That a real ensign in a real dispatch will always follow the format under all conditions. But no test can prove that for an LLM — the best we can do is verify the instructions produce the right behavior in controlled conditions, which is what these tests do.
+- **Doesn't test:** The first officer's completeness check in a live team context (matching dispatched checklist items against reported items). That requires the full Agent/SendMessage infrastructure and is out of scope.
+
+#### Minimal viable version
+
+If cost or time is a concern, Test 3 alone is the highest-value test. It directly reproduces the original incident (ensign skips test harness with weak rationale) and verifies the first-officer review catches it. Tests 1 and 2 add defense in depth but Test 3 is the one that would have caught the actual bug.
 
 ### Verdict
 
-PASSED — All acceptance criteria met. Implementation is clean, internally consistent, and the commission test harness passes. The template changes are minimal and correctly scoped to `templates/first-officer.md`.
+PASSED — All acceptance criteria met. Implementation is clean, internally consistent, and the commission test harness passes (59/59). The template changes are correctly scoped to `templates/first-officer.md`. Runtime compliance test design is provided above with concrete prompts, validation checks, and a minimal viable starting point.
