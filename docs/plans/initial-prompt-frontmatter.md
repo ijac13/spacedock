@@ -84,3 +84,13 @@ Existing commissioned pipelines that already have the `## AUTO-START` body secti
 3. `agents/first-officer.md` reference doc reflects the new `initialPrompt` approach
 4. Test harness checks for `initialPrompt` instead of `AUTO-START`
 5. All existing test checks still pass (the other guardrails are unchanged)
+
+## Implementation Summary
+
+Three files changed:
+
+1. **`skills/commission/SKILL.md`** — Added `initialPrompt: "Report pipeline status."` to the generated first-officer frontmatter (after `commissioned-by`). Removed the `## AUTO-START` section from the generated body.
+
+2. **`agents/first-officer.md`** — Updated the Role section to note that `initialPrompt` triggers the startup sequence. Added the full list of generated frontmatter fields (`name`, `description`, `tools`, `commissioned-by`, `initialPrompt`) to the Full Template Specification section.
+
+3. **`v0/test-commission.sh`** — Replaced `"AUTO-START|auto-start"` with `"initialPrompt"` in the keyword completeness check loop (line 189).
