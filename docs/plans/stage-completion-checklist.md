@@ -1,9 +1,9 @@
 ---
 id: 043
 title: Stage completion checklist for ensign reporting
-status: backlog
+status: ideation
 source: CL
-started:
+started: 2026-03-26T00:00:00Z
 completed:
 verdict:
 score: 0.80
