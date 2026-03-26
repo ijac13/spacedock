@@ -128,3 +128,32 @@ All changes are in `templates/first-officer.md` (the template used by commission
 - Step 1: guard on receiving worker messages from ensigns in direct communication.
 - Step 5: skip dispatch for ensigns in direct communication.
 - Step 6: "in direct communication" added to the list of reasons the pipeline can be idle.
+
+## Validation Report
+
+### Acceptance Criteria Results
+
+| # | Criterion | Result | Evidence |
+|---|-----------|--------|----------|
+| 1 | Direct Communication section covers entering, behavior during, and exiting | PASS | Four subsections at lines 184, 196, 207, 221 cover all three phases plus unsignaled detection |
+| 2 | Event loop includes guard against acting on ensigns in direct communication | PASS | Guards added at step 1 (line 229: don't act on messages), step 5 (line 233: skip dispatch), step 6 (line 234: idle condition) |
+| 3 | Clarification section references escalation-to-direct-communication path | PASS | Step 3 added at line 174 linking clarification escalation to the Direct Communication protocol |
+| 4 | No frontmatter schema changes, no new stages, no code changes | PASS | Only two files changed: `templates/first-officer.md` (prompt additions) and this task file (summary). `git diff --stat` confirms no other files touched |
+| 5 | Protocol degrades gracefully when CL messages ensign without signaling | PASS | "Detecting unsignaled direct communication" subsection (line 221-223) instructs first officer to ask CL proactively |
+
+### Structural Checks
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| Section placement | PASS | Direct Communication placed after Clarification (line 153) and before Event Loop (line 225), as specified in design |
+| Existing guardrails intact | PASS | All four guardrails verified present: Agent tool required (line 45), subagent_type prohibition (line 47), TeamCreate in startup (line 19), report-once (line 236) |
+| Template variable consistency | PASS | New section uses `{slug}` consistently with the rest of the template; no new template variables introduced |
+| Edge case coverage | PASS | All five edge cases from the design are addressed: unsignaled communication, completion during direct comm, task file modification during direct comm, multiple ensigns (handled naturally per-ensign), session crash (conversational state, orphan detection handles recovery) |
+| Design fidelity | PASS | Implementation matches proposed approach exactly — no deviations, additions, or omissions |
+
+### Notes
+
+- The full commission test script (`scripts/test-commission.sh`) was not run because it requires a live `claude` API call. The template changes are purely additive prompt text — no structural changes to the template's variable substitution, section ordering, or guardrail patterns that the commission test validates.
+- No code, no frontmatter schema, no status script changes — this is a prompt-only addition, so the commission test's file-existence, frontmatter, and guardrail checks would all pass unchanged.
+
+### Recommendation: PASSED
