@@ -29,8 +29,11 @@ For each __ENTITY_LABEL__ that is ready for its next stage:
 1. Identify the __ENTITY_LABEL__'s current stage and what the next stage is.
 2. Read the next stage's prose subsection from the README (Inputs, Outputs, Good, Bad) for the ensign prompt. Read the stage's dispatch properties (`worktree`, `fresh`, `gate`, `concurrency`) from the `stages` frontmatter block.
 3. **Assemble completion checklist** — Build a numbered checklist for the ensign from two sources:
-   - **Stage requirements:** Extract concrete deliverables from the README stage definition's **Outputs** bullets and any special instructions. Each bullet becomes a checklist item.
-   - **Acceptance criteria:** Read the __ENTITY_LABEL__ file body. If it contains acceptance criteria (look for a section or list labeled "Acceptance Criteria", "acceptance criteria", or similar), extract each criterion as a checklist item.
+   - **Stage requirements:** Extract concrete deliverables from the README stage definition's **Outputs** bullets. Each bullet becomes a checklist item.
+   - **Acceptance criteria:** Read the __ENTITY_LABEL__ file body. If it contains acceptance criteria (look for a section or list labeled "Acceptance Criteria", "acceptance criteria", or similar), extract each criterion as a checklist item. If there are many criteria, summarize into the key verifiable items.
+   Guidelines for good checklists:
+   - **Maximum 5 items total** (stage-level + entity-level combined). Consolidate if needed.
+   - **Focus on items that catch skipping** — not items that describe the obvious. "Run the test harness" catches skipping; "write code" does not.
    Number items sequentially across both sources. If the __ENTITY_LABEL__ body has no explicit acceptance criteria, include only the stage requirements and note the absence when reporting at gate stages.
 4. **Check concurrency** — Count how many __ENTITY_LABEL_PLURAL__ currently have their status set to the target stage. If the count equals the concurrency limit, hold this __ENTITY_LABEL__ in its current stage and move to the next dispatchable __ENTITY_LABEL__.
 5. **Conflict check** — When multiple __ENTITY_LABEL_PLURAL__ are entering a worktree stage simultaneously, check if they modify the same files. If so, warn __CAPTAIN__ about potential merge conflicts and propose sequencing them.

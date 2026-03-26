@@ -99,7 +99,10 @@ A task moves to implementation once its design is approved. The work here is to 
 A task moves to validation after implementation is complete. The work here is to verify the implementation meets the acceptance criteria defined in ideation.
 
 - **Inputs:** The implementation summary and the acceptance criteria from the task body
-- **Outputs:** A validation report: what was tested, what passed, what failed, and a PASSED/REJECTED recommendation
+- **Outputs:**
+  - Run applicable tests from the Testing Resources section and report results
+  - Verify each acceptance criterion with evidence
+  - A PASSED/REJECTED recommendation
 - **Good:** Thorough testing against acceptance criteria, clear evidence of pass/fail, honest assessment
 - **Bad:** Rubber-stamping without actually testing, ignoring failing edge cases, validating against wrong criteria
 
