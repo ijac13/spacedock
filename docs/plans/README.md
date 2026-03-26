@@ -1,5 +1,5 @@
 ---
-commissioned-by: spacedock@0.2.1
+commissioned-by: spacedock@0.3.0
 entity-type: entity
 entity-label: entity
 entity-label-plural: entities

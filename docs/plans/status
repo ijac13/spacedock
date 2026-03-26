@@ -1,13 +1,33 @@
 #!/bin/bash
-# commissioned-by: spacedock@0.1.4
+# commissioned-by: spacedock@0.3.0
 # The actual program generated below is a version of the description:
 #
 # goal: Show one-line-per-entity pipeline overview from YAML frontmatter.
+#
 # instruction: For every .md file in this directory (excluding README.md),
 #   extract slug (filename without .md), id, status, title, score, source from YAML frontmatter.
-#   Print table with columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
-#   Sorted by stage order then score descending.
+#   Print aligned table with columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
+#   Sorted by stage order ascending, then score descending.
 #   Default: scan only $DIR/*.md. With --archived, also scan $DIR/_archive/*.md.
+#
+# YAML parsing: Read lines between the first and second "---" delimiters.
+#   For each field, use pattern: case "$line" in field:*) val="${line#*:}"; val="${val# }" ;;
+#   This handles both "field: value" and "field:" (empty). Do NOT use sed/awk for extraction.
+#
+# Empty field handling: YAML frontmatter fields may be empty (e.g., "score:" with nothing
+#   after the colon). After extraction with ${line#*:}, empty fields yield an empty string.
+#   Display empty fields as blank (empty string), NOT as "-" or "0" or the field name.
+#   For sort purposes, treat empty scores as lowest priority (sort after all scored items).
+#
+# Stage ordering: Map each status to a numeric order using a case statement.
+#   Unknown statuses get order 99 (sort last).
+#
+# Output format: Use printf with fixed column widths. Header row, then separator row
+#   of dashes, then data rows. Example:
+#     ID     SLUG                 STATUS         TITLE                     SCORE  SOURCE
+#     --     ----                 ------         -----                     -----  ------
+#     001    my-feature           backlog        My Feature Idea           0.85   user feedback
+#
 # constraints: bash 3.2+ (no associative arrays), resolves paths relative to this script, skips README.md.
 # valid status values: backlog, ideation, implementation, validation, done.
 
@@ -31,16 +51,14 @@ stage_order() {
   esac
 }
 
-printf "%-6s %-30s %-20s %-30s %-8s %s\n" "ID" "SLUG" "STATUS" "TITLE" "SCORE" "SOURCE"
-printf "%-6s %-30s %-20s %-30s %-8s %s\n" "--" "----" "------" "-----" "-----" "------"
-
-{
-for f in "$DIR"/*.md; do
-  [ -f "$f" ] || continue
-  [ "$(basename "$f")" = "README.md" ] && continue
+parse_entity() {
+  local f="$1"
+  [ -f "$f" ] || return
+  [ "$(basename "$f")" = "README.md" ] && return
+  local slug id st title score source
   slug=$(basename "$f" .md)
   id="" st="" title="" score="" source=""
-  in_fm=false
+  local in_fm=false
   while IFS= read -r line; do
     if [ "$line" = "---" ]; then
       if $in_fm; then break; fi
@@ -56,34 +74,22 @@ for f in "$DIR"/*.md; do
       esac
     fi
   done < "$f"
+  local order
   order=$(stage_order "$st")
   printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$order" "$score" "$id" "$slug" "$st" "$title" "$score" "$source"
+}
+
+printf "%-6s %-30s %-20s %-30s %-8s %s\n" "ID" "SLUG" "STATUS" "TITLE" "SCORE" "SOURCE"
+printf "%-6s %-30s %-20s %-30s %-8s %s\n" "--" "----" "------" "-----" "-----" "------"
+
+{
+for f in "$DIR"/*.md; do
+  parse_entity "$f"
 done
 
 if $INCLUDE_ARCHIVE; then
   for f in "$DIR"/_archive/*.md; do
-    [ -f "$f" ] || continue
-    [ "$(basename "$f")" = "README.md" ] && continue
-    slug=$(basename "$f" .md)
-    id="" st="" title="" score="" source=""
-    in_fm=false
-    while IFS= read -r line; do
-      if [ "$line" = "---" ]; then
-        if $in_fm; then break; fi
-        in_fm=true; continue
-      fi
-      if $in_fm; then
-        case "$line" in
-          id:*) id="${line#*:}" ; id="${id# }" ;;
-          status:*) st="${line#*:}" ; st="${st# }" ;;
-          title:*) title="${line#*:}" ; title="${title# }" ;;
-          score:*) score="${line#*:}" ; score="${score# }" ;;
-          source:*) source="${line#*:}" ; source="${source# }" ;;
-        esac
-      fi
-    done < "$f"
-    order=$(stage_order "$st")
-    printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$order" "$score" "$id" "$slug" "$st" "$title" "$score" "$source"
+    parse_entity "$f"
   done
 fi
 } | sort -t$'\t' -k1,1n -k2,2rn | awk -F'\t' '{ printf "%-6s %-30s %-20s %-30s %-8s %s\n", $3, $4, $5, $6, $7, $8 }'
