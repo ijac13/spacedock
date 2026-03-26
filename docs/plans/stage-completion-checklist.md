@@ -402,13 +402,27 @@ The test doesn't directly verify that the first officer pushes back on a weak sk
 
 #### Implementation notes
 
-- **Separate script vs. extending test-commission.sh:** This should be a separate script (e.g., `scripts/test-checklist-e2e.sh`). The commission test validates template generation; this test validates runtime agent behavior. Different concerns, different failure modes, different run times.
-- **Run time:** Phase 1 (commission) takes ~30-60s. Phase 2 (first officer + ensign) takes ~60-120s depending on how much work the ensign does. Total: ~2-3 minutes. Acceptable for a smoke test run occasionally, not for every commit.
-- **Cost:** Two `claude -p` invocations (commission + first officer which spawns an ensign). Estimated $0.50-$1.00 per run. The `--max-budget-usd` cap prevents surprises.
-- **Determinism:** LLM output varies between runs. The checks are deliberately lenient (grep for keywords, not exact strings). A test that passes 19/20 runs is still useful — it's a smoke test that catches structural regressions, not a unit test that catches every edge case.
-- **Team directory cleanup:** The test creates a team directory under `~/.claude/teams/`. The cleanup step removes it. If the test crashes before cleanup, stale team directories accumulate — but the first officer already handles this (it cleans up stale teams on startup).
-- **The `--bare` flag** is important: it prevents the user's CLAUDE.md, hooks, and plugin configurations from affecting the test. The commission phase still needs `--plugin-dir` to load the spacedock plugin, but the first-officer phase runs standalone.
+- **Implemented at `scripts/test-checklist-e2e.sh`** — separate from `test-commission.sh` since they test different concerns (template generation vs. runtime behavior).
+- **Validates from stream-json log, not team inbox.** The first officer calls `TeamDelete` at session end, removing the team inbox files before the test can read them. The stream-json log is persistent and captures both the Agent dispatch prompt and the first officer's review output.
+- **Run time:** Phase 1 (commission) takes ~30-60s. Phase 2 (first officer + ensign) takes ~60-120s. Total: ~2-3 minutes.
+- **Cost:** ~$0.80 per run based on observed usage. The `--max-budget-usd 2.00` cap prevents surprises.
+- **Determinism:** LLM output varies between runs. The checks are deliberately lenient (grep for keywords, not exact strings).
+
+#### E2e test results
+
+Ran `bash scripts/test-checklist-e2e.sh` — 9/9 checks passed:
+
+- Commission produced test-checklist.md and first-officer.md
+- Dispatch prompt contains Completion checklist section
+- Dispatch prompt has DONE/SKIPPED/FAILED instructions
+- Dispatch prompt includes entity acceptance criteria ("hello", "UTF-8")
+- Dispatch prompt includes stage requirement items ("deliverables", "summary")
+- First officer performed checklist review (text mentions "All 4 items reported as DONE")
+- First officer review references item statuses
+- Dispatch prompt has structured completion message template (### Checklist, ### Summary)
+
+The first officer assembled a 4-item checklist (2 stage requirements + 2 acceptance criteria), dispatched the ensign with the checklist in the prompt, the ensign completed all items and reported them as DONE, and the first officer explicitly reviewed the checklist before proceeding.
 
 ### Verdict
 
-PASSED — All acceptance criteria met. Implementation is clean, internally consistent, and the commission test harness passes (59/59). The template changes are correctly scoped to `templates/first-officer.md`. Runtime compliance test design is provided above with concrete prompts, validation checks, and a minimal viable starting point.
+PASSED — All acceptance criteria met. Commission test harness passes (59/59). E2e checklist compliance test passes (9/9). Implementation is clean, internally consistent, and correctly scoped to `templates/first-officer.md`.
