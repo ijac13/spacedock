@@ -156,4 +156,8 @@ All changes are in `templates/first-officer.md` (the template used by commission
 - The full commission test script (`scripts/test-commission.sh`) was not run because it requires a live `claude` API call. The template changes are purely additive prompt text — no structural changes to the template's variable substitution, section ordering, or guardrail patterns that the commission test validates.
 - No code, no frontmatter schema, no status script changes — this is a prompt-only addition, so the commission test's file-existence, frontmatter, and guardrail checks would all pass unchanged.
 
+### Post-validation fix
+
+CL requested that lines touched by this task use "workflow" instead of "pipeline" (broader template rename is a separate task). Fixed three occurrences in the new/amended lines: line 202 (behavior rule 3), line 233 (event loop step 5), line 234 (event loop step 6).
+
 ### Recommendation: PASSED

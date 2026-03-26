@@ -199,7 +199,7 @@ When an ensign is in direct communication with __CAPTAIN__:
 
 1. **Do not send work or instructions to that ensign.** Do not dispatch new stages, send follow-up messages, or issue shutdown while __CAPTAIN__ has it.
 2. **Do not relay for that ensign.** If the ensign sends a message to team-lead while in direct communication, note it but do not act — __CAPTAIN__ is handling it directly.
-3. **Continue other pipeline work.** The rest of the pipeline is unaffected. Continue dispatching and managing other __ENTITY_LABEL_PLURAL__ normally.
+3. **Continue other workflow work.** The rest of the workflow is unaffected. Continue dispatching and managing other __ENTITY_LABEL_PLURAL__ normally.
 4. **Do not prompt __CAPTAIN__ for status.** __CAPTAIN__ will signal when they are done.
 
 If the ensign sends its completion message to team-lead while in direct communication, note the completion but do NOT proceed with the normal post-completion flow (gate checks, next dispatch, shutdown). Wait for __CAPTAIN__ to signal that direct communication is over, then resume the normal flow.
@@ -230,8 +230,8 @@ After your initial dispatch, process events as they arrive:
 2. **Ensign lifecycle and gate check** — Follow the procedure from Dispatching step 6: check the completed stage's `gate` property from frontmatter, manage ensign shutdown or keep-alive, handle approval/rejection.
 3. **Update timestamps** — When dispatching or during the final merge commit: if the __ENTITY_LABEL__ just entered its first active (non-initial) stage, set `started:` to the current ISO 8601 datetime. If the __ENTITY_LABEL__ reached the terminal stage, set `completed:` to the current datetime and `verdict:` to PASSED or REJECTED based on the ensign's assessment.
 4. **Verify state** — Run `bash __DIR__/status` to confirm the __ENTITY_LABEL__'s status on disk.
-5. **Dispatch next** — Look at the updated pipeline state. If any other __ENTITY_LABEL__ is ready for its next stage, dispatch an ensign for it (following the full dispatch procedure). Skip any __ENTITY_LABEL__ whose ensign is currently in direct communication with __CAPTAIN__. Prioritize by score (highest first) when multiple __ENTITY_LABEL_PLURAL__ are ready.
-6. **Repeat** — Continue until no __ENTITY_LABEL_PLURAL__ are ready for dispatch (all are in the terminal stage, blocked by approval gates, at concurrency limit, in direct communication, or the pipeline is empty).
+5. **Dispatch next** — Look at the updated workflow state. If any other __ENTITY_LABEL__ is ready for its next stage, dispatch an ensign for it (following the full dispatch procedure). Skip any __ENTITY_LABEL__ whose ensign is currently in direct communication with __CAPTAIN__. Prioritize by score (highest first) when multiple __ENTITY_LABEL_PLURAL__ are ready.
+6. **Repeat** — Continue until no __ENTITY_LABEL_PLURAL__ are ready for dispatch (all are in the terminal stage, blocked by approval gates, at concurrency limit, in direct communication, or the workflow is empty).
 
 When the pipeline is idle (nothing to dispatch), report the current state to __CAPTAIN__ and wait for instructions. Report pipeline state ONCE when you reach an approval gate or idle state. Do NOT send additional status messages while waiting — __CAPTAIN__ will respond when ready.
 
