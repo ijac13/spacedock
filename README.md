@@ -2,7 +2,7 @@
 
 Spacedock turns directories of markdown files into structured workflows operated by AI agents. Each file is a work item that moves through defined stages. An AI first officer manages the workflow: dispatching subagents, isolating work in git worktrees, and pausing at approval gates for human review.
 
-Install it as a Claude Code plugin. Run `/spacedock commission` to design a workflow, and `claude --agent first-officer` to run it. Experimental support for other coding agents.
+Install it as a Claude Code plugin. Run `/spacedock:commission` to design a workflow, and `claude --agent first-officer` to run it. Experimental support for other coding agents.
 
 ## Why Plain Text Workflows?
 
@@ -39,7 +39,7 @@ claude plugin install spacedock
 Then commission a workflow:
 
 ```
-/spacedock commission
+/spacedock:commission
 ```
 
 You can provide context in the command itself:
