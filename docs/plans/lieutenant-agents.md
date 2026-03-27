@@ -1,13 +1,13 @@
 ---
 title: Stage-specialized lieutenant agents
 id: 035
-status: ideation
+status: implementation
 source: CL
 started: 2026-03-27T00:00:00Z
 completed:
 verdict:
 score: 0.80
-worktree:
+worktree: .worktrees/ensign-lieutenant-agents
 ---
 
 Replace generic ensigns with stage-specialized lieutenant agents. Each lieutenant has its own agent file with full methodology instructions, dispatched by the first officer for its specific stage.
