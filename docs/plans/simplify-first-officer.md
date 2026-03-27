@@ -178,3 +178,33 @@ The commission skill (`skills/commission/commission.md`) copies the first-office
 
 **Q: What about the validation instructions block?**
 The current 8-line block tells the ensign how to handle validation differently depending on what work was done (code changes vs. analysis vs. other). This is genuinely useful context — validation ensigns need to know to look for test scripts. Compress to ~3 lines but keep the substance.
+
+## Implementation Summary
+
+Rewrote `templates/first-officer.md` from 292 lines to 90 lines (excluding frontmatter). The template now focuses on judgment work while delegating mechanical orchestration to `status --next` and the ensign agent file.
+
+**Files changed:**
+- `templates/first-officer.md` — 292 → 90 lines (97 total with frontmatter)
+- `scripts/test-commission.sh` — Updated ensign reuse check to dispatch-fresh check
+
+**Structure (90 lines):**
+- Role statement (3 lines)
+- Startup (4 lines) — TeamCreate, read README, status --next, orphan check
+- Dispatch (22 lines) — single prompt template, validation instructions, event loop
+- Completion and Gates (24 lines) — stage report review, gate presentation, guardrail
+- Merge and Cleanup (7 lines)
+- State Management (6 lines)
+- Clarification and Communication (6 lines) — includes compressed direct communication
+- Pipeline Path (4 lines)
+
+**Acceptance criteria status:**
+1. Under 90 lines — exactly 90 (hard ceiling met)
+2. status --next replaces manual scanning — used in startup and dispatch loop
+3. Single dispatch prompt — one Agent() block with conditional worktree line
+4. Ensign reuse removed — "Always dispatch fresh" throughout
+5. Checklist review reads entity file — no SendMessage negotiation
+6. Gate guardrail preserved — NEVER self-approve block verbatim
+7. Direct communication ≤5 lines — compressed to 3 lines
+8. Event loop folded in — "This is the event loop" in dispatch section
+9. Template variables preserved — all 10 __VAR__ markers present
+10. Test harness — reuse check updated to fresh-dispatch check; all other patterns verified
