@@ -121,8 +121,7 @@ Do NOT spawn an Agent for this — a direct file read is sufficient. Look for:
 After collecting answers, derive all remaining values from the mission context:
 
 - `{approval_gates}` — default: gate before the terminal stage (e.g., `validation → done`).
-- `{dir}` — `docs/{mission-slug}/` where `{mission-slug}` is the mission condensed to a short lowercase hyphenated directory name. Also derive `{dir_basename}` (the last path component).
-- `{project_name}` — the basename of the git repo root directory (from `git rev-parse --show-toplevel`), or the current working directory basename if not in a git repo. Used to scope the team name.
+- `{dir}` — `docs/{mission-slug}/` where `{mission-slug}` is the mission condensed to a short lowercase hyphenated directory name.
 - `{captain}` — "captain".
 
 Present the full summary with all derived values:
@@ -392,82 +391,41 @@ pr:
 
 ### 2d. Generate First-Officer Agent
 
-Write the first-officer agent to `{project_root}/.claude/agents/first-officer.md`.
+Copy the first-officer agent template to `{project_root}/.claude/agents/first-officer.md`.
 
 **IMPORTANT: Use Bash to write this file, NOT the Write tool.** The Write tool is often blocked for `.claude/` paths.
 
-**This file is generated from a template — NOT LLM-generated prose.** The template lives at `templates/first-officer.md` (relative to the Spacedock plugin directory). It contains `__VAR__` markers for commission-time substitution, and `{var}` markers for runtime variables that pass through unchanged.
-
-Do NOT rewrite, paraphrase, or embellish the template content. Your only job is to compute variable values and run sed.
+The template is static — no substitution needed. Copy it verbatim.
 
 ```bash
-# 1. Resolve the template path (relative to the Spacedock plugin directory)
-TMPL="{spacedock_plugin_dir}/templates/first-officer.md"
-
-# 2. Run sed to substitute __VAR__ markers with design-phase values
 mkdir -p {project_root}/.claude/agents
-sed \
-  -e 's|__MISSION__|{mission}|g' \
-  -e 's|__DIR__|{dir}|g' \
-  -e 's|__DIR_BASENAME__|{dir_basename}|g' \
-  -e 's|__ENTITY_LABEL__|{entity_label}|g' \
-  -e 's|__ENTITY_LABEL_PLURAL__|{entity_label_plural}|g' \
-  -e 's|__CAPTAIN__|{captain}|g' \
-  -e 's|__SPACEDOCK_VERSION__|{spacedock_version}|g' \
-  -e 's|__PROJECT_NAME__|{project_name}|g' \
-  -e 's|__FIRST_STAGE__|{first_stage}|g' \
-  -e 's|__LAST_STAGE__|{last_stage}|g' \
-  "$TMPL" > {project_root}/.claude/agents/first-officer.md
+cp "{spacedock_plugin_dir}/templates/first-officer.md" {project_root}/.claude/agents/first-officer.md
 ```
-
-The template uses `__VAR__` markers (double-underscore delimited) for commission-time values and `{var}` markers (single curly braces) for runtime values that the first officer fills at dispatch time. The sed command replaces only the `__VAR__` markers; `{var}` markers pass through unchanged.
 
 ### 2e. Generate Ensign Agent
 
-Write the ensign agent to `{project_root}/.claude/agents/ensign.md`.
+Copy the ensign agent template to `{project_root}/.claude/agents/ensign.md`.
 
 **IMPORTANT: Use Bash to write this file, NOT the Write tool.** The Write tool is often blocked for `.claude/` paths.
 
-**This file is generated from a template — NOT LLM-generated prose.** The template lives at `templates/ensign.md` (relative to the Spacedock plugin directory). It contains `__VAR__` markers for commission-time substitution.
-
-Do NOT rewrite, paraphrase, or embellish the template content. Your only job is to compute variable values and run sed.
+The template is static — no substitution needed. Copy it verbatim.
 
 ```bash
-# 1. Resolve the template path (relative to the Spacedock plugin directory)
-TMPL="{spacedock_plugin_dir}/templates/ensign.md"
-
-# 2. Run sed to substitute __VAR__ markers with design-phase values
-sed \
-  -e 's|__MISSION__|{mission}|g' \
-  -e 's|__ENTITY_LABEL__|{entity_label}|g' \
-  -e 's|__SPACEDOCK_VERSION__|{spacedock_version}|g' \
-  "$TMPL" > {project_root}/.claude/agents/ensign.md
+cp "{spacedock_plugin_dir}/templates/ensign.md" {project_root}/.claude/agents/ensign.md
 ```
 
 ### 2f. Generate PR Lieutenant Agent (conditional)
 
 Check the README frontmatter for any stages with `agent: pr-lieutenant`. If at least one stage references `pr-lieutenant`, generate the PR lieutenant agent.
 
-Write the PR lieutenant agent to `{project_root}/.claude/agents/pr-lieutenant.md`.
+Copy the pr-lieutenant agent template to `{project_root}/.claude/agents/pr-lieutenant.md`.
 
 **IMPORTANT: Use Bash to write this file, NOT the Write tool.** The Write tool is often blocked for `.claude/` paths.
 
-**This file is generated from a template — NOT LLM-generated prose.** The template lives at `templates/pr-lieutenant.md` (relative to the Spacedock plugin directory). It contains `__VAR__` markers for commission-time substitution.
-
-Do NOT rewrite, paraphrase, or embellish the template content. Your only job is to compute variable values and run sed.
+The template is static — no substitution needed. Copy it verbatim.
 
 ```bash
-# 1. Resolve the template path (relative to the Spacedock plugin directory)
-TMPL="{spacedock_plugin_dir}/templates/pr-lieutenant.md"
-
-# 2. Run sed to substitute __VAR__ markers with design-phase values
-sed \
-  -e 's|__MISSION__|{mission}|g' \
-  -e 's|__ENTITY_LABEL__|{entity_label}|g' \
-  -e 's|__SPACEDOCK_VERSION__|{spacedock_version}|g' \
-  -e 's|__CAPTAIN__|{captain}|g' \
-  -e 's|__DIR__|{dir}|g' \
-  "$TMPL" > {project_root}/.claude/agents/pr-lieutenant.md
+cp "{spacedock_plugin_dir}/templates/pr-lieutenant.md" {project_root}/.claude/agents/pr-lieutenant.md
 ```
 
 If no stage references `pr-lieutenant`, skip this step entirely.

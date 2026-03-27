@@ -205,3 +205,24 @@ The FO template uses a placeholder like `{workflow_dir}` (a runtime variable, no
 ### Summary
 
 Completed ideation for workflow-agnostic agents. The core insight is that only `__DIR__` (5 uses in FO, 1 in pr-lieutenant) affects agent behavior — all other template variables are decorative or derivable from the README at runtime. The proposed three-phase approach starts with the lowest-risk change (making ensign and pr-lieutenant fully static) and progressively reduces the first-officer's dependency on commission-time substitution. Staff engineer consultations confirmed that the "static definition + runtime config" pattern is well-established across VS Code, Terraform, Kubernetes, and Temporal, and that Claude Code's plugin system does not currently support shipping agent definitions.
+
+## Stage Report: implementation
+
+- [x] Ensign template is fully static — zero `__VAR__` markers, generic headings
+  Removed `__MISSION__`, `__ENTITY_LABEL__`, `__SPACEDOCK_VERSION__` from `templates/ensign.md`. Commit: 9e01c05.
+- [x] PR-lieutenant template is fully static — zero `__VAR__` markers, hooks use generic directory references
+  Removed `__MISSION__`, `__ENTITY_LABEL__`, `__SPACEDOCK_VERSION__`, `__DIR__`, `__CAPTAIN__` from `templates/pr-lieutenant.md`. Hook references "the workflow directory" generically. Commit: 9e01c05.
+- [x] First-officer template is fully static — zero `__VAR__` markers, all runtime-derived
+  All 10 distinct `__VAR__` types replaced: `__MISSION__`, `__CAPTAIN__`, `__ENTITY_LABEL__`, `__ENTITY_LABEL_PLURAL__`, `__FIRST_STAGE__`, `__LAST_STAGE__`, `__PROJECT_NAME__`, `__DIR_BASENAME__`, `__DIR__`, `__SPACEDOCK_VERSION__`. FO reads all values from README at runtime. Commit: 2797ad5.
+- [x] FO has workflow discovery at startup — searches for `^commissioned-by` README files
+  Discovery is startup step 1: `grep -rl '^commissioned-by: spacedock@' --include='README.md' .`. Single result auto-selects; multiple prompts captain. Verified against `docs/plans/` workflow. Commit: 2797ad5.
+- [x] Commission skill updated — copies static agents instead of sed substitution
+  Sections 2d/2e/2f changed from sed to `cp`. Removed `{project_name}` and `{dir_basename}` from design phase derivation. Commit: 080ba55.
+- [x] Refit skill updated — copy-if-changed for all agents
+  Strategy changed from "Regenerate" to "Copy if changed" for all agents. Agent staleness detected by content comparison instead of version stamps. Degraded mode simplified. Commit: 56e4762.
+- [x] All changes committed with descriptive messages
+  Four incremental commits: templates (2), commission skill (1), refit skill (1).
+
+### Summary
+
+Implemented workflow-agnostic agents using Option B (runtime discovery). All three agent templates (ensign, pr-lieutenant, first-officer) are now fully static with zero `__VAR__` markers. The first officer discovers its workflow directory at startup by grepping for README.md files with `commissioned-by: spacedock@` frontmatter, then reads mission, entity labels, stage names, and all other workflow-specific values from the README. The commission skill now copies templates verbatim instead of running sed substitution. The refit skill uses content comparison instead of version stamps to detect agent staleness.
