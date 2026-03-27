@@ -1,9 +1,9 @@
 ---
 id: 057
 title: Publish spacedock via npx skills ecosystem
-status: backlog
+status: ideation
 source: CL
-started:
+started: 2026-03-27T23:45:00Z
 completed:
 verdict:
 score:
