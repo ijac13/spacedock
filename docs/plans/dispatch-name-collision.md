@@ -1,13 +1,13 @@
 ---
 id: 051
 title: First-officer must use unique ensign names per dispatch
-status: ideation
+status: implementation
 source: https://github.com/clkao/spacedock/issues/1
 started: 2026-03-27T05:50:00Z
 completed:
 verdict:
 score:
-worktree:
+worktree: .worktrees/ensign-dispatch-name-collision
 ---
 
 When the first officer dispatches agents using the Agent tool, it reuses the same name (e.g., `{agent}-{slug}`) across sequential dispatches for the same entity. This causes shutdown request collisions: a pending `shutdown_request` sent to agent name `X` gets delivered to a newly spawned agent that reuses name `X`, killing it immediately.
