@@ -1,7 +1,7 @@
 ---
 id: 047
 title: Checklist as scannable gate artifact
-status: implementation
+status: validation
 source: adoption feedback, CL
 started: 2026-03-27T00:00:00Z
 completed:
