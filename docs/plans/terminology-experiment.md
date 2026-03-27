@@ -360,3 +360,22 @@ There is a separate project called Harbor (`av/harbor` on GitHub) that is a CLI 
 ### Summary
 
 Expanded the benchmark design with a task-quality dimension: a link-checker CLI utility task that requires real cognitive work through all pipeline stages, scored on a 0-30 rubric by an LLM judge with human calibration. Researched three external tools: Terminal-Bench 2 (containerized terminal agent benchmark, low relevance), SWE-bench (GitHub issue patching benchmark, low-to-medium relevance), and Harbor (agent eval framework, low relevance for our scale). All three are designed for single-agent containerized evaluation at larger scale than our experiment needs. The custom task-quality benchmark is a better fit: cheaper, exercises all pipeline stages, and directly measures whether terminology affects the quality of actual work output.
+
+## Stage Report: implementation
+
+- [x] Business English variant templates created in `templates-business/`
+  3 files: orchestrator.md (fork of first-officer.md), worker.md (fork of ensign.md), pr-specialist.md (fork of pr-lieutenant.md). Diff verified: only role terminology changed, behavioral instructions and protocol format preserved.
+- [x] Benchmark harness script at `scripts/terminology-benchmark.sh`
+  Accepts --variant nautical|business|all, --runs N, --test gate|checklist|dispatch|task-quality|all. Sets up test projects with correct templates per variant, runs claude CLI, captures logs, invokes scoring.
+- [x] Scoring script at `scripts/score-run.py`
+  Reads stream-json JSONL logs, scores 6 dimensions (gate compliance, protocol compliance, role adherence, pipeline completion, token efficiency, error rate), outputs JSON. Tested with synthetic log data.
+- [x] Link-checker benchmark fixture at `tests/fixtures/link-checker-benchmark/`
+  README with 4-stage pipeline (ideation gated), 3 seed entities (extract-links, check-urls, format-report), status script with --next support, starter Python package with stub modules.
+- [x] Analysis script at `scripts/analyze-benchmark.py`
+  Loads all score JSONs, computes per-dimension mean/stdev per variant, runs Fisher's exact (binary), Mann-Whitney U (graduated), Welch's t-test (continuous). Stdlib only. Tested with synthetic data.
+- [x] All changes committed
+  Single commit 47e02c3 on ensign/terminology-exp branch.
+
+### Summary
+
+Built the complete experiment infrastructure for the nautical vs business English terminology comparison. The business English templates are minimal forks with only role terminology changes (verified by diff). The benchmark harness orchestrates test runs with variant-appropriate templates and logs. The scoring and analysis scripts use only Python 3 stdlib, implementing Fisher's exact test, Mann-Whitney U, and Welch's t-test from scratch. The link-checker benchmark fixture provides a 4-stage gated pipeline with 3 entities for measuring task quality.
