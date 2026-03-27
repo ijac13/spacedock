@@ -1,9 +1,9 @@
 ---
 id: 061
 title: Pair implementation and validation agents — validator judges, implementer fixes
-status: backlog
+status: ideation
 source: CL
-started:
+started: 2026-03-27T22:45:00Z
 completed:
 verdict:
 score:
