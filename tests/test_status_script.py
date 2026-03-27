@@ -227,12 +227,12 @@ class TestNextOption(unittest.TestCase):
             self.assertEqual(len(data_lines), 0)
 
     def test_concurrency_limit(self):
-        """Entity not dispatchable when next stage is at concurrency capacity."""
+        """Entity not dispatchable when next stage has active ensigns at capacity."""
         with tempfile.TemporaryDirectory() as tmpdir:
             make_pipeline(tmpdir, README_WITH_STAGES, {
-                # Two entities already in ideation (concurrency default is 2)
-                'in-ideation-1.md': entity('001', 'Ideation 1', 'ideation', '0.90'),
-                'in-ideation-2.md': entity('002', 'Ideation 2', 'ideation', '0.85'),
+                # Two actively-worked entities in ideation (concurrency default is 2)
+                'in-ideation-1.md': entity('001', 'Ideation 1', 'ideation', '0.90', worktree='.worktrees/ensign-in-ideation-1'),
+                'in-ideation-2.md': entity('002', 'Ideation 2', 'ideation', '0.85', worktree='.worktrees/ensign-in-ideation-2'),
                 # This backlog entity wants to move to ideation but it's full
                 'waiting.md': entity('003', 'Waiting', 'backlog', '0.80'),
             })
@@ -240,12 +240,27 @@ class TestNextOption(unittest.TestCase):
             data_lines = result.stdout.strip().split('\n')[2:]
             self.assertEqual(len(data_lines), 0)
 
-    def test_concurrency_available(self):
-        """Entity dispatchable when next stage has room."""
+    def test_concurrency_parked_not_counted(self):
+        """Parked entities (no worktree) in a stage don't consume concurrency slots."""
         with tempfile.TemporaryDirectory() as tmpdir:
             make_pipeline(tmpdir, README_WITH_STAGES, {
-                # One entity in ideation (concurrency default is 2, so room for one more)
-                'in-ideation.md': entity('001', 'Ideation 1', 'ideation', '0.90'),
+                # Two entities in ideation but NOT actively worked (no worktree)
+                'in-ideation-1.md': entity('001', 'Ideation 1', 'ideation', '0.90'),
+                'in-ideation-2.md': entity('002', 'Ideation 2', 'ideation', '0.85'),
+                # This backlog entity should be dispatchable — parked entities don't block
+                'waiting.md': entity('003', 'Waiting', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--next')
+            data_lines = result.stdout.strip().split('\n')[2:]
+            self.assertEqual(len(data_lines), 1)
+            self.assertIn('waiting', data_lines[0])
+
+    def test_concurrency_available(self):
+        """Entity dispatchable when next stage has room below concurrency limit."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                # One actively-worked entity in ideation (concurrency=2, room for one more)
+                'in-ideation.md': entity('001', 'Ideation 1', 'ideation', '0.90', worktree='.worktrees/ensign-in-ideation'),
                 'waiting.md': entity('002', 'Waiting', 'backlog', '0.80'),
             })
             result = run_status(tmpdir, '--next')
@@ -256,6 +271,7 @@ class TestNextOption(unittest.TestCase):
     def test_next_sorted_by_score_desc(self):
         """--next output sorted by score descending."""
         with tempfile.TemporaryDirectory() as tmpdir:
+            # Use a README with concurrency 2 and one active slot taken
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'low.md': entity('001', 'Low Priority', 'backlog', '0.30'),
                 'high.md': entity('002', 'High Priority', 'backlog', '0.90'),
@@ -263,7 +279,7 @@ class TestNextOption(unittest.TestCase):
             })
             result = run_status(tmpdir, '--next')
             data_lines = result.stdout.strip().split('\n')[2:]
-            # Concurrency for ideation is 2, so only top 2 by score should appear
+            # No active ensigns in ideation, so concurrency allows 2 dispatches
             self.assertEqual(len(data_lines), 2)
             self.assertIn('high', data_lines[0])
             self.assertIn('mid', data_lines[1])

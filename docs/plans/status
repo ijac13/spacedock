@@ -32,7 +32,7 @@
 #   1. Not terminal — its current stage has a defined next stage
 #   2. Not gate-blocked — its current stage does NOT have gate: true
 #   3. Not actively worked — entity does NOT have a non-empty worktree field
-#   4. Concurrency available — count of entities in the next stage < that stage's concurrency limit
+#   4. Concurrency available — count of actively-worked entities (non-empty worktree) in the next stage < that stage's concurrency limit
 #
 # constraints: Python 3 stdlib only (no PyYAML), resolves paths relative to this script, skips README.md.
 # valid status values: backlog, ideation, implementation, validation, done.
@@ -249,17 +249,18 @@ def print_next_table(entities, stages):
     stage_by_name = {s['name']: s for s in stages}
     stage_names = [s['name'] for s in stages]
 
-    # Count entities per stage
-    stage_counts = {}
+    # Count actively-worked entities per stage (non-empty worktree = active ensign)
+    active_counts = {}
     for e in entities:
-        st = e['status']
-        stage_counts[st] = stage_counts.get(st, 0) + 1
+        if e['worktree']:
+            st = e['status']
+            active_counts[st] = active_counts.get(st, 0) + 1
 
     # Sort all candidates by score descending first
     candidates = sorted(entities, key=sort_key_next)
 
     # Determine dispatchable entities, tracking concurrency as we go
-    next_stage_counts = dict(stage_counts)
+    next_stage_counts = dict(active_counts)
     dispatchable = []
     for e in candidates:
         status = e['status']

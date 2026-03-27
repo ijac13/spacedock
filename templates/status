@@ -31,7 +31,7 @@
 #   1. Not terminal — its current stage has a defined next stage
 #   2. Not gate-blocked — its current stage does NOT have gate: true
 #   3. Not actively worked — entity does NOT have a non-empty worktree field
-#   4. Concurrency available — count of entities in the next stage < that stage's concurrency limit
+#   4. Concurrency available — count of actively-worked entities (non-empty worktree) in the next stage < that stage's concurrency limit
 #
 # constraints: Python 3 stdlib only (no PyYAML), resolves paths relative to this script, skips README.md.
 # valid status values: {stage1}, {stage2}, ..., {last_stage}.
