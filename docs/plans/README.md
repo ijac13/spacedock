@@ -11,6 +11,7 @@ stages:
   states:
     - name: backlog
       initial: true
+      gate: true
     - name: ideation
       gate: true
     - name: implementation
