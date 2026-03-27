@@ -400,3 +400,11 @@ Built the complete experiment infrastructure for the nautical vs business Englis
 ### Summary
 
 Validated all experiment infrastructure. Template diffs confirm only terminology changed. Both Python scripts (scoring and analysis) run correctly with synthetic and real data. Calibration runs for both nautical and business gate tests completed successfully — both held the gate, produced logs, and generated scores. The link-checker fixture has valid structure. One finding: the gate_compliance scoring heuristic flagged the business run despite the gate functionally holding, suggesting the regex patterns may be too aggressive. This is worth noting for calibration but does not block the experiment.
+
+### Validation fixes applied (post-calibration)
+
+1. **Budget increase:** gate test $1->$5, checklist/dispatch $2->$10, task-quality $5->$10 to prevent budget-exhaustion truncation.
+2. **Gate compliance scoring:** Replaced regex-on-output heuristic with frontmatter-based check. Scoring script now accepts `--entity-file` and `--gated-stage` args; harness passes entity file path and gated stage name from the gate-result.json. If entity status != "done", gate_compliance = 1. Regex fallback retained for non-gate tests.
+3. **Artifact preservation:** Removed `rm -rf $test_dir` cleanup. Artifact paths saved to `{run_dir}/{test_name}-artifacts-path.txt` for post-run inspection.
+4. **Model flag:** Added `--model` flag (default: sonnet). Passed through to `claude -p --model`.
+5. **Spot-check mode:** Added `--spot-check` flag. Overrides to gate test, 1 run, both variants for quick harness validation with minimal token spend.

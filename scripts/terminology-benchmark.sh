@@ -9,21 +9,27 @@ VARIANT="all"
 RUNS=5
 TEST_FILTER="all"
 RESULTS_DIR="$REPO_ROOT/benchmark-results"
+MODEL="sonnet"
+SPOT_CHECK=false
 
 usage() {
-  echo "Usage: $0 [--variant nautical|business|all] [--runs N] [--test gate|checklist|dispatch|task-quality|all]"
+  echo "Usage: $0 [--variant nautical|business|all] [--runs N] [--test gate|checklist|dispatch|task-quality|all] [--model MODEL] [--spot-check]"
   echo ""
-  echo "  --variant    Which template variant to test (default: all)"
-  echo "  --runs       Number of runs per variant (default: 5)"
-  echo "  --test       Which test to run (default: all)"
+  echo "  --variant     Which template variant to test (default: all)"
+  echo "  --runs        Number of runs per variant (default: 5)"
+  echo "  --test        Which test to run (default: all)"
+  echo "  --model       Model to use for claude -p (default: sonnet)"
+  echo "  --spot-check  Quick validation: run gate test once per variant only"
   exit 1
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --variant) VARIANT="$2"; shift 2 ;;
-    --runs)    RUNS="$2"; shift 2 ;;
-    --test)    TEST_FILTER="$2"; shift 2 ;;
+    --variant)     VARIANT="$2"; shift 2 ;;
+    --runs)        RUNS="$2"; shift 2 ;;
+    --test)        TEST_FILTER="$2"; shift 2 ;;
+    --model)       MODEL="$2"; shift 2 ;;
+    --spot-check)  SPOT_CHECK=true; shift ;;
     --help|-h) usage ;;
     *) echo "Unknown option: $1"; usage ;;
   esac
@@ -39,6 +45,14 @@ case "$TEST_FILTER" in
   gate|checklist|dispatch|task-quality|all) ;;
   *) echo "ERROR: --test must be gate, checklist, dispatch, task-quality, or all"; exit 1 ;;
 esac
+
+# Spot-check mode: gate test only, 1 run, both variants
+if [ "$SPOT_CHECK" = true ]; then
+  RUNS=1
+  TEST_FILTER="gate"
+  VARIANT="all"
+  echo "*** Spot-check mode: gate test, 1 run, both variants ***"
+fi
 
 # Template paths for each variant
 template_dir() {
@@ -145,7 +159,8 @@ run_test() {
         --permission-mode bypassPermissions \
         --verbose \
         --output-format stream-json \
-        --max-budget-usd 1.00 \
+        --model "$MODEL" \
+        --max-budget-usd 5.00 \
         2>&1 > "$run_dir/gate-log.jsonl" || exit_code=$?
 
       # Validate: entity should NOT be at 'done'
@@ -161,7 +176,7 @@ run_test() {
         gate_pass="true"
       fi
       echo "    gate_held=$gate_pass (status=$entity_status)"
-      echo "{\"test\": \"gate\", \"variant\": \"$variant\", \"run\": $run_num, \"pass\": $gate_pass, \"entity_status\": \"$entity_status\"}" > "$run_dir/gate-result.json"
+      echo "{\"test\": \"gate\", \"variant\": \"$variant\", \"run\": $run_num, \"pass\": $gate_pass, \"entity_status\": \"$entity_status\", \"entity_file\": \"$entity_file\", \"gated_stage\": \"work\"}" > "$run_dir/gate-result.json"
       ;;
 
     checklist)
@@ -226,7 +241,8 @@ ENTITY
         --permission-mode bypassPermissions \
         --verbose \
         --output-format stream-json \
-        --max-budget-usd 2.00 \
+        --model "$MODEL" \
+        --max-budget-usd 10.00 \
         2>&1 > "$run_dir/checklist-log.jsonl" || exit_code=$?
 
       # Check if entity advanced past backlog
@@ -284,7 +300,8 @@ ENTITY
         --permission-mode bypassPermissions \
         --verbose \
         --output-format stream-json \
-        --max-budget-usd 2.00 \
+        --model "$MODEL" \
+        --max-budget-usd 10.00 \
         2>&1 > "$run_dir/dispatch-log.jsonl" || exit_code=$?
 
       # Check completion
@@ -360,7 +377,8 @@ ENTITY
         --permission-mode bypassPermissions \
         --verbose \
         --output-format stream-json \
-        --max-budget-usd 5.00 \
+        --model "$MODEL" \
+        --max-budget-usd 10.00 \
         2>&1 > "$run_dir/task-quality-log.jsonl" || exit_code=$?
 
       # Count how many entities reached done
@@ -384,7 +402,8 @@ ENTITY
       ;;
   esac
 
-  rm -rf "$test_dir"
+  echo "    artifacts: $test_dir"
+  echo "$test_dir" > "$run_dir/${test_name}-artifacts-path.txt"
   return 0
 }
 
@@ -406,6 +425,7 @@ echo "=== Terminology Benchmark ==="
 echo "Variants: ${VARIANTS[*]}"
 echo "Tests:    ${TESTS[*]}"
 echo "Runs:     $RUNS per variant"
+echo "Model:    $MODEL"
 echo "Results:  $RESULTS_DIR"
 echo ""
 
@@ -428,12 +448,27 @@ for variant in "${VARIANTS[@]}"; do
       [ -f "$log_file" ] || continue
       test_name="$(basename "$log_file" -log.jsonl)"
       echo "Scoring $variant/run-$run/$test_name..."
+
+      # For gate tests, pass entity file and gated stage to scoring script
+      score_extra_args=""
+      if [ "$test_name" = "gate" ]; then
+        gate_result_file="$run_dir/gate-result.json"
+        if [ -f "$gate_result_file" ]; then
+          entity_path=$(python3 -c "import json; print(json.load(open('$gate_result_file')).get('entity_file',''))" 2>/dev/null)
+          gated_stage=$(python3 -c "import json; print(json.load(open('$gate_result_file')).get('gated_stage',''))" 2>/dev/null)
+          if [ -n "$entity_path" ] && [ -n "$gated_stage" ]; then
+            score_extra_args="--entity-file $entity_path --gated-stage $gated_stage"
+          fi
+        fi
+      fi
+
       python3 "$REPO_ROOT/scripts/score-run.py" \
         --log "$log_file" \
         --output "$run_dir/${test_name}-scores.json" \
         --variant "$variant" \
         --test "$test_name" \
         --run "$run" \
+        $score_extra_args \
         2>&1 || echo "  WARNING: scoring failed for $log_file"
     done
   done
