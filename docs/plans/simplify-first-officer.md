@@ -1,10 +1,10 @@
 ---
 id: 048
 title: Simplify first officer prompt — judgment over mechanics
-status: backlog
+status: ideation
 source: adoption feedback
 depends: 045, 046
-started:
+started: 2026-03-27T00:00:00Z
 completed:
 verdict:
 score: 0.70
