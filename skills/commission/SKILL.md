@@ -8,7 +8,7 @@ user-invocable: true
 
 # Commission a Plain Text Workflow
 
-You are commissioning a plain text workflow. A plain text workflow is a directory of markdown files with YAML frontmatter, where each file is a work entity that moves through stages. The directory's README is the single source of truth for schema and stages, and a self-describing bash script provides workflow status views.
+You are commissioning a plain text workflow. A plain text workflow is a directory of markdown files with YAML frontmatter, where each file is a work entity that moves through stages. The directory's README is the single source of truth for schema and stages, and a self-describing Python script provides workflow status views.
 
 This is a v0 shuttle-mode workflow: one general-purpose ensign agent handles all stages. You will walk {captain} through interactive design, generate all workflow files, then launch a pilot run.
 
@@ -298,7 +298,7 @@ worktree:
 View the workflow overview:
 
 ```bash
-bash {dir}/status
+{dir}/status
 ```
 
 Output columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
@@ -306,7 +306,13 @@ Output columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
 Include archived {entity_label_plural} with `--archived`:
 
 ```bash
-bash {dir}/status --archived
+{dir}/status --archived
+```
+
+Find dispatchable {entity_label_plural} ready for their next stage:
+
+```bash
+{dir}/status --next
 ```
 
 Find {entity_label_plural} in a specific stage:
@@ -349,7 +355,7 @@ Generate the status script from the reference template at `templates/status` (re
    - `{stage1}, {stage2}, ..., {last_stage}` — the workflow's stage names in order
 3. Write the result to `{dir}/status`.
 4. Make it executable: `chmod +x {dir}/status`.
-5. **Materialize** — read back the description header (the `# goal:` / `# instruction:` / `# constraints:` comments) and replace the stub body with a working bash implementation that satisfies the description. The implementation must work on bash 3.2+ (no associative arrays, no bash 4+ features). Keep the description header intact — only replace everything after it.
+5. **Materialize** — read back the description header (the `# goal:` / `# instruction:` / `# constraints:` comments) and replace the stub body with a working Python 3 implementation that satisfies the description. The implementation must use only Python 3 stdlib (no PyYAML or other third-party modules). Keep the description header intact — only replace everything after it.
 
 ### 2c. Generate Seed Entities
 
@@ -464,7 +470,7 @@ Process entities following the first-officer event loop. When the workflow reach
 If the pilot run fails (agent errors, YAML gets mangled, dispatch issues):
 
 - Report exactly what happened, including any error messages
-- Show the current state of the workflow (`bash {dir}/status`)
+- Show the current state of the workflow (`{dir}/status`)
 - Do not retry automatically — let {captain} decide next steps
 
 This is v0. Either it works or we learn why it didn't.

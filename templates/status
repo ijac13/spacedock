@@ -1,34 +1,41 @@
-#!/bin/bash
+#!/usr/bin/env python3
 # commissioned-by: spacedock@{spacedock_version}
-# The actual program generated below is a version of the description:
+# ABOUTME: Pipeline status viewer — shows entity overview from YAML frontmatter.
+# ABOUTME: Supports default table, --archived, and --next (dispatchable entity detection).
 #
 # goal: Show one-line-per-{entity_label} pipeline overview from YAML frontmatter.
 #
 # instruction: For every .md file in this directory (excluding README.md),
-#   extract slug (filename without .md), status, title, score, source from YAML frontmatter.
-#   Print aligned table with columns: SLUG, STATUS, TITLE, SCORE, SOURCE.
+#   extract slug (filename without .md), id, status, title, score, source from YAML frontmatter.
+#   Print aligned table with columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
 #   Sorted by stage order ascending, then score descending.
+#   Default: scan only $DIR/*.md. With --archived, also scan $DIR/_archive/*.md.
+#   With --next, read stage metadata from README frontmatter and output dispatchable entities.
 #
 # YAML parsing: Read lines between the first and second "---" delimiters.
-#   For each field, use pattern: case "$line" in field:*) val="${line#*:}"; val="${val# }" ;;
-#   This handles both "field: value" and "field:" (empty). Do NOT use sed/awk for extraction.
+#   For each field, split on first ":" to get key and value.
+#   This handles both "field: value" and "field:" (empty). No PyYAML dependency.
 #
 # Empty field handling: YAML frontmatter fields may be empty (e.g., "score:" with nothing
-#   after the colon). After extraction with ${line#*:}, empty fields yield an empty string.
+#   after the colon). After extraction, empty fields yield an empty string.
 #   Display empty fields as blank (empty string), NOT as "-" or "0" or the field name.
 #   For sort purposes, treat empty scores as lowest priority (sort after all scored items).
 #
-# Stage ordering: Map each status to a numeric order using a case statement.
+# Stage ordering: Map each status to a numeric order from the stages list.
 #   Unknown statuses get order 99 (sort last).
 #
-# Output format: Use printf with fixed column widths. Header row, then separator row
-#   of dashes, then data rows. Example:
-#     SLUG                 STATUS         TITLE                     SCORE  SOURCE
-#     ----                 ------         -----                     -----  ------
-#     my-feature           backlog        My Feature Idea           0.85   user feedback
+# Output format: Use fixed column widths. Header row, then separator row
+#   of dashes, then data rows.
 #
-# constraints: bash 3.2+ (no associative arrays), resolves paths relative to this script, skips README.md.
+# --next dispatch rules: An entity is dispatchable if ALL of:
+#   1. Not terminal — its current stage has a defined next stage
+#   2. Not gate-blocked — its current stage does NOT have gate: true
+#   3. Not actively worked — entity does NOT have a non-empty worktree field
+#   4. Concurrency available — count of actively-worked entities (non-empty worktree) in the next stage < that stage's concurrency limit
+#
+# constraints: Python 3 stdlib only (no PyYAML), resolves paths relative to this script, skips README.md.
 # valid status values: {stage1}, {stage2}, ..., {last_stage}.
 
-echo "Not compiled. Run with an LLM or add a pre-compiled dist." >&2
-exit 1
+import sys
+print("Not compiled. Run with an LLM or add a pre-compiled dist.", file=sys.stderr)
+sys.exit(1)
