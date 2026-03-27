@@ -1,13 +1,13 @@
 ---
 id: 042
 title: GitHub issue reference and PR workflow integration
-status: ideation
+status: implementation
 source: CL
 started: 2026-03-26T00:00:00Z
 completed:
 verdict:
 score:
-worktree:
+worktree: .worktrees/ensign-github-issue-pr
 depends: 035
 ---
 
@@ -143,19 +143,16 @@ The `pr-lieutenant` agent file and the `agent` stage property are part of task 0
 
 ## Scope
 
-**This task:**
+**This task (updated — now includes PR lieutenant, since task 035 shipped):**
 - `issue` and `pr` frontmatter fields (passive cross-references)
 - First officer checks `pr` field at merge boundary — if set, check PR state instead of local merge
 - First officer detects merged PRs on startup
 - Commission generates `issue` and `pr` fields in entity template
-
-**Task 035 (lieutenant agents):**
-- `agent` stage property in README frontmatter
-- PR lieutenant agent file with push/create-PR/review-comments methodology
-- Commission generates lieutenant agent files
+- PR lieutenant agent template at `templates/pr-lieutenant.md` with push/create-PR methodology
+- Commission generates the PR lieutenant from template when a stage has `agent: pr-lieutenant`
 
 **Future (not scoped):**
-- Inbound PR workflow (contributor opens PR, pipeline reviews it)
+- Inbound PR workflow (contributor opens PR, workflow reviews it)
 - Auto-close issues when entities reach terminal
 - PR review comment parsing for automated redo
 - CI status checks as validation input
@@ -166,8 +163,9 @@ The `pr-lieutenant` agent file and the `agent` stage property are part of task 0
 - [ ] First-officer template checks `pr` field at merge boundary: if set and PR is merged, skip local merge; if set and PR is open, wait; if unset, local merge as today
 - [ ] First-officer template detects merged PRs on startup and advances entities to terminal stage
 - [ ] Commission skill generates `issue` and `pr` fields in entity template
-- [ ] Existing pipelines continue to work unchanged (no PR field = local merge)
-- [ ] PR body (when created by a lieutenant, not this task) includes entity title and link back to entity file
+- [ ] Existing workflows continue to work unchanged (no PR field = local merge)
+- [ ] PR lieutenant template at `templates/pr-lieutenant.md` with methodology for: implementation work, branch push, PR creation via `gh`, reporting PR number
+- [ ] Commission skill generates the PR lieutenant agent file when a stage references `agent: pr-lieutenant`
 
 ## Open Questions
 
