@@ -1,13 +1,13 @@
 ---
 id: 063
 title: Make agents workflow-agnostic — one agent definition serves multiple workflows
-status: validation
+status: done
 source: CL
 started: 2026-03-27T22:35:00Z
-completed:
-verdict:
+completed: 2026-03-27T23:15:00Z
+verdict: PASSED
 score: 0.85
-worktree: .worktrees/pr-lieutenant-agnostic-agents
+worktree:
 issue: "#3"
 pr: "#6"
 ---
