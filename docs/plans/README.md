@@ -1,5 +1,5 @@
 ---
-commissioned-by: spacedock@0.5.0
+commissioned-by: spacedock@0.5.2
 entity-type: entity
 entity-label: task
 entity-label-plural: tasks
@@ -62,7 +62,7 @@ worktree:
 | `completed` | ISO 8601 | When the task reached terminal status |
 | `verdict` | enum | PASSED or REJECTED — set at final stage |
 | `score` | number | Priority score, 0.0–1.0 (optional). Workflows can upgrade to a multi-dimension rubric in their README. |
-| `worktree` | string | Worktree path while an ensign is active, empty otherwise |
+| `worktree` | string | Worktree path while a dispatched agent is active, empty otherwise |
 
 ## Stages
 
