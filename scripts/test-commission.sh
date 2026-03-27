@@ -328,10 +328,10 @@ if [ -f "$FO" ]; then
   else
     fail "first-officer supports Fresh stage property"
   fi
-  if grep -qi "reuse.*ensign\|ensign.*reuse\|SendMessage.*next stage\|same.*ensign" "$FO"; then
-    pass "first-officer supports ensign reuse"
+  if grep -qi "dispatch fresh\|always.*fresh\|fresh.*dispatch" "$FO"; then
+    pass "first-officer dispatches fresh ensigns"
   else
-    fail "first-officer supports ensign reuse"
+    fail "first-officer dispatches fresh ensigns"
   fi
   if grep -qi "validation.*test\|Testing Resources\|run.*test\|test.*harness" "$FO"; then
     pass "first-officer has smart validation instructions"
