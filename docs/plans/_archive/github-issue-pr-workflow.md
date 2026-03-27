@@ -1,13 +1,13 @@
 ---
 id: 042
 title: GitHub issue reference and PR workflow integration
-status: validation
+status: done
 source: CL
 started: 2026-03-26T00:00:00Z
-completed:
-verdict:
+completed: 2026-03-27T07:40:00Z
+verdict: PASSED
 score:
-worktree: .worktrees/ensign-github-issue-pr
+worktree:
 depends: 035
 pr: "#2"
 ---
