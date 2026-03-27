@@ -272,3 +272,5 @@ Validated the validation-implementation pairing implementation against all 9 acc
 ### Summary
 
 Added a lightweight E2E test for the validation rejection flow. The test fixture contains a deliberate bug (subtract instead of add) that the validator will detect, and the test script verifies the full relay: validator dispatched for fresh:true stage, REJECTED recommendation produced, implementer dispatched after rejection. The test prompt simulates captain approval of the REJECTED verdict to allow the rejection flow to proceed without interactive input.
+
+Additionally, updated the FO rejection flow from serial to parallel model: validator persists across fix cycles, implementer messages validator directly via SendMessage, FO only re-enters at gate reviews. Updated the task design section (### 3. Communication and Iteration Protocol) and the FO validation instructions to match.
