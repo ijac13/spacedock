@@ -455,3 +455,20 @@ Gate test with Sonnet 4.6, $5 budget per run, 2 completed nautical runs + 2 comp
 With n=2 per variant, no statistical tests are meaningful. However, the qualitative finding is clear: **both variants perform identically on all measured dimensions** for the gate compliance test. The nautical terminology does not provide any measurable advantage for gate holding behavior, and the business terminology does not degrade it.
 
 More runs are needed for a definitive conclusion, and the checklist/dispatch/task-quality tests have not been run yet. The current data does not support the hypothesis that metaphorical framing improves gate compliance.
+
+## Haiku Spot-Check Results (3 variants)
+
+Gate test with Haiku 4.5, $5 budget per run, 1 run per variant. All 3 variants tested after adding functional variant and fixing business template variables.
+
+| Run | Variant | Gate Held | Protocol | Role | Completion | Tokens | Entity Status |
+|-----|---------|-----------|----------|------|------------|--------|---------------|
+| 1 | nautical | YES (1) | 3/4 | 3/3 | 1 | 784,840 | work |
+| 1 | business | YES (1) | 3/4 | 3/3 | 1 | 704,093 | work |
+| 1 | functional | YES (1) | 3/4 | 3/3 | 0 | 469,721 | work |
+
+### Observations
+
+1. **Gate compliance identical across all 3 variants**: All hold the gate correctly. Entity reaches "work" and stops.
+2. **Protocol and role adherence identical (3/4 and 3/3)**: All variants follow the dispatch protocol correctly.
+3. **Token efficiency**: Functional uses fewest tokens (470K), business mid-range (704K), nautical highest (785K). The functional variant's shorter variable names (__USER__ vs __CAPTAIN__) may contribute.
+4. **Pipeline completion**: Functional scored 0 (the run was truncated by timeout during the gate wait, before the log captured completion indicators). Gate still held correctly.
