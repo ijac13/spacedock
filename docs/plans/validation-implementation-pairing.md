@@ -226,3 +226,32 @@ Designed a validation-implementation pairing model where the validator is a dist
 ### Summary
 
 Implemented the validation-implementation pairing by creating a `templates/validator.md` with restricted tools (no Write/Edit) and explicit no-fix rules, updating the first-officer template with `fresh: true` -> `validator` agent type resolution, read-only validation instructions, and a full rejection flow with 3-cycle escalation, and updating the commission skill to generate the validator agent file. The ensign template was left unchanged as specified.
+
+## Stage Report: validation
+
+- [x] Validator template — correct tools restriction, no Write/Edit, explicit no-fix rules
+  Tools frontmatter is `Read, Bash, Glob, Grep, SendMessage`. Rules section forbids file creation/editing, commits (except stage report), bug fixing, and using Bash to write files.
+- [x] FO dispatch — `fresh: true` defaults to `validator`
+  Dispatch step 4: "default to `validator` when the stage has `fresh: true`, otherwise default to `ensign`" (first-officer.md line 30).
+- [x] FO validation instructions — read-only validator role clarified
+  Validation instructions paragraph opens with "You are a validator. You read and judge — you do NOT write code or fix bugs." and closes with relay instructions (first-officer.md line 44).
+- [x] FO rejection flow — complete 5-step protocol with 3-cycle limit
+  `## Validation Rejection Flow` section at lines 75-93 with: cycle count check (>=3 escalates), shut down validator, dispatch implementer with findings, increment cycle count and dispatch fresh validator, repeat through gate flow.
+- [x] Commission skill — validator.md generation included
+  Step 2e2 copies validator.md, generation checklist includes it, Phase 3 announcement lists it, lieutenant warnings exclude it (SKILL.md lines 417-427, 454, 483, 460).
+- [x] All templates static — zero `__VAR__` markers
+  `grep __ templates/` returns only Python dunders (`__file__`, `__name__`) in the status script. No template variable markers in any template including validator.md.
+- [x] All 9 acceptance criteria verified
+  AC1: validator.md exists, tools correct, static. AC2: FO dispatch resolves fresh:true to validator. AC3: rejection flow with implementer+re-validation. AC4: 3-cycle limit. AC5: explicit no-fix rules. AC6: Bash restricted to tests/read-only. AC7: commission generates validator.md. AC8: existing validation stage (fresh:true, no agent:) works without modification. AC9: ensign.md has zero diff from main.
+
+### Recommendation
+
+PASSED
+
+### Findings
+
+All criteria are met. The implementation correctly creates a validator agent with restricted tools (no Write/Edit), updates the first-officer template with fresh:true-to-validator dispatch logic, adds a complete validation rejection flow with 3-cycle escalation, updates the commission skill to generate the validator agent, and leaves the ensign template unchanged.
+
+### Summary
+
+Validated the validation-implementation pairing implementation against all 9 acceptance criteria. Every artifact was verified: validator template has correct tool restrictions and explicit no-fix rules, the first-officer template correctly resolves fresh:true to validator agent type and includes a complete 5-step rejection flow with 3-cycle limit, the commission skill generates the validator agent, and the ensign template is unchanged. All templates are fully static with zero template variable markers.
