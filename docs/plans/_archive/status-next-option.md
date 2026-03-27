@@ -1,13 +1,13 @@
 ---
 id: 045
 title: Add --next option to status script for dispatchable entity detection
-status: validation
+status: done
 source: adoption feedback
 started: 2026-03-26T00:00:00Z
-completed:
-verdict:
+completed: 2026-03-27T03:18:00Z
+verdict: PASSED
 score: 0.85
-worktree: .worktrees/ensign-status-next-option
+worktree:
 ---
 
 The first officer currently scans entity frontmatter manually to determine what's dispatchable. This is mechanical work (check stage ordering, concurrency limits, worktree status) that an LLM does unreliably — it's branching logic over structured data.

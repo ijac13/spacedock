@@ -1,13 +1,13 @@
 ---
 id: 046
 title: Named ensign agent to replace prompt-within-a-prompt dispatch
-status: validation
+status: done
 source: adoption feedback
 started: 2026-03-26T00:00:00Z
-completed:
-verdict:
+completed: 2026-03-27T03:43:00Z
+verdict: PASSED
 score: 0.80
-worktree: .worktrees/ensign-named-ensign-agent
+worktree:
 ---
 
 The first officer currently copies a ~25-line prompt template verbatim when dispatching ensigns, filling named variables. The template says "copy exactly as written" three times — fighting the LLM's tendency to paraphrase or "improve." In practice, the first officer drifts: rewording instructions, dropping lines, injecting extra context.

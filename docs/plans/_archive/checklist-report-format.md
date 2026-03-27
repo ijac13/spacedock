@@ -1,11 +1,11 @@
 ---
 id: 044
 title: Tighten checklist report format for scannability
-status: backlog
+status: done
 source: CL
 started:
-completed:
-verdict:
+completed: 2026-03-27T03:20:00Z
+verdict: PASSED
 score: 0.75
 worktree:
 ---

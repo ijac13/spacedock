@@ -1,14 +1,14 @@
 ---
 id: 048
 title: Simplify first officer prompt — judgment over mechanics
-status: validation
+status: done
 source: adoption feedback
 depends: 045, 046
 started: 2026-03-27T00:00:00Z
-completed:
-verdict:
+completed: 2026-03-27T04:28:00Z
+verdict: PASSED
 score: 0.70
-worktree: .worktrees/ensign-simplify-first-officer
+worktree:
 ---
 
 Once the status --next option (045) and named ensign agent (046) exist, the first officer can shed most of its mechanical orchestration and focus on LLM-appropriate work: understanding, judgment, communication.

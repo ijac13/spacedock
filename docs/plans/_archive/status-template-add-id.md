@@ -1,11 +1,11 @@
 ---
 id: 038
 title: Add id column to status template
-status: backlog
+status: done
 source: refit gap analysis
 started:
-completed:
-verdict:
+completed: 2026-03-27T03:50:00Z
+verdict: PASSED
 score: 0.5
 worktree:
 ---

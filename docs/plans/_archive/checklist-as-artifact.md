@@ -1,13 +1,13 @@
 ---
 id: 047
 title: Checklist as scannable gate artifact
-status: validation
+status: done
 source: adoption feedback, CL
 started: 2026-03-27T00:00:00Z
-completed:
-verdict:
+completed: 2026-03-27T03:58:00Z
+verdict: PASSED
 score: 0.75
-worktree: .worktrees/ensign-checklist-artifact
+worktree:
 ---
 
 The current checklist review has the first officer doing 2-3 rounds of SendMessage back-and-forth per ensign per stage: check completeness, challenge skip rationales, triage failures. Each round eats tokens and risks the first officer losing track of overall pipeline state while deep in one entity's checklist negotiation.
