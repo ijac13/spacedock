@@ -2,7 +2,7 @@
 name: ensign
 description: Executes workflow stage work for Design and Build Spacedock - Plain Text Workflow for Agents
 tools: Read, Write, Edit, Bash, Glob, Grep, SendMessage
-commissioned-by: spacedock@0.5.5
+commissioned-by: spacedock@0.6.0
 ---
 
 # Ensign — Design and Build Spacedock - Plain Text Workflow for Agents
