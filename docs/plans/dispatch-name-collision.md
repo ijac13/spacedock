@@ -116,3 +116,20 @@ Audited all occurrences of the `{agent}-{slug}` naming pattern in `templates/fir
 ### Summary
 
 Applied the single-line fix to `templates/first-officer.md` line 36, changing the dispatch name pattern from `{agent}-{slug}` to `{agent}-{slug}-{stage}`. All 61 tests in `scripts/test-commission.sh` pass. Added E2E test `tests/test-dispatch-names.sh` that exercises the actual failure mode: a no-gate pipeline where the entity must traverse multiple stages via consecutive agent dispatches. The pass criterion is whether the entity reaches `done` — before the fix it would get stuck mid-pipeline because the second agent gets killed by a stale shutdown request.
+
+## Stage Report: validation
+
+- [x] Test harness passes: `scripts/test-commission.sh` all checks green including the new dispatch name uniqueness guardrail
+  61/61 checks passed. Check 61 (`guardrail: dispatch name includes stage for uniqueness`) passes — the generated first-officer agent contains `name=.*{.*stage` in the dispatch block.
+- [x] E2E test review: `tests/test-dispatch-names.sh` is structurally sound — fixture is valid, checks exercise the failure mode, pass criterion is entity-reaches-done
+  Fixture at `tests/fixtures/multi-stage-pipeline/` is a valid 4-stage no-gate pipeline (backlog->work->review->done) with one entity. The test generates a first-officer from the template via sed, runs it with `claude -p --agent first-officer`, and verifies: (1) entity reaches `done` status, (2) entity advances past backlog, (3) at least 2 Agent() dispatches occurred, (4) completed timestamp is set. The core assertion — entity reaching done through consecutive dispatches — directly exercises the failure mode where stale shutdown requests would kill the second agent.
+- [x] Verify: `templates/first-officer.md` dispatch name includes `{stage}` — only the dispatch name changed, not worktree/branch naming
+  `git diff main -- templates/first-officer.md` shows exactly one line changed: line 36 from `name="{agent}-{slug}"` to `name="{agent}-{slug}-{stage}"`. Lines 29, 30, 75, 77 retain `{agent}-{slug}` for worktree paths and branch names — confirmed via grep.
+- [x] Verify: `.claude/agents/first-officer.md` was NOT modified
+  `git diff main -- .claude/agents/first-officer.md` produces no output — file is unchanged on this branch.
+- [x] PASSED recommendation
+  All 4 acceptance criteria verified with evidence. The fix is a single-line change that solves the dispatch name collision without affecting worktree/branch naming. Test harness covers the guardrail. E2E test is structurally sound and exercises the exact failure mode.
+
+### Summary
+
+Validated the dispatch name collision fix. The test harness (`scripts/test-commission.sh`) passes all 61 checks including the new stage-in-dispatch-name guardrail. The E2E test (`tests/test-dispatch-names.sh`) is structurally sound: it uses a valid 4-stage no-gate fixture, generates the first-officer from the template, and asserts the entity completes the full pipeline through consecutive dispatches — the exact scenario that would fail without the fix. The template diff is minimal (one line) and correctly scoped to only the dispatch name, not worktree/branch naming. Recommendation: PASSED.
