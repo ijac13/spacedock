@@ -8,6 +8,7 @@ completed:
 verdict:
 score:
 worktree: .worktrees/ensign-val-pairing
+pr: "#7"
 ---
 
 ## Problem Statement
