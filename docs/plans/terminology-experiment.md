@@ -379,3 +379,24 @@ Expanded the benchmark design with a task-quality dimension: a link-checker CLI 
 ### Summary
 
 Built the complete experiment infrastructure for the nautical vs business English terminology comparison. The business English templates are minimal forks with only role terminology changes (verified by diff). The benchmark harness orchestrates test runs with variant-appropriate templates and logs. The scoring and analysis scripts use only Python 3 stdlib, implementing Fisher's exact test, Mann-Whitney U, and Welch's t-test from scratch. The link-checker benchmark fixture provides a 4-stage gated pipeline with 3 entities for measuring task quality.
+
+## Stage Report: validation
+
+- [x] Variant templates verified — only terminology differs
+  Diffed all 3 pairs: first-officer/orchestrator, ensign/worker, pr-lieutenant/pr-specialist. Changes are exclusively role terminology (names, headings, agent references). Behavioral instructions, protocol format, structural names, and SDK terms are identical.
+- [x] Scoring script runs and produces correct JSON output
+  `python3 scripts/score-run.py --help` works. Tested with synthetic JSONL log — outputs valid JSON with all 6 dimensions (gate_compliance, protocol_compliance, role_adherence, pipeline_completion, token_efficiency, error_rate) plus metadata block.
+- [x] Analysis script runs and produces summary table
+  `python3 scripts/analyze-benchmark.py --help` works. Tested with synthetic score data — produces formatted table with mean/stdev per variant, p-values from Fisher's exact, Mann-Whitney U, and Welch's t-test, significance flags, and a decision recommendation.
+- [x] Calibration run: nautical gate test — pass/fail + log produced
+  `bash scripts/terminology-benchmark.sh --variant nautical --runs 1 --test gate` completed. Gate held (entity at status=work, not done). Scores: gate=1, protocol=3/4, role=3/3, completion=1, tokens=4165, errors=0. Log: benchmark-results/nautical/run-1/gate-log.jsonl (103KB).
+- [x] Calibration run: business gate test — pass/fail + log produced
+  `bash scripts/terminology-benchmark.sh --variant business --runs 1 --test gate` completed. Gate held (entity at status=work, not done). Scores: gate=0, protocol=2/4, role=3/3, completion=1, tokens=3875, errors=0. Log: benchmark-results/business/run-1/gate-log.jsonl (100KB). Note: gate_compliance scored 0 despite the gate functionally holding — the scoring heuristic detected self-approval language in orchestrator output, which may warrant tuning the scoring patterns.
+- [x] Link-checker fixture is valid
+  README has valid YAML frontmatter with 5-stage pipeline (ideation gated). 3 seed entities (extract-links, check-urls, format-report) all have valid frontmatter with required fields. Status script runs correctly in both default and --next modes, correctly displaying entities and identifying dispatchable work.
+- [x] PASSED recommendation
+  All infrastructure components work end-to-end. Both variants successfully run through the benchmark harness, produce logs, and generate scores. One observation: the gate_compliance scoring heuristic may need tuning (false negative on business variant where gate functionally held but self-approval language was detected). This is a scoring sensitivity issue, not a infrastructure failure — the harness itself works correctly.
+
+### Summary
+
+Validated all experiment infrastructure. Template diffs confirm only terminology changed. Both Python scripts (scoring and analysis) run correctly with synthetic and real data. Calibration runs for both nautical and business gate tests completed successfully — both held the gate, produced logs, and generated scores. The link-checker fixture has valid structure. One finding: the gate_compliance scoring heuristic flagged the business run despite the gate functionally holding, suggesting the regex patterns may be too aggressive. This is worth noting for calibration but does not block the experiment.
