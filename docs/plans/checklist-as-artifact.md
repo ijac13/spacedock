@@ -1,9 +1,9 @@
 ---
 id: 047
-title: Checklist as gate artifact instead of conversation
-status: backlog
-source: adoption feedback
-started:
+title: Checklist as scannable gate artifact
+status: ideation
+source: adoption feedback, CL
+started: 2026-03-27T00:00:00Z
 completed:
 verdict:
 score: 0.75
@@ -17,3 +17,10 @@ Instead: the ensign writes the structured completion report into the entity file
 One read, no negotiation rounds.
 
 Motivated by adoption feedback: "Make the checklist a gate artifact, not a conversation."
+
+Also incorporates task 044 (checklist report format): the format should be tight and scannable — not prose-heavy. Status markers (DONE/SKIPPED/FAILED) at a glance, not buried in paragraphs. Domain-agnostic — a legal review pipeline and a software dev pipeline use the same report structure. Reference: superpowers plugin patterns (status enums, emoji markers, bullet lists with specific references).
+
+Questions to explore:
+- What's the right structural format for checklist items + status + evidence?
+- How verbose should evidence be? One-line reference vs. paragraph?
+- Should the first officer's gate report to the captain use the same format or a summarized view?
