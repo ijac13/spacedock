@@ -99,3 +99,18 @@ Single-line change. No other files in this fix scope.
 ### Summary
 
 Audited all occurrences of the `{agent}-{slug}` naming pattern in `templates/first-officer.md`. Confirmed the collision is dispatch-name-only (line 36) — worktree paths, branch names, and merge/cleanup references are entity-scoped and do not collide across stages. The fix is a single-line change adding `{stage}` to the dispatch name. The existing test at `scripts/test-commission.sh:233` already validates this pattern and will pass once the fix is applied.
+
+## Stage Report: implementation
+
+- [x] `templates/first-officer.md` dispatch `name=` changed to include `{stage}` for per-dispatch uniqueness
+  Line 36 changed from `name="{agent}-{slug}"` to `name="{agent}-{slug}-{stage}"`
+- [x] No other naming patterns changed (worktree paths, branch names, merge/cleanup references remain `{agent}-{slug}`)
+  Verified lines 29, 30, 75, 77 still use `{agent}-{slug}` without stage suffix
+- [x] `.claude/agents/first-officer.md` is NOT directly edited
+  Only `templates/first-officer.md` was modified
+- [x] All changes committed to the worktree
+  Single-line change committed to ensign/dispatch-name-collision branch
+
+### Summary
+
+Applied the single-line fix to `templates/first-officer.md` line 36, changing the dispatch name pattern from `{agent}-{slug}` to `{agent}-{slug}-{stage}`. All 61 tests in `scripts/test-commission.sh` pass, including the specific guardrail check for stage-unique dispatch names. No other naming patterns were modified.

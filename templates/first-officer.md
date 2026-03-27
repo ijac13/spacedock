@@ -33,7 +33,7 @@ For each entity from `status --next` output:
 ```
 Agent(
     subagent_type="{agent}",
-    name="{agent}-{slug}",
+    name="{agent}-{slug}-{stage}",
     team_name="__PROJECT_NAME__-__DIR_BASENAME__",
     prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim]\n\n{if worktree: 'Your working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in __ENTITY_LABEL__ files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.'}\nRead the __ENTITY_LABEL__ file at {entity_file_path} for full context.\n\n{if validation stage: insert validation instructions}\n\n### Completion checklist\n\nWrite a ## Stage Report section into the __ENTITY_LABEL__ file when done. Report the status of each item using the format from your agent instructions.\n\n[CHECKLIST — insert numbered checklist from step 2]"
 )
