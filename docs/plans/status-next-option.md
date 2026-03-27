@@ -26,7 +26,37 @@ The first officer's dispatch loop requires determining which entities are ready 
 
 The README frontmatter is the single source of truth for stage definitions. The `--next` option reads the `stages` block from `README.md` at runtime so that changes to stage properties (gates, concurrency, worktree flags) take effect immediately without re-commissioning or refitting.
 
-The challenge: the `stages` block is nested YAML that bash 3.2+ can't parse cleanly (no associative arrays, no native YAML support). Solution: use an inline `python3` snippet for the `--next` code path. Python's `yaml` module isn't guaranteed available, but the stages block is simple enough to parse with basic string processing in python3 (split on `- name:` boundaries, extract key-value pairs per stage). Python3 is available on macOS and most Linux systems where Claude Code runs.
+### Language choice: bash+python3 hybrid vs. full Python rewrite
+
+**Option A: Bash script with inline python3 for `--next`** (recommended)
+
+The existing status view stays pure bash. When `--next` is passed, the bash script delegates to an inline `python3 -c '...'` block that handles README parsing, entity scanning, dispatch logic, and output. The description-header template pattern is unchanged.
+
+Pros:
+- Minimal change to existing pattern — the base status view is untouched
+- No impact on existing commissioned pipelines — `bash {dir}/status` still works
+- The first-officer template calls `bash __DIR__/status`; no need to update
+
+Cons:
+- Two languages in one file (bash shell + inline python3)
+- python3 dependency for `--next` (not for base status)
+
+**Option B: Full Python rewrite**
+
+Replace the entire status script with Python. Both the base status view and `--next` are Python. The template becomes `#!/usr/bin/env python3` with description-header comments.
+
+Pros:
+- Single language, cleaner long-term
+- Python handles both flat entity YAML and nested README YAML naturally
+- Easier to add future options
+
+Cons:
+- **Breaking change**: Every existing commissioned pipeline has `bash __DIR__/status` hardcoded in its first-officer agent file. A Python script invoked as `bash {dir}/status` would fail. This requires updating the first-officer template AND refitting all existing pipelines.
+- Changes the commission template pattern (materialization target language)
+- python3 becomes a hard dependency for all status operations, not just `--next`
+- PyYAML (`import yaml`) is not in Python stdlib — still need string-based YAML parsing or add a dependency
+
+**Recommendation: Option A.** The breaking-change cost of a full rewrite isn't justified for adding one option. The hybrid approach is pragmatic — bash for the simple stuff, python3 for the one thing bash can't do. If the script accumulates more options that need structured data, a full rewrite can be reconsidered then.
 
 ### Architecture
 
