@@ -357,12 +357,12 @@ Description of this {entity_label} and what it aims to achieve.
 Generate the status script from the reference template at `templates/status` (relative to the Spacedock plugin directory).
 
 1. Read the template file.
-2. Fill in the two variable fields:
+2. Fill in the variable fields:
    - `{spacedock_version}` — from plugin.json
+   - `{entity_label}` — from the design phase
    - `{stage1}, {stage2}, ..., {last_stage}` — the workflow's stage names in order
 3. Write the result to `{dir}/status`.
 4. Make it executable: `chmod +x {dir}/status`.
-5. **Materialize** — read back the description header (the `# goal:` / `# instruction:` / `# constraints:` comments) and replace the stub body with a working Python 3 implementation that satisfies the description. The implementation must use only Python 3 stdlib (no PyYAML or other third-party modules). Keep the description header intact — only replace everything after it.
 
 ### 2c. Generate Seed Entities
 

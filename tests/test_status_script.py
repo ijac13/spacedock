@@ -8,13 +8,27 @@ import textwrap
 import unittest
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-STATUS_SCRIPT = os.path.join(SCRIPT_DIR, '..', 'docs', 'plans', 'status')
+TEMPLATE_PATH = os.path.join(SCRIPT_DIR, '..', 'templates', 'status')
 
 
-def run_status(pipeline_dir, *args):
+def build_status_script(tmpdir):
+    """Substitute template variables and return path to a runnable status script."""
+    script_path = os.path.join(tmpdir, 'status')
+    with open(TEMPLATE_PATH, 'r') as f:
+        content = f.read()
+    content = content.replace('{spacedock_version}', '0.0.0-test')
+    content = content.replace('{entity_label}', 'task')
+    content = content.replace('{stage1}, {stage2}, ..., {last_stage}', 'backlog, ideation, implementation, validation, done')
+    with open(script_path, 'w') as f:
+        f.write(content)
+    os.chmod(script_path, 0o755)
+    return script_path
+
+
+def run_status(pipeline_dir, *args, script_path=None):
     """Run the status script against a pipeline directory."""
     result = subprocess.run(
-        ['python3', STATUS_SCRIPT] + list(args),
+        ['python3', script_path] + list(args),
         capture_output=True, text=True,
         env={**os.environ, 'PIPELINE_DIR': pipeline_dir}
     )
@@ -94,13 +108,21 @@ def entity(id, title, status, score='', source='', worktree=''):
 class TestDefaultStatus(unittest.TestCase):
     """Test the default status table output."""
 
+    def setUp(self):
+        self._script_dir = tempfile.mkdtemp()
+        self.script_path = build_status_script(self._script_dir)
+
+    def tearDown(self):
+        os.unlink(self.script_path)
+        os.rmdir(self._script_dir)
+
     def test_basic_output(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'feature-a.md': entity('001', 'Feature A', 'backlog', '0.80', 'user'),
                 'feature-b.md': entity('002', 'Feature B', 'ideation', '0.90', 'CL'),
             })
-            result = run_status(tmpdir)
+            result = run_status(tmpdir, script_path=self.script_path)
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = result.stdout.strip().split('\n')
             self.assertEqual(len(lines), 4)  # header + separator + 2 data rows
@@ -120,7 +142,7 @@ class TestDefaultStatus(unittest.TestCase):
                 'high-score.md': entity('002', 'High Score', 'backlog', '0.90'),
                 'ideation-task.md': entity('003', 'Ideation Task', 'ideation', '0.50'),
             })
-            result = run_status(tmpdir)
+            result = run_status(tmpdir, script_path=self.script_path)
             lines = result.stdout.strip().split('\n')[2:]  # skip header+separator
             # backlog (order 1) should come before ideation (order 2)
             # within backlog, high score first
@@ -135,7 +157,7 @@ class TestDefaultStatus(unittest.TestCase):
                 'scored.md': entity('001', 'Scored', 'backlog', '0.50'),
                 'unscored.md': entity('002', 'Unscored', 'backlog', ''),
             })
-            result = run_status(tmpdir)
+            result = run_status(tmpdir, script_path=self.script_path)
             lines = result.stdout.strip().split('\n')[2:]
             self.assertIn('scored', lines[0])
             self.assertIn('unscored', lines[1])
@@ -146,7 +168,7 @@ class TestDefaultStatus(unittest.TestCase):
                 entities={'active.md': entity('001', 'Active', 'backlog', '0.50')},
                 archived={'old.md': entity('002', 'Old', 'done', '0.80')},
             )
-            result = run_status(tmpdir)
+            result = run_status(tmpdir, script_path=self.script_path)
             lines = result.stdout.strip().split('\n')[2:]
             self.assertEqual(len(lines), 1)
             self.assertIn('active', lines[0])
@@ -157,7 +179,7 @@ class TestDefaultStatus(unittest.TestCase):
                 entities={'active.md': entity('001', 'Active', 'backlog', '0.50')},
                 archived={'old.md': entity('002', 'Old', 'done', '0.80')},
             )
-            result = run_status(tmpdir, '--archived')
+            result = run_status(tmpdir, '--archived', script_path=self.script_path)
             lines = result.stdout.strip().split('\n')[2:]
             self.assertEqual(len(lines), 2)
 
@@ -166,7 +188,7 @@ class TestDefaultStatus(unittest.TestCase):
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'blank.md': entity('001', 'Blank Fields', 'backlog'),
             })
-            result = run_status(tmpdir)
+            result = run_status(tmpdir, script_path=self.script_path)
             # Should not contain '-' or '0' for empty fields
             self.assertEqual(result.returncode, 0)
             lines = result.stdout.strip().split('\n')[2:]
@@ -176,13 +198,21 @@ class TestDefaultStatus(unittest.TestCase):
 class TestNextOption(unittest.TestCase):
     """Test --next dispatch eligibility detection."""
 
+    def setUp(self):
+        self._script_dir = tempfile.mkdtemp()
+        self.script_path = build_status_script(self._script_dir)
+
+    def tearDown(self):
+        os.unlink(self.script_path)
+        os.rmdir(self._script_dir)
+
     def test_basic_dispatchable(self):
         """Entity in backlog (non-terminal, no gate, no worktree) is dispatchable."""
         with tempfile.TemporaryDirectory() as tmpdir:
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'ready.md': entity('001', 'Ready Task', 'backlog', '0.80'),
             })
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = result.stdout.strip().split('\n')
             self.assertIn('ID', lines[0])
@@ -202,7 +232,7 @@ class TestNextOption(unittest.TestCase):
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'finished.md': entity('001', 'Finished', 'done', '0.80'),
             })
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             data_lines = result.stdout.strip().split('\n')[2:]
             self.assertEqual(len(data_lines), 0)
 
@@ -212,7 +242,7 @@ class TestNextOption(unittest.TestCase):
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'gated.md': entity('001', 'Gated Task', 'ideation', '0.80'),
             })
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             data_lines = result.stdout.strip().split('\n')[2:]
             self.assertEqual(len(data_lines), 0)
 
@@ -222,7 +252,7 @@ class TestNextOption(unittest.TestCase):
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'working.md': entity('001', 'Working', 'implementation', '0.80', worktree='.worktrees/ensign-working'),
             })
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             data_lines = result.stdout.strip().split('\n')[2:]
             self.assertEqual(len(data_lines), 0)
 
@@ -236,7 +266,7 @@ class TestNextOption(unittest.TestCase):
                 # This backlog entity wants to move to ideation but it's full
                 'waiting.md': entity('003', 'Waiting', 'backlog', '0.80'),
             })
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             data_lines = result.stdout.strip().split('\n')[2:]
             self.assertEqual(len(data_lines), 0)
 
@@ -250,7 +280,7 @@ class TestNextOption(unittest.TestCase):
                 # This backlog entity should be dispatchable — parked entities don't block
                 'waiting.md': entity('003', 'Waiting', 'backlog', '0.80'),
             })
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             data_lines = result.stdout.strip().split('\n')[2:]
             self.assertEqual(len(data_lines), 1)
             self.assertIn('waiting', data_lines[0])
@@ -263,7 +293,7 @@ class TestNextOption(unittest.TestCase):
                 'in-ideation.md': entity('001', 'Ideation 1', 'ideation', '0.90', worktree='.worktrees/ensign-in-ideation'),
                 'waiting.md': entity('002', 'Waiting', 'backlog', '0.80'),
             })
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             data_lines = result.stdout.strip().split('\n')[2:]
             self.assertEqual(len(data_lines), 1)
             self.assertIn('waiting', data_lines[0])
@@ -277,7 +307,7 @@ class TestNextOption(unittest.TestCase):
                 'high.md': entity('002', 'High Priority', 'backlog', '0.90'),
                 'mid.md': entity('003', 'Mid Priority', 'backlog', '0.60'),
             })
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             data_lines = result.stdout.strip().split('\n')[2:]
             # No active ensigns in ideation, so concurrency allows 2 dispatches
             self.assertEqual(len(data_lines), 2)
@@ -291,17 +321,13 @@ class TestNextOption(unittest.TestCase):
                 # backlog -> ideation (worktree: false by default)
                 'to-ideation.md': entity('001', 'To Ideation', 'backlog', '0.80'),
             })
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             data_lines = result.stdout.strip().split('\n')[2:]
             self.assertIn('no', data_lines[0])
 
     def test_next_worktree_yes(self):
         """WORKTREE column shows 'yes' when next stage has worktree: true."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            # implementation has worktree: true, and ideation has gate: true
-            # so we need an entity moving from a non-gate stage to implementation
-            # But ideation is gated, so entities in ideation can't advance.
-            # Let's make a README where ideation is NOT gated, to test this.
             readme = textwrap.dedent("""\
                 ---
                 entity-type: task
@@ -324,7 +350,7 @@ class TestNextOption(unittest.TestCase):
             make_pipeline(tmpdir, readme, {
                 'task.md': entity('001', 'Task', 'ideation', '0.80'),
             })
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             data_lines = result.stdout.strip().split('\n')[2:]
             self.assertEqual(len(data_lines), 1)
             self.assertIn('yes', data_lines[0])
@@ -336,7 +362,7 @@ class TestNextOption(unittest.TestCase):
             make_pipeline(tmpdir, README_NO_STAGES, {
                 'task.md': entity('001', 'Task', 'backlog', '0.80'),
             })
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('stages', result.stderr.lower())
 
@@ -346,7 +372,7 @@ class TestNextOption(unittest.TestCase):
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'unknown.md': entity('001', 'Unknown', 'mystery', '0.80'),
             })
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             data_lines = result.stdout.strip().split('\n')[2:]
             self.assertEqual(len(data_lines), 0)
 
@@ -354,7 +380,7 @@ class TestNextOption(unittest.TestCase):
         """--next with no entities outputs header only."""
         with tempfile.TemporaryDirectory() as tmpdir:
             make_pipeline(tmpdir, README_WITH_STAGES)
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             self.assertEqual(result.returncode, 0)
             lines = result.stdout.strip().split('\n')
             self.assertEqual(len(lines), 2)  # header + separator
@@ -365,7 +391,7 @@ class TestNextOption(unittest.TestCase):
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'task.md': entity('042', 'Task', 'backlog', '0.80'),
             })
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             data_lines = result.stdout.strip().split('\n')[2:]
             self.assertIn('042', data_lines[0])
 
@@ -373,12 +399,20 @@ class TestNextOption(unittest.TestCase):
 class TestFrontmatterParsing(unittest.TestCase):
     """Test edge cases in YAML frontmatter parsing."""
 
+    def setUp(self):
+        self._script_dir = tempfile.mkdtemp()
+        self.script_path = build_status_script(self._script_dir)
+
+    def tearDown(self):
+        os.unlink(self.script_path)
+        os.rmdir(self._script_dir)
+
     def test_multiword_title(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'test.md': entity('001', 'A Multi Word Title', 'backlog', '0.50'),
             })
-            result = run_status(tmpdir)
+            result = run_status(tmpdir, script_path=self.script_path)
             self.assertIn('A Multi Word Title', result.stdout)
 
     def test_empty_worktree_not_blocked(self):
@@ -387,7 +421,7 @@ class TestFrontmatterParsing(unittest.TestCase):
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'task.md': entity('001', 'Task', 'backlog', '0.80', worktree=''),
             })
-            result = run_status(tmpdir, '--next')
+            result = run_status(tmpdir, '--next', script_path=self.script_path)
             data_lines = result.stdout.strip().split('\n')[2:]
             self.assertEqual(len(data_lines), 1)
 
