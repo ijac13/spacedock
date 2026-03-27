@@ -53,10 +53,10 @@ Each scaffolding file gets a specific upgrade strategy based on how safe it is t
 | File | Strategy | Rationale |
 |------|----------|-----------|
 | `status` | **Replace** | Mechanical script. Workflow-specific content (stage names) is extracted from the README. Users rarely customize beyond what's generated. |
-| `first-officer.md` | **Regenerate** | Standard template structure with workflow-specific values extracted from the existing README and agent. Show diff and ask CL for confirmation before replacing. |
-| `README.md` | **Show diff** | Users customize stages, schema fields, quality criteria. Too risky to auto-replace. Show what the current template would produce and let CL decide. |
+| `first-officer.md` | **Regenerate** | Standard template structure with workflow-specific values extracted from the existing README and agent. Show diff and ask the captain for confirmation before replacing. |
+| `README.md` | **Show diff** | Users customize stages, schema fields, quality criteria. Too risky to auto-replace. Show what the current template would produce and let the captain decide. |
 
-Present the classification to CL:
+Present the classification to the captain:
 
 > **Upgrade plan:**
 >
@@ -68,7 +68,7 @@ Present the classification to CL:
 >
 > Proceed?
 
-Wait for CL to confirm before proceeding.
+Wait for the captain to confirm before proceeding.
 
 ---
 
@@ -97,7 +97,7 @@ Generate the status script from the reference template at `templates/status` (re
 2. Fill in the two variable fields:
    - `{current_version}` — the target Spacedock version
    - `{stage1}, {stage2}, ..., {last_stage}` — the workflow's stage names in order (extracted from README)
-3. Show CL the diff between the old status script's description header and the new one. (Only the header matters — the implementation will be regenerated regardless.)
+3. Show the captain the diff between the old status script's description header and the new one. (Only the header matters — the implementation will be regenerated regardless.)
 4. Replace `{dir}/status` with the filled-in template.
 5. Preserve the executable bit (`chmod +x`).
 6. **Materialize** — read back the description header and replace the stub body with a working bash implementation that satisfies the description. The implementation must work on bash 3.2+ (no associative arrays, no bash 4+ features). Keep the description header intact — only replace everything after it.
@@ -115,16 +115,16 @@ Generate the status script from the reference template at `templates/status` (re
 
 2. Generate a new first-officer using the template from the commission skill (the full template in section 2d of `skills/commission/SKILL.md`), filling in all extracted values.
 
-3. Show CL a diff of the old vs new first-officer:
+3. Show the captain a diff of the old vs new first-officer:
 
 > **First-officer changes:**
 > {diff output}
 >
 > Replace the first-officer agent? (y/n)
 
-4. Wait for CL's confirmation before replacing.
+4. Wait for the captain's confirmation before replacing.
 
-If the user added custom sections to the first-officer (sections not in the standard template), warn CL:
+If the user added custom sections to the first-officer (sections not in the standard template), warn the captain:
 
 > **Warning:** The existing first-officer has custom sections that aren't in the standard template. These will be lost if you replace it:
 > {list of custom section headings}
@@ -133,7 +133,7 @@ If the user added custom sections to the first-officer (sections not in the stan
 
 1. Generate what the current commission template would produce for this workflow, using the extracted values (mission, stages, schema, etc.).
 2. Diff it against the user's current README.
-3. Present the diff to CL, noting which differences are likely template changes vs user customizations:
+3. Present the diff to the captain, noting which differences are likely template changes vs user customizations:
 
 > **README template diff:**
 >
@@ -143,7 +143,7 @@ If the user added custom sections to the first-officer (sections not in the stan
 >
 > I have NOT modified your README. Review the diff and apply any changes you want manually, or tell me which specific changes to make.
 
-Do NOT auto-modify the README. CL decides what to adopt.
+Do NOT auto-modify the README. The captain decides what to adopt.
 
 ---
 
@@ -166,7 +166,7 @@ If no schema changes affect entity data, skip to Phase 5.
 
 For each detected schema change, scan all entity files in `{dir}/*.md` (excluding README.md) and identify which entities have values in the affected fields.
 
-Present findings to CL:
+Present findings to the captain:
 
 > **Schema migration needed:**
 >
@@ -182,7 +182,7 @@ Present findings to CL:
 
 ### Step 3 — Execute migration
 
-On CL's approval, update the affected entity frontmatter fields. Use the Edit tool — never rewrite whole entity files. Only touch the specific fields identified in the migration plan.
+On the captain's approval, update the affected entity frontmatter fields. Use the Edit tool — never rewrite whole entity files. Only touch the specific fields identified in the migration plan.
 
 Show a summary of what was migrated:
 
@@ -194,7 +194,7 @@ Show a summary of what was migrated:
 ## Phase 5: Finalize
 
 1. Update all version stamps to `{current_version}` in files that were replaced or regenerated.
-2. For the README (if CL didn't request changes), update only the version stamp in YAML frontmatter: `commissioned-by: spacedock@{current_version}`.
+2. For the README (if the captain didn't request changes), update only the version stamp in YAML frontmatter: `commissioned-by: spacedock@{current_version}`.
 3. Show a summary:
 
 > **Refit complete:**
@@ -214,7 +214,7 @@ Show a summary of what was migrated:
 
 ## Degraded Mode (No Version Stamp)
 
-When no version stamps are found on any scaffolding file, the original baseline cannot be determined. Inform CL and offer two options:
+When no version stamps are found on any scaffolding file, the original baseline cannot be determined. Inform the captain and offer two options:
 
 > **No version stamps found.** This workflow was commissioned before version stamping was implemented, or the stamps were removed. I can't determine what the original scaffolding looked like.
 >
@@ -235,7 +235,7 @@ Add version stamps to each file without modifying anything else:
 
 ### Option 2: Full Refit with Review
 
-Execute Phase 3, but show a full diff for every file (including status and first-officer) and require CL's explicit approval before replacing each one. Never auto-replace files without a version stamp — the risk of overwriting customizations is too high.
+Execute Phase 3, but show a full diff for every file (including status and first-officer) and require the captain's explicit approval before replacing each one. Never auto-replace files without a version stamp — the risk of overwriting customizations is too high.
 
 ---
 
@@ -244,4 +244,4 @@ Execute Phase 3, but show a full diff for every file (including status and first
 - **Never modify entity file bodies** — only frontmatter, and only during an approved schema migration.
 - **Never auto-replace without a version stamp** — always enter degraded mode.
 - **Always show diffs** — even for "replace" strategy files, show the diff before replacing.
-- **Git is the safety net** — remind CL they can `git diff` or `git checkout` to recover.
+- **Git is the safety net** — remind the captain they can `git diff` or `git checkout` to recover.
