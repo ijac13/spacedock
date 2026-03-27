@@ -177,15 +177,14 @@ The commission skill (`skills/commission/SKILL.md`) needs to:
 
 ## Acceptance Criteria
 
-1. A `templates/validator.md` exists with tools limited to Read, Bash, Glob, Grep, SendMessage (no Write, no Edit), fully static (no template variables)
+1. A `templates/validator.md` exists with full tools (Read, Write, Edit, Bash, Glob, Grep, SendMessage), fully static (no template variables)
 2. The first-officer template resolves `fresh: true` stages to `validator` agent type when no explicit `agent:` is set
 3. The first-officer template includes a validation rejection flow that dispatches an implementer for fixes and a fresh validator for re-validation
 4. The validation rejection flow enforces a 3-cycle limit before escalation
-5. The validator template explicitly forbids file creation/editing and code fixes
-6. The validator template's Bash instructions restrict usage to test execution and read-only commands
-7. The commission skill generates `validator.md` alongside other agent files
-8. Existing validation stage definitions in README.md (with `fresh: true`) work without modification — no new stage properties required
-9. The ensign template is unchanged
+5. The validator template explicitly forbids modifying implementation code but permits creating/modifying test files and the entity file
+6. The commission skill generates `validator.md` alongside other agent files
+7. Existing validation stage definitions in README.md (with `fresh: true`) work without modification — no new stage properties required
+8. The ensign template is unchanged
 
 ## Stage Report: ideation
 
