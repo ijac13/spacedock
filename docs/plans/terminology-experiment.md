@@ -1,13 +1,13 @@
 ---
 id: 058
 title: Experiment — nautical terminology vs business English performance comparison
-status: ideation
+status: implementation
 source: CL
 started: 2026-03-27T15:15:00Z
 completed:
 verdict:
 score:
-worktree:
+worktree: .worktrees/ensign-terminology-exp
 ---
 
 Does the Star Trek / nautical terminology (captain, first officer, ensign, commission, refit) help or hurt agent performance compared to plain business English (user, orchestrator, worker, setup, upgrade)?
