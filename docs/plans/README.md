@@ -1,5 +1,5 @@
 ---
-commissioned-by: spacedock@0.5.3
+commissioned-by: spacedock@0.5.4
 entity-type: entity
 entity-label: task
 entity-label-plural: tasks
@@ -47,6 +47,8 @@ completed:
 verdict:
 score:
 worktree:
+issue:
+pr:
 ---
 ```
 
@@ -63,6 +65,8 @@ worktree:
 | `verdict` | enum | PASSED or REJECTED — set at final stage |
 | `score` | number | Priority score, 0.0–1.0 (optional). Workflows can upgrade to a multi-dimension rubric in their README. |
 | `worktree` | string | Worktree path while a dispatched agent is active, empty otherwise |
+| `issue` | string | GitHub issue reference (e.g., `#42` or `owner/repo#42`). Optional cross-reference, set manually. |
+| `pr` | string | GitHub PR reference (e.g., `#57` or `owner/repo#57`). Set when a PR is created for this entity's worktree branch. |
 
 ## Stages
 
