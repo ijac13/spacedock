@@ -414,6 +414,18 @@ The template is static — no substitution needed. Copy it verbatim.
 cp "{spacedock_plugin_dir}/templates/ensign.md" {project_root}/.claude/agents/ensign.md
 ```
 
+### 2e2. Generate Validator Agent
+
+Copy the validator agent template to `{project_root}/.claude/agents/validator.md`.
+
+**IMPORTANT: Use Bash to write this file, NOT the Write tool.** The Write tool is often blocked for `.claude/` paths.
+
+The template is static — no substitution needed. Copy it verbatim.
+
+```bash
+cp "{spacedock_plugin_dir}/templates/validator.md" {project_root}/.claude/agents/validator.md
+```
+
 ### 2f. Generate PR Lieutenant Agent (conditional)
 
 Check the README frontmatter for any stages with `agent: pr-lieutenant`. If at least one stage references `pr-lieutenant`, generate the PR lieutenant agent.
@@ -439,12 +451,13 @@ After generating all files, verify before proceeding:
 - [ ] Each seed entity file exists at `{dir}/{slug}.md` with valid YAML frontmatter
 - [ ] `{project_root}/.claude/agents/first-officer.md` exists with all sections
 - [ ] `{project_root}/.claude/agents/ensign.md` exists with all sections
+- [ ] `{project_root}/.claude/agents/validator.md` exists with all sections
 - [ ] `{project_root}/.claude/agents/pr-lieutenant.md` exists (only if a stage references `agent: pr-lieutenant`)
 - [ ] `.worktrees/` is in `{project_root}/.gitignore`
 
 ### Lieutenant Agent Warnings
 
-After generation, check the README frontmatter for any stages with an `agent:` property that is NOT `pr-lieutenant` (since `pr-lieutenant` is generated in step 2f). For each such referenced agent, check whether `{project_root}/.claude/agents/{agent}.md` exists. If a referenced agent file does not exist, warn {captain}:
+After generation, check the README frontmatter for any stages with an `agent:` property that is NOT `pr-lieutenant` or `validator` (since these are generated in steps 2e2 and 2f). For each such referenced agent, check whether `{project_root}/.claude/agents/{agent}.md` exists. If a referenced agent file does not exist, warn {captain}:
 
 > Stage '{stage_name}' references agent '{agent}' but `{project_root}/.claude/agents/{agent}.md` does not exist. You'll need to create this file before running the workflow.
 
@@ -467,6 +480,7 @@ Tell {captain} what was generated:
 > - {for each seed entity: "`{dir}/{slug}.md` — {title}"}
 > - `{project_root}/.claude/agents/first-officer.md` — workflow orchestrator
 > - `{project_root}/.claude/agents/ensign.md` — stage worker agent
+> - `{project_root}/.claude/agents/validator.md` — validation agent
 > - {if pr-lieutenant was generated: "`{project_root}/.claude/agents/pr-lieutenant.md` — PR workflow agent"}
 >
 > To run this workflow in future sessions, start Claude Code with:
