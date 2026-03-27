@@ -45,3 +45,22 @@ Replace the stub with the working implementation from `docs/plans/status` (the l
 ### Summary
 
 Replaced the stub body in `templates/status` with the full working Python implementation, keeping `{spacedock_version}`, `{entity_label}`, and `{stage1}, {stage2}, ..., {last_stage}` as template variables for sed substitution at commission time. Removed the LLM materialization step (step 5) from the commission skill's section 2b. Updated tests to build a runnable script from the template via variable substitution rather than pointing at the live `docs/plans/status` instance.
+
+## Stage Report: validation
+
+- [x] Unit tests: all 22 pass
+  Ran `python3 -m unittest tests.test_status_script -v`: 22 tests, 0 failures, 0 errors
+- [x] Template is working code, not a stub
+  `templates/status` contains 339 lines of Python (parse_frontmatter, parse_stages_block, scan_entities, main, etc.). No "Not compiled" text found.
+- [x] Template variables present for sed substitution
+  `{spacedock_version}` on line 2, `{entity_label}` on line 6, `{stage1}, {stage2}, ..., {last_stage}` on line 37
+- [x] Commission skill materialization step removed
+  Grepped SKILL.md for "materiali[sz]e" — zero matches. Section 2b now reads template, fills variables, writes file, makes executable. No LLM generation step.
+- [x] Live `docs/plans/status` still works (no regression)
+  Ran `docs/plans/status` — produced 6-entity table with correct columns (ID, SLUG, STATUS, TITLE, SCORE, SOURCE)
+- [x] PASSED recommendation
+  All acceptance criteria met. Implementation is clean and correct.
+
+### Summary
+
+Validated the precompiled status template implementation against all acceptance criteria. All 22 unit tests pass, the template is a full working Python script with template variables intact for sed substitution, the commission skill no longer references materialization, and the live `docs/plans/status` script continues to work without regression. Recommendation: PASSED.
