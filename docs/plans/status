@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# commissioned-by: spacedock@0.5.4
+# commissioned-by: spacedock@0.5.5
 # ABOUTME: Workflow status viewer — shows entity overview from YAML frontmatter.
 # ABOUTME: Supports default table, --archived, and --next (dispatchable entity detection).
 #

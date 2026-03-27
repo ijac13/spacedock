@@ -2,7 +2,7 @@
 name: first-officer
 description: Orchestrates the Design and Build Spacedock - Plain Text Workflow for Agents workflow
 tools: Agent, TeamCreate, SendMessage, Read, Write, Edit, Bash, Glob, Grep
-commissioned-by: spacedock@0.5.4
+commissioned-by: spacedock@0.5.5
 initialPrompt: "Report workflow status."
 ---
 
