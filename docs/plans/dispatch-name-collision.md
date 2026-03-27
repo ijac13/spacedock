@@ -109,8 +109,10 @@ Audited all occurrences of the `{agent}-{slug}` naming pattern in `templates/fir
 - [x] `.claude/agents/first-officer.md` is NOT directly edited
   Only `templates/first-officer.md` was modified
 - [x] All changes committed to the worktree
-  Single-line change committed to ensign/dispatch-name-collision branch
+  All changes committed to ensign/dispatch-name-collision branch
+- [x] E2E test at `tests/test-dispatch-names.sh` validates dispatch name uniqueness at runtime
+  Commissions a no-gate pipeline (backlog->work->review->done), runs the first officer, parses stream-json log for Agent() calls, verifies all dispatch names are unique and include stage suffix. Fixture at `tests/fixtures/no-gate-pipeline/`. Budget cap $2.
 
 ### Summary
 
-Applied the single-line fix to `templates/first-officer.md` line 36, changing the dispatch name pattern from `{agent}-{slug}` to `{agent}-{slug}-{stage}`. All 61 tests in `scripts/test-commission.sh` pass, including the specific guardrail check for stage-unique dispatch names. No other naming patterns were modified.
+Applied the single-line fix to `templates/first-officer.md` line 36, changing the dispatch name pattern from `{agent}-{slug}` to `{agent}-{slug}-{stage}`. All 61 tests in `scripts/test-commission.sh` pass, including the specific guardrail check for stage-unique dispatch names. No other naming patterns were modified. Added E2E test `tests/test-dispatch-names.sh` with a no-gate pipeline fixture that runs the first officer through multiple stages and validates each Agent() dispatch used a unique name.

@@ -1,0 +1,104 @@
+#!/bin/bash
+# ABOUTME: Status viewer for the no-gate-pipeline test fixture.
+# ABOUTME: Displays task status from YAML frontmatter; supports --next for dispatch detection.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+STAGES=(backlog work review done)
+TERMINAL="done"
+
+# Map stage name to numeric order
+stage_order() {
+  local i=0
+  for s in "${STAGES[@]}"; do
+    if [ "$s" = "$1" ]; then echo $i; return; fi
+    i=$((i + 1))
+  done
+  echo 99
+}
+
+# Get next stage name (empty if terminal)
+next_stage() {
+  local i=0
+  for s in "${STAGES[@]}"; do
+    if [ "$s" = "$1" ]; then
+      i=$((i + 1))
+      if [ $i -lt ${#STAGES[@]} ]; then
+        echo "${STAGES[$i]}"
+      fi
+      return
+    fi
+    i=$((i + 1))
+  done
+}
+
+if [ "${1:-}" = "--archived" ]; then
+  DIR="$SCRIPT_DIR/_archive"
+elif [ "${1:-}" = "--next" ]; then
+  # Output dispatchable entities: not terminal, not gate-blocked (no gates here), no active worktree
+  for file in "$SCRIPT_DIR"/*.md; do
+    [ "$(basename "$file")" = "README.md" ] && continue
+    [ ! -f "$file" ] && continue
+
+    slug="$(basename "$file" .md)"
+    status="" worktree=""
+    in_fm=0
+
+    while IFS= read -r line; do
+      case "$line" in
+        ---) if [ $in_fm -eq 0 ]; then in_fm=1; else break; fi ;;
+        *)
+          if [ $in_fm -eq 1 ]; then
+            case "$line" in
+              status:*)   status="${line#*:}"; status="${status# }" ;;
+              worktree:*) worktree="${line#*:}"; worktree="${worktree# }" ;;
+            esac
+          fi
+          ;;
+      esac
+    done < "$file"
+
+    # Skip terminal
+    [ "$status" = "$TERMINAL" ] && continue
+    # Skip if actively worked (non-empty worktree)
+    [ -n "$worktree" ] && continue
+
+    ns=$(next_stage "$status")
+    [ -z "$ns" ] && continue
+
+    echo "$slug -> $ns ($file)"
+  done
+  exit 0
+else
+  DIR="$SCRIPT_DIR"
+fi
+
+printf "%-25s %-10s %-30s %-7s %-10s\n" "TASK" "STATUS" "TITLE" "SCORE" "SOURCE"
+printf "%-25s %-10s %-30s %-7s %-10s\n" "----" "------" "-----" "-----" "------"
+
+for file in "$DIR"/*.md; do
+  [ "$(basename "$file")" = "README.md" ] && continue
+  [ ! -f "$file" ] && continue
+
+  slug="$(basename "$file" .md)"
+  status="" title="" score="" source=""
+  in_fm=0
+
+  while IFS= read -r line; do
+    case "$line" in
+      ---) if [ $in_fm -eq 0 ]; then in_fm=1; else break; fi ;;
+      *)
+        if [ $in_fm -eq 1 ]; then
+          case "$line" in
+            status:*) status="${line#*:}"; status="${status# }" ;;
+            title:*)  title="${line#*:}";  title="${title# }" ;;
+            score:*)  score="${line#*:}";  score="${score# }" ;;
+            source:*) source="${line#*:}"; source="${source# }" ;;
+          esac
+        fi
+        ;;
+    esac
+  done < "$file"
+
+  printf "%-25s %-10s %-30s %-7s %-10s\n" "$slug" "$status" "$title" "$score" "$source"
+done
