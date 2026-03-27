@@ -1,7 +1,7 @@
 ---
 id: 063
 title: Make agents workflow-agnostic — one agent definition serves multiple workflows
-status: implementation
+status: validation
 source: CL
 started: 2026-03-27T22:35:00Z
 completed:
