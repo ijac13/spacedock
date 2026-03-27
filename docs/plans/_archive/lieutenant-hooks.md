@@ -1,13 +1,14 @@
 ---
 id: 060
 title: Lieutenant hooks — lieutenants inject behavior into the first officer
-status: validation
+status: done
 source: CL
 started: 2026-03-27T18:50:00Z
-completed:
-verdict:
+completed: 2026-03-27T22:00:00Z
+verdict: PASSED
 score:
-worktree: .worktrees/ensign-lt-hooks
+pr: "#5"
+worktree:
 ---
 
 Currently the PR-aware merge and startup PR detection are hardcoded in the first-officer template. This means every workflow gets PR-related logic in its first officer whether or not it uses a PR lieutenant. The first officer shouldn't know about GitHub PRs — that knowledge belongs to the pr-lieutenant.
