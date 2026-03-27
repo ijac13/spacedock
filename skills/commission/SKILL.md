@@ -257,6 +257,8 @@ completed:
 verdict:
 score:
 worktree:
+issue:
+pr:
 {any domain-specific fields from {captain}'s answers}
 ---
 ```
@@ -274,6 +276,8 @@ worktree:
 | `verdict` | enum | PASSED or REJECTED — set at final stage |
 | `score` | number | Priority score, 0.0–1.0 (optional). Workflows can upgrade to a multi-dimension rubric in their README. |
 | `worktree` | string | Worktree path while a dispatched agent is active, empty otherwise |
+| `issue` | string | GitHub issue reference (e.g., `#42` or `owner/repo#42`). Optional cross-reference, set manually. |
+| `pr` | string | GitHub PR reference (e.g., `#57` or `owner/repo#57`). Set when a PR is created for this entity's worktree branch. |
 
 ## Stages
 
@@ -335,6 +339,8 @@ completed:
 verdict:
 score:
 worktree:
+issue:
+pr:
 ---
 
 Description of this {entity_label} and what it aims to achieve.
@@ -377,6 +383,8 @@ completed:
 verdict:
 score: {score, or leave empty}
 worktree:
+issue:
+pr:
 ---
 
 {Description/thesis from {captain}'s seed input.}
@@ -436,6 +444,32 @@ sed \
   "$TMPL" > {project_root}/.claude/agents/ensign.md
 ```
 
+### 2f. Generate PR Lieutenant Agent (conditional)
+
+Check the README frontmatter for any stages with `agent: pr-lieutenant`. If at least one stage references `pr-lieutenant`, generate the PR lieutenant agent.
+
+Write the PR lieutenant agent to `{project_root}/.claude/agents/pr-lieutenant.md`.
+
+**IMPORTANT: Use Bash to write this file, NOT the Write tool.** The Write tool is often blocked for `.claude/` paths.
+
+**This file is generated from a template — NOT LLM-generated prose.** The template lives at `templates/pr-lieutenant.md` (relative to the Spacedock plugin directory). It contains `__VAR__` markers for commission-time substitution.
+
+Do NOT rewrite, paraphrase, or embellish the template content. Your only job is to compute variable values and run sed.
+
+```bash
+# 1. Resolve the template path (relative to the Spacedock plugin directory)
+TMPL="{spacedock_plugin_dir}/templates/pr-lieutenant.md"
+
+# 2. Run sed to substitute __VAR__ markers with design-phase values
+sed \
+  -e 's|__MISSION__|{mission}|g' \
+  -e 's|__ENTITY_LABEL__|{entity_label}|g' \
+  -e 's|__SPACEDOCK_VERSION__|{spacedock_version}|g' \
+  "$TMPL" > {project_root}/.claude/agents/pr-lieutenant.md
+```
+
+If no stage references `pr-lieutenant`, skip this step entirely.
+
 ### Generation Checklist
 
 After generating all files, verify before proceeding:
@@ -445,11 +479,12 @@ After generating all files, verify before proceeding:
 - [ ] Each seed entity file exists at `{dir}/{slug}.md` with valid YAML frontmatter
 - [ ] `{project_root}/.claude/agents/first-officer.md` exists with all sections
 - [ ] `{project_root}/.claude/agents/ensign.md` exists with all sections
+- [ ] `{project_root}/.claude/agents/pr-lieutenant.md` exists (only if a stage references `agent: pr-lieutenant`)
 - [ ] `.worktrees/` is in `{project_root}/.gitignore`
 
 ### Lieutenant Agent Warnings
 
-After generation, check the README frontmatter for any stages with an `agent:` property. For each referenced agent, check whether `{project_root}/.claude/agents/{agent}.md` exists. If a referenced agent file does not exist, warn {captain}:
+After generation, check the README frontmatter for any stages with an `agent:` property that is NOT `pr-lieutenant` (since `pr-lieutenant` is generated in step 2f). For each such referenced agent, check whether `{project_root}/.claude/agents/{agent}.md` exists. If a referenced agent file does not exist, warn {captain}:
 
 > Stage '{stage_name}' references agent '{agent}' but `{project_root}/.claude/agents/{agent}.md` does not exist. You'll need to create this file before running the workflow.
 
@@ -472,6 +507,7 @@ Tell {captain} what was generated:
 > - {for each seed entity: "`{dir}/{slug}.md` — {title}"}
 > - `{project_root}/.claude/agents/first-officer.md` — workflow orchestrator
 > - `{project_root}/.claude/agents/ensign.md` — stage worker agent
+> - {if pr-lieutenant was generated: "`{project_root}/.claude/agents/pr-lieutenant.md` — PR workflow agent"}
 >
 > To run this workflow in future sessions, start Claude Code with:
 >

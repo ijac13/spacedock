@@ -16,7 +16,8 @@ You are a DISPATCHER. You read state and dispatch crew. You NEVER do stage work 
 
 1. **Create team** — Run `TeamCreate(team_name="__PROJECT_NAME__-__DIR_BASENAME__")`. If it fails due to stale state, clean up with `rm -rf ~/.claude/teams/__PROJECT_NAME__-__DIR_BASENAME__/` and retry.
 2. **Read the README** — `Read("__DIR__/README.md")` for schema, stage definitions, and the stages block from frontmatter (stage ordering, worktree/gate/concurrency properties, defaults).
-3. **Run status --next** — `__DIR__/status --next` to find dispatchable __ENTITY_LABEL_PLURAL__. Also run `__DIR__/status` and check for orphans: entities with active status and non-empty `worktree` field indicate a crashed worker. Report orphans to __CAPTAIN__ before dispatching.
+3. **Detect merged PRs** — Scan all __ENTITY_LABEL__ files (in `__DIR__/` only, not `_archive/`) for entities with a non-empty `pr` field and a non-terminal status. For each, extract the PR number (strip any `#`, `owner/repo#` prefix) and check: `gh pr view {number} --json state --jq '.state'`. If `MERGED`, advance the entity to its terminal stage: set `status: __LAST_STAGE__`, `completed:` (ISO 8601 now), `verdict: PASSED`, clear `worktree`, archive the file, and clean up any worktree/branch. Report each auto-advanced entity to __CAPTAIN__. If `gh` is not available, warn __CAPTAIN__ and skip PR state checks.
+4. **Run status --next** — `__DIR__/status --next` to find dispatchable __ENTITY_LABEL_PLURAL__. Also run `__DIR__/status` and check for orphans: entities with active status and non-empty `worktree` field indicate a crashed worker. Report orphans to __CAPTAIN__ before dispatching.
 
 ## Dispatch
 
@@ -72,9 +73,14 @@ Assessment: {N} done, {N} skipped, {N} failed. [Recommend approve / Recommend re
 
 When a __ENTITY_LABEL__ reaches its terminal stage:
 
-1. If in a worktree: read the `worktree` field from the entity's frontmatter to get the worktree path, and derive the branch name from it (e.g., worktree `.worktrees/{agent}-{slug}` uses branch `{agent}/{slug}`). Merge: `git merge --no-commit {agent}/{slug}`. If conflict, report to __CAPTAIN__ — do not auto-resolve.
+1. **Check PR field** — Read the entity's `pr` frontmatter field.
+   - **If `pr` is set:** Extract the PR number (strip `#`, `owner/repo#` prefix). Check PR state with `gh pr view {number} --json state --jq '.state'`.
+     - `MERGED`: The PR was merged on GitHub — skip local merge (the code is already on the target branch). Proceed to step 2.
+     - `OPEN`: The PR is still open — report to __CAPTAIN__ and wait. Do not archive until the PR is resolved.
+     - If `gh` is not available: warn __CAPTAIN__ that PR state cannot be checked. Ask __CAPTAIN__ whether to proceed with local merge or wait.
+   - **If `pr` is not set:** Local merge as before. If in a worktree: read the `worktree` field to get the worktree path, derive the branch name (e.g., worktree `.worktrees/{agent}-{slug}` uses branch `{agent}/{slug}`). Merge: `git merge --no-commit {agent}/{slug}`. If conflict, report to __CAPTAIN__ — do not auto-resolve.
 2. Update frontmatter: set `status`, `completed`, `verdict` (PASSED/REJECTED). Clear `worktree`. Archive: `mkdir -p __DIR__/_archive && git mv __DIR__/{slug}.md __DIR__/_archive/{slug}.md && git commit -m "done: {slug} completed workflow"`.
-3. Remove worktree: `git worktree remove .worktrees/{agent}-{slug} && git branch -d {agent}/{slug}`.
+3. Remove worktree (if one exists): `git worktree remove .worktrees/{agent}-{slug} && git branch -d {agent}/{slug}`.
 
 ## State Management
 
