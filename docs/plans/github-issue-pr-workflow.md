@@ -172,3 +172,20 @@ The `pr-lieutenant` agent file and the `agent` stage property are part of task 0
 1. **`gh` CLI availability** — The first officer's PR state checking requires `gh`. If `gh` is not available and `pr` is set, should it warn and skip, or error? Leaning toward: warn and fall back to asking the captain for manual status.
 
 2. **PR number format** — Should the `pr` field store just the number (`57`), the GitHub shorthand (`#57`), or a full reference (`owner/repo#57`)? The shorthand `#57` is most natural for single-repo use. Full reference is needed for cross-repo. Leaning toward: accept any format, parse as needed when calling `gh`.
+
+## Stage Report: implementation
+
+- [x] Entity schema: `issue` and `pr` optional string fields added to entity template in `skills/commission/SKILL.md`
+  Added to schema section (line 260-261), field reference table (line 277-278), entity template (line 342-343), and seed entity template (line 386-387)
+- [x] First-officer template: PR-aware merge boundary
+  `templates/first-officer.md` Merge and Cleanup section checks `pr` field, uses `gh pr view` for state, falls back to local merge when unset, warns if `gh` unavailable
+- [x] First-officer template: startup detects merged PRs for entities with non-empty `pr` field
+  Added as startup step 3 in `templates/first-officer.md` — scans active entities with `pr` set, checks via `gh pr view`, auto-advances merged ones
+- [x] PR lieutenant template at `templates/pr-lieutenant.md`
+  Agent file with same behavioral contract as ensign (assignment protocol, rules, completion protocol) plus PR Methodology section for branch push, `gh pr create`, and PR number reporting
+- [x] Commission skill generates PR lieutenant from template when a stage references `agent: pr-lieutenant`
+  Added section 2f after ensign generation in `skills/commission/SKILL.md` with conditional check, sed-based template generation, updated generation checklist and lieutenant warnings
+
+### Summary
+
+Implemented all five components of the GitHub issue/PR workflow integration. The `issue` and `pr` fields are passive cross-references in entity frontmatter. The first-officer template gained two PR-aware behaviors: startup merged-PR detection (step 3) and PR-state-aware merge boundary (checks MERGED/OPEN before archiving). The PR lieutenant template follows the same structural pattern as the ensign but adds a PR Methodology section for push and PR creation. The commission skill conditionally generates the PR lieutenant using the same sed-from-template pattern as ensign generation.
