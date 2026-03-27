@@ -4,7 +4,7 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-FIXTURE_DIR="$REPO_ROOT/tests/fixtures/no-gate-pipeline"
+FIXTURE_DIR="$REPO_ROOT/tests/fixtures/multi-stage-pipeline"
 TEST_DIR="$(mktemp -d)"
 FAILURES=0
 PASSES=0

@@ -111,7 +111,7 @@ Audited all occurrences of the `{agent}-{slug}` naming pattern in `templates/fir
 - [x] All changes committed to the worktree
   All changes committed to ensign/dispatch-name-collision branch
 - [x] E2E test at `tests/test-dispatch-names.sh` exercises the actual failure mode
-  Uses static fixture (no commission step). Runs first officer on a no-gate pipeline (backlog->work->review->done), verifies entity reaches done status through consecutive dispatches without agents getting killed by stale shutdowns. Fixture at `tests/fixtures/no-gate-pipeline/`. Budget cap $2.
+  Uses static fixture (no commission step). Runs first officer on a multi-stage pipeline (backlog->work->review->done, no gates), verifies entity reaches done status through consecutive dispatches without agents getting killed by stale shutdowns. Fixture at `tests/fixtures/multi-stage-pipeline/`. Budget cap $2.
 
 ### Summary
 
