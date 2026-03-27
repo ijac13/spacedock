@@ -19,7 +19,7 @@ When you begin, do these things in order:
 1. **Create team** — Run `TeamCreate(team_name="__PROJECT_NAME__-__DIR_BASENAME__")`. If it fails due to stale team state from a prior crashed session, clean up with `rm -rf ~/.claude/teams/__PROJECT_NAME__-__DIR_BASENAME__/` and retry TeamCreate.
 2. **Read the README** — Run `Read("__DIR__/README.md")` to understand the pipeline schema and stage definitions.
 3. **Read stage properties** — Read the `stages` block from the README frontmatter. This gives you the state machine: stage names, ordering, per-stage properties (`worktree`, `fresh`, `gate`, `concurrency`), defaults, and any non-linear transitions. The `defaults` block sets baseline values; per-state entries override them. If the README has no `stages` block in frontmatter, fall back to parsing stage properties from prose sections (`Worktree`, `Fresh`, `Approval gate` / `Human approval` bullets) and read concurrency from the `## Concurrency` section (default 2).
-4. **Run status** — Run `python3 __DIR__/status` to see the current state of all __ENTITY_LABEL_PLURAL__. Only scan the main directory (`__DIR__/*.md`) — the `_archive/` subdirectory holds terminal entities and is ignored for dispatch.
+4. **Run status** — Run `__DIR__/status` to see the current state of all __ENTITY_LABEL_PLURAL__. Only scan the main directory (`__DIR__/*.md`) — the `_archive/` subdirectory holds terminal entities and is ignored for dispatch.
 5. **Check for orphans** — Look for __ENTITY_LABEL_PLURAL__ with an active status and a non-empty `worktree` field. These are ensigns that crashed or were interrupted in a prior session. Handle them per the Orphan Detection procedure before dispatching new work.
 
 ## Dispatching
@@ -252,7 +252,7 @@ After your initial dispatch, process events as they arrive:
 2. **Checklist review** — Follow the procedure from Dispatching step 7: verify completeness, review skip rationales, triage failures. Send the ensign back if the checklist is incomplete or rationales are weak.
 3. **Ensign lifecycle and gate check** — Follow the procedure from Dispatching step 8: check the completed stage's `gate` property from frontmatter, manage ensign shutdown or keep-alive, handle approval/rejection.
 4. **Update timestamps** — When dispatching or during the final merge commit: if the __ENTITY_LABEL__ just entered its first active (non-initial) stage, set `started:` to the current ISO 8601 datetime. If the __ENTITY_LABEL__ reached the terminal stage, set `completed:` to the current datetime and `verdict:` to PASSED or REJECTED based on the ensign's assessment.
-5. **Verify state** — Run `python3 __DIR__/status` to confirm the __ENTITY_LABEL__'s status on disk.
+5. **Verify state** — Run `__DIR__/status` to confirm the __ENTITY_LABEL__'s status on disk.
 6. **Dispatch next** — Look at the updated workflow state. If any other __ENTITY_LABEL__ is ready for its next stage, dispatch an ensign for it (following the full dispatch procedure). Skip any __ENTITY_LABEL__ whose ensign is currently in direct communication with __CAPTAIN__. Prioritize by score (highest first) when multiple __ENTITY_LABEL_PLURAL__ are ready.
 7. **Repeat** — Continue until no __ENTITY_LABEL_PLURAL__ are ready for dispatch (all are in the terminal stage, blocked by approval gates, at concurrency limit, in direct communication, or the workflow is empty).
 
