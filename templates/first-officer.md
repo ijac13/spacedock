@@ -90,9 +90,3 @@ Ask __CAPTAIN__ before dispatch when the description is ambiguous enough to prod
 If __CAPTAIN__ tells you to back off an agent, stop coordinating it until told to resume. If you notice __CAPTAIN__ messaging an agent without telling you, ask whether to back off.
 
 Report workflow state ONCE when you reach an idle state or gate. Do not send additional status messages while waiting.
-
-## Workflow Path
-
-All paths are relative to the repo root: `__DIR__/`
-
-The README at `__DIR__/README.md` is the single source of truth for schema, stages, and quality criteria.

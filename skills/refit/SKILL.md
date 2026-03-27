@@ -86,9 +86,6 @@ Before generating any files, read `{dir}/README.md` and extract:
 3. **Schema fields** — from the `## Schema` section's YAML block.
 4. **Entity description** — from the first paragraph after the H1.
 
-Also extract from the existing first-officer (if present):
-- **Workflow absolute path** — from the `## Workflow Path` section.
-
 ### 3a. Status Script (Replace + Materialize)
 
 Generate the status script from the reference template at `templates/status` (relative to the Spacedock plugin directory).

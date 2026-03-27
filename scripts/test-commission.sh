@@ -187,7 +187,7 @@ if [ -f "$FO" ]; then
     fail "first-officer has tools in frontmatter"
   fi
   # Content checks
-  for KEYWORD in "DISPATCHER|dispatcher" "TeamCreate" "Agent\(" "Event Loop|event loop" "Workflow Path|workflow path|WORKFLOW PATH" "initialPrompt"; do
+  for KEYWORD in "DISPATCHER|dispatcher" "TeamCreate" "Agent\(" "Event Loop|event loop" "initialPrompt"; do
     LABEL="$(echo "$KEYWORD" | sed 's/|/ or /g')"
     if grep -qE "$KEYWORD" "$FO"; then
       pass "first-officer contains '$LABEL'"

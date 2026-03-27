@@ -135,7 +135,6 @@ Open the file and verify these sections are present:
 - Dispatching section with an `Agent()` call block that includes `subagent_type`, `name`, `team_name`, and `prompt`
 - Event Loop
 - State Management
-- Workflow Path (with a repo-root-relative path, not an absolute path or template variable)
 - `initialPrompt` in frontmatter
 
 ### First-officer guardrails
