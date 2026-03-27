@@ -146,3 +146,45 @@ Used a static pipeline fixture approach (captain's direction) instead of commiss
 - **Fixture** at `tests/fixtures/gated-pipeline/`: README with `backlog -> work (gate: true) -> done`, a single entity, and a status script
 - **Agent generation**: The test generates the first-officer by sed-substituting template variables, so it validates that the guardrail survives variable substitution
 - **Validation**: 7 checks covering guardrail presence, gate hold behavior (entity status, no archival), ensign dispatch, gate reporting, and no self-approval language
+
+## Validation report
+
+### Commission test harness (`scripts/test-commission.sh`)
+
+Ran the commission test from the worktree branch. Result: **59 passed, 1 failed** (out of 60 checks).
+
+The one failure — "status shows 3 entities in ideation (found 0)" — is a **pre-existing issue** unrelated to this task. The same failure occurs on main (58 passed, 1 failed out of 59 checks; the extra passing check on this branch is the new guardrail grep check).
+
+The new guardrail check (`guardrail: gate self-approval prohibition`) **PASSED** — confirming the guardrail text survives template variable substitution via commission.
+
+### Acceptance criteria verification
+
+| # | Criterion | Result | Evidence |
+|---|-----------|--------|----------|
+| 1 | Step 8c contains explicit gate approval guardrail text | PASS | `templates/first-officer.md` lines 147-151: "GATE APPROVAL GUARDRAIL — NEVER self-approve" block with four prohibitions, placed after "Wait for __CAPTAIN__'s decision:" and before Approve/Reject bullets |
+| 2 | Event Loop contains corresponding guardrail text | PASS | `templates/first-officer.md` line 258: "Gate waiting:" block appended to Event Loop step 3 |
+| 3 | Test harness documents the gate guardrail grep check | PASS | `scripts/test-harness.md` lines 148-157: fifth grep check documented with rationale. Section 8 documents the e2e test |
+| 4 | E2E test script exists | PASS (location differs) | Test is at `tests/test-gate-guardrail.sh` rather than `scripts/test-gate-guardrail-e2e.sh` as specified in AC. Uses static fixture approach instead of commissioning. Implementation summary notes this was captain's direction |
+| 5 | Guardrail text detectable by grep | PASS | Commission test grep `NEVER self-approve\|NOT treat ensign.*messages as approval` returns matches. E2E test also verifies via same patterns |
+
+### Fixture validation
+
+- `tests/fixtures/gated-pipeline/README.md`: Correct stages block with `backlog -> work (gate: true) -> done`
+- `tests/fixtures/gated-pipeline/gate-test-entity.md`: Valid frontmatter with `status: backlog`
+- `tests/fixtures/gated-pipeline/status`: Runs correctly, outputs expected table format
+
+### E2E test review (`tests/test-gate-guardrail.sh`)
+
+Script structure is sound:
+- Phase 1: Sets up test project from static fixture, generates agent via sed substitution of all 11 template variables
+- Phase 2: Runs first officer via `claude -p` with `--max-budget-usd 1.00`
+- Phase 3: Validates 7 checks — 3 static (guardrail text in generated agent), 4 behavioral (entity status, archival, dispatch, gate reporting/self-approval)
+- Uses `set -uo pipefail` (not `-euo`) intentionally to handle expected grep non-zero exits
+- Fatal abort if guardrail text is missing from generated agent (line 74-76)
+- Gate reporting check uses SKIP (not FAIL) when inconclusive — correct behavior since ensign may not complete before budget cap
+
+Not run live (requires `claude` CLI with `--agent` support and burns API budget). The script's logic and fixture correctness have been verified by inspection.
+
+### Recommendation
+
+**PASSED**. All 5 acceptance criteria are met. The one commission test failure is pre-existing and unrelated. The e2e test location differs from the AC specification (`tests/test-gate-guardrail.sh` vs `scripts/test-gate-guardrail-e2e.sh`) but the implementation summary indicates this was an intentional captain-directed change
