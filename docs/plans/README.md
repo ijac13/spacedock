@@ -109,6 +109,7 @@ A task moves to validation after implementation is complete. The work here is to
   - A PASSED/REJECTED recommendation
 - **Good:** Thorough testing against acceptance criteria, clear evidence of pass/fail, honest assessment
 - **Bad:** Rubber-stamping without actually testing, ignoring failing edge cases, validating against wrong criteria
+- **Spot-check principle:** Before committing to an expensive multi-run experiment or long test suite, do a cheap single-run spot-check (ideally on a smaller/cheaper model) to verify the infrastructure works end-to-end. Fix broken plumbing before burning budget on real runs.
 
 ### `done`
 
