@@ -44,3 +44,24 @@ The refit skill (`skills/refit/SKILL.md`) regenerates the first-officer and stat
 ### Summary
 
 Added ensign and lieutenant agent handling to all five phases of the refit skill. The changes follow the same patterns established by the existing first-officer regeneration — sed from template, show diff, ask captain. Degraded Mode stamp-only option was also updated to cover ensign and lieutenant agents. The acceptance criterion about orphaned lieutenants is addressed by the discovery phase noting missing files without attempting deletion.
+
+## Stage Report: validation
+
+- [x] Phase 1: ensign and lieutenant discovery present with version stamp extraction
+  SKILL.md lines 34-36: items 4 (ensign) and 5 (lieutenant) added to Step 2, both extract `commissioned-by` version stamps
+- [x] Phase 2: classification table includes ensign and lieutenant with Regenerate strategy
+  SKILL.md lines 60-61 (strategy rationale) and lines 72-73 (captain-facing upgrade plan) both include ensign and lieutenant rows
+- [x] Phase 3d: ensign regeneration follows first-officer pattern (sed, diff, confirm)
+  SKILL.md lines 153-171: extracts Mission and Entity label, sed substitutes `__MISSION__`, `__ENTITY_LABEL__`, `__SPACEDOCK_VERSION__` — all three match the actual `templates/ensign.md` variables exactly
+- [x] Phase 3e: lieutenant regeneration scans README stages, handles missing templates
+  SKILL.md lines 175-201: scans `stages.states` for `agent:` properties, warns and skips if template missing, shows diff for existing agents, shows full content for new agents
+- [x] Phase 5: summary table includes ensign and lieutenant rows
+  SKILL.md lines 259-261: `ensign.md` and `{lieutenant}.md` rows added between first-officer and README
+- [x] No other files modified
+  `git diff --name-only dcf247c~1..dcf247c` shows only `skills/refit/SKILL.md` changed in the implementation commit
+- [x] PASSED recommendation
+  Test harness passes 64/64 (no regressions). All five acceptance criteria are addressed: ensign regeneration from template, lieutenant regeneration from README stage references, both show diffs with captain confirmation, version stamps updated via sed `__SPACEDOCK_VERSION__`, and orphaned lieutenants handled by discovery-only (no deletion). Degraded Mode stamp-only also covers ensign and lieutenant agents (lines 291-292).
+
+### Summary
+
+Validated the refit skill changes against all acceptance criteria. The implementation correctly mirrors the existing first-officer regeneration pattern for both ensign and lieutenant agents across all five phases, including Degraded Mode. Template variable substitution (`__MISSION__`, `__ENTITY_LABEL__`, `__SPACEDOCK_VERSION__`) matches the actual `templates/ensign.md` markers exactly. Lieutenant handling gracefully degrades when templates are missing. The commission test harness passes 64/64 with no regressions. Recommendation: PASSED.
