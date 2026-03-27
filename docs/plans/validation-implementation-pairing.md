@@ -207,3 +207,22 @@ The commission skill (`skills/commission/SKILL.md`) needs to:
 ### Summary
 
 Designed a validation-implementation pairing model where the validator is a distinct agent type (`validator.md`) with restricted tools (no Write/Edit) that can only read, test, and judge. The FO mediates all communication: when validation rejects, the FO dispatches an implementer to fix and a fresh validator to re-check, with a 3-cycle escalation limit. The key architectural decision was respawn-over-keep-alive for the implementation agent — it matches the existing "always dispatch fresh" principle and avoids resource waste during gate reviews. `fresh: true` now implies `agent: validator` as a natural extension of its independence guarantee.
+
+## Stage Report: implementation
+
+- [x] `templates/validator.md` exists — static, tools restricted to Read/Bash/Glob/Grep/SendMessage, explicit no-fix rules
+  Created at `templates/validator.md` with tools frontmatter `Read, Bash, Glob, Grep, SendMessage`, no Write/Edit. Rules section explicitly forbids file creation/editing, commits (except stage report), bug fixing, and using Bash to write files.
+- [x] FO dispatch resolves `fresh: true` to `validator` agent type
+  Updated Dispatch step 4 in `templates/first-officer.md`: "If no `agent` property: default to `validator` when the stage has `fresh: true`, otherwise default to `ensign`."
+- [x] FO validation instructions updated for read-only validator role
+  Prepended "You are a validator. You read and judge — you do NOT write code or fix bugs." and appended relay instructions to the validation instructions paragraph.
+- [x] FO validation rejection flow added — implementer dispatch, fresh re-validation, 3-cycle limit
+  Added `## Validation Rejection Flow` section between "Completion and Gates" and "Merge and Cleanup" with 5-step protocol: check cycle count (>=3 escalates), shut down validator, dispatch implementer with findings, increment cycle count, dispatch fresh validator.
+- [x] Commission skill copies validator.md alongside other agents
+  Added step 2e2 in `skills/commission/SKILL.md` to copy `validator.md`, updated generation checklist, updated Phase 3 announcement, and updated lieutenant agent warnings to exclude `validator`.
+- [x] All changes committed
+  Commit `0c15b48` on branch `ensign/val-pairing`.
+
+### Summary
+
+Implemented the validation-implementation pairing by creating a `templates/validator.md` with restricted tools (no Write/Edit) and explicit no-fix rules, updating the first-officer template with `fresh: true` -> `validator` agent type resolution, read-only validation instructions, and a full rejection flow with 3-cycle escalation, and updating the commission skill to generate the validator agent file. The ensign template was left unchanged as specified.
