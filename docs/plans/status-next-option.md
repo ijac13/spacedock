@@ -1,7 +1,7 @@
 ---
 id: 045
 title: Add --next option to status script for dispatchable entity detection
-status: implementation
+status: validation
 source: adoption feedback
 started: 2026-03-26T00:00:00Z
 completed:
