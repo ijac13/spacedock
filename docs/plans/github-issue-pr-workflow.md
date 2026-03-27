@@ -1,7 +1,7 @@
 ---
 id: 042
 title: GitHub issue reference and PR workflow integration
-status: implementation
+status: validation
 source: CL
 started: 2026-03-26T00:00:00Z
 completed:
