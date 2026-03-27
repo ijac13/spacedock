@@ -99,13 +99,6 @@ Accept all changes from the upstream template. When showing diffs, approve all r
     if ! git diff-index --quiet HEAD --; then
         git add -A
         git commit -m "refit: upgrade workflow scaffolding to spacedock@$VERSION"
-
-        echo ""
-        echo "=========================================="
-        echo "REFIT CHANGES (local customizations diff)"
-        echo "=========================================="
-        git diff HEAD~1 -- .claude/agents/ docs/plans/status
-        echo "=========================================="
     else
         echo "(No refit changes to commit)"
     fi

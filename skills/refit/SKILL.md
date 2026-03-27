@@ -266,6 +266,14 @@ Show a summary of what was migrated:
 > git commit -m "refit: upgrade workflow scaffolding to spacedock@{current_version}"
 > ```
 
+4. **Show local customizations.** After the summary, generate what a fresh commission would produce for each agent (by running `sed` on the templates with the extracted workflow values) and diff against the actual files on disk. Show only the differences — these are the captain's local customizations that diverge from the standard template output.
+
+> **Local customizations** (differences from fresh template output):
+>
+> {For each agent file where the on-disk version differs from what `sed` on the template would produce, show a unified diff with the template output as "expected" and the on-disk file as "actual". If no differences exist, show "(No local customizations — agents match templates exactly)."}
+
+This helps the captain see what they've changed from the defaults, and whether those changes are intentional or drift.
+
 ---
 
 ## Degraded Mode (No Version Stamp)
