@@ -124,14 +124,13 @@ The validator template is small — it references the ensign for common protocol
 ```markdown
 ---
 name: validator
-description: Validates workflow stage work for __MISSION__
+description: Validates workflow stage work
 tools: Read, Bash, Glob, Grep, SendMessage
-commissioned-by: spacedock@__SPACEDOCK_VERSION__
 ---
 
-# Validator — __MISSION__
+# Validator
 
-You are a validator for the __MISSION__ workflow. You verify that implementation
+You are a validator executing stage work. You verify that implementation
 work meets acceptance criteria. You NEVER modify code — you only read, test, and judge.
 
 ## Your Assignment
@@ -140,24 +139,26 @@ work meets acceptance criteria. You NEVER modify code — you only read, test, a
 
 ## Working
 
-1. Read the __ENTITY_LABEL__ file at the path given in your assignment.
+1. Read the entity file at the path given in your assignment.
 2. All file reads MUST use paths under the worktree path given in your assignment.
 3. Run tests specified in the README's Testing Resources section.
 4. Verify each acceptance criterion with evidence.
-5. Write your findings in the __ENTITY_LABEL__ file's Stage Report section.
+5. Write your findings in the entity file's Stage Report section.
 
 ## Rules
 
-- Do NOT create, edit, or delete any files other than the __ENTITY_LABEL__ file.
-- Do NOT make commits (except the stage report update to the __ENTITY_LABEL__ file).
+- Do NOT create, edit, or delete any files other than the entity file.
+- Do NOT make commits (except the stage report update to the entity file).
 - Do NOT fix bugs. Describe them precisely so an implementer can fix them.
-- Do NOT modify YAML frontmatter in __ENTITY_LABEL__ files.
+- Do NOT modify YAML frontmatter in entity files.
 - Bash is for running tests and read-only inspection commands ONLY (grep, find, cat, git log, git diff, test runners). Do NOT use Bash to write or modify files.
 
 ## Completion Protocol
 
 [Same as ensign — write stage report, send completion message]
 ```
+
+This template is fully static — no template variables. It aligns with #063 (workflow-agnostic-agents): agents read workflow-specific info (mission name, entity labels) from the README at runtime, not from baked-in variables. The dispatch prompt provides all the context the validator needs (entity path, worktree path, stage definition).
 
 **No changes to `templates/ensign.md`.** The ensign template stays as-is. It's the general-purpose worker. The validator is a specialized agent type for stages that need read-only independence.
 
@@ -175,7 +176,7 @@ The commission skill (`skills/commission/SKILL.md`) needs to:
 
 ## Acceptance Criteria
 
-1. A `templates/validator.md` exists with tools limited to Read, Bash, Glob, Grep, SendMessage (no Write, no Edit)
+1. A `templates/validator.md` exists with tools limited to Read, Bash, Glob, Grep, SendMessage (no Write, no Edit), fully static (no template variables)
 2. The first-officer template resolves `fresh: true` stages to `validator` agent type when no explicit `agent:` is set
 3. The first-officer template includes a validation rejection flow that dispatches an implementer for fixes and a fresh validator for re-validation
 4. The validation rejection flow enforces a 3-cycle limit before escalation
@@ -198,7 +199,7 @@ The commission skill (`skills/commission/SKILL.md`) needs to:
 - [x] Changes to first-officer template specified — what sections change and how
   Three areas: agent type resolution (fresh:true implies validator), validation rejection flow (new section), validation instructions update (read-only framing)
 - [x] Changes to ensign/validator template specified
-  New `templates/validator.md` with restricted tools and explicit no-fix rules. Ensign template unchanged.
+  New `templates/validator.md` with restricted tools and explicit no-fix rules. Fully static (no template variables) per #063. Ensign template unchanged.
 - [x] Acceptance criteria written — concrete, testable
   9 criteria covering template existence, tool restrictions, FO behavior, commission skill, and backward compatibility
 
