@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# commissioned-by: spacedock@0.5.2
-# ABOUTME: Pipeline status viewer — shows entity overview from YAML frontmatter.
+# commissioned-by: spacedock@0.5.3
+# ABOUTME: Workflow status viewer — shows entity overview from YAML frontmatter.
 # ABOUTME: Supports default table, --archived, and --next (dispatchable entity detection).
 #
-# goal: Show one-line-per-task pipeline overview from YAML frontmatter.
+# goal: Show one-line-per-task workflow overview from YAML frontmatter.
 #
 # instruction: For every .md file in this directory (excluding README.md),
 #   extract slug (filename without .md), id, status, title, score, source from YAML frontmatter.
