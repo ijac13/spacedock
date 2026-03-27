@@ -193,7 +193,7 @@ Implemented all five components of the GitHub issue/PR workflow integration. The
 ## Stage Report: validation
 
 - [x] Test harness passes: `scripts/test-commission.sh` all checks green
-  61 passed, 0 failed (out of 61 checks) — RESULT: PASS. Re-run after pr-lieutenant template rewrite: 61/61 pass again, no regressions.
+  65 passed, 0 failed (out of 65 checks) — RESULT: PASS. Test prompt updated to use `agent: pr-lieutenant` on implementation stage. 4 new checks added: pr-lieutenant file existence, frontmatter name, ensign reference, no unsubstituted `__VAR__` markers.
 - [x] PR lieutenant template follows ensign behavioral contract (same assignment, rules, completion protocol; methodology section added)
   Rewritten to eliminate duplication: PR lieutenant now reads `.claude/agents/ensign.md` at runtime for assignment protocol, working process, rules, and completion protocol. Template contains only frontmatter, a directive to read the ensign, PR Methodology (3 steps: push, gh pr create, report number), and a Completion Addendum for PR number reporting. Reduced from 87 lines to 33 lines.
 - [x] First-officer template: PR-aware merge boundary checks `pr` field with correct fallback to local merge
@@ -203,10 +203,10 @@ Implemented all five components of the GitHub issue/PR workflow integration. The
 - [x] Commission skill: `issue` and `pr` in schema and entity template; conditional PR lieutenant generation
   Schema (lines 260-261), Field Reference (lines 279-280), Entity Template (lines 342-343), Seed Entity Template (lines 386-387). Section 2f (lines 447-471): conditional generation when stage references `agent: pr-lieutenant`. Generation checklist (line 482) and Lieutenant Warnings (line 487) updated. Phase 3 announcement (line 510) includes pr-lieutenant conditionally.
 - [x] Backward compatibility: no `pr` field = local merge unchanged
-  First-officer Merge step: `pr` not set branch falls through to existing `git merge --no-commit` path. Startup step 3 only scans entities with non-empty `pr`, so entities without it are untouched. Test harness confirms no regression (61/61 pass with no pr-lieutenant stage in test workflow).
+  First-officer Merge step: `pr` not set branch falls through to existing `git merge --no-commit` path. Startup step 3 only scans entities with non-empty `pr`, so entities without it are untouched. Test harness confirms no regression (65/65 pass).
 - [x] PASSED recommendation
   All acceptance criteria verified with evidence. PR lieutenant duplication eliminated per review feedback.
 
 ### Summary
 
-All validation checks pass. The test harness (`scripts/test-commission.sh`) ran a full batch commission and all 61 checks passed. The PR lieutenant template was rewritten per review feedback to eliminate ~60 lines of duplication: it now reads the ensign agent file at runtime for shared protocol and only contains the PR-specific methodology and completion addendum. The first-officer template correctly handles both PR and non-PR workflows. The commission skill adds `issue` and `pr` to all schema/template locations and conditionally generates the PR lieutenant. Recommendation: PASSED.
+All validation checks pass. The test harness (`scripts/test-commission.sh`) was updated to exercise the pr-lieutenant generation path: the test prompt now specifies `agent: pr-lieutenant` on the implementation stage, and 4 new checks verify the generated agent file (existence, frontmatter name, ensign reference, no unsubstituted template markers). All 65 checks pass. The PR lieutenant template was rewritten per review feedback to read the ensign at runtime, eliminating ~60 lines of duplication. The first-officer template correctly handles both PR and non-PR workflows. Recommendation: PASSED.
