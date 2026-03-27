@@ -30,9 +30,7 @@ Read each scaffolding file and extract its version stamp:
 
 1. **README** — Read `{dir}/README.md`. Extract version from YAML frontmatter `commissioned-by: spacedock@X.Y.Z`. Store as `{readme_version}`.
 2. **Status script** — Read `{dir}/status`. Extract version from `# commissioned-by: spacedock@X.Y.Z`. Store as `{status_version}`.
-3. **First-officer agent** — Read `{project_root}/.claude/agents/first-officer.md`. Extract version from YAML frontmatter `commissioned-by: spacedock@X.Y.Z`. Store as `{agent_version}`.
-4. **Ensign agent** — Read `{project_root}/.claude/agents/ensign.md`. Extract version from YAML frontmatter `commissioned-by: spacedock@X.Y.Z`. Store as `{ensign_version}`.
-5. **Lieutenant agents** — Read the README frontmatter `stages.states` entries. For each entry with an `agent:` property, check if `{project_root}/.claude/agents/{agent}.md` exists. If it does, extract its version from YAML frontmatter `commissioned-by: spacedock@X.Y.Z`. Store each as `{lt_{agent}_version}`. If the file doesn't exist, note it as missing.
+3. **Agent files** — Agent templates are static (no version stamps). For each agent (`first-officer.md`, `ensign.md`, and any lieutenants referenced in README `stages.states`), check if `{project_root}/.claude/agents/{agent}.md` exists. Compare its content to the corresponding template at `{spacedock_plugin_dir}/templates/{agent}.md`. Store whether each agent matches its template or differs.
 
 If a file doesn't exist, note it as missing and skip it.
 
@@ -42,9 +40,9 @@ Read `.claude-plugin/plugin.json` from the Spacedock plugin directory (the direc
 
 ### Step 4 — Evaluate
 
-- If all found stamps match `{current_version}`: report "Workflow is already up to date." and stop.
-- If no stamps were found on any file: enter **Degraded Mode** (see below).
-- Otherwise: proceed to Phase 2 with the list of outdated files.
+- If all version stamps match `{current_version}` and all agent files match their templates: report "Workflow is already up to date." and stop.
+- If no stamps were found on any versioned file (README, status): enter **Degraded Mode** (see below).
+- Otherwise: proceed to Phase 2 with the list of outdated files and mismatched agents.
 
 ---
 
@@ -55,26 +53,26 @@ Each scaffolding file gets a specific upgrade strategy based on how safe it is t
 | File | Strategy | Rationale |
 |------|----------|-----------|
 | `status` | **Replace** | Mechanical script. Workflow-specific content (stage names) is extracted from the README. Users rarely customize beyond what's generated. |
-| `first-officer.md` | **Regenerate** | Standard template structure with workflow-specific values extracted from the existing README and agent. Show diff and ask the captain for confirmation before replacing. |
+| `first-officer.md` | **Copy if changed** | Static template — compare on-disk to template, show diff and ask the captain for confirmation before replacing. |
 | `README.md` | **Show diff** | Users customize stages, schema fields, quality criteria. Too risky to auto-replace. Show what the current template would produce and let the captain decide. |
-| `ensign.md` | **Regenerate** | Standard template structure with workflow-specific values. Show diff and ask the captain for confirmation before replacing. |
-| `{lieutenant}.md` | **Regenerate** | Standard template structure with workflow-specific values. Only present for stages that reference a lieutenant agent. Show diff and ask the captain for confirmation before replacing. |
+| `ensign.md` | **Copy if changed** | Static template — compare on-disk to template, show diff and ask the captain for confirmation before replacing. |
+| `{lieutenant}.md` | **Copy if changed** | Static template. Only present for stages that reference a lieutenant agent. Show diff and ask the captain for confirmation before replacing. |
 
 Present the classification to the captain:
 
 > **Upgrade plan:**
 >
-> | File | Current Version | Strategy |
-> |------|----------------|----------|
+> | File | Current State | Strategy |
+> |------|--------------|----------|
 > | `status` | {status_version or "no stamp"} | Replace |
-> | `first-officer.md` | {agent_version or "no stamp"} | Regenerate (with diff review) |
+> | `first-officer.md` | {matches template / differs from template / missing} | Copy if changed |
 > | `README.md` | {readme_version or "no stamp"} | Show diff (manual review) |
-> | `ensign.md` | {ensign_version or "no stamp"} | Regenerate (with diff review) |
-> | `{lieutenant}.md` (for each) | {lt_{agent}_version or "no stamp"} | Regenerate (with diff review) |
+> | `ensign.md` | {matches template / differs from template / missing} | Copy if changed |
+> | `{lieutenant}.md` (for each) | {matches template / differs from template / missing} | Copy if changed |
 >
 > Proceed?
 
-Only include lieutenant rows for agents actually referenced in the README `stages.states` entries.
+Only include lieutenant rows for agents actually referenced in the README `stages.states` entries. Omit agent rows where the on-disk file already matches the template.
 
 Wait for the captain to confirm before proceeding.
 
@@ -107,27 +105,18 @@ Generate the status script from the reference template at `templates/status` (re
 5. Preserve the executable bit (`chmod +x`).
 6. **Materialize** — read back the description header and replace the stub body with a working bash implementation that satisfies the description. The implementation must work on bash 3.2+ (no associative arrays, no bash 4+ features). Keep the description header intact — only replace everything after it.
 
-### 3b. First-Officer Agent (Regenerate)
+### 3b. First-Officer Agent (Copy if changed)
 
-1. Extract workflow-specific values:
-   - **Mission** — from README H1
-   - **Workflow directory** — `{dir}` (absolute path)
-   - **Stage list** — from README stage sections
-   - **Approval gates** — from README stage sections (transitions where "Human approval: Yes")
-   - **Team name** — `{dir_basename}`
-   - **Stages as comma-separated list** — for state management section
-   - **First stage** and **last stage** — first and last in the ordered stage list
+1. Compare `{project_root}/.claude/agents/first-officer.md` to the template at `{spacedock_plugin_dir}/templates/first-officer.md`.
 
-2. Generate a new first-officer using the template from the commission skill (the full template in section 2d of `skills/commission/SKILL.md`), filling in all extracted values.
-
-3. Show the captain a diff of the old vs new first-officer:
+2. If they match, skip. If they differ, show the captain a diff:
 
 > **First-officer changes:**
 > {diff output}
 >
 > Replace the first-officer agent? (y/n)
 
-4. Wait for the captain's confirmation before replacing.
+3. Wait for the captain's confirmation before replacing.
 
 If the user added custom sections to the first-officer (sections not in the standard template), warn the captain:
 
@@ -150,53 +139,39 @@ If the user added custom sections to the first-officer (sections not in the stan
 
 Do NOT auto-modify the README. The captain decides what to adopt.
 
-### 3d. Ensign Agent (Regenerate)
+### 3d. Ensign Agent (Copy if changed)
 
-1. Extract workflow-specific values from the README:
-   - **Mission** — from README H1
-   - **Entity label** — from README frontmatter `entity-label`
+1. Compare `{project_root}/.claude/agents/ensign.md` to the template at `{spacedock_plugin_dir}/templates/ensign.md`.
 
-2. Generate a new ensign using the template at `templates/ensign.md` (relative to the Spacedock plugin directory). Use `sed` to substitute the `__VAR__` markers:
-   - `__MISSION__` — the mission
-   - `__ENTITY_LABEL__` — the entity label
-   - `__SPACEDOCK_VERSION__` — `{current_version}`
-
-3. Show the captain a diff of the old vs new ensign:
+2. If they match, skip. If they differ, show the captain a diff:
 
 > **Ensign agent changes:**
 > {diff output}
 >
 > Replace the ensign agent? (y/n)
 
-4. Wait for the captain's confirmation before replacing `{project_root}/.claude/agents/ensign.md`.
+3. Wait for the captain's confirmation before replacing `{project_root}/.claude/agents/ensign.md`.
 
-### 3e. Lieutenant Agents (Regenerate)
+### 3e. Lieutenant Agents (Copy if changed)
 
 Scan the README frontmatter `stages.states` for entries with an `agent:` property. For each referenced lieutenant agent:
 
-1. Check if the template exists at `templates/{agent}.md` (relative to the Spacedock plugin directory). If the template does not exist, warn the captain and skip:
+1. Check if the template exists at `{spacedock_plugin_dir}/templates/{agent}.md`. If the template does not exist, warn the captain and skip:
 
-> **Warning:** Stage '{stage_name}' references agent '{agent}' but no template exists at `templates/{agent}.md`. Skipping regeneration — the existing agent file (if any) will not be updated.
+> **Warning:** Stage '{stage_name}' references agent '{agent}' but no template exists at `templates/{agent}.md`. Skipping — the existing agent file (if any) will not be updated.
 
-2. If the template exists, extract the same workflow-specific values as the ensign (mission, entity label, captain, directory) and generate a new lieutenant using `sed`:
-   - `__MISSION__` — the mission
-   - `__ENTITY_LABEL__` — the entity label
-   - `__SPACEDOCK_VERSION__` — `{current_version}`
-   - `__CAPTAIN__` — the captain (extracted from the first-officer agent file or README)
-   - `__DIR__` — the workflow directory path
-
-3. Show the captain a diff of the old vs new lieutenant:
+2. If the template exists, compare `{project_root}/.claude/agents/{agent}.md` to the template. If they match, skip. If they differ, show the captain a diff:
 
 > **{agent} agent changes:**
 > {diff output}
 >
 > Replace the {agent} agent? (y/n)
 
-4. Wait for the captain's confirmation before replacing `{project_root}/.claude/agents/{agent}.md`.
+3. Wait for the captain's confirmation before replacing `{project_root}/.claude/agents/{agent}.md`.
 
-If the agent file does not currently exist at `{project_root}/.claude/agents/{agent}.md`, show the full generated content instead of a diff and ask:
+If the agent file does not currently exist at `{project_root}/.claude/agents/{agent}.md`, show the full template content and ask:
 
-> **{agent} agent is new** (referenced by stage '{stage_name}' but not yet generated):
+> **{agent} agent is new** (referenced by stage '{stage_name}' but not yet installed):
 > {full content}
 >
 > Create the {agent} agent? (y/n)
@@ -249,38 +224,30 @@ Show a summary of what was migrated:
 
 ## Phase 5: Finalize
 
-1. Update all version stamps to `{current_version}` in files that were replaced or regenerated.
+1. Update version stamps to `{current_version}` in versioned files that were replaced (status script, README).
 2. For the README (if the captain didn't request changes), update only the version stamp in YAML frontmatter: `commissioned-by: spacedock@{current_version}`.
 3. Show a summary:
 
 > **Refit complete:**
 >
-> | File | Action | Version |
-> |------|--------|---------|
-> | `status` | Replaced | spacedock@{current_version} |
-> | `first-officer.md` | {Regenerated or Skipped} | spacedock@{current_version} |
-> | `ensign.md` | {Regenerated or Skipped} | spacedock@{current_version} |
-> | `{lieutenant}.md` (for each) | {Regenerated or Skipped or Created} | spacedock@{current_version} |
-> | `README.md` | {Stamp updated / User-reviewed / No changes} | spacedock@{current_version} |
+> | File | Action |
+> |------|--------|
+> | `status` | Replaced |
+> | `first-officer.md` | {Replaced / Already current / Skipped} |
+> | `ensign.md` | {Replaced / Already current / Skipped} |
+> | `{lieutenant}.md` (for each) | {Replaced / Already current / Created / Skipped} |
+> | `README.md` | {Stamp updated / User-reviewed / No changes} |
 >
 > Suggest committing:
 > ```
 > git commit -m "refit: upgrade workflow scaffolding to spacedock@{current_version}"
 > ```
 
-4. **Show local customizations.** After the summary, generate what a fresh commission would produce for each agent (by running `sed` on the templates with the extracted workflow values) and diff against the actual files on disk. Show only the differences — these are the captain's local customizations that diverge from the standard template output.
-
-> **Local customizations** (differences from fresh template output):
->
-> {For each agent file where the on-disk version differs from what `sed` on the template would produce, show a unified diff with the template output as "expected" and the on-disk file as "actual". If no differences exist, show "(No local customizations — agents match templates exactly)."}
-
-This helps the captain see what they've changed from the defaults, and whether those changes are intentional or drift.
-
 ---
 
 ## Degraded Mode (No Version Stamp)
 
-When no version stamps are found on any scaffolding file, the original baseline cannot be determined. Inform the captain and offer two options:
+When no version stamps are found on the README or status script, the original baseline cannot be determined. Inform the captain and offer two options:
 
 > **No version stamps found.** This workflow was commissioned before version stamping was implemented, or the stamps were removed. I can't determine what the original scaffolding looked like.
 >
@@ -293,13 +260,12 @@ When no version stamps are found on any scaffolding file, the original baseline 
 
 ### Option 1: Stamp Only
 
-Add version stamps to each file without modifying anything else:
+Add version stamps to versioned files without modifying anything else:
 
 - **README.md** — Add YAML frontmatter with `commissioned-by: spacedock@{current_version}` (wrap in `---` delimiters if frontmatter doesn't exist).
 - **status** — Insert `# commissioned-by: spacedock@{current_version}` as the second line (after `#!/bin/bash`).
-- **first-officer.md** — Add `commissioned-by: spacedock@{current_version}` to the YAML frontmatter.
-- **ensign.md** — Add `commissioned-by: spacedock@{current_version}` to the YAML frontmatter.
-- **Lieutenant agents** — For each lieutenant referenced in README `stages.states`, add `commissioned-by: spacedock@{current_version}` to the YAML frontmatter (if the file exists).
+
+Agent files are static templates and do not carry version stamps. They are updated by comparing to the template content.
 
 ### Option 2: Full Refit with Review
 
