@@ -1,7 +1,7 @@
 ---
 id: 046
 title: Named ensign agent to replace prompt-within-a-prompt dispatch
-status: implementation
+status: validation
 source: adoption feedback
 started: 2026-03-26T00:00:00Z
 completed:
