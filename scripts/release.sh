@@ -77,7 +77,7 @@ if [ -f "$SELF_HOSTED_WORKFLOW/README.md" ]; then
     echo "Running refit..."
     echo ""
 
-    CLAUDE_ARGS=(-p "/spacedock:refit $SELF_HOSTED_WORKFLOW" --plugin-dir "$REPO_ROOT" --dangerously-skip-permissions)
+    CLAUDE_ARGS=("/spacedock:refit $SELF_HOSTED_WORKFLOW" --plugin-dir "$REPO_ROOT" --dangerously-skip-permissions)
     if command -v safehouse >/dev/null 2>&1; then
         safehouse claude "${CLAUDE_ARGS[@]}"
     else
