@@ -199,3 +199,36 @@ Task 048 depends on this task. Once the named ensign agent exists, the first off
 5. The SendMessage reuse path (ensign continuation) uses the same simplified context-only format
 6. The validation stage insertion still works — either via the dispatch prompt or the agent file
 7. The ensign agent file uses `__VAR__` markers for commission-time substitution, matching the first-officer template pattern
+
+## Validation Report
+
+**Recommendation: PASSED**
+
+### Test Harness Results
+
+Commission test harness (`scripts/test-commission.sh`): **59 passed, 1 failed** out of 60 checks.
+
+The single failure (`status shows 3 entities in ideation`) is a pre-existing issue with the status script materialization step — the LLM-generated status script had a Python/bash hashbang problem. The status template (`templates/status`) was NOT modified in this commit. The failure is unrelated to the named ensign agent changes.
+
+### Acceptance Criteria Verification
+
+1. **PASS** — `templates/ensign.md` exists (51 lines) with all four behavioral contract sections: Your Assignment, Working (5-step procedure), Rules (frontmatter prohibition, agent file protection, clarification protocol), and Completion Protocol (checklist format, SendMessage template).
+
+2. **PASS** — All dispatch calls in `templates/first-officer.md` use `subagent_type="ensign"`. Zero references to `general-purpose` remain. The guardrail text was updated to match: "You MUST use `subagent_type="ensign"`".
+
+3. **PASS** — Both dispatch prompts (main and worktree) contain only context: entity title, stage name, stage definition placeholder, file path, and completion checklist placeholder. No behavioral instructions (frontmatter prohibition, completion protocol format, SendMessage template, etc.) appear in the dispatch prompts — all of that lives in the ensign agent file.
+
+4. **PASS** — `skills/commission/SKILL.md` has a new step 2e ("Generate Ensign Agent") with the sed-based template substitution pattern matching step 2d. The generation checklist includes `ensign.md`. The Phase 3 announcement mentions the ensign agent file.
+
+5. **PASS** — The SendMessage reuse path (ensign continuation) uses the simplified context-only format: stage name, stage definition, entity title, and checklist — no behavioral instructions.
+
+6. **PASS** — Validation instructions are handled via the dispatch prompt. Both dispatch sections reference a shared "Validation instructions block" section (line 105) that is inserted between the stage definition and completion checklist when dispatching a validation stage. The validation content itself (Testing Resources check, analysis verification, flexible approach) is preserved intact.
+
+7. **PASS** — `templates/ensign.md` uses three `__VAR__` markers: `__MISSION__`, `__ENTITY_LABEL__`, `__SPACEDOCK_VERSION__`. The SKILL.md sed command substitutes exactly these three markers, matching the first-officer template pattern.
+
+### Changes Summary
+
+Three files modified in one commit (`ccab630`):
+- `templates/ensign.md` (new, 51 lines) — ensign behavior contract as a Claude Code agent file template
+- `templates/first-officer.md` (30 insertions, 14 deletions) — dispatch prompts simplified from ~25-line behavioral templates to ~10-line context-only prompts; validation block consolidated into a shared section
+- `skills/commission/SKILL.md` (24 insertions) — step 2e for ensign generation, updated checklist, updated Phase 3 announcement
