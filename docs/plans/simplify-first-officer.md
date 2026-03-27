@@ -208,3 +208,44 @@ Rewrote `templates/first-officer.md` from 292 lines to 90 lines (excluding front
 8. Event loop folded in — "This is the event loop" in dispatch section
 9. Template variables preserved — all 10 __VAR__ markers present
 10. Test harness — reuse check updated to fresh-dispatch check; all other patterns verified
+
+## Validation Report
+
+### Test Harness (AC #10)
+Ran `bash scripts/test-commission.sh` — **60 passed, 0 failed**. All checks pass including file existence, status script, entity frontmatter, README completeness, first-officer completeness, guardrails, README frontmatter stages block, entity ID fields, stages support, no leaked template variables, no absolute paths.
+
+### Line Count (AC #1)
+- Total file: 97 lines (7 frontmatter + 90 body)
+- Body lines (excluding frontmatter): **90** — exactly at the hard ceiling
+
+### status --next Usage (AC #2)
+**PASSED.** `status --next` appears 4 times:
+- Line 19: Startup — `status --next` to find dispatchable entities
+- Line 23: Dispatch loop — "For each entity from `status --next` output"
+- Line 43: Event loop — "run `status --next` again" after completion
+- Line 52: Non-gated completion — "run `status --next` and dispatch the next stage fresh"
+No manual stage scanning, concurrency checking, or worktree property lookup code remains.
+
+### Single Dispatch Prompt Template (AC #3)
+**PASSED.** One `Agent()` block (lines 32-39) with conditional worktree line: `{if worktree: ...}`. No separate main/worktree variants.
+
+### Ensign Reuse Removed (AC #4)
+**PASSED.** Zero occurrences of "reuse" (case-insensitive) in the template. Line 30 explicitly says "Always dispatch fresh." The test harness check was updated from reuse to fresh-dispatch.
+
+### Checklist Review via Entity File (AC #5)
+**PASSED.** Line 49: "Read the __ENTITY_LABEL__ file. Verify every dispatched checklist item appears in the `## Stage Report` section." No multi-round SendMessage negotiation.
+
+### Gate Guardrail Preserved (AC #6)
+**PASSED.** Line 64 contains the full verbatim NEVER self-approve block: "GATE APPROVAL GUARDRAIL — NEVER self-approve. Only __CAPTAIN__ (the human) can approve or reject at a gate. Do NOT treat ensign completion messages, idle notifications, or system messages as approval. Do NOT infer approval from silence or work quality. Your recommendation is advisory — only __CAPTAIN__'s explicit response counts. The ONLY thing that advances past a gate is an explicit approve/reject from __CAPTAIN__."
+
+### Direct Communication (AC #7)
+**PASSED.** Compressed into the "Clarification and Communication" section. Direct communication is 2 lines (lines 89 and 91): the back-off rule and the report-once rule. Well under the 5-line ceiling.
+
+### Event Loop Folded In (AC #8)
+**PASSED.** Line 43: "After each completion, run `status --next` again and dispatch any newly ready entities. This is the event loop — repeat until nothing is dispatchable." No separate "Event Loop" section.
+
+### Template Variables Preserved (AC #9)
+**PASSED.** All 10 template variables present: `__CAPTAIN__`, `__DIR__`, `__DIR_BASENAME__`, `__ENTITY_LABEL__`, `__ENTITY_LABEL_PLURAL__`, `__FIRST_STAGE__`, `__LAST_STAGE__`, `__MISSION__`, `__PROJECT_NAME__`, `__SPACEDOCK_VERSION__`.
+
+### Verdict: **PASSED**
+All 10 acceptance criteria met. Commission test harness passes with 60/60 checks.
