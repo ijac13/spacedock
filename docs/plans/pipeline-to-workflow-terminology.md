@@ -165,3 +165,20 @@ The `## Pipeline Path` heading in `templates/first-officer.md` (line 94) is refe
 ### Summary
 
 Audited all 560 occurrences of "pipeline" across 66 files. The core changes affect 7 source files (3 templates, AGENTS.md, README.md, release.sh, and the Pipeline Path decision). Test files add ~5 more files with mostly variable/function name renames. The key design decision is whether to rename `## Pipeline Path` to `## Workflow Path` — leaning yes since it appears in generated output, but it requires coordinated updates to refit SKILL.md. Archived task files and generated live instances are explicitly out of scope.
+
+## Stage Report: implementation
+
+- [x] Templates updated: `templates/first-officer.md`, `templates/ensign.md`, `templates/status` — all user-facing "pipeline" to "workflow"
+  All 11 occurrences across the three template files updated. Verified zero remaining "pipeline" in templates/.
+- [x] Docs updated: `AGENTS.md`, `README.md` — "pipeline" to "workflow" in user-facing prose
+  AGENTS.md: 5 occurrences (section heading, body text). README.md: 1 occurrence ("Research pipelines" to "Research workflows").
+- [x] `scripts/release.sh` — user-facing echo messages updated
+  Variable renamed `SELF_HOSTED_PIPELINE` to `SELF_HOSTED_WORKFLOW`, echo messages and changelog prompt updated. 4 changes total.
+- [x] `## Pipeline Path` renamed to `## Workflow Path` in first-officer template, with `skills/refit/SKILL.md` reference updated atomically
+  Both files updated in the same commit. Refit SKILL.md line 90 now reads `## Workflow Path`.
+- [x] Test files updated where practical: `scripts/test-commission.sh`, `scripts/test-harness.md`, `scripts/test-checklist-e2e.sh`, `tests/test-gate-guardrail.sh`
+  test-commission.sh: PIPELINE_DIR to WORKFLOW_DIR (all occurrences), Pipeline Path grep to Workflow Path. test-harness.md: 7 prose references updated. test-checklist-e2e.sh: ABOUTME, echo messages, commit messages, claude prompt updated. test-gate-guardrail.sh: ABOUTME, comments, commit message, claude prompt updated. Fixture directory name `gated-pipeline/` and entity name `multi-pipeline` preserved as internal identifiers. Fixture README and status ABOUTME updated.
+
+### Summary
+
+Renamed all user-facing "pipeline" to "workflow" across 13 files (3 templates, 2 docs, 1 script, 1 skill, 4 test files, 2 fixture files). The `## Pipeline Path` heading was renamed to `## Workflow Path` with a coordinated update to the refit SKILL.md reference. Internal identifiers like the `gated-pipeline` fixture directory name and `multi-pipeline` entity name were preserved. No functional changes — all modifications are terminology-only. Archived task files and generated live instances were not touched per the audit plan.
