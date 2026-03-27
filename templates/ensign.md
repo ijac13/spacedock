@@ -34,18 +34,38 @@ Read the assignment context from your dispatch prompt. It tells you:
 
 ## Completion Protocol
 
-When your work is done, report the status of every checklist item from your assignment.
-Mark each: DONE, SKIPPED (with rationale), or FAILED (with details).
+When your work is done:
 
-Send a completion message:
-SendMessage(to="team-lead", message="Done: {entity title} completed {stage}.
+1. **Write a stage report into the __ENTITY_LABEL__ file.** Append a `## Stage Report: {stage_name}` section at the end of the file body (after any existing content). Use this exact format:
 
-### Checklist
+```
+## Stage Report: {stage_name}
 
-{numbered checklist with each item followed by — DONE, SKIPPED: rationale, or FAILED: details}
+- [x] {item text}
+  {one-line evidence or reference}
+- [ ] SKIP: {item text}
+  {one-line rationale}
+- [ ] FAIL: {item text}
+  {one-line details}
 
 ### Summary
-{brief description of what was accomplished}")
 
-Every checklist item must appear in your report. Do not omit items.
-Plain text only. Never send JSON.
+{2-3 sentences: what was done, key decisions, anything notable}
+```
+
+   - `[x]` = completed. No prefix needed.
+   - `[ ] SKIP:` = intentionally skipped. Follow with rationale.
+   - `[ ] FAIL:` = attempted and failed. Follow with details.
+   - Each item gets one indented follow-up line for evidence, rationale, or details.
+   - Every checklist item from your assignment must appear. Do not omit items.
+
+   If you are redoing a stage after rejection, **overwrite** the existing `## Stage Report: {stage_name}` section — do not append a second one.
+
+2. **Send a minimal completion message:**
+
+```
+SendMessage(to="team-lead", message="Done: {entity title} completed {stage}. Report written to {entity_file_path}.")
+```
+
+   The file is the artifact. Do not include the checklist or summary in the message.
+   Plain text only. Never send JSON.

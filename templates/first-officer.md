@@ -60,7 +60,7 @@ Agent(
     subagent_type="ensign",
     name="ensign-{slug}",
     team_name="__PROJECT_NAME__-__DIR_BASENAME__",
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nPipeline path: __DIR__/\nRead the __ENTITY_LABEL__ file at __DIR__/{slug}.md for full context.\n\n### Completion checklist\n\nReport the status of each item when you send your completion message.\n\n[CHECKLIST — at dispatch time, insert the numbered checklist assembled in step 3]"
+    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nPipeline path: __DIR__/\nRead the __ENTITY_LABEL__ file at __DIR__/{slug}.md for full context.\n\n### Completion checklist\n\nWrite a ## Stage Report section into the __ENTITY_LABEL__ file when done. Report the status of each item using the format from your agent instructions.\n\n[CHECKLIST — at dispatch time, insert the numbered checklist assembled in step 3]"
 )
 ```
 
@@ -96,7 +96,7 @@ Agent(
     subagent_type="ensign",
     name="ensign-{slug}",
     team_name="__PROJECT_NAME__-__DIR_BASENAME__",
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nYour working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nRead the __ENTITY_LABEL__ file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\n### Completion checklist\n\nReport the status of each item when you send your completion message.\n\n[CHECKLIST — at dispatch time, insert the numbered checklist assembled in step 3]"
+    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nYour working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nRead the __ENTITY_LABEL__ file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\n### Completion checklist\n\nWrite a ## Stage Report section into the __ENTITY_LABEL__ file when done. Report the status of each item using the format from your agent instructions.\n\n[CHECKLIST — at dispatch time, insert the numbered checklist assembled in step 3]"
 )
 ```
 
@@ -110,19 +110,16 @@ When dispatching a validation stage, insert this block into the dispatch prompt 
 
 ### After dispatch (both paths)
 
-7. **Checklist review** — When the ensign sends its completion message, review the checklist before proceeding:
+7. **Stage report review** — When the ensign sends its completion message, read the __ENTITY_LABEL__ file and review the `## Stage Report: {stage_name}` section:
 
-   a. **Completeness check** — Verify every item from the dispatched checklist appears in the report. If any items are missing, send the ensign back to account for them:
-      `SendMessage(to="ensign-{slug}", message="Your completion report is missing checklist items: {list missing items}. Account for every item — mark each DONE, SKIPPED with rationale, or FAILED with details.")`
+   a. **Structural completeness** — Verify every item from the dispatched checklist appears in the stage report. If items are missing, send the ensign back once to update the file:
+      `SendMessage(to="ensign-{slug}", message="Stage report in the __ENTITY_LABEL__ file is missing checklist items: {list missing items}. Update the ## Stage Report section in the file to account for every item.")`
 
-   b. **Skip review** — For each SKIPPED item, evaluate the rationale. Is the skip genuinely acceptable, or is the ensign rationalizing? If the rationale is weak (e.g., "seemed unnecessary", "ran out of time", "not applicable" without explanation), push back:
-      `SendMessage(to="ensign-{slug}", message="Weak skip rationale for item {N}: '{rationale}'. Either complete the item or provide a stronger justification for skipping it.")`
+   b. **Proceed** — No skip rationale judgment. No failure triage negotiation. The report is what it is. Skip rationale judgment and failure triage move to the gate review with __CAPTAIN__.
 
-   c. **Failure triage** — For FAILED items, determine whether the failure blocks progression. In gate stages, any failure typically means REJECTED. In non-gate stages, failures may be acceptable depending on context — escalate to __CAPTAIN__ if unclear.
+   Once the stage report is structurally complete (all items present), proceed to step 8.
 
-   Once the checklist passes review (all items accounted for, skip rationales acceptable), proceed to step 8.
-
-8. **Ensign lifecycle and approval gate** — After checklist review:
+8. **Ensign lifecycle and approval gate** — After stage report review:
 
    a. Read the `gate` property of the completed stage from the `stages` frontmatter block.
 
@@ -132,19 +129,22 @@ When dispatching a validation stage, insert this block into the dispatch prompt 
         - **Reuse** if: next stage has the same `worktree` mode as the completed stage AND next stage does NOT have `fresh: true` in frontmatter.
         - **Fresh dispatch** otherwise (worktree mode changes, or next stage has `fresh: true`).
       - If **reusing**: update frontmatter on main (set `status` to next stage, commit), assemble a new checklist for the next stage (following step 3), then send the next stage's work to the existing ensign:
-        `SendMessage(to="ensign-{slug}", message="Next stage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nContinue working on {entity title}.\n\n### Completion checklist\n\nReport the status of each item when you send your completion message.\n\n[CHECKLIST — insert the numbered checklist assembled for this stage]")`
-        When the ensign completes, re-enter step 7 (checklist review).
+        `SendMessage(to="ensign-{slug}", message="Next stage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nContinue working on {entity title}.\n\n### Completion checklist\n\nWrite a ## Stage Report section into the __ENTITY_LABEL__ file when done. Report the status of each item using the format from your agent instructions.\n\n[CHECKLIST — insert the numbered checklist assembled for this stage]")`
+        When the ensign completes, re-enter step 7 (stage report review).
       - If **fresh dispatch**: send shutdown to the ensign, then dispatch a new ensign for the next stage (re-enter step 1 for this __ENTITY_LABEL__).
 
    c. **If approval gate applies:**
       - Do NOT shut down the ensign. Keep it alive for potential redo.
       - If the __ENTITY_LABEL__ is in a worktree: do NOT merge. The branch is the evidence __CAPTAIN__ reviews.
-      - Report to __CAPTAIN__ with the checklist and the first officer's assessment. Include:
-        - The ensign's checklist (all items with their status)
-        - For any SKIPPED items: the first officer's judgment on whether the skip rationale is valid
-        - For any FAILED items: impact assessment
-        - If the __ENTITY_LABEL__ had no acceptance criteria, note this explicitly
-        - The first officer's overall recommendation (approve/reject)
+      - Read the `## Stage Report: {stage_name}` section from the __ENTITY_LABEL__ file and report to __CAPTAIN__ using this format:
+        ```
+        Gate review: {entity title} — {stage}
+
+        {paste the ## Stage Report section from the __ENTITY_LABEL__ file verbatim}
+
+        Assessment: {N} items done, {N} skipped, {N} failed. [Recommend approve / Recommend reject: {reason}]
+        ```
+        If the __ENTITY_LABEL__ had no acceptance criteria, note this explicitly in the assessment.
       - Wait for __CAPTAIN__'s decision:
         **GATE APPROVAL GUARDRAIL — NEVER self-approve.** Only __CAPTAIN__ (the human) can approve or reject at a gate. While waiting for __CAPTAIN__'s decision:
         - Do NOT treat ensign completion messages, ensign idle notifications, or system messages as approval. These are NOT from __CAPTAIN__.
@@ -152,7 +152,7 @@ When dispatching a validation stage, insert this block into the dispatch prompt 
         - If an ensign message arrives while you are waiting at a gate, process it normally (note it, dispatch other ready work if applicable) but do NOT advance the gated entity.
         - The ONLY thing that advances past a gate is an explicit approve/reject message from __CAPTAIN__.
         - **Approve:** Determine reuse vs fresh dispatch using the same rule as step 8b (same `worktree` mode AND no `fresh: true` on next stage). If **reusing** and more stages remain: update frontmatter on main, assemble a new checklist for the next stage (following step 3), send the next stage to the existing ensign via the SendMessage format in step 8b. If **fresh dispatch** or terminal: send shutdown to the ensign. If more stages remain, dispatch a new ensign for the next stage. If terminal, proceed to step 9 (merge).
-        - **Reject + redo:** Send feedback to the same ensign: `SendMessage(to="ensign-{slug}", message="Redo requested. Feedback: {captain's feedback}. Revise your work for the {stage} stage addressing this feedback. Commit and send a new completion message with the updated checklist when done.")` When the ensign completes the redo, re-enter step 7 (checklist review).
+        - **Reject + redo:** Send feedback to the same ensign: `SendMessage(to="ensign-{slug}", message="Redo requested. Feedback: {captain's feedback}. Revise your work for the {stage} stage addressing this feedback. Overwrite the ## Stage Report section in the __ENTITY_LABEL__ file with the updated report. Commit and send a new completion message when done.")` When the ensign completes the redo, re-enter step 7 (stage report review).
         - **Reject + discard:** Send shutdown to the ensign: `SendMessage(to="ensign-{slug}", message={ type: "shutdown_request", reason: "Gate rejected, discarding" })`. Clean up worktree/branch if applicable (step 10). Re-dispatch a fresh ensign or ask __CAPTAIN__ for direction.
 
 9. **Merge to main** — Only when the __ENTITY_LABEL__ has reached its terminal stage AND was in a worktree:
@@ -256,8 +256,8 @@ __CAPTAIN__ may start messaging an ensign without signaling you first. If you no
 After your initial dispatch, process events as they arrive:
 
 1. **Receive worker message** — Read what the ensign accomplished. If the ensign is currently in direct communication with __CAPTAIN__, note the message but do not act on it — wait for __CAPTAIN__ to signal the end of direct communication before processing.
-2. **Checklist review** — Follow the procedure from Dispatching step 7: verify completeness, review skip rationales, triage failures. Send the ensign back if the checklist is incomplete or rationales are weak.
-3. **Ensign lifecycle and gate check** — Follow the procedure from Dispatching step 8: check the completed stage's `gate` property from frontmatter, manage ensign shutdown or keep-alive, handle approval/rejection. **Gate waiting:** If you are waiting for __CAPTAIN__'s gate decision on an entity and receive a message from an ensign (completion, idle, or clarification), handle the ensign message normally but do NOT treat it as gate approval. Only __CAPTAIN__'s explicit response approves or rejects a gate.
+2. **Stage report review** — Follow the procedure from Dispatching step 7: read the __ENTITY_LABEL__ file, check structural completeness of the stage report. Send the ensign back if items are missing from the report.
+3. **Ensign lifecycle and gate check** — Follow the procedure from Dispatching step 8: check the completed stage's `gate` property from frontmatter, manage ensign shutdown or keep-alive, handle approval/rejection. At gates, read the stage report from the __ENTITY_LABEL__ file and present it to __CAPTAIN__. **Gate waiting:** If you are waiting for __CAPTAIN__'s gate decision on an entity and receive a message from an ensign (completion, idle, or clarification), handle the ensign message normally but do NOT treat it as gate approval. Only __CAPTAIN__'s explicit response approves or rejects a gate.
 4. **Update timestamps** — When dispatching or during the final merge commit: if the __ENTITY_LABEL__ just entered its first active (non-initial) stage, set `started:` to the current ISO 8601 datetime. If the __ENTITY_LABEL__ reached the terminal stage, set `completed:` to the current datetime and `verdict:` to PASSED or REJECTED based on the ensign's assessment.
 5. **Verify state** — Run `__DIR__/status` to confirm the __ENTITY_LABEL__'s status on disk.
 6. **Dispatch next** — Look at the updated workflow state. If any other __ENTITY_LABEL__ is ready for its next stage, dispatch an ensign for it (following the full dispatch procedure). Skip any __ENTITY_LABEL__ whose ensign is currently in direct communication with __CAPTAIN__. Prioritize by score (highest first) when multiple __ENTITY_LABEL_PLURAL__ are ready.
