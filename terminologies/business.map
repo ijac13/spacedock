@@ -1,0 +1,17 @@
+first officer=orchestrator
+First Officer=Orchestrator
+first-officer=orchestrator
+an ensign=a worker
+ensign=worker
+Ensign=Worker
+pr-lieutenant=pr-specialist
+PR Lieutenant=PR Specialist
+PR lieutenant=PR specialist
+The captain=The operator
+the captain=the operator
+captain=operator
+crew=team
+refit=upgrade
+first-officer.md=orchestrator.md
+ensign.md=worker.md
+pr-lieutenant.md=pr-specialist.md

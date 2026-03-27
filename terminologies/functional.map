@@ -1,0 +1,17 @@
+first officer=dispatcher
+First Officer=Dispatcher
+first-officer=dispatcher
+an ensign=an executor
+ensign=executor
+Ensign=Executor
+pr-lieutenant=executor-pr
+PR Lieutenant=Executor-PR
+PR lieutenant=executor-PR
+The captain=The user
+the captain=the user
+captain=user
+crew=agents
+refit=update
+first-officer.md=dispatcher.md
+ensign.md=executor.md
+pr-lieutenant.md=executor-pr.md
