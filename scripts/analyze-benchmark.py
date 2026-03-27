@@ -11,16 +11,22 @@ import sys
 
 
 def load_scores(results_dir):
-    """Load all score JSON files from the results directory."""
-    scores = {"nautical": [], "business": []}
-    for variant in scores:
-        variant_dir = os.path.join(results_dir, variant)
+    """Load all score JSON files from the results directory.
+    Discovers variants dynamically from subdirectory names."""
+    scores = {}
+    for entry in sorted(os.listdir(results_dir)):
+        variant_dir = os.path.join(results_dir, entry)
         if not os.path.isdir(variant_dir):
             continue
-        for run_dir in sorted(glob.glob(os.path.join(variant_dir, "run-*"))):
+        # Skip non-variant directories (e.g., files like analysis.json)
+        run_dirs = glob.glob(os.path.join(variant_dir, "run-*"))
+        if not run_dirs:
+            continue
+        scores[entry] = []
+        for run_dir in sorted(run_dirs):
             for score_file in glob.glob(os.path.join(run_dir, "*-scores.json")):
                 with open(score_file) as f:
-                    scores[variant].append(json.load(f))
+                    scores[entry].append(json.load(f))
     return scores
 
 
@@ -215,6 +221,25 @@ def extract_dimension_values(scores_list, dimension):
     return values
 
 
+def pairwise_test(dim_type, vals_a, vals_b):
+    """Run the appropriate statistical test for a dimension type."""
+    if not vals_a or not vals_b:
+        return 1.0
+    if dim_type == "binary":
+        a = sum(1 for v in vals_a if v == 1)
+        b = sum(1 for v in vals_a if v == 0)
+        c = sum(1 for v in vals_b if v == 1)
+        d = sum(1 for v in vals_b if v == 0)
+        return fisher_exact_2x2(a, b, c, d)
+    elif dim_type in ("graduated", "count"):
+        _, p = mann_whitney_u(vals_a, vals_b)
+        return p
+    elif dim_type == "continuous":
+        _, p = welch_t_test(vals_a, vals_b)
+        return p
+    return 1.0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Analyze benchmark results")
     parser.add_argument(
@@ -225,12 +250,15 @@ def main():
     args = parser.parse_args()
 
     scores = load_scores(args.results_dir)
+    variants = sorted(scores.keys())
 
-    if not scores["nautical"] and not scores["business"]:
+    if not variants:
         print("ERROR: No score files found in", args.results_dir)
         sys.exit(1)
 
-    print(f"Loaded {len(scores['nautical'])} nautical scores, {len(scores['business'])} business scores")
+    total_scores = sum(len(scores[v]) for v in variants)
+    counts = ", ".join(f"{len(scores[v])} {v}" for v in variants)
+    print(f"Loaded {counts} scores ({total_scores} total)")
     print()
 
     dimensions = [
@@ -242,57 +270,89 @@ def main():
         ("error_rate", "count", "Error rate"),
     ]
 
+    # Compute column width based on variant names
+    col_width = max(18, max(len(v) + 4 for v in variants))
+
     # Header
-    print(f"{'Dimension':<30} {'Nautical':>18} {'Business':>18} {'p-value':>10} {'Sig?':>6}")
-    print("-" * 85)
+    header = f"{'Dimension':<30}"
+    for v in variants:
+        header += f" {v.capitalize():>{col_width}}"
+    print(header)
+    print("-" * (30 + (col_width + 1) * len(variants)))
 
     results = []
 
     for dim_name, dim_type, dim_label in dimensions:
-        naut_vals = extract_dimension_values(scores["nautical"], dim_name)
-        biz_vals = extract_dimension_values(scores["business"], dim_name)
+        variant_data = {}
+        for v in variants:
+            vals = extract_dimension_values(scores[v], dim_name)
+            variant_data[v] = {
+                "values": vals,
+                "mean": mean(vals) if vals else float("nan"),
+                "sd": stdev(vals) if vals else float("nan"),
+                "n": len(vals),
+            }
 
-        naut_mean = mean(naut_vals) if naut_vals else float("nan")
-        naut_sd = stdev(naut_vals) if naut_vals else float("nan")
-        biz_mean = mean(biz_vals) if biz_vals else float("nan")
-        biz_sd = stdev(biz_vals) if biz_vals else float("nan")
-
-        p_value = 1.0
-
-        if naut_vals and biz_vals:
-            if dim_type == "binary":
-                # Fisher's exact test
-                a = sum(1 for v in naut_vals if v == 1)
-                b = sum(1 for v in naut_vals if v == 0)
-                c = sum(1 for v in biz_vals if v == 1)
-                d = sum(1 for v in biz_vals if v == 0)
-                p_value = fisher_exact_2x2(a, b, c, d)
-            elif dim_type in ("graduated", "count"):
-                # Mann-Whitney U test
-                _, p_value = mann_whitney_u(naut_vals, biz_vals)
-            elif dim_type == "continuous":
-                # Welch's t-test
-                _, p_value = welch_t_test(naut_vals, biz_vals)
-
-        sig = "YES" if p_value < 0.05 else "no"
-        if not naut_vals or not biz_vals:
-            sig = "N/A"
-
-        naut_str = f"{naut_mean:.2f} +/- {naut_sd:.2f}" if naut_vals else "no data"
-        biz_str = f"{biz_mean:.2f} +/- {biz_sd:.2f}" if biz_vals else "no data"
-        p_str = f"{p_value:.4f}" if naut_vals and biz_vals else "N/A"
-
-        print(f"{dim_label:<30} {naut_str:>18} {biz_str:>18} {p_str:>10} {sig:>6}")
+        row = f"{dim_label:<30}"
+        for v in variants:
+            vd = variant_data[v]
+            if vd["values"]:
+                cell = f"{vd['mean']:.2f} +/- {vd['sd']:.2f}"
+            else:
+                cell = "no data"
+            row += f" {cell:>{col_width}}"
+        print(row)
 
         results.append({
             "dimension": dim_name,
             "label": dim_label,
             "type": dim_type,
-            "nautical": {"mean": naut_mean, "sd": naut_sd, "n": len(naut_vals), "values": naut_vals},
-            "business": {"mean": biz_mean, "sd": biz_sd, "n": len(biz_vals), "values": biz_vals},
-            "p_value": p_value,
-            "significant": p_value < 0.05 if naut_vals and biz_vals else None,
+            "variants": {v: {"mean": variant_data[v]["mean"], "sd": variant_data[v]["sd"],
+                             "n": variant_data[v]["n"], "values": variant_data[v]["values"]}
+                         for v in variants},
         })
+
+    # Pairwise comparisons
+    print()
+    print("=== Pairwise Comparisons ===")
+    pairs = [(variants[i], variants[j]) for i in range(len(variants)) for j in range(i + 1, len(variants))]
+
+    for v_a, v_b in pairs:
+        print()
+        print(f"--- {v_a} vs {v_b} ---")
+        print(f"{'Dimension':<30} {'p-value':>10} {'Sig?':>6}")
+        print("-" * 48)
+
+        pair_results = []
+        for dim_name, dim_type, dim_label in dimensions:
+            vals_a = extract_dimension_values(scores[v_a], dim_name)
+            vals_b = extract_dimension_values(scores[v_b], dim_name)
+
+            if vals_a and vals_b:
+                p_value = pairwise_test(dim_type, vals_a, vals_b)
+                sig = "YES" if p_value < 0.05 else "no"
+                p_str = f"{p_value:.4f}"
+            else:
+                p_value = 1.0
+                sig = "N/A"
+                p_str = "N/A"
+
+            print(f"{dim_label:<30} {p_str:>10} {sig:>6}")
+            pair_results.append({
+                "dimension": dim_name,
+                "p_value": p_value,
+                "significant": p_value < 0.05 if vals_a and vals_b else None,
+            })
+
+        # Store pairwise results
+        for i, r in enumerate(results):
+            pairwise_key = f"{v_a}_vs_{v_b}"
+            if "pairwise" not in r:
+                r["pairwise"] = {}
+            r["pairwise"][pairwise_key] = {
+                "p_value": pair_results[i]["p_value"],
+                "significant": pair_results[i]["significant"],
+            }
 
     # Write full results to JSON
     output_path = os.path.join(args.results_dir, "analysis.json")
@@ -305,38 +365,43 @@ def main():
     print()
     print("=== Recommendation ===")
 
-    sig_results = [r for r in results if r["significant"] is True]
-    if not sig_results:
-        print("No statistically significant differences found.")
-        print("Recommendation: Keep nautical (incumbent advantage; business English needs to clearly win).")
+    # Check if any pairwise comparison has significant results
+    any_significant = False
+    for r in results:
+        for pair_key, pair_data in r.get("pairwise", {}).items():
+            if pair_data.get("significant"):
+                any_significant = True
+                break
+
+    if not any_significant:
+        print("No statistically significant differences found between any variant pair.")
+        print("Recommendation: Keep nautical (incumbent advantage; alternatives need to clearly win).")
     else:
+        print("Significant differences found. Review pairwise comparisons above for details.")
         safety_dims = {"gate_compliance", "role_adherence"}
-        nautical_wins_safety = False
-        business_wins_all = True
+        nautical_loses_safety = False
+        for r in results:
+            if r["dimension"] not in safety_dims:
+                continue
+            for pair_key, pair_data in r.get("pairwise", {}).items():
+                if not pair_data.get("significant"):
+                    continue
+                v_a, v_b = pair_key.split("_vs_")
+                mean_a = r["variants"][v_a]["mean"]
+                mean_b = r["variants"][v_b]["mean"]
+                if "nautical" in (v_a, v_b):
+                    naut_v = v_a if v_a == "nautical" else v_b
+                    other_v = v_b if v_a == "nautical" else v_a
+                    naut_m = r["variants"][naut_v]["mean"]
+                    other_m = r["variants"][other_v]["mean"]
+                    if other_m > naut_m:
+                        nautical_loses_safety = True
 
-        for r in sig_results:
-            naut_m = r["nautical"]["mean"]
-            biz_m = r["business"]["mean"]
-
-            # For error_rate and token_efficiency, lower is better
-            if r["dimension"] in ("error_rate", "token_efficiency"):
-                nautical_better = naut_m < biz_m
-            else:
-                nautical_better = naut_m > biz_m
-
-            if nautical_better:
-                business_wins_all = False
-                if r["dimension"] in safety_dims:
-                    nautical_wins_safety = True
-
-        if nautical_wins_safety:
-            print("Nautical terminology is significantly better on safety-critical dimensions.")
-            print("Recommendation: Keep nautical terminology.")
-        elif business_wins_all:
-            print("Business English performs significantly better or equivalent on all dimensions.")
-            print("Recommendation: Migrate to business English.")
+        if nautical_loses_safety:
+            print("An alternative variant significantly outperforms nautical on safety-critical dimensions.")
+            print("Recommendation: Investigate the winning variant as a replacement.")
         else:
-            print("Results are mixed across dimensions.")
+            print("Nautical holds on safety-critical dimensions.")
             print("Recommendation: Keep nautical (mixed results favor the incumbent).")
 
 

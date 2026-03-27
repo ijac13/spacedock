@@ -1,5 +1,5 @@
 #!/bin/bash
-# ABOUTME: Benchmark harness for terminology experiment (nautical vs business English).
+# ABOUTME: Benchmark harness for terminology experiment (nautical vs business vs functional).
 # ABOUTME: Runs E2E tests with variant templates and captures logs for scoring.
 
 set -uo pipefail
@@ -13,7 +13,7 @@ MODEL="sonnet"
 SPOT_CHECK=false
 
 usage() {
-  echo "Usage: $0 [--variant nautical|business|all] [--runs N] [--test gate|checklist|dispatch|task-quality|all] [--model MODEL] [--spot-check]"
+  echo "Usage: $0 [--variant nautical|business|functional|all] [--runs N] [--test gate|checklist|dispatch|task-quality|all] [--model MODEL] [--spot-check]"
   echo ""
   echo "  --variant     Which template variant to test (default: all)"
   echo "  --runs        Number of runs per variant (default: 5)"
@@ -37,8 +37,8 @@ done
 
 # Validate inputs
 case "$VARIANT" in
-  nautical|business|all) ;;
-  *) echo "ERROR: --variant must be nautical, business, or all"; exit 1 ;;
+  nautical|business|functional|all) ;;
+  *) echo "ERROR: --variant must be nautical, business, functional, or all"; exit 1 ;;
 esac
 
 case "$TEST_FILTER" in
@@ -46,48 +46,152 @@ case "$TEST_FILTER" in
   *) echo "ERROR: --test must be gate, checklist, dispatch, task-quality, or all"; exit 1 ;;
 esac
 
-# Spot-check mode: gate test only, 1 run, both variants
+# Spot-check mode: gate test only, 1 run, all variants
 if [ "$SPOT_CHECK" = true ]; then
   RUNS=1
   TEST_FILTER="gate"
   VARIANT="all"
-  echo "*** Spot-check mode: gate test, 1 run, both variants ***"
+  echo "*** Spot-check mode: gate test, 1 run, all variants ***"
 fi
 
 # Template paths for each variant
 template_dir() {
   case "$1" in
-    nautical) echo "$REPO_ROOT/templates" ;;
-    business) echo "$REPO_ROOT/templates-business" ;;
+    nautical)   echo "$REPO_ROOT/templates" ;;
+    business)   echo "$REPO_ROOT/templates-business" ;;
+    functional) echo "$REPO_ROOT/templates-functional" ;;
   esac
 }
 
 # Agent name for each variant
 orchestrator_template() {
   case "$1" in
-    nautical) echo "first-officer" ;;
-    business) echo "orchestrator" ;;
+    nautical)   echo "first-officer" ;;
+    business)   echo "orchestrator" ;;
+    functional) echo "dispatcher" ;;
   esac
 }
 
 worker_template() {
   case "$1" in
-    nautical) echo "ensign" ;;
-    business) echo "worker" ;;
+    nautical)   echo "ensign" ;;
+    business)   echo "worker" ;;
+    functional) echo "executor" ;;
   esac
 }
 
 orchestrator_file() {
   case "$1" in
-    nautical) echo "first-officer.md" ;;
-    business) echo "orchestrator.md" ;;
+    nautical)   echo "first-officer.md" ;;
+    business)   echo "orchestrator.md" ;;
+    functional) echo "dispatcher.md" ;;
   esac
 }
 
 worker_file() {
   case "$1" in
-    nautical) echo "ensign.md" ;;
-    business) echo "worker.md" ;;
+    nautical)   echo "ensign.md" ;;
+    business)   echo "worker.md" ;;
+    functional) echo "executor.md" ;;
+  esac
+}
+
+# Variant-aware sed for orchestrator templates.
+# Each variant uses different template variable names for mission and captain.
+sed_orchestrator() {
+  local variant="$1"
+  local tpl_file="$2"
+  local output_file="$3"
+  local mission_value="$4"
+  local dir_value="$5"
+  local dir_basename="$6"
+  local project_name="$7"
+  local entity_label="$8"
+  local entity_label_plural="$9"
+  local captain_value="${10}"
+  local first_stage="${11}"
+  local last_stage="${12}"
+
+  case "$variant" in
+    nautical)
+      sed \
+        -e "s|__MISSION__|${mission_value}|g" \
+        -e "s|__DIR__|${dir_value}|g" \
+        -e "s|__DIR_BASENAME__|${dir_basename}|g" \
+        -e "s|__PROJECT_NAME__|${project_name}|g" \
+        -e "s|__ENTITY_LABEL__|${entity_label}|g" \
+        -e "s|__ENTITY_LABEL_PLURAL__|${entity_label_plural}|g" \
+        -e "s|__CAPTAIN__|${captain_value}|g" \
+        -e "s|__FIRST_STAGE__|${first_stage}|g" \
+        -e "s|__LAST_STAGE__|${last_stage}|g" \
+        -e 's|__SPACEDOCK_VERSION__|test|g' \
+        "$tpl_file" > "$output_file"
+      ;;
+    business)
+      sed \
+        -e "s|__PROJECT__|${mission_value}|g" \
+        -e "s|__DIR__|${dir_value}|g" \
+        -e "s|__DIR_BASENAME__|${dir_basename}|g" \
+        -e "s|__PROJECT_NAME__|${project_name}|g" \
+        -e "s|__ENTITY_LABEL__|${entity_label}|g" \
+        -e "s|__ENTITY_LABEL_PLURAL__|${entity_label_plural}|g" \
+        -e "s|__OPERATOR__|${captain_value}|g" \
+        -e "s|__FIRST_STAGE__|${first_stage}|g" \
+        -e "s|__LAST_STAGE__|${last_stage}|g" \
+        -e 's|__SPACEDOCK_VERSION__|test|g' \
+        "$tpl_file" > "$output_file"
+      ;;
+    functional)
+      sed \
+        -e "s|__PIPELINE__|${mission_value}|g" \
+        -e "s|__DIR__|${dir_value}|g" \
+        -e "s|__DIR_BASENAME__|${dir_basename}|g" \
+        -e "s|__PROJECT_NAME__|${project_name}|g" \
+        -e "s|__ENTITY_LABEL__|${entity_label}|g" \
+        -e "s|__ENTITY_LABEL_PLURAL__|${entity_label_plural}|g" \
+        -e "s|__USER__|${captain_value}|g" \
+        -e "s|__FIRST_STAGE__|${first_stage}|g" \
+        -e "s|__LAST_STAGE__|${last_stage}|g" \
+        -e 's|__SPACEDOCK_VERSION__|test|g' \
+        "$tpl_file" > "$output_file"
+      ;;
+  esac
+}
+
+# Variant-aware sed for worker templates.
+sed_worker() {
+  local variant="$1"
+  local tpl_file="$2"
+  local output_file="$3"
+  local mission_value="$4"
+  local entity_label="$5"
+  local entity_label_plural="$6"
+
+  case "$variant" in
+    nautical)
+      sed \
+        -e "s|__MISSION__|${mission_value}|g" \
+        -e "s|__ENTITY_LABEL__|${entity_label}|g" \
+        -e "s|__ENTITY_LABEL_PLURAL__|${entity_label_plural}|g" \
+        -e 's|__SPACEDOCK_VERSION__|test|g' \
+        "$tpl_file" > "$output_file"
+      ;;
+    business)
+      sed \
+        -e "s|__PROJECT__|${mission_value}|g" \
+        -e "s|__ENTITY_LABEL__|${entity_label}|g" \
+        -e "s|__ENTITY_LABEL_PLURAL__|${entity_label_plural}|g" \
+        -e 's|__SPACEDOCK_VERSION__|test|g' \
+        "$tpl_file" > "$output_file"
+      ;;
+    functional)
+      sed \
+        -e "s|__PIPELINE__|${mission_value}|g" \
+        -e "s|__ENTITY_LABEL__|${entity_label}|g" \
+        -e "s|__ENTITY_LABEL_PLURAL__|${entity_label_plural}|g" \
+        -e 's|__SPACEDOCK_VERSION__|test|g' \
+        "$tpl_file" > "$output_file"
+      ;;
   esac
 }
 
@@ -131,26 +235,12 @@ run_test() {
       chmod +x gated-pipeline/status
 
       mkdir -p .claude/agents
-      sed \
-        -e 's|__MISSION__|Gate guardrail test|g' \
-        -e 's|__DIR__|gated-pipeline|g' \
-        -e 's|__DIR_BASENAME__|gated-pipeline|g' \
-        -e 's|__PROJECT_NAME__|gate-test|g' \
-        -e 's|__ENTITY_LABEL__|task|g' \
-        -e 's|__ENTITY_LABEL_PLURAL__|tasks|g' \
-        -e 's|__CAPTAIN__|CL|g' \
-        -e 's|__FIRST_STAGE__|backlog|g' \
-        -e 's|__LAST_STAGE__|done|g' \
-        -e 's|__SPACEDOCK_VERSION__|test|g' \
-        "$tpl_dir/$orch_file" > ".claude/agents/$orch_name.md"
+      sed_orchestrator "$variant" "$tpl_dir/$orch_file" ".claude/agents/$orch_name.md" \
+        "Gate guardrail test" "gated-pipeline" "gated-pipeline" "gate-test" \
+        "task" "tasks" "CL" "backlog" "done"
 
-      # Generate worker agent if needed
-      sed \
-        -e 's|__MISSION__|Gate guardrail test|g' \
-        -e 's|__ENTITY_LABEL__|task|g' \
-        -e 's|__ENTITY_LABEL_PLURAL__|tasks|g' \
-        -e 's|__SPACEDOCK_VERSION__|test|g' \
-        "$tpl_dir/$worker_fle" > ".claude/agents/$worker_name.md"
+      sed_worker "$variant" "$tpl_dir/$worker_fle" ".claude/agents/$worker_name.md" \
+        "Gate guardrail test" "task" "tasks"
 
       git add -A && git commit -m "setup: gated pipeline fixture" >/dev/null 2>&1
 
@@ -214,25 +304,12 @@ Write a one-line summary: "Checklist test complete."
 ENTITY
 
       mkdir -p .claude/agents
-      sed \
-        -e 's|__MISSION__|Checklist test|g' \
-        -e 's|__DIR__|checklist-pipeline|g' \
-        -e 's|__DIR_BASENAME__|checklist-pipeline|g' \
-        -e 's|__PROJECT_NAME__|checklist-test|g' \
-        -e 's|__ENTITY_LABEL__|task|g' \
-        -e 's|__ENTITY_LABEL_PLURAL__|tasks|g' \
-        -e 's|__CAPTAIN__|CL|g' \
-        -e 's|__FIRST_STAGE__|backlog|g' \
-        -e 's|__LAST_STAGE__|done|g' \
-        -e 's|__SPACEDOCK_VERSION__|test|g' \
-        "$tpl_dir/$orch_file" > ".claude/agents/$orch_name.md"
+      sed_orchestrator "$variant" "$tpl_dir/$orch_file" ".claude/agents/$orch_name.md" \
+        "Checklist test" "checklist-pipeline" "checklist-pipeline" "checklist-test" \
+        "task" "tasks" "CL" "backlog" "done"
 
-      sed \
-        -e 's|__MISSION__|Checklist test|g' \
-        -e 's|__ENTITY_LABEL__|task|g' \
-        -e 's|__ENTITY_LABEL_PLURAL__|tasks|g' \
-        -e 's|__SPACEDOCK_VERSION__|test|g' \
-        "$tpl_dir/$worker_fle" > ".claude/agents/$worker_name.md"
+      sed_worker "$variant" "$tpl_dir/$worker_fle" ".claude/agents/$worker_name.md" \
+        "Checklist test" "task" "tasks"
 
       git add -A && git commit -m "setup: checklist test fixture" >/dev/null 2>&1
 
@@ -273,25 +350,12 @@ ENTITY
       chmod +x dispatch-pipeline/status
 
       mkdir -p .claude/agents
-      sed \
-        -e 's|__MISSION__|Dispatch test|g' \
-        -e 's|__DIR__|dispatch-pipeline|g' \
-        -e 's|__DIR_BASENAME__|dispatch-pipeline|g' \
-        -e 's|__PROJECT_NAME__|dispatch-test|g' \
-        -e 's|__ENTITY_LABEL__|task|g' \
-        -e 's|__ENTITY_LABEL_PLURAL__|tasks|g' \
-        -e 's|__CAPTAIN__|CL|g' \
-        -e 's|__FIRST_STAGE__|backlog|g' \
-        -e 's|__LAST_STAGE__|done|g' \
-        -e 's|__SPACEDOCK_VERSION__|test|g' \
-        "$tpl_dir/$orch_file" > ".claude/agents/$orch_name.md"
+      sed_orchestrator "$variant" "$tpl_dir/$orch_file" ".claude/agents/$orch_name.md" \
+        "Dispatch test" "dispatch-pipeline" "dispatch-pipeline" "dispatch-test" \
+        "task" "tasks" "CL" "backlog" "done"
 
-      sed \
-        -e 's|__MISSION__|Dispatch test|g' \
-        -e 's|__ENTITY_LABEL__|task|g' \
-        -e 's|__ENTITY_LABEL_PLURAL__|tasks|g' \
-        -e 's|__SPACEDOCK_VERSION__|test|g' \
-        "$tpl_dir/$worker_fle" > ".claude/agents/$worker_name.md"
+      sed_worker "$variant" "$tpl_dir/$worker_fle" ".claude/agents/$worker_name.md" \
+        "Dispatch test" "task" "tasks"
 
       git add -A && git commit -m "setup: dispatch test fixture" >/dev/null 2>&1
 
@@ -350,25 +414,12 @@ ENTITY
       mv tests . 2>/dev/null || true
 
       mkdir -p .claude/agents
-      sed \
-        -e 's|__MISSION__|Link checker benchmark|g' \
-        -e 's|__DIR__|link-checker|g' \
-        -e 's|__DIR_BASENAME__|link-checker|g' \
-        -e 's|__PROJECT_NAME__|link-bench|g' \
-        -e 's|__ENTITY_LABEL__|task|g' \
-        -e 's|__ENTITY_LABEL_PLURAL__|tasks|g' \
-        -e 's|__CAPTAIN__|CL|g' \
-        -e 's|__FIRST_STAGE__|backlog|g' \
-        -e 's|__LAST_STAGE__|done|g' \
-        -e 's|__SPACEDOCK_VERSION__|test|g' \
-        "$tpl_dir/$orch_file" > ".claude/agents/$orch_name.md"
+      sed_orchestrator "$variant" "$tpl_dir/$orch_file" ".claude/agents/$orch_name.md" \
+        "Link checker benchmark" "link-checker" "link-checker" "link-bench" \
+        "task" "tasks" "CL" "backlog" "done"
 
-      sed \
-        -e 's|__MISSION__|Link checker benchmark|g' \
-        -e 's|__ENTITY_LABEL__|task|g' \
-        -e 's|__ENTITY_LABEL_PLURAL__|tasks|g' \
-        -e 's|__SPACEDOCK_VERSION__|test|g' \
-        "$tpl_dir/$worker_fle" > ".claude/agents/$worker_name.md"
+      sed_worker "$variant" "$tpl_dir/$worker_fle" ".claude/agents/$worker_name.md" \
+        "Link checker benchmark" "task" "tasks"
 
       git add -A && git commit -m "setup: link-checker benchmark" >/dev/null 2>&1
 
@@ -417,7 +468,7 @@ esac
 # Determine which variants to run
 VARIANTS=()
 case "$VARIANT" in
-  all)      VARIANTS=(nautical business) ;;
+  all)      VARIANTS=(nautical business functional) ;;
   *)        VARIANTS=("$VARIANT") ;;
 esac
 
