@@ -91,7 +91,8 @@ check "first-officer.md exists"       test -f "$TEST_DIR/.claude/agents/first-of
 echo ""
 echo "[Status Script]"
 if [ -f "$PIPELINE_DIR/status" ]; then
-  STATUS_OUTPUT="$(bash "$PIPELINE_DIR/status" 2>&1)" || true
+  chmod +x "$PIPELINE_DIR/status"
+  STATUS_OUTPUT="$("$PIPELINE_DIR/status" 2>&1)" || true
   if [ -n "$STATUS_OUTPUT" ]; then
     pass "status script produces output"
   else

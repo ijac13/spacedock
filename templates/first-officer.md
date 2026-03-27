@@ -49,20 +49,18 @@ b. **Dispatch ensign** on main (working directory = repo root):
 
 **You MUST use the Agent tool to spawn each ensign. Do NOT use SendMessage to dispatch — ensigns do not exist until you create them with Agent. SendMessage is only for communicating with already-running ensigns.**
 
-**You MUST use `subagent_type="general-purpose"` when dispatching ensigns. NEVER use `subagent_type="first-officer"` — that clones yourself instead of dispatching a worker.**
+**You MUST use `subagent_type="ensign"` when dispatching ensigns. NEVER use `subagent_type="first-officer"` — that clones yourself instead of dispatching a worker.**
 
-**Copy the ensign prompt template exactly as written. Only fill `{named_variables}` — do not expand, rewrite, or customize any other text (including bracketed placeholders). Do NOT add pipeline-specific dispatch logic, custom section references, or per-stage conditionals — the [STAGE_DEFINITION] placeholder handles all stage-specific context at runtime.**
+**Only fill `{named_variables}` in the dispatch prompt — do not expand, rewrite, or customize bracketed placeholders. Do NOT add behavioral instructions — those are in the ensign agent file.**
 
-**Validation stage addition:** If the stage being dispatched is a validation stage, insert the following block into the ensign prompt between "Do the work described in the stage definition." and "Commit your work before sending completion message.":
-
-> Determine what kind of work was done in the previous stage (code changes, analysis/research, documentation, design, etc.) by reading the entity body and any implementation summary.\n\n- **Code changes:** Check the pipeline README for a Testing Resources section. If one exists, read it to find applicable test scripts. Run the relevant tests and include results in your validation report. A test failure means the entity should be recommended REJECTED.\n- **Analysis or research:** Verify the analysis is correct, complete, and addresses the acceptance criteria in the entity description.\n- **Other or unclear:** Use your judgment about what thorough validation means for this entity. If genuinely unsure, ask the captain via SendMessage(to=\"team-lead\") what validation should look like.\n\nValidation is flexible — adapt your approach to what was actually produced.
+**Validation stage addition:** If the stage being dispatched is a validation stage, insert the validation instructions block (see below) between the stage definition and the completion checklist in the dispatch prompt.
 
 ```
 Agent(
-    subagent_type="general-purpose",
+    subagent_type="ensign",
     name="ensign-{slug}",
     team_name="__PROJECT_NAME__-__DIR_BASENAME__",
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nAll file paths are relative to the repository root.\nDo NOT modify YAML frontmatter in __ENTITY_LABEL__ files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.\n\nRead the __ENTITY_LABEL__ file at __DIR__/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the __ENTITY_LABEL__ file body (not frontmatter) with your findings or outputs.\nCommit your work before sending completion message.\n\n### Completion checklist\n\nReport the status of each item when you send your completion message.\nMark each: DONE, SKIPPED (with rationale), or FAILED (with details).\n\n[CHECKLIST — at dispatch time, insert the numbered checklist assembled in step 3]\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}.\n\n### Checklist\n\n{numbered checklist with each item followed by — DONE, SKIPPED: rationale, or FAILED: details}\n\n### Summary\n{brief description of what was accomplished}\")\n\nEvery checklist item must appear in your report. Do not omit items.\nPlain text only. Never send JSON."
+    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nPipeline path: __DIR__/\nRead the __ENTITY_LABEL__ file at __DIR__/{slug}.md for full context.\n\n### Completion checklist\n\nReport the status of each item when you send your completion message.\n\n[CHECKLIST — at dispatch time, insert the numbered checklist assembled in step 3]"
 )
 ```
 
@@ -89,22 +87,26 @@ b. **Create worktree** (first worktree dispatch only) — If the __ENTITY_LABEL_
    If the __ENTITY_LABEL__ already has an active worktree (continuing from a prior stage), skip this step.
 c. **Dispatch ensign** in the worktree:
 
-**Copy the ensign prompt template exactly as written. Only fill `{named_variables}` — do not expand, rewrite, or customize any other text (including bracketed placeholders). Do NOT add pipeline-specific dispatch logic, custom section references, or per-stage conditionals — the [STAGE_DEFINITION] placeholder handles all stage-specific context at runtime.**
+**Only fill `{named_variables}` in the dispatch prompt — do not expand, rewrite, or customize bracketed placeholders. Do NOT add behavioral instructions — those are in the ensign agent file.**
 
-**Validation stage addition:** If the stage being dispatched is a validation stage, insert the following block into the ensign prompt between "Do the work described in the stage definition." and "Commit your work to your branch before sending completion message.":
-
-> Determine what kind of work was done in the previous stage (code changes, analysis/research, documentation, design, etc.) by reading the entity body and any implementation summary.\n\n- **Code changes:** Check the pipeline README for a Testing Resources section. If one exists, read it to find applicable test scripts. Run the relevant tests and include results in your validation report. A test failure means the entity should be recommended REJECTED.\n- **Analysis or research:** Verify the analysis is correct, complete, and addresses the acceptance criteria in the entity description.\n- **Other or unclear:** Use your judgment about what thorough validation means for this entity. If genuinely unsure, ask the captain via SendMessage(to=\"team-lead\") what validation should look like.\n\nValidation is flexible — adapt your approach to what was actually produced.
+**Validation stage addition:** If the stage being dispatched is a validation stage, insert the validation instructions block (see below) between the stage definition and the completion checklist in the dispatch prompt.
 
 ```
 Agent(
-    subagent_type="general-purpose",
+    subagent_type="ensign",
     name="ensign-{slug}",
     team_name="__PROJECT_NAME__-__DIR_BASENAME__",
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nYour working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in __ENTITY_LABEL__ files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.\n\nRead the __ENTITY_LABEL__ file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\nIf requirements are unclear or ambiguous, ask for clarification via SendMessage(to=\"team-lead\") rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.\n\nDo the work described in the stage definition. Update the __ENTITY_LABEL__ file body (not frontmatter) with your findings or outputs.\nCommit your work to your branch before sending completion message.\n\n### Completion checklist\n\nReport the status of each item when you send your completion message.\nMark each: DONE, SKIPPED (with rationale), or FAILED (with details).\n\n[CHECKLIST — at dispatch time, insert the numbered checklist assembled in step 3]\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}.\n\n### Checklist\n\n{numbered checklist with each item followed by — DONE, SKIPPED: rationale, or FAILED: details}\n\n### Summary\n{brief description of what was accomplished}\")\n\nEvery checklist item must appear in your report. Do not omit items.\nPlain text only. Never send JSON."
+    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — at dispatch time, copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nYour working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nRead the __ENTITY_LABEL__ file at {worktree_path}/{relative_pipeline_dir}/{slug}.md for full context.\n\n### Completion checklist\n\nReport the status of each item when you send your completion message.\n\n[CHECKLIST — at dispatch time, insert the numbered checklist assembled in step 3]"
 )
 ```
 
 d. Wait for the ensign to complete and send its message.
+
+### Validation instructions block
+
+When dispatching a validation stage, insert this block into the dispatch prompt between the stage definition and the completion checklist:
+
+> Determine what kind of work was done in the previous stage (code changes, analysis/research, documentation, design, etc.) by reading the entity body and any implementation summary.\n\n- **Code changes:** Check the pipeline README for a Testing Resources section. If one exists, read it to find applicable test scripts. Run the relevant tests and include results in your validation report. A test failure means the entity should be recommended REJECTED.\n- **Analysis or research:** Verify the analysis is correct, complete, and addresses the acceptance criteria in the entity description.\n- **Other or unclear:** Use your judgment about what thorough validation means for this entity. If genuinely unsure, ask the captain via SendMessage(to=\"team-lead\") what validation should look like.\n\nValidation is flexible — adapt your approach to what was actually produced.
 
 ### After dispatch (both paths)
 
@@ -130,7 +132,7 @@ d. Wait for the ensign to complete and send its message.
         - **Reuse** if: next stage has the same `worktree` mode as the completed stage AND next stage does NOT have `fresh: true` in frontmatter.
         - **Fresh dispatch** otherwise (worktree mode changes, or next stage has `fresh: true`).
       - If **reusing**: update frontmatter on main (set `status` to next stage, commit), assemble a new checklist for the next stage (following step 3), then send the next stage's work to the existing ensign:
-        `SendMessage(to="ensign-{slug}", message="Next stage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nContinue working on {entity title}. Do the work described in the stage definition. Update the __ENTITY_LABEL__ file body (not frontmatter) with your findings or outputs.\nCommit your work before sending completion message.\n\n### Completion checklist\n\nReport the status of each item when you send your completion message.\nMark each: DONE, SKIPPED (with rationale), or FAILED (with details).\n\n[CHECKLIST — insert the numbered checklist assembled for this stage]\n\nThen send a completion message:\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage}.\n\n### Checklist\n\n{numbered checklist with each item followed by — DONE, SKIPPED: rationale, or FAILED: details}\n\n### Summary\n{brief description}.\")\n\nEvery checklist item must appear in your report. Do not omit items.\nPlain text only. Never send JSON.")`
+        `SendMessage(to="ensign-{slug}", message="Next stage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim, including all bullets and any additional context under that heading]\n\nContinue working on {entity title}.\n\n### Completion checklist\n\nReport the status of each item when you send your completion message.\n\n[CHECKLIST — insert the numbered checklist assembled for this stage]")`
         When the ensign completes, re-enter step 7 (checklist review).
       - If **fresh dispatch**: send shutdown to the ensign, then dispatch a new ensign for the next stage (re-enter step 1 for this __ENTITY_LABEL__).
 

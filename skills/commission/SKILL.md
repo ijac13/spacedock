@@ -413,6 +413,28 @@ sed \
 
 The template uses `__VAR__` markers (double-underscore delimited) for commission-time values and `{var}` markers (single curly braces) for runtime values that the first officer fills at dispatch time. The sed command replaces only the `__VAR__` markers; `{var}` markers pass through unchanged.
 
+### 2e. Generate Ensign Agent
+
+Write the ensign agent to `{project_root}/.claude/agents/ensign.md`.
+
+**IMPORTANT: Use Bash to write this file, NOT the Write tool.** The Write tool is often blocked for `.claude/` paths.
+
+**This file is generated from a template — NOT LLM-generated prose.** The template lives at `templates/ensign.md` (relative to the Spacedock plugin directory). It contains `__VAR__` markers for commission-time substitution.
+
+Do NOT rewrite, paraphrase, or embellish the template content. Your only job is to compute variable values and run sed.
+
+```bash
+# 1. Resolve the template path (relative to the Spacedock plugin directory)
+TMPL="{spacedock_plugin_dir}/templates/ensign.md"
+
+# 2. Run sed to substitute __VAR__ markers with design-phase values
+sed \
+  -e 's|__MISSION__|{mission}|g' \
+  -e 's|__ENTITY_LABEL__|{entity_label}|g' \
+  -e 's|__SPACEDOCK_VERSION__|{spacedock_version}|g' \
+  "$TMPL" > {project_root}/.claude/agents/ensign.md
+```
+
 ### Generation Checklist
 
 After generating all files, verify before proceeding:
@@ -421,6 +443,7 @@ After generating all files, verify before proceeding:
 - [ ] `{dir}/status` exists and is executable
 - [ ] Each seed entity file exists at `{dir}/{slug}.md` with valid YAML frontmatter
 - [ ] `{project_root}/.claude/agents/first-officer.md` exists with all sections
+- [ ] `{project_root}/.claude/agents/ensign.md` exists with all sections
 - [ ] `.worktrees/` is in `{project_root}/.gitignore`
 
 ---
@@ -439,6 +462,7 @@ Tell {captain} what was generated:
 > - `{dir}/status` — workflow status viewer
 > - {for each seed entity: "`{dir}/{slug}.md` — {title}"}
 > - `{project_root}/.claude/agents/first-officer.md` — workflow orchestrator
+> - `{project_root}/.claude/agents/ensign.md` — stage worker agent
 >
 > To run this workflow in future sessions, start Claude Code with:
 >
