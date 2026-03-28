@@ -1,7 +1,7 @@
 ---
 id: 066
 title: Fix workflow discovery — FO greps home directory instead of project root
-status: backlog
+status: ideation
 source: 058 terminology experiment validation
 started:
 completed:
