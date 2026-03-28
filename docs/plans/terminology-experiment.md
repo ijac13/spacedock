@@ -1,7 +1,7 @@
 ---
 id: 058
 title: Experiment — nautical terminology vs business English performance comparison
-status: validation
+status: implementation
 source: CL
 started: 2026-03-27T15:15:00Z
 completed:
