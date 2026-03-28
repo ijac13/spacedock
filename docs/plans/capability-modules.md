@@ -406,3 +406,167 @@ This strengthens the case for a `claims:` filtering mechanism. For startup/merge
 **Open question:** Does the need for dispatch/gate filtering push toward more structured claims (Option C direction), or are natural language conditions still sufficient given the FO is an LLM?
 
 **Status:** Presented to CL. Waiting for direction on which capabilities and lifecycle points to prioritize, and whether the expanded lifecycle points change the format decision.
+
+## Brainstorm: Hook structure recommendation
+
+### The real question: what is `claims:` doing?
+
+The purpose of a claims line is to let the FO decide, before reading the full hook body, whether this hook is relevant to the current entity/context. With one capability (pr-merge), this is trivial — the FO reads one hook and follows it. The question only matters when multiple capabilities hook the same lifecycle point.
+
+### Why Option A fails at scale
+
+With pure prose, two capabilities hooking `merge` would force the FO to read both full instruction blocks to figure out which one applies. This is workable for two hooks, but the cognitive load (for the LLM) grows linearly. More importantly, the FO has no way to report "these hooks were considered but didn't apply" without parsing paragraphs — it would just silently skip them based on its interpretation, with no auditability.
+
+### Why Option C is premature
+
+Option C's structured YAML (`field: pr`, `condition: non-empty`) is designing a query language for a consumer that doesn't need one. The FO is an LLM — it can evaluate "entities where `pr` field is non-empty" directly from natural language. Structured conditions would only matter if a non-LLM system needed to evaluate claims, which is not on the roadmap. The YAML-inside-markdown nesting is also syntactically awkward (fenced code blocks inside markdown sections that are themselves being parsed as prose).
+
+### Why Option D is the wrong paradigm
+
+Option D (scripts) inverts the system's core design principle: the FO follows prose instructions using LLM judgment. Scripts remove that judgment. The value of LLM-interpreted hooks is handling edge cases gracefully — when `gh` is unavailable, when a branch was force-deleted, when the entity is in an unexpected state. A shell script either handles these or fails. The FO can ask the captain; a script can only exit non-zero.
+
+### Recommendation: Option B, with one refinement
+
+Option B is correct. The `claims:` line provides scannable filtering. The `fallback:` line makes degradation explicit. Instructions stay as flexible prose.
+
+**Refinement: make `claims:` optional for global hooks.** Startup hooks typically apply globally (scan all entities, check external state). Requiring a `claims:` line for hooks that always fire adds noise. The convention should be:
+
+- `claims:` present → hook fires only for matching entities/context. The FO evaluates the natural-language condition against the current entity.
+- `claims:` absent → hook always fires at this lifecycle point (global hook).
+
+This distinguishes "I apply to specific entities" (merge hooks, dispatch hooks) from "I run every time" (startup hooks, metrics). The FO doesn't need to parse a condition for global hooks — it just reads the instructions.
+
+**Fallback convention:** `fallback:` is only meaningful for hooks that override default FO behavior. Merge hooks override the default local merge, so `fallback: local-merge` makes sense. Startup hooks don't override anything — they augment. For augmenting hooks, `fallback:` can be omitted.
+
+**Resulting format for pr-merge:**
+
+```markdown
+## Hook: startup
+
+### Instructions
+
+Scan all entity files (in the workflow directory only, not `_archive/`) for entities
+with a non-empty `pr` field and a non-terminal status. For each, check PR state
+via `gh pr view`. If MERGED, advance and archive. If `gh` unavailable, warn captain.
+
+## Hook: merge
+
+claims: entities with a non-empty `worktree` field or worktree-derived branch
+fallback: local-merge
+
+### Instructions
+
+Push the worktree branch. Create a PR via `gh pr create`. Set the entity's `pr` field.
+If `gh` is unavailable, fall back to local merge.
+```
+
+Startup has no `claims:` because it always runs and scans all entities itself. Merge has `claims:` because it competes with the default local-merge behavior and the FO needs to know whether this hook applies before running it.
+
+### How this interacts with dispatch/gate hooks (forward-looking)
+
+If dispatch/gate hooks are added later, they would use `claims:` with stage-aware conditions:
+
+```markdown
+## Hook: dispatch
+
+claims: entities entering `implementation` or `validation` stages
+
+### Instructions
+
+Post a notification to Slack with the entity title and assigned stage.
+```
+
+The FO already knows which entity and stage it's dispatching, so it can evaluate "entities entering `implementation` or `validation`" as a natural-language predicate against that context. No structured query language needed — the FO has the entity frontmatter and the stage name in scope.
+
+This confirms Option B scales to dispatch/gate without needing Option C's structure. The `claims:` line is a filter hint, not a query — the FO interprets it with full context.
+
+## Brainstorm: Lifecycle points analysis
+
+### What we need now vs. later
+
+**Needed now (v0.8 scope): `startup` and `merge` only.**
+
+These two points are implemented (#060), battle-tested in testflight-005, and directly map to the pr-merge capability. The capability modules design (#064) is a refactoring of where hook content lives (agent files → capability files) and how hooks are discovered (stage `agent:` properties → `_capabilities/` directory scan). Adding new lifecycle points in the same change would be scope creep — it mixes a structural refactor with a behavioral expansion.
+
+**Realistic near-term (v0.9–1.0): `dispatch`**
+
+The `dispatch` lifecycle point has a concrete, non-speculative use case: github-issues integration. When an entity enters a new stage, you'd want to update the linked GitHub issue's labels or status. Notifications (Slack/webhook) are another plausible dispatch hook. The FO already has a well-defined dispatch moment (after `status --next`, before spawning the agent), making this a natural insertion point.
+
+However, `dispatch` hooks introduce a new execution question: should they fire before or after the worktree is created? For github-issues (updating a label), it doesn't matter. For a hypothetical `pre-flight-check` capability, it would matter a lot. The FO's dispatch flow currently does: update frontmatter → create worktree → dispatch agent. A dispatch hook could slot before the worktree creation (advisory, can abort) or after (informational, entity is committed to the stage). This needs design work before implementation.
+
+**Realistic near-term (v0.9–1.0): `gate`**
+
+The `gate` point is trickier. Gates are already complex — the FO presents a stage report, waits for captain approval, and handles approve/reject/redo flows. A gate hook (like ci-gate: "check if CI passed before letting the captain approve") would need to interact with the gate approval flow. Does it run before the captain sees the gate? After? Continuously while waiting? The FO's gate logic is already the most complex part of the template, and injecting hook execution into it needs careful design.
+
+ci-gate specifically has an additional timing problem: CI runs may not be complete when the entity reaches the gate. The hook would need to poll or the FO would need to re-check periodically, which doesn't fit the current "run hooks once at a lifecycle point" model.
+
+**Speculative (post-1.0): everything else**
+
+- **scheduled-intake**: Arguably just a startup hook that creates new entities from external sources. No new lifecycle point needed — it hooks `startup`.
+- **metrics/reporting**: Could hook `startup` (summary dashboard) and `merge` (record completion). No new lifecycle point needed.
+- **external-review**: The most speculative. Requires polling, async responses, and state tracking that goes beyond the hook model. Better modeled as a custom stage with a specialized agent than as a capability hook.
+
+### Recommendation
+
+Ship #064 with `startup` and `merge` only. Document `dispatch` and `gate` as planned future lifecycle points in the capability format section (so capability authors know they're coming) but do not implement them. This keeps the refactoring clean and lets us design dispatch/gate hooks with real usage feedback from pr-merge running as a capability module.
+
+The capability file format already supports adding new lifecycle points without any structural changes — a capability just adds a `## Hook: dispatch` section and the FO reads it. The only work needed to add a lifecycle point is updating the FO template with the new execution logic.
+
+## Brainstorm: Dispatch/gate filtering — structured vs. prose claims
+
+### The filtering question
+
+At `startup` and `merge`, the FO has one entity in hand (merge) or scans all entities (startup). Filtering is simple: "does this entity have field X?" At `dispatch` and `gate`, the FO has both an entity AND a stage transition, and hooks may care about both: "only fire when entity enters stage Y" or "only fire for entities with field Z entering a worktree stage."
+
+Does this compound context push toward structured claims?
+
+### No — natural language claims still work
+
+The FO evaluates `claims:` with full context. At dispatch time, it knows:
+- The entity (all frontmatter fields)
+- The target stage name and properties (worktree, gate, fresh, concurrency)
+- The agent type being dispatched
+
+A `claims:` line like `entities entering worktree stages` or `entities with `issue` field entering `implementation`` is unambiguous to the FO because it has all the context variables in scope. There's no information gap that structured claims would bridge.
+
+Structured claims (Option C style) would only be useful if:
+1. A non-LLM system needed to evaluate them (not the case)
+2. The conditions were so complex that natural language was ambiguous (two-field checks are not complex)
+3. We needed to compose conditions programmatically (we don't — each capability has a fixed set of hooks written by a human)
+
+### The real risk with dispatch/gate hooks is not filtering — it's ordering
+
+When two capabilities both hook `dispatch`, the FO runs them alphabetically by filename. For startup and merge, ordering rarely matters (hooks operate on different entities or different aspects of the same entity). For dispatch, ordering could matter: a `pre-flight-check` capability that can abort dispatch needs to run before a `notifications` capability that announces the dispatch.
+
+If dispatch/gate hooks are added, the design may need a `priority:` or `before:` convention to handle ordering. But this is a dispatch/gate design problem, not a claims filtering problem. Natural language `claims:` remains fine.
+
+### Recommendation
+
+Keep `claims:` as natural language in Option B format. When dispatch/gate hooks are designed (post-#064), address ordering as a separate concern. Do not preemptively add structured claims for a lifecycle point that doesn't exist yet.
+
+## Updated acceptance criteria assessment
+
+The brainstorming does not change the design direction — it confirms and refines it. The core design (capability files in `_capabilities/`, FO scans them, hook sections with `## Hook:` headings) is sound. The hook structure recommendation (Option B with optional `claims:`) is a refinement, not a change.
+
+Recommended additions to acceptance criteria:
+
+11. Hook sections use Option B format: `claims:` line (optional, for entity-specific hooks), `fallback:` line (optional, for hooks that override default behavior), and `### Instructions` subsection with prose
+12. Startup hooks in pr-merge capability have no `claims:` line (global hooks); merge hooks have `claims:` and `fallback:` lines
+13. `dispatch` and `gate` lifecycle points are documented as planned-future in the capability format section but not implemented
+
+These can be finalized by CL after reviewing the brainstorming.
+
+## Stage Report: ideation (brainstorm continuation)
+
+- [x] Hook structure format recommendation with rationale grounded in lifecycle points analysis
+  Recommends Option B with one refinement: `claims:` is optional (absent for global hooks like startup, present for entity-specific hooks like merge). Option A fails at scale (no scannable filtering), Option C is YAGNI (structured query language for an LLM consumer), Option D inverts the system paradigm. Format confirmed to scale to dispatch/gate hooks via natural-language claims with full FO context.
+- [x] Lifecycle points analysis — which are needed now vs future, with reasoning
+  `startup` and `merge` only for #064 (refactoring, not behavioral expansion). `dispatch` is realistic near-term (github-issues, notifications) but needs before/after-worktree design work. `gate` is near-term but complex (interaction with approval flow, polling for CI). `scheduled-intake` and `metrics` reuse existing hooks. `external-review` is better modeled as a custom stage.
+- [x] Dispatch/gate filtering recommendation — structured vs prose claims
+  Natural language claims remain sufficient. The FO has entity + stage context at dispatch/gate time, making two-field conditions unambiguous in prose. Structured claims would only help non-LLM consumers (none exist). The real risk with dispatch/gate is ordering, not filtering — that's a separate design concern for when those points are implemented.
+- [x] Updated acceptance criteria if the brainstorming changes the design direction
+  Design direction confirmed, not changed. Proposed three additional acceptance criteria: Option B hook format, claims/fallback conventions per hook type, and dispatch/gate documented as future.
+
+### Summary
+
+Explored all three open design questions in depth. Hook structure: Option B wins with an optional-claims refinement — global hooks (startup) omit `claims:`, entity-specific hooks (merge) include it. Lifecycle points: ship #064 with startup/merge only; dispatch is realistic near-term but needs its own design pass; gate is complex due to approval flow interaction. Filtering: natural language claims are sufficient even for dispatch/gate because the FO has full entity + stage context; the harder problem is hook execution ordering, which is a separate concern. No changes to the core design direction — refinements to the hook format convention and confirmation that the two-lifecycle-point scope is correct for this task.
