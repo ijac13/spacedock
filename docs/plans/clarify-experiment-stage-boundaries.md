@@ -542,3 +542,79 @@ The entity proposes: ensign = worker, lieutenant = feedback, first officer = orc
 ### Summary
 
 Stress-tested all five recommendations from the first brainstorm. All hold up under deeper scrutiny. The most substantive new finding is a micro-gap in Change 3's FO validation instructions: need one sentence clarifying that running code to verify behavior is validation work (distinct from running experiments to produce results). The `feedback-to`/`fresh` orthogonality is confirmed with two new arguments (commission handles the common case, implicit behavior change is dangerous). The lieutenant naming question is settled as documentation-only with no artifacts in code/config. Task 064 interaction is clean but has one coordination point: FO step 4 must be split into agent selection (065) and hook discovery (064) when both land. Chaining remains YAGNI — the real need is dynamic routing at rejection time, not pre-declared chains.
+
+## Brainstorm 3: Discussion with CL — Drop the validator, simplify for non-software
+
+CL raised three questions that shifted the direction of the task:
+
+1. How does `feedback-to` get incorporated into the commission skill?
+2. Does the implementation actually need a specialized validator agent?
+3. What do non-software scenarios reveal about the feedback pattern?
+
+### Key decision: Drop the validator template
+
+CL's principle: **Agent specialization is for domain knowledge, not behavioral framing.** A specialized agent should exist when the README stage definition isn't enough to capture the domain expertise needed (e.g., a `legal-reviewer` for contract review). The feedback protocol itself (check-don't-produce, PASSED/REJECTED, findings) is generic infrastructure the FO should own.
+
+Analysis of what the validator template actually provides:
+- "You NEVER modify implementation code" — a constraint (injectable by FO)
+- "You read, test, judge" — behavioral framing (injectable by FO)
+- Recommendation section (PASSED/REJECTED) — report format (injectable by FO)
+- Findings with file paths/line numbers — report format (software-specific, shouldn't be generic)
+
+None of this requires a separate agent template. It's all dispatch-time instructions.
+
+### Revised architecture: Three layers
+
+1. **Feedback protocol (FO-owned, generic):** When a stage has `feedback-to`, the FO injects feedback-role instructions into an ensign's dispatch: "You are reviewing the work from {target_stage}. You check what was produced — you do not produce it yourself. If the deliverable is missing or incomplete, that is itself a REJECTED finding. Report using Recommendation and Findings format."
+
+2. **Review criteria (README-owned, workflow-specific):** The stage definition's Outputs/Good/Bad bullets describe what to check. These are domain-specific — editorial quality for a content pipeline, clause coverage for legal review, methodology adherence for experiments.
+
+3. **Domain expertise (agent-owned, only when needed):** The `agent:` property is reserved for real specialization — a `legal-reviewer` or `security-auditor` whose domain knowledge doesn't fit in README bullets. The feedback protocol is still injected by the FO; the specialized agent adds domain knowledge on top.
+
+### Non-software scenarios explored
+
+**Content pipeline** (pitch → draft → editorial-review → published): Editorial review checks thesis coherence, sourced claims, tone. The validator template's "You NEVER modify implementation code" is meaningless here. Review criteria belong entirely in the README stage definition.
+
+**Hiring pipeline** (sourced → screening → interview → offer-review → hired): Two feedback stages with completely different review criteria. Screening evaluates candidates against role requirements. Offer-review checks whether interview assessment supports the proposed offer. Generic validator language doesn't apply to either.
+
+**Recipe development** (concept → recipe-draft → test-cook → tasting-review → published): Tasting review checks reproducibility, clarity of instructions, match to concept. Domain-specific criteria that belong in the stage definition.
+
+**Legal contract review** (draft → internal-review → client-review → executed): Internal review checks clause coverage, liability, policy compliance. This is a case where `agent: legal-reviewer` makes sense — the domain expertise is too deep for README bullets. But the feedback protocol (bounce to draft on rejection) is still generic.
+
+**Pattern:** In every scenario, the feedback protocol is identical (check, report PASSED/REJECTED, bounce on rejection). The review criteria are always workflow-specific. A specialized agent is only needed when domain expertise exceeds what fits in a stage definition.
+
+### Commission skill: User-facing presentation
+
+CL flagged that the Confirm Design summary needs to show per-stage properties, but also that implementation terms (`worktree`, `gate`, `fresh`) leak jargon into the user experience. Non-software users shouldn't need to learn these terms.
+
+**Resolution:** The commission presents only workflow-level decisions, not implementation vocabulary:
+
+```
+Stages: pitch → draft → editorial-review → published
+
+Approval gates: editorial-review (you review before publishing)
+On rejection: editorial-review bounces back to draft
+```
+
+The stage sequence stays clean. Behavioral properties are called out separately in plain language. The commission infers implementation details (`worktree`, `fresh`, etc.) from the workflow design and generates the full YAML frontmatter without exposing those terms to the user.
+
+Properties the user decides on:
+- **Where do I need to approve?** (maps to `gate: true`)
+- **What happens when something gets rejected?** (maps to `feedback-to: {target}`)
+
+Properties the commission infers:
+- `worktree: true` — stage does substantive work beyond the entity file
+- `fresh: true` — stage is a feedback stage (usually wants independent perspective)
+
+### Impact on proposed changes (Changes 1-4)
+
+- **Change 1 (README implementation stage):** Still valid. Broadening to "produce the deliverable" is correct regardless of whether a validator template exists.
+- **Change 2 (README validation stage):** Still valid. The boundary statement applies to any feedback stage, not just ones using a validator agent.
+- **Change 3 (FO validation instructions):** Needs revision. Instead of being a block inserted for "validation stages," this becomes the generic feedback-role instructions inserted whenever `feedback-to` is present. The software-specific parts (file paths, line numbers, "run applicable tests") should be removed from the generic version and left to README stage definitions.
+- **Change 4 (Validator template — no changes):** Superseded. The validator template is dropped entirely.
+
+### Open questions (for CL to decide)
+
+1. **Transition plan:** The current Spacedock workflow uses the validator template. Do we update it in place, or is this a v-next change?
+2. **Findings format:** The current validator template prescribes file paths + line numbers. The generic feedback protocol should prescribe "numbered list of specific issues with enough detail to locate and address" — domain-agnostic. Should the commission help users define what "specific" means for their domain?
+3. **FO template wording:** The generic feedback instructions need to be written. The current FO validation instructions are a starting point but need the software-specific language stripped out.
