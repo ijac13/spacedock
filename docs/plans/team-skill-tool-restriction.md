@@ -16,7 +16,7 @@ Team-spawned subagents (dispatched with `team_name` or auto-joined via `name` pa
 
 ## Findings
 
-Documented in `docs/research-skill-tool-team-restriction.md`. Key evidence:
+Initial evidence (documented in `docs/research-skill-tool-team-restriction.md`):
 
 | Spawn config | Has Skill? |
 |---|---|
@@ -24,15 +24,22 @@ Documented in `docs/research-skill-tool-team-restriction.md`. Key evidence:
 | `ensign` — no `name`, no `team_name` | **Yes** |
 | `general-purpose` + `team_name` | No |
 
-Cross-confirmed in the `conn` project where ensigns dispatched without `team_name` successfully invoked `Skill("superpowers:test-driven-development")`.
+Further investigation revealed the root cause is NOT team membership itself. It is the first-officer's `tools:` frontmatter restricting the inherited tool set:
 
-## Hypothesis: team lead tool inheritance
+- **email-triage project:** FO has no `tools:` restriction (or includes Skill). Team-spawned agents with `general-purpose` + `team_name` DO get Skill. Same dispatch pattern that failed in spacedock.
+- **spacedock project:** FO had `tools: Agent, TeamCreate, SendMessage, Read, Write, Edit, Bash, Glob, Grep` (no Skill). Team-spawned agents did NOT get Skill.
+- Confirmed via JSONL log comparison between the two projects.
 
-The first-officer agent does NOT have the Skill tool in its own tool set (it has: Agent, TeamCreate, SendMessage, Read, Write, Edit, Bash, Glob, Grep). Team members may inherit their available tools from the team lead's set, which would explain why they don't get Skill — the lead doesn't have it either.
+## Root cause: team lead tool inheritance
 
-If true, the fix might be: ensure the first-officer agent definition includes `Skill` in its tools list. But this depends on whether the `tools:` frontmatter is actually enforced for the top-level agent (evidence from other issues suggests it's advisory).
+**Confirmed.** Team members inherit their available tools from the team lead's declared `tools:` set. When the FO declared a restricted `tools:` list without Skill, all team-spawned agents lost Skill.
 
-This needs testing: does adding `Skill` to the first-officer's `tools:` frontmatter give it the Skill tool? And if so, do team-spawned agents then inherit it?
+The `tools:` frontmatter IS enforced for the team lead agent — it restricts the tool set, and that restriction propagates to all team members. This is different from the behavior reported in GitHub issues about `tools:` being "advisory" for regular subagents.
+
+**Fix:** Remove the `tools:` line from the first-officer agent definition. Without an explicit `tools:` list, the FO inherits the full tool set, and team members inherit it in turn.
+
+- Template fixed in `93e2a5d` (removed `tools:` from `templates/first-officer.md`)
+- Deployed file fixed in `d860543` (removed `tools:` from `.claude/agents/first-officer.md`)
 
 ## Related GitHub issues
 
@@ -40,15 +47,31 @@ This needs testing: does adding `Skill` to the first-officer's `tools:` frontmat
 - [#25834](https://github.com/anthropics/claude-code/issues/25834) — Plugin agent `skills:` frontmatter silently fails
 - [#19077](https://github.com/anthropics/claude-code/issues/19077) — Sub-agents can't create sub-sub-agents (`tools:` not enforced)
 
-## Scope
+## Fix
 
-1. Test the team lead inheritance hypothesis
-2. Determine a reliable workaround for spacedock workflows
-3. If workaround involves template changes, update the commission/refit skills
+The fix is simply removing the `tools:` line from the first-officer agent definition. No workaround needed — this was a configuration bug, not a platform limitation.
 
-## Workaround options (from research doc)
+Template and deployed file are both fixed. Existing commissioned projects need a refit to pick up the template change.
 
-1. Dispatch without team membership (lose SendMessage, gain Skill)
-2. Inline skill content in dispatch prompts
-3. Reference skills in README stage definitions (the conn pattern)
-4. `skills:` frontmatter preloading (buggy per #25834, #29441)
+## Remaining work
+
+1. **Test in a fresh session** — confirm team-spawned ensigns get Skill after the fix
+2. **Review ensign.md `tools:` declaration** — does the ensign's own `tools:` frontmatter matter for team-spawned agents, or does only the team lead's declaration count? If the ensign's list is also enforced, it could independently restrict tools. Currently it includes Skill, so not blocking, but worth understanding.
+3. **Refit guidance** — existing commissioned projects still have the old FO with `tools:` restriction. The refit skill should handle this.
+
+## Stage Report: ideation
+
+- [x] Problem statement clarified with evidence from testing
+  Root cause identified: FO's `tools:` frontmatter restriction propagates to team members. Cross-project JSONL log comparison (email-triage vs spacedock) confirmed the mechanism.
+- [x] Proposed approach with rationale (which workaround option, or a new one)
+  Not a workaround — direct fix: remove `tools:` from FO agent definition. Already applied in template (93e2a5d) and deployed file (d860543).
+- [x] Acceptance criteria defined — what does "done" look like
+  Done = (1) fresh session confirms team-spawned ensigns get Skill, (2) ensign `tools:` behavior understood, (3) refit handles propagation to existing projects.
+- [x] Open questions resolved or explicitly deferred
+  Deferred: whether ensign's own `tools:` frontmatter independently restricts team-spawned agents (not blocking since it already includes Skill).
+- [x] CL has been consulted and their input incorporated
+  CL participated directly in the session, confirmed the root cause via JSONL log analysis, and applied the fix commits.
+
+### Summary
+
+The Skill tool unavailability for team-spawned agents was caused by the first-officer's explicit `tools:` frontmatter omitting Skill. Team members inherit the team lead's declared tool set, so the restriction propagated. The fix is removing `tools:` from the FO definition so it inherits the full set. Template and deployed file are both fixed. Remaining work is testing in a fresh session and ensuring the refit skill propagates the fix to existing projects.
