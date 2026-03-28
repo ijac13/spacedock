@@ -394,3 +394,151 @@ Analyzed the implementation/validation boundary problem through the lens of task
 ### Summary
 
 Deep-dived the four open questions from the expanded scope section. Key recommendations: (1) `feedback-to` and `fresh: true` must remain orthogonal properties — coupling them creates contradictions with the rejection flow and prevents legitimate use cases like iterative review; (2) keep `validator` as the template name, use `lieutenant` only as conceptual framing for the feedback role category; (3) tasks 064 and 065 divide cleanly along lifecycle-vs-topology lines with no conflicts; (4) chaining is YAGNI — the data model supports it later if needed but no current workflow requires it. The three proposed wording changes from the initial ideation are sufficient with no significant gaps.
+
+## Brainstorm 2: Stress-testing the recommendations
+
+### Q1 revisited: `feedback-to` and `fresh: true` — the default question
+
+The prior brainstorm correctly recommends keeping them orthogonal. But there is a pragmatic concern that was under-explored: **what does the typical README stages block look like after these changes?**
+
+Current (Spacedock's own workflow):
+```yaml
+- name: validation
+  worktree: true
+  fresh: true
+  gate: true
+```
+
+Proposed with `feedback-to`:
+```yaml
+- name: validation
+  worktree: true
+  fresh: true
+  feedback-to: implementation
+  gate: true
+```
+
+That is four properties on a single stage. Every standard dev workflow will have this same four-property validation stage. If `feedback-to: implementation` is the overwhelmingly common pattern for validation stages, there is a usability argument for a shorthand — not that `feedback-to` *implies* `fresh`, but that there should be a way to declare the standard validation pattern without four properties every time.
+
+**However, this is a commission UX problem, not a schema problem.** The commission skill already generates the stages block. It can emit the four properties when the user selects a validation stage. The schema should stay explicit (all four properties visible), because the README is the source of truth that agents read. Implicit defaults in the schema create a gap between what agents read and what the workflow author intended. The commission can make it easy to produce; the schema should make it unambiguous to read.
+
+**One more case against implying `fresh`: the `feedback-to` property names a stage, not a behavior.** If `feedback-to` implied `fresh`, then adding `feedback-to` to an existing non-fresh stage would silently change its context isolation behavior. That is a spooky action-at-a-distance problem. A workflow author who adds `feedback-to: draft` to a review stage (wanting the bounce-back flow) would accidentally get fresh context isolation they did not ask for. Explicit is better.
+
+**Final recommendation: confirmed. No implication. The commission handles the common case by generating both properties together.**
+
+### Q2 revisited: Validator/lieutenant naming — what "lieutenant" actually means now
+
+The prior brainstorm says "lieutenant is a role category, not a template." This is correct but raises a question: **what is the term "lieutenant" for, concretely?** If it is not a template name, not a filename, not an `agent:` value, and not a `subagent_type` — where does it appear in the system?
+
+Three possibilities:
+
+1. **Documentation only.** "Lieutenant" appears in the spec, design docs, and conceptual explanations of the role hierarchy. It never appears in code, filenames, or configuration. This is the cleanest option — the term serves a pedagogical purpose ("feedback agents are like lieutenants in the chain of command") without creating any naming artifacts that could conflict with task 064.
+
+2. **Role category tag.** Templates could declare a `role:` field in their frontmatter (e.g., `role: lieutenant` in the validator template, `role: ensign` in the ensign template). The FO could read this to know "this is a feedback agent" without relying on the template name. But this is over-engineering — the FO already knows a stage is a feedback stage from `feedback-to`. It does not need the agent template to confirm this. The `feedback-to` property is the authority on whether a stage provides feedback, not the agent template's self-description.
+
+3. **Redefine for task 064.** Task 064 says the pr-lieutenant is being replaced by capability modules. If "lieutenant" is freed from its "stage agent that provides hooks" meaning, it could be re-adopted as the feedback role name. But task 064 is not removing the *term* lieutenant from the codebase — it is removing the `pr-lieutenant` specifically. The term "lieutenant" still carries the baggage of "agent that provides lifecycle hooks." Reusing it for "feedback provider" within the same version cycle will confuse anyone reading the git history.
+
+**Recommendation: Option 1 — documentation only.** "Lieutenant" is a conceptual term in the Star Trek metaphor. It does not appear in filenames, configuration, or template frontmatter. The validator template stays named `validator`. Future feedback templates (reviewer, approver) are named for their behavior, not their rank.
+
+This also resolves a subtle inconsistency in the Star Trek framing itself: in Star Trek, a lieutenant outranks an ensign and can give orders. In the Spacedock model, the feedback agent (validator) cannot give orders — it can only recommend REJECTED and provide findings. The ensign (implementer) decides how to fix. The FO decides whether to bounce. The hierarchy metaphor is imperfect, and leaning on it too hard for naming would create false expectations about authority.
+
+### Q3 revisited: Task 064 interaction — the dispatch step 4 convergence
+
+The prior brainstorm identifies the convergence point: FO dispatch step 4 must prioritize `agent:` > `feedback-to` default > `ensign` default. Let me trace through the concrete scenario to verify this works after both tasks land.
+
+**Current FO step 4 (today):**
+```
+If stage has `agent:` → use that
+If stage has `fresh: true` → default to `validator`
+Otherwise → default to `ensign`
+```
+
+**After task 064 only (capabilities, no feedback-to):**
+The `agent:` property is still present but no longer serves hook discovery. The step stays functionally the same, but the *reason* for `agent:` changes — it is purely for non-default worker agents.
+
+**After task 065 only (feedback-to, no capabilities):**
+```
+If stage has `agent:` → use that
+If stage has `feedback-to:` → default to `validator`
+Otherwise → default to `ensign`
+```
+The `fresh: true` → `validator` coupling breaks. A stage with `fresh: true` but no `feedback-to` gets an ensign (fresh ensign — second opinion pattern). A stage with `feedback-to` but no `fresh` gets a validator (warm validator — iterative review pattern).
+
+**After both tasks land:**
+Same as "after task 065 only" — task 064 changes where hooks live, not how agent types are selected. The dispatch step 4 logic is purely task 065's domain.
+
+**Potential sequencing issue:** If task 064 lands first, it will update the FO template's step 4 wording. If task 065 lands second, it needs to modify the same section. This is a merge conflict risk, but both tasks are in ideation — the implementation order is not yet decided. The recommendation is: implement task 065's dispatch change (the `feedback-to` logic) in whichever task lands second, or do both in a single implementation if they are sequenced.
+
+**One genuine conflict to flag:** Task 064's acceptance criterion 3 says "FO template startup step 3 discovers hooks by scanning `{workflow_dir}/_capabilities/*.md` (not agent files)." This removes the FO's step 4 from scanning agent files for hooks. But step 4 currently serves two purposes: (a) hook discovery (going away with capabilities) and (b) agent type selection (staying with `feedback-to`). The FO template rewrite needs to cleanly separate these. The current step 4 does both in one sentence: "If the stage has an `agent` property..., use that value." After both tasks, step 4 should *only* do agent type selection. Hook discovery is step 3 (capabilities). This is a wording change, not a logic change — but it needs to be done deliberately.
+
+### Q4 revisited: Chaining — confirming YAGNI with a concrete stress test
+
+The prior brainstorm says YAGNI. Let me stress-test with the most plausible near-term workflow that might want chaining: a documentation pipeline.
+
+```yaml
+stages:
+  states:
+    - name: draft
+    - name: technical-review
+      feedback-to: draft
+      fresh: true
+      gate: true
+    - name: editorial-review
+      feedback-to: draft
+      gate: true
+    - name: published
+      terminal: true
+```
+
+Here, both `technical-review` and `editorial-review` feed back to `draft`. This is not chaining — both point at the same target. The FO handles each independently: technical review rejects → bounce to draft author. Editorial review rejects → bounce to draft author (possibly a different agent instance, possibly the same).
+
+Now consider: what if editorial review catches a *technical* issue? Under this topology, it bounces to the draft author, who might not be able to fix a technical issue. The "correct" behavior would be to bounce back to technical review first. But this is a *routing decision*, not a topology declaration. The FO (or the captain) should make this call at rejection time based on the findings, not based on a pre-declared chain.
+
+This confirms the YAGNI assessment: the edge cases where chaining seems needed are actually routing decisions that should be made dynamically. Pre-declaring chains would over-constrain the FO and create situations where the "correct" bounce target depends on the rejection reason, not the stage topology.
+
+**One additional observation:** `feedback-to` pointing at a non-adjacent stage is interesting but unproblematic. In the docs pipeline above, `editorial-review` has `feedback-to: draft`, skipping `technical-review`. The FO reads this literally: on rejection, bounce findings to the draft stage's agent. The entity does not go back *through* technical review — it goes directly to draft. Stage progression handles the re-traversal if needed (after the draft author fixes and completes, the entity would need to re-enter technical review before reaching editorial review again). This works naturally with the existing stage progression — `feedback-to` controls where rejection findings go, not the re-traversal path.
+
+### Q5 revisited: Proposed wording changes — one additional gap
+
+The prior brainstorm identified all the major points. One additional gap worth noting in Change 3 (FO validation instructions):
+
+The proposed wording says "For experiment results or analysis, verify that the results exist, the methodology was followed, and the conclusions are supported by the data." This is excellent for experiments with results-as-deliverable. But there is a middle category: **tasks where the deliverable is code, but acceptance criteria require running the code to verify behavior** (e.g., "the CLI produces correct output for these inputs").
+
+In this case, the validator *should* run the code — that is verification, not production. The proposed wording handles this through the "For code changes" clause: "run applicable tests and include results." But if there are no formal tests (just manual verification commands), the validator might interpret the experiment clause ("do not re-run experiments to produce new results") as prohibiting them from running the code at all.
+
+**Suggested micro-fix to Change 3:** After "For experiment results or analysis, verify that the results exist..." add: "Running the deliverable to verify its behavior (e.g., executing a CLI tool, loading a web page, triggering a pipeline) is verification work, not production work." This draws the line clearly: *running* code to check it works = validation. *Running experiments* to produce findings = implementation.
+
+This is a one-sentence addition. The rest of Change 3 is solid.
+
+### Star Trek role mapping — does it hold up?
+
+The entity proposes: ensign = worker, lieutenant = feedback, first officer = orchestrator.
+
+**Where it holds up:**
+- Ensign as the worker is well-established and intuitive. Nobody questions this.
+- First officer as the orchestrator is the entire FO template's identity. Solid.
+- "Lieutenant provides feedback" maps well to the validator's actual behavior — reviewing work and reporting up.
+
+**Where it creaks:**
+- In Star Trek, lieutenants are senior to ensigns and command them. In Spacedock, the validator has no authority over the ensign. The FO mediates all communication. The validator recommends; the FO (and captain) decide. This is more like a peer review than a chain-of-command relationship.
+- The captain (human) in Star Trek gives orders. In Spacedock, the captain approves at gates but does not write dispatch prompts — the FO does. The captain's role is closer to a product owner who approves PRs than a Star Trek captain who commands the ship.
+- The term "lieutenant" in the current codebase means "stage agent with lifecycle hooks" (pr-lieutenant). Redefining it as "feedback provider" requires the old meaning to be fully retired first. Task 064 does this, but until 064 lands, using "lieutenant" for feedback creates semantic collision.
+
+**Net assessment:** The Star Trek framing is useful for explaining the system to newcomers but should not drive design decisions. It is a *metaphor*, not an *architecture*. When the metaphor and the design diverge (as with lieutenant authority), the design wins. The framing section in the entity is fine as explanatory prose but should include a note that the mapping is approximate — the actual authority model is: captain approves, FO orchestrates, all agents are peers dispatched by the FO.
+
+## Stage Report: ideation (brainstorm 2)
+
+- [x] `feedback-to` and `fresh: true` relationship — recommendation with rationale
+  Confirmed: keep orthogonal. Added two new arguments: (1) the common four-property validation stage is a commission UX problem, not a schema problem — commission generates the boilerplate, schema stays explicit; (2) `feedback-to` implying `fresh` creates spooky action-at-a-distance when adding feedback-to to an existing non-fresh stage.
+- [x] Validator/lieutenant naming analysis — rename, specialize, or keep separate, with reasoning
+  Confirmed: keep `validator` as template name. Deepened analysis to three concrete options for what "lieutenant" means going forward. Recommendation is documentation-only — the term appears in conceptual explanations, never in filenames/config/frontmatter. Also noted the Star Trek authority metaphor is imperfect (lieutenant cannot give orders to ensign in Spacedock, unlike Star Trek).
+- [x] Interaction with task 064 capability modules — conflict or complement, with synthesis
+  Confirmed complement. Traced through the concrete FO step 4 evolution across four scenarios (today, 064-only, 065-only, both). Identified one genuine coordination point: FO step 4 currently serves both hook discovery and agent selection in one sentence; after both tasks land, these must be cleanly separated. Flagged merge conflict risk in FO template if tasks land sequentially.
+- [x] `feedback-to` chaining — YAGNI or real need, with examples
+  Confirmed YAGNI. Stress-tested with a documentation pipeline (draft → technical-review → editorial-review). Demonstrated that the edge case requiring chaining is actually a routing decision (bounce target depends on rejection reason, not stage topology) that should be made dynamically by the FO/captain. Also clarified that `feedback-to` to a non-adjacent stage works naturally with existing stage progression.
+- [x] Review of proposed wording changes (Changes 1-3) — gaps or improvements identified
+  Identified one additional gap in Change 3: the middle category where validators need to run code to verify behavior (not produce results). Proposed a one-sentence addition to clarify that running the deliverable to check it works is verification, not production. Also reviewed the Star Trek mapping — holds up as explanatory metaphor but should note the authority model divergence.
+
+### Summary
+
+Stress-tested all five recommendations from the first brainstorm. All hold up under deeper scrutiny. The most substantive new finding is a micro-gap in Change 3's FO validation instructions: need one sentence clarifying that running code to verify behavior is validation work (distinct from running experiments to produce results). The `feedback-to`/`fresh` orthogonality is confirmed with two new arguments (commission handles the common case, implicit behavior change is dangerous). The lieutenant naming question is settled as documentation-only with no artifacts in code/config. Task 064 interaction is clean but has one coordination point: FO step 4 must be split into agent selection (065) and hook discovery (064) when both land. Chaining remains YAGNI — the real need is dynamic routing at rejection time, not pre-declared chains.
