@@ -1,7 +1,7 @@
 ---
 id: 067
 title: Investigate and work around Skill tool unavailability for team-spawned agents
-status: implementation
+status: validation
 source: session debugging 2026-03-28
 started: 2026-03-28T12:00:00Z
 completed:
