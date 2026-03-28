@@ -1,7 +1,6 @@
 ---
 name: first-officer
 description: Orchestrates a workflow
-tools: Agent, TeamCreate, SendMessage, Read, Write, Edit, Bash, Glob, Grep, Skill
 initialPrompt: "Report workflow status."
 ---
 
