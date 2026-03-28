@@ -229,6 +229,125 @@ This connects to task 064 (capability modules) which is already rethinking the l
 3. How does this interact with task 064's capability modules — are feedback agents a capability or a core concept?
 4. Should `feedback-to` support chaining (e.g., approval → review → implementation)?
 
+## Brainstorm: Open questions deep dive
+
+### Q1: Should `feedback-to` imply `fresh: true`?
+
+**Recommendation: No. Keep them orthogonal. Do not imply `fresh: true`.**
+
+The initial lean was correct, but the reasoning deserves more depth.
+
+**Why feedback stages usually want fresh context:** The independence principle — a validator shouldn't be contaminated by the implementer's reasoning. If the validator sees the implementation thought process, it's primed to agree rather than challenge. This is the *typical* case for validation stages.
+
+**Cases where a feedback stage wouldn't want fresh context:**
+
+1. **Iterative review stages.** Imagine a writing pipeline: `draft → review → revision → final-review`. The `review` stage has `feedback-to: draft`. If the reviewer has been working with the author through prior stages, that accumulated context is valuable — they understand the intent, the audience, the constraints. Fresh context would force them to re-derive all of that from the document alone.
+
+2. **Approval stages.** An `approval` stage with `feedback-to: implementation` might be the captain reviewing work. The captain doesn't need fresh context — they've been watching the whole process. (Granted, the captain isn't an agent, but a human-delegated approval agent might carry context.)
+
+3. **Multi-round feedback within a stage.** During the validation rejection flow, the validator already persists across fix cycles (the FO keeps it alive). If `feedback-to` implied `fresh: true`, this would create a contradiction: the property says "fresh" but the rejection flow says "keep the validator alive."
+
+**The coupling problem restated:** `fresh: true` is about *epistemological independence* — the agent shouldn't have prior context that biases its judgment. `feedback-to` is about *workflow topology* — this stage's output feeds back to another stage on rejection. These are correlated (validation wants both) but not identical (review might want feedback-to without fresh, and a "second opinion" stage might want fresh without feedback-to).
+
+**Practical implication for the FO dispatch logic:** The current rule "default to `validator` when `fresh: true`" should become "default to `validator` when `feedback-to` is set." The `fresh` property continues to control context isolation independently. A stage can have `feedback-to` without `fresh` (reviewer with accumulated context) or `fresh` without `feedback-to` (independent second opinion that doesn't feed back anywhere).
+
+### Q2: Validator/lieutenant naming — rename, specialize, or keep separate?
+
+**Recommendation: Keep `validator` as the template name. Do not rename to `lieutenant`. `Lieutenant` is a conceptual role in the hierarchy, not a template.**
+
+Here's the reasoning:
+
+**The Star Trek hierarchy mapping is useful as a mental model but breaks down as a naming scheme.** In the entity, the mapping is: ensign = worker, lieutenant = feedback provider, first officer = orchestrator. This is a clean conceptual hierarchy. But as template names, it creates problems:
+
+1. **"Lieutenant" is too generic for a template name.** A validator has specific behavior: it reads, tests, judges, doesn't modify implementation code, produces a Recommendation section. A "reviewer" (another feedback role) might have different behavior: it reads for clarity, style, and correctness, but doesn't run tests and might suggest edits. Calling both "lieutenant" erases the behavioral distinction.
+
+2. **The validator template works well as-is.** It already has the right framing: "You verify that implementation work meets acceptance criteria. You NEVER modify implementation code." Renaming it to "lieutenant" would lose this specificity without gaining anything.
+
+3. **Task 064 is actively rethinking what "lieutenant" means.** The pr-lieutenant is being decomposed into capability modules. If we simultaneously redefine "lieutenant" as the feedback role, we're loading the term with two different semantic histories — the old "stage agent that also provides hooks" and the new "feedback provider in the hierarchy." This invites confusion.
+
+**Better framing:** `Lieutenant` describes a *role category* (feedback provider), and `validator` is a *specialization* of that role. Future feedback templates — `reviewer`, `approver`, etc. — would also be lieutenant-role agents. But their template names should describe their specific behavior, not their position in a hierarchy.
+
+**What this means for the FO dispatch logic:** The FO's step 4 becomes:
+- Stage has `agent:` → use that
+- Stage has `feedback-to:` but no `agent:` → default to `validator`
+- Otherwise → default to `ensign`
+
+The validator is the *default* feedback agent, but `agent: reviewer` could override it for a stage that needs a different feedback flavor. No renaming needed.
+
+**What about the Star Trek framing in documentation?** It's fine as explanatory prose (e.g., in the spec or a design document explaining the role hierarchy). It just shouldn't drive template filenames.
+
+### Q3: Interaction with task 064 — capability modules
+
+**Recommendation: Feedback agents are a core concept, not a capability. They complement capability modules rather than conflicting.**
+
+Task 064's core insight: capabilities like PR management are *cross-cutting lifecycle behaviors* — they hook into startup, merge, and potentially dispatch/gate. They don't belong in a single stage. The pr-lieutenant was awkward because it tried to be both a stage agent and a lifecycle hook provider.
+
+Task 065's feedback-to pattern is fundamentally different: it's about *stage topology* — how stages relate to each other in the workflow graph. When validation rejects, findings flow back to implementation. This is intrinsic to the workflow structure, not a cross-cutting behavior that can be enabled/disabled.
+
+**Where they interact cleanly:**
+
+1. **Capability modules replace the hook-providing role of lieutenants.** Lifecycle behaviors (startup hooks, merge hooks) move to `_capabilities/`. This is task 064's domain.
+
+2. **`feedback-to` replaces the implicit coupling between `fresh: true` and agent type.** Workflow topology (which stage feeds back to which) is declared in the README stages block. This is task 065's domain.
+
+3. **The validator template stays as a core agent template.** It's not a capability module — it's an agent type, like `ensign`. Capabilities hook into the FO's lifecycle; agent types are dispatched to do stage work.
+
+**Where they could conflict:**
+
+The `agent:` stage property has dual roles today:
+- Task 064 says: `agent:` was used for hook-providing lieutenants, which is being replaced by capabilities. The `agent:` property remains for "non-default worker agents" (e.g., a hypothetical `data-scientist` ensign variant).
+- Task 065 says: the FO defaults to `validator` when `feedback-to` is set, but `agent:` can override.
+
+These are compatible. After task 064, `agent:` no longer serves a hook-discovery role. It purely selects which agent template to dispatch for stage work. Task 065's `feedback-to` tells the FO this is a feedback stage, and `agent:` (if present) overrides the default `validator` with an alternative feedback agent.
+
+**Synthesis:** The two tasks divide cleanly along the lifecycle-vs-topology boundary:
+- **Task 064 (capabilities):** Cross-cutting lifecycle behaviors. Modular. Enable/disable per workflow.
+- **Task 065 (feedback-to):** Stage relationships in the workflow graph. Structural. Declared in README stages block.
+
+No changes needed to either task to make them compatible. The only coordination point is ensuring the FO dispatch logic (step 4) correctly prioritizes: `agent:` > `feedback-to` default > `ensign` default.
+
+### Q4: Should `feedback-to` support chaining?
+
+**Recommendation: YAGNI. Do not support chaining in the initial implementation.**
+
+The question is whether a chain like `implementation → review → approval` needs `approval` to have `feedback-to: review` and `review` to have `feedback-to: implementation`, so rejection cascades back through the chain.
+
+**Why it seems appealing:** Some workflows have layered quality gates. Code goes through peer review, then tech lead approval, then security review. Each layer might reject for different reasons, and the rejection should go back to the right fixer.
+
+**Why it's YAGNI:**
+
+1. **The current rejection flow already handles the common case.** Validation rejects → implementer fixes → validator re-checks. This is a two-party bounce, not a chain. Adding a third link (approval rejects → reviewer re-reviews → reviewer re-sends to approval) adds complexity without a demonstrated need.
+
+2. **Chaining introduces ambiguity about where to bounce.** If `approval` rejects, should it bounce to `review` (the stage it has `feedback-to` pointing at) or to `implementation` (the stage that actually produces the code)? The answer depends on *what* was rejected — a code bug should go to the implementer, a review inadequacy should go to the reviewer. This requires the rejection to carry routing information, which is a significant increase in complexity.
+
+3. **The FO can already handle multi-stage rejection manually.** If approval finds a code bug, the captain can reject at the approval gate and say "send this back to implementation." The FO's existing rejection flow handles this — it doesn't need to be automated through chain declarations.
+
+4. **No real workflow in the current system needs it.** Spacedock workflows today have at most implementation → validation. Adding review or approval stages is hypothetical. Building chaining support for hypothetical stages violates YAGNI.
+
+**If it ever becomes needed:** The `feedback-to` property already points at a single stage name. Chaining would mean each feedback stage points at its own target, and the FO follows the chain. The data model supports it — each stage has its own `feedback-to`, and the FO reads the rejected stage's `feedback-to` to know where to bounce. This could be added later without changing the property format. But build it when there's a real workflow that needs it, not now.
+
+### Q5: Review of proposed wording changes (Changes 1-3)
+
+**Change 1 (README implementation stage) — Good, one minor gap.**
+
+The proposed wording correctly broadens from "write the code" to "produce the deliverable" and lists examples (code, experiments, analysis, test suites). The closing sentence "Implementation is complete when the deliverable exists and is ready for independent verification" is a strong boundary marker.
+
+**Gap:** The "Bad" criteria list adds "leaving the deliverable incomplete for validation to finish" but doesn't address the reverse problem: over-producing. An implementer might run an experiment AND interpret the results AND draw conclusions, when the acceptance criteria only asked for raw results. This isn't strictly a boundary problem (it's more about scope creep), and the existing "Over-engineering" bullet probably covers it. No wording change needed, but worth noting.
+
+**Change 2 (README validation stage) — Good, sufficient.**
+
+Adding "The validator checks what was produced — it does not produce the deliverable itself" is the right fix. It's one clear sentence that flows into every validator dispatch prompt via the FO's stage definition copy.
+
+**Potential improvement:** Consider whether the sentence should also clarify "checking" vs "extending." The validator can run existing tests (checking), write supplementary tests (extending for verification purposes), but not write the test suite that IS the deliverable. The validator template already permits writing test files, so this distinction is important. However, the validator template handles this adequately — the README sentence doesn't need to duplicate it.
+
+**Change 3 (FO validation instructions) — Good, strongest improvement.**
+
+The specific guidance for experiments ("verify that the results exist, the methodology was followed, and the conclusions are supported by the data — do not re-run experiments to produce new results") directly addresses the 058 failure. The "missing deliverable = REJECTED" rule is the most valuable addition — it prevents the validator from compensating for incomplete implementation.
+
+**One subtle gap:** The phrase "For code changes, check the README for a Testing Resources section — run applicable tests" could be read as "run ALL tests," which might be excessive for a targeted change. But this is an existing issue in the current wording, not something introduced by the proposed changes. Not in scope for this task.
+
+**Overall assessment:** The three proposed changes are sufficient to address the core problem. They correctly identify the three control points (README implementation definition, README validation definition, FO dispatch instructions) and make targeted wording changes at each. No structural changes are needed — the fixes are all in prose that flows into dispatch prompts.
+
 ## Acceptance Criteria
 
 1. README `implementation` stage definition uses "produce the deliverable" language that covers code, experiments, analysis, and test suites — not just "write the code"
@@ -258,3 +377,20 @@ This connects to task 064 (capability modules) which is already rethinking the l
 ### Summary
 
 Analyzed the implementation/validation boundary problem through the lens of task 058 (where the validator produced experiment results instead of verifying them) and task 061 (which established the independence principle). The root cause is twofold: README stage definitions use code-centric language ("write the code") that doesn't cover non-code deliverables, and the FO validation instructions don't explicitly distinguish running tests to verify from running experiments to produce results. Proposed specific wording changes to the README implementation stage (broaden to "produce the deliverable"), the README validation stage (add boundary statement), and the FO validation instructions (experiment-specific guidance, missing-deliverable handling). The validator template needs no changes — the fix belongs in the stage definitions and FO instructions that flow into dispatch prompts.
+
+## Stage Report: ideation (brainstorm)
+
+- [x] `feedback-to` and `fresh: true` relationship — recommendation with rationale
+  Keep orthogonal. `fresh` = epistemological independence, `feedback-to` = workflow topology. Three cases identified where feedback stages wouldn't want fresh context (iterative review, approval, multi-round rejection flow contradiction).
+- [x] Validator/lieutenant naming analysis — rename, specialize, or keep separate, with reasoning
+  Keep `validator` as the template name. `Lieutenant` is a conceptual role category (feedback provider), not a template. Renaming would lose behavioral specificity, collide with task 064's semantic history, and wouldn't improve the FO dispatch logic.
+- [x] Interaction with task 064 capability modules — conflict or complement, with synthesis
+  Complement, not conflict. Clean division: task 064 handles cross-cutting lifecycle behaviors (capabilities), task 065 handles stage topology (feedback-to). The `agent:` property serves both without ambiguity after task 064 removes its hook-discovery role.
+- [x] `feedback-to` chaining — YAGNI or real need, with examples
+  YAGNI. Current two-party bounce handles the common case. Chaining introduces routing ambiguity (which stage to bounce to depends on rejection reason). Data model already supports future chaining without format changes if needed.
+- [x] Review of proposed wording changes (Changes 1-3) — gaps or improvements identified
+  All three changes are sufficient. One minor gap noted (over-producing in implementation, covered by existing "over-engineering" bullet). One subtle gap in validation instructions ("run applicable tests" could mean "run ALL tests") but that's pre-existing, not introduced by the changes.
+
+### Summary
+
+Deep-dived the four open questions from the expanded scope section. Key recommendations: (1) `feedback-to` and `fresh: true` must remain orthogonal properties — coupling them creates contradictions with the rejection flow and prevents legitimate use cases like iterative review; (2) keep `validator` as the template name, use `lieutenant` only as conceptual framing for the feedback role category; (3) tasks 064 and 065 divide cleanly along lifecycle-vs-topology lines with no conflicts; (4) chaining is YAGNI — the data model supports it later if needed but no current workflow requires it. The three proposed wording changes from the initial ideation are sufficient with no significant gaps.
