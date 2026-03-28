@@ -183,9 +183,9 @@ if [ -f "$FO" ]; then
     fail "first-officer has name in frontmatter"
   fi
   if head -20 "$FO" | grep -q "tools:"; then
-    pass "first-officer has tools in frontmatter"
+    fail "first-officer has no tools in frontmatter (tools: found)"
   else
-    fail "first-officer has tools in frontmatter"
+    pass "first-officer has no tools in frontmatter"
   fi
   # Content checks
   for KEYWORD in "DISPATCHER|dispatcher" "TeamCreate" "Agent\(" "Event Loop|event loop" "initialPrompt"; do
