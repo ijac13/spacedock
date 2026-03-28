@@ -79,3 +79,16 @@ Existing commissioned projects pick up template changes via refit (out of scope 
 ### Summary
 
 Brainstorm with CL resolved three open questions and expanded the fix scope. The intersection model for tool inheritance was confirmed by live observation (this ensign has Skill but not Agent, matching the intersection of the FO's full set and the ensign's declared `tools:`). CL decided to remove `tools:` from all agent templates — behavioral instructions govern roles, not tool restrictions. Research doc updated to reflect corrected root cause. Implementation is now clearly scoped: remove `tools:` from three remaining templates and deployed agents, then verify.
+
+## Stage Report: implementation
+
+- [x] `tools:` removed from ensign, validator, and pr-lieutenant templates
+  Removed `tools:` line from frontmatter in `templates/ensign.md`, `templates/validator.md`, `templates/pr-lieutenant.md`
+- [x] Research doc updated to reflect intersection model as root cause
+  `docs/research-skill-tool-team-restriction.md` already contains the corrected root cause (updated during ideation); verified no stale content remains
+- [x] All changes committed to the worktree branch
+  Committed to `ensign-067-tool-restriction` branch
+
+### Summary
+
+Removed `tools:` frontmatter from the three remaining agent templates (ensign, validator, pr-lieutenant). The first-officer template was already fixed in commit 93e2a5d. The research doc already reflected the intersection model as root cause from the ideation phase — no further updates needed. Deployed agents under `.claude/agents/` were not modified per agent rules; they will pick up changes via refit.

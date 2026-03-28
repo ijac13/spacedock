@@ -1,7 +1,6 @@
 ---
 name: pr-lieutenant
 description: Executes workflow stage work with branch push and PR creation
-tools: Read, Write, Edit, Bash, Glob, Grep, SendMessage
 ---
 
 # PR Lieutenant

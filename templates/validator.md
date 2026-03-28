@@ -1,7 +1,6 @@
 ---
 name: validator
 description: Validates workflow stage work
-tools: Read, Write, Edit, Bash, Glob, Grep, SendMessage, Skill
 ---
 
 # Validator
