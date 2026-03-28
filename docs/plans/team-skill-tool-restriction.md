@@ -30,16 +30,17 @@ Further investigation revealed the root cause is NOT team membership itself. It 
 - **spacedock project:** FO had `tools: Agent, TeamCreate, SendMessage, Read, Write, Edit, Bash, Glob, Grep` (no Skill). Team-spawned agents did NOT get Skill.
 - Confirmed via JSONL log comparison between the two projects.
 
-## Root cause: team lead tool inheritance
+## Root cause: intersection model for tool inheritance
 
-**Confirmed.** Team members inherit their available tools from the team lead's declared `tools:` set. When the FO declared a restricted `tools:` list without Skill, all team-spawned agents lost Skill.
+**Confirmed.** Team members receive the **intersection** of the team lead's tool set and their own `tools:` declaration. When the FO declared a restricted `tools:` list without Skill, team-spawned agents lost Skill even though their own `tools:` included it.
 
-The `tools:` frontmatter IS enforced for the team lead agent — it restricts the tool set, and that restriction propagates to all team members. This is different from the behavior reported in GitHub issues about `tools:` being "advisory" for regular subagents.
+Live confirmation of intersection model: after removing `tools:` from the FO (giving it the full set), a team-spawned ensign with `tools: Read, Write, Edit, Bash, Glob, Grep, SendMessage, Skill` gained Skill but lacked Agent — because Agent is not in the ensign's `tools:` list.
 
-**Fix:** Remove the `tools:` line from the first-officer agent definition. Without an explicit `tools:` list, the FO inherits the full tool set, and team members inherit it in turn.
+**Fix:** Remove `tools:` from ALL agent templates (not just the FO). Behavioral instructions govern agent roles, not tool restrictions. This avoids the intersection trap and eliminates template maintenance burden for new tools.
 
-- Template fixed in `93e2a5d` (removed `tools:` from `templates/first-officer.md`)
-- Deployed file fixed in `d860543` (removed `tools:` from `.claude/agents/first-officer.md`)
+- FO template fixed in `93e2a5d` (removed `tools:` from `templates/first-officer.md`)
+- FO deployed fixed in `d860543` (removed `tools:` from `.claude/agents/first-officer.md`)
+- Remaining: remove `tools:` from ensign, validator, and pr-lieutenant templates and deployed agents
 
 ## Related GitHub issues
 
@@ -49,29 +50,32 @@ The `tools:` frontmatter IS enforced for the team lead agent — it restricts th
 
 ## Fix
 
-The fix is simply removing the `tools:` line from the first-officer agent definition. No workaround needed — this was a configuration bug, not a platform limitation.
+Remove `tools:` from all agent definitions (templates and deployed). The FO is already fixed. Remaining agents: ensign, validator, pr-lieutenant.
 
-Template and deployed file are both fixed. Existing commissioned projects need a refit to pick up the template change.
+Existing commissioned projects pick up template changes via refit (out of scope for 067).
 
-## Remaining work
+## Implementation
 
-1. **Test in a fresh session** — confirm team-spawned ensigns get Skill after the fix
-2. **Review ensign.md `tools:` declaration** — does the ensign's own `tools:` frontmatter matter for team-spawned agents, or does only the team lead's declaration count? If the ensign's list is also enforced, it could independently restrict tools. Currently it includes Skill, so not blocking, but worth understanding.
-3. **Refit guidance** — existing commissioned projects still have the old FO with `tools:` restriction. The refit skill should handle this.
+1. Remove `tools:` from `templates/ensign.md`, `templates/validator.md`, `templates/pr-lieutenant.md`
+2. Remove `tools:` from `.claude/agents/ensign.md`, `.claude/agents/validator.md`, `.claude/agents/pr-lieutenant.md`
+3. Update research doc to reflect corrected root cause (intersection model)
+4. Verify in a fresh session that team-spawned ensigns get the full tool set
+
+## Acceptance criteria
+
+- All agent templates and deployed agent files have no `tools:` frontmatter
+- Research doc reflects the intersection model as root cause
+- Fresh session confirms team-spawned agents get Skill (and other tools previously missing)
 
 ## Stage Report: ideation
 
-- [x] Problem statement clarified with evidence from testing
-  Root cause identified: FO's `tools:` frontmatter restriction propagates to team members. Cross-project JSONL log comparison (email-triage vs spacedock) confirmed the mechanism.
-- [x] Proposed approach with rationale (which workaround option, or a new one)
-  Not a workaround — direct fix: remove `tools:` from FO agent definition. Already applied in template (93e2a5d) and deployed file (d860543).
-- [x] Acceptance criteria defined — what does "done" look like
-  Done = (1) fresh session confirms team-spawned ensigns get Skill, (2) ensign `tools:` behavior understood, (3) refit handles propagation to existing projects.
-- [x] Open questions resolved or explicitly deferred
-  Deferred: whether ensign's own `tools:` frontmatter independently restricts team-spawned agents (not blocking since it already includes Skill).
-- [x] CL has been consulted and their input incorporated
-  CL participated directly in the session, confirmed the root cause via JSONL log analysis, and applied the fix commits.
+- [x] Remaining work items resolved or clearly scoped for implementation
+  Three items scoped: (1) remove `tools:` from ensign/validator/pr-lieutenant templates and deployed agents, (2) update research doc, (3) verify in fresh session. Refit propagation confirmed out of scope — handled by refit skill.
+- [x] Acceptance criteria updated if needed based on brainstorm findings
+  Updated to reflect removing `tools:` from ALL agents (not just FO) and the intersection model discovery.
+- [x] Open questions from the entity addressed
+  Tool inheritance model confirmed as intersection (live evidence: ensign has Skill but not Agent). Refit propagation scoped to refit skill. Research doc corrected in this session. CL decided to remove `tools:` from all agents rather than maintaining per-agent allowlists.
 
 ### Summary
 
-The Skill tool unavailability for team-spawned agents was caused by the first-officer's explicit `tools:` frontmatter omitting Skill. Team members inherit the team lead's declared tool set, so the restriction propagated. The fix is removing `tools:` from the FO definition so it inherits the full set. Template and deployed file are both fixed. Remaining work is testing in a fresh session and ensuring the refit skill propagates the fix to existing projects.
+Brainstorm with CL resolved three open questions and expanded the fix scope. The intersection model for tool inheritance was confirmed by live observation (this ensign has Skill but not Agent, matching the intersection of the FO's full set and the ensign's declared `tools:`). CL decided to remove `tools:` from all agent templates — behavioral instructions govern roles, not tool restrictions. Research doc updated to reflect corrected root cause. Implementation is now clearly scoped: remove `tools:` from three remaining templates and deployed agents, then verify.

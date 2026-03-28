@@ -30,7 +30,17 @@ In the `conn` project (spacedock@0.5.0, Claude Code 2.1.85):
 
 ### Root cause
 
-The `tools:` frontmatter in `.claude/agents/*.md` is advisory, not enforced. The actual tool set is determined by the subagent runtime. Team-spawned teammates get a restricted tool set that excludes `Skill`. Non-team subagents get a larger default tool set that includes `Skill`.
+**Updated 2026-03-28:** The original hypothesis below was wrong. The root cause is the **intersection model** for team-spawned tool inheritance.
+
+Team members receive the **intersection** of:
+1. The team lead's available tools (from its own `tools:` declaration, or the full set if `tools:` is omitted)
+2. The agent's own `tools:` declaration (from `.claude/agents/*.md`)
+
+When the first-officer declared `tools: Agent, TeamCreate, SendMessage, Read, Write, Edit, Bash, Glob, Grep` (omitting Skill), team-spawned agents lost Skill — even though their own `tools:` listed it — because Skill wasn't in the team lead's set.
+
+**Evidence for intersection model:** After removing `tools:` from the FO (giving it the full set), a team-spawned ensign with `tools: Read, Write, Edit, Bash, Glob, Grep, SendMessage, Skill` gained Skill but still lacked Agent — because Agent is in the FO's inherited full set but not in the ensign's `tools:` list.
+
+**Fix:** Remove `tools:` from all agent templates so they inherit the full set. Behavioral instructions (not tool restrictions) define agent roles.
 
 ### Related GitHub issues
 
@@ -54,6 +64,6 @@ The `tools:` frontmatter in `.claude/agents/*.md` is advisory, not enforced. The
 
 The issue stems from how the FO is instantiated:
 - **Commission-to-FO-in-same-session** (conn pattern): FO is the top-level process. Ensigns are first-level subagents with full tool set.
-- **FO-as-spawned-subagent** (spacedock plugin pattern): FO is spawned by the user's session. FO creates a team. Ensigns are team-spawned teammates with restricted tool set.
+- **FO-as-spawned-subagent** (spacedock plugin pattern): FO is spawned by the user's session. FO creates a team. Ensigns are team-spawned teammates whose tools are the intersection of the FO's tools and their own `tools:` declaration.
 
-The spacedock plugin's `first-officer` agent is designed to be spawned as a subagent, which means it always creates teams, which means its ensigns always lose Skill.
+The fix is removing `tools:` from all agent definitions so they inherit the full set from the platform. Agent behavior is governed by instructions, not tool restrictions.
