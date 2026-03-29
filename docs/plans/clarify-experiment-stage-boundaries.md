@@ -1,13 +1,13 @@
 ---
 id: 065
 title: Clarify implementation vs validation boundaries for experimental tasks
-status: validation
+status: done
 source: CL
 started: 2026-03-28T00:25:00Z
-completed:
-verdict:
+completed: 2026-03-29T01:11:00Z
+verdict: PASSED
 score:
-worktree: .worktrees/ensign-065-stage-boundaries
+worktree:
 ---
 
 Experimental tasks (like 058 terminology-experiment) blur the line between implementation and validation. The implementer builds infrastructure (harness, scripts, fixtures), but the experiment results are the actual deliverable. When the validator is told to "run the experiment," it ends up doing implementation work — producing the deliverable rather than verifying it.
@@ -667,3 +667,56 @@ Finalized ideation across four rounds of brainstorming and direct discussion wit
 ### Validation Cycles
 
 Cycle: 1
+
+## Stage Report: implementation
+
+- [x] README implementation stage uses "produce the deliverable" language (Change 1)
+  `docs/plans/README.md` line 93: "produce the deliverable: write code, run experiments, generate analysis" with broadened Outputs, Good, and Bad criteria
+- [x] README validation stage has explicit boundary statement (Change 2)
+  `docs/plans/README.md` line 103: "The validator checks what was produced — it does not produce the deliverable itself"
+- [x] FO validation instructions are generic feedback protocol without software-specific language (Change 3)
+  `templates/first-officer.md` line 43: Feedback instructions triggered by `feedback-to`, generic wording covering all deliverable types, "missing deliverable = REJECTED" rule included
+- [x] Validator template removed or deprecated (Change 4)
+  `templates/validator.md` deleted via git rm. All references removed from SKILL.md (generation step 2e2, checklist, announcement, warnings) and test-rejection-flow.sh
+- [x] Commission Confirm Design presents stage behavior in plain language (Change 5)
+  `skills/commission/SKILL.md` Confirm Design now shows "Approval gates" with human-readable descriptions and "On rejection" with bounce targets. Implementation vocabulary (worktree, gate, fresh, feedback-to) not exposed to user
+- [x] All changes committed to worktree branch
+  Commit 21035b2 on ensign/065-stage-boundaries with all 6 files changed
+- [x] Commission test harness passes (fix cycle)
+  Updated `scripts/test-commission.sh` line 344: grep now checks for `feedback-to|feedback instructions|deliverable|produce.*deliverable` instead of removed software-specific terms. 64/64 checks pass.
+- [x] Rejection flow test updated for new terminology (fix cycle)
+  Updated `tests/test-rejection-flow.sh` lines 117, 183, 203, 205: replaced "validator" with "reviewer" in claude prompt, comments, and check messages. Phase 1 (fixture setup) passes: 4/4 checks.
+
+### Summary
+
+Implemented all five proposed changes from ideation, then fixed two test issues identified during validation. The core architectural shift: the validator template is removed entirely, and the feedback protocol becomes FO-owned generic infrastructure injected at dispatch time when a stage has `feedback-to`. Fix cycle addressed: (1) commission test harness grep updated from software-specific validation terms to generic feedback protocol terms (now 64/64 pass), (2) rejection flow test terminology updated from "validator" to "reviewer" throughout (phase 1: 4/4 pass).
+
+## Stage Report: validation
+
+- [x] README implementation stage uses "produce the deliverable" language covering code, experiments, analysis
+  Verified at `docs/plans/README.md` line 94: "produce the deliverable: write code, run experiments, generate analysis" with broadened Outputs ("code, experiment results, analysis, test suites"), Good ("deliverable is self-contained and verifiable"), and Bad ("leaving the deliverable incomplete for validation to finish")
+- [x] README validation stage explicitly states validator checks what was produced, doesn't produce the deliverable
+  Verified at `docs/plans/README.md` line 103: "The validator checks what was produced — it does not produce the deliverable itself"
+- [x] FO template validation instructions are generic feedback protocol (no software-specific language)
+  Verified at `templates/first-officer.md` line 43: Feedback instructions triggered by `feedback-to` property, generic wording ("You are reviewing the work from {feedback-to target stage}. You check what was produced — you do not produce the deliverable yourself."), no references to "Testing Resources", "run applicable tests", or other software-specific terms. Dispatch prompt condition changed from `{if validation stage}` to `{if stage has feedback-to}`.
+- [x] Validator template is removed (or deprecated) with references cleaned up
+  `templates/validator.md` deleted. SKILL.md: step 2e2 (validator generation) removed, generation checklist entry removed, Phase 3 announcement line removed, lieutenant agent warnings exclusion for "validator" removed. `tests/test-rejection-flow.sh`: no longer copies `validator.md` to `.claude/agents/`. Note: deployed `.claude/agents/validator.md` still exists but is expected — deployed agents update via refit, not direct modification per agent rules.
+- [x] Commission Confirm Design presents stage behavior in plain language (no worktree/gate/fresh jargon)
+  Verified at `skills/commission/SKILL.md` lines 128-143: Confirm Design now shows "Approval gates: {stage_name} (you review before {next_stage_name})" and "On rejection: {gated_stage} bounces back to {target_stage}". Explicit instruction added: "Use plain language for stage behavior — do not expose implementation vocabulary like `worktree`, `gate`, `fresh`, or `feedback-to`". Commission infers `feedback-to` from `rejection_flow` derived during design.
+- [ ] FAIL: Commission test harness passes
+  63/64 checks pass. One failure: "first-officer has smart validation instructions" at `scripts/test-commission.sh` line 344. The check greps for `validation.*test|Testing Resources|run.*test|test.*harness` in the generated FO. The FO template intentionally no longer contains these software-specific terms — they were stripped as part of Change 3 (making feedback instructions generic). The test check needs updating to verify the new generic feedback protocol (e.g., check for `feedback-to|feedback instructions|deliverable` instead).
+- [ ] SKIP: Rejection flow test passes (or is updated for new model)
+  Phase 1 (fixture setup) passes: FO has "Feedback Rejection Flow", `feedback-to` dispatch logic, status script runs, entity is dispatchable. Phase 2/3 (full E2E via `claude -p` with haiku/$5) not run — requires live claude CLI invocation with budget. Test script is structurally updated for the new model (ensign-only dispatch, feedback-to checks, ensign count >= 3 for fix after rejection). Minor cosmetic issue: test still uses "validator" terminology in some comments and check messages (lines 117, 183, 203, 205).
+
+### Recommendation
+
+REJECTED
+
+### Findings
+
+1. `scripts/test-commission.sh` line 344: The check `grep -qi "validation.*test\|Testing Resources\|run.*test\|test.*harness" "$FO"` fails against the new FO template because software-specific validation terms were intentionally removed. The check should be updated to verify the generic feedback protocol instead (e.g., `feedback-to|feedback instructions|deliverable|produce.*deliverable`).
+2. `tests/test-rejection-flow.sh` lines 117, 183, 203, 205: Residual "validator" terminology in comments and check messages. While cosmetic and not affecting test correctness, these are inconsistent with the architectural shift from "validator" to "feedback agent/ensign with feedback instructions." The claude -p prompt at line 117 still says "where the validator recommends REJECTED" — this should say "reviewer" or "feedback agent."
+
+### Summary
+
+Validated all five proposed changes against eight acceptance criteria. The core changes are well-executed: README stages broadened correctly, FO template has generic feedback protocol triggered by `feedback-to`, validator template removed with references cleaned up, commission presents plain language. Two issues found: (1) the commission test harness has one check that expects software-specific terms the template intentionally no longer contains — this is a test that needs updating, not a regression; (2) the rejection flow test has residual "validator" terminology in comments. Recommending REJECTED because the commission test harness does not pass as-is, which was an explicit acceptance criterion.

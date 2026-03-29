@@ -47,7 +47,7 @@ cp "$FIXTURE_DIR/status" rejection-pipeline/
 chmod +x rejection-pipeline/status
 
 # Copy the buggy implementation and tests into the repo root
-# (the validator will find these via the worktree)
+# (the feedback agent will find these via the worktree)
 cp "$FIXTURE_DIR/math_ops.py" .
 mkdir -p tests
 cp "$FIXTURE_DIR/tests/test_add.py" tests/
@@ -69,28 +69,26 @@ sed \
 
 # Copy static agent templates (no template variables to substitute)
 cp "$REPO_ROOT/templates/ensign.md" .claude/agents/ensign.md
-cp "$REPO_ROOT/templates/validator.md" .claude/agents/validator.md
-
 git add -A && git commit -m "setup: rejection flow fixture with buggy implementation" >/dev/null 2>&1
 
 echo ""
 echo "[Fixture Setup]"
 
-# Verify the generated first-officer has the validation rejection flow
-if grep -q "Validation Rejection Flow" .claude/agents/first-officer.md; then
-  pass "generated first-officer contains validation rejection flow"
+# Verify the generated first-officer has the feedback rejection flow
+if grep -q "Feedback Rejection Flow" .claude/agents/first-officer.md; then
+  pass "generated first-officer contains feedback rejection flow"
 else
-  fail "generated first-officer contains validation rejection flow"
+  fail "generated first-officer contains feedback rejection flow"
   echo "  FATAL: Rejection flow section missing from generated agent. Aborting."
   trap - EXIT
   exit 1
 fi
 
-# Verify the FO resolves fresh:true to validator
-if grep -qE "default to.*validator.*when.*fresh.*true" .claude/agents/first-officer.md; then
-  pass "generated first-officer resolves fresh:true to validator"
+# Verify the FO has feedback instructions triggered by feedback-to
+if grep -q "feedback-to" .claude/agents/first-officer.md; then
+  pass "generated first-officer has feedback-to dispatch logic"
 else
-  fail "generated first-officer resolves fresh:true to validator"
+  fail "generated first-officer has feedback-to dispatch logic"
 fi
 
 # Verify status script works
@@ -116,7 +114,7 @@ echo "--- Phase 2: Run first officer (this takes ~120-300s) ---"
 cd "$TEST_DIR/test-project"
 
 FO_EXIT=0
-claude -p "Process all tasks through the workflow. When you encounter a gate review where the validator recommends REJECTED, approve the REJECTED verdict so the rejection flow proceeds." \
+claude -p "Process all tasks through the workflow. When you encounter a gate review where the reviewer recommends REJECTED, approve the REJECTED verdict so the rejection flow proceeds." \
   --agent first-officer \
   --permission-mode bypassPermissions \
   --verbose \
@@ -175,14 +173,14 @@ with open('$TEST_DIR/agent-calls.txt', 'w') as f:
 echo ""
 echo "[Rejection Flow Behavior]"
 
-# Check 1: FO dispatched a validator (not ensign) for the validation stage
-if grep -q "subagent_type=validator" "$TEST_DIR/agent-calls.txt" 2>/dev/null; then
-  pass "FO dispatched a validator for validation stage"
+# Check 1: FO dispatched an ensign for the validation stage (feedback behavior is injected, not a separate agent type)
+if grep -q "subagent_type=ensign" "$TEST_DIR/agent-calls.txt" 2>/dev/null; then
+  pass "FO dispatched an ensign for validation stage"
 else
-  fail "FO dispatched a validator for validation stage"
+  fail "FO dispatched an ensign for validation stage"
 fi
 
-# Check 2: The validator's stage report contains a REJECTED recommendation
+# Check 2: The reviewer's stage report contains a REJECTED recommendation
 # Look in entity files (main and worktree copies) and FO text output
 FOUND_REJECTED=false
 
@@ -202,26 +200,22 @@ if grep -qi "REJECTED" "$TEST_DIR/fo-texts.txt" 2>/dev/null; then
 fi
 
 if $FOUND_REJECTED; then
-  pass "validator stage report contains REJECTED recommendation"
+  pass "reviewer stage report contains REJECTED recommendation"
 else
-  fail "validator stage report contains REJECTED recommendation"
+  fail "reviewer stage report contains REJECTED recommendation"
 fi
 
-# Check 3: FO dispatched an ensign implementer after the rejection
-# The implementer dispatch should come AFTER the validator dispatch in the log
-VALIDATOR_LINE=$(grep -n "subagent_type=validator" "$TEST_DIR/agent-calls.txt" 2>/dev/null | head -1 | cut -d: -f1)
-ENSIGN_LINE=$(grep -n "subagent_type=ensign" "$TEST_DIR/agent-calls.txt" 2>/dev/null | head -1 | cut -d: -f1)
+# Check 3: FO dispatched multiple ensigns (implementation + validation + fix after rejection)
+# After the feedback stage produces a REJECTED recommendation, the FO should dispatch
+# another ensign to fix the issues. This means at least 3 ensign dispatches total.
+ENSIGN_COUNT=$(grep -c "subagent_type=ensign" "$TEST_DIR/agent-calls.txt" 2>/dev/null || echo 0)
 
-if [ -n "${ENSIGN_LINE:-}" ] && [ -n "${VALIDATOR_LINE:-}" ]; then
-  if [ "$ENSIGN_LINE" -gt "$VALIDATOR_LINE" ]; then
-    pass "FO dispatched ensign implementer after validator rejection"
-  else
-    fail "FO dispatched ensign implementer after validator rejection (ensign dispatched before validator)"
-  fi
-elif [ -n "${ENSIGN_LINE:-}" ]; then
-  fail "FO dispatched ensign implementer after validator rejection (no validator dispatch found)"
+if [ "$ENSIGN_COUNT" -ge 3 ]; then
+  pass "FO dispatched ensign for fix after rejection ($ENSIGN_COUNT total ensign dispatches)"
+elif [ "$ENSIGN_COUNT" -ge 2 ]; then
+  fail "FO dispatched ensign for fix after rejection (only $ENSIGN_COUNT ensign dispatches — missing fix dispatch)"
 else
-  fail "FO dispatched ensign implementer after validator rejection (no ensign dispatch found)"
+  fail "FO dispatched ensign for fix after rejection (only $ENSIGN_COUNT ensign dispatches)"
 fi
 
 # --- Results ---

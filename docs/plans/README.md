@@ -19,6 +19,7 @@ stages:
     - name: validation
       worktree: true
       fresh: true
+      feedback-to: implementation
       gate: true
     - name: done
       terminal: true
@@ -90,16 +91,16 @@ A task moves to ideation when a pilot starts fleshing out the idea: clarify the 
 
 ### `implementation`
 
-A task moves to implementation once its design is approved. The work here is to write the code, create the files, or make whatever changes the task describes.
+A task moves to implementation once its design is approved. The work here is to produce the deliverable: write code, run experiments, generate analysis, or make whatever changes the task describes. Implementation is complete when the deliverable exists and is ready for independent verification.
 
 - **Inputs:** The fleshed-out task body from ideation with approach and acceptance criteria
-- **Outputs:** Working code or artifacts committed to the repo, with a summary of what was built and where
-- **Good:** Minimal changes that satisfy acceptance criteria, clean code, tests where appropriate
-- **Bad:** Over-engineering, unrelated refactoring, skipping tests, ignoring edge cases identified in ideation
+- **Outputs:** The deliverable committed to the repo (code, experiment results, analysis, test suites — whatever the task specifies), with a summary of what was produced and where
+- **Good:** Minimal changes that satisfy acceptance criteria, clean code, tests where appropriate, deliverable is self-contained and verifiable
+- **Bad:** Over-engineering, unrelated refactoring, skipping tests, ignoring edge cases identified in ideation, leaving the deliverable incomplete for validation to finish
 
 ### `validation`
 
-A task moves to validation after implementation is complete. The work here is to verify the implementation meets the acceptance criteria defined in ideation.
+A task moves to validation after implementation is complete. The work here is to verify the deliverable meets the acceptance criteria defined in ideation. The validator checks what was produced — it does not produce the deliverable itself.
 
 - **Inputs:** The implementation summary and the acceptance criteria from the task body
 - **Outputs:**

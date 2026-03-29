@@ -26,7 +26,7 @@ For each entity from `status --next` output:
 1. **Read context** — Read the entity file and the next stage's subsection from the README (Inputs, Outputs, Good, Bad).
 2. **Assemble checklist** — Build a numbered checklist (max 5 items) from stage Outputs bullets + entity acceptance criteria.
 3. **Conflict check** — If multiple entities enter a worktree stage simultaneously, check for file overlap and warn the captain.
-4. **Determine agent type** — Read the next stage's entry in the `stages.states` block from the README frontmatter. If the stage has an `agent` property (e.g., `agent: pr-lieutenant`), use that value as `{agent}`. If no `agent` property: default to `validator` when the stage has `fresh: true`, otherwise default to `ensign`.
+4. **Determine agent type** — Read the next stage's entry in the `stages.states` block from the README frontmatter. If the stage has an `agent` property (e.g., `agent: pr-lieutenant`), use that value as `{agent}`. If no `agent` property: default to `ensign`. (All agents are ensigns — feedback behavior is injected via dispatch instructions when `feedback-to` is present, not via a separate agent type.)
 5. **Update state** — Edit frontmatter on main: set `status: {next_stage}`. For worktree stages, set `worktree: .worktrees/{agent}-{slug}`. Commit: `dispatch: {slug} entering {next_stage}`.
 6. **Create worktree** (worktree stages only, first dispatch) — `git worktree add .worktrees/{agent}-{slug} -b {agent}/{slug}`. Clean up stale worktree/branch first if needed.
 7. **Dispatch agent** — Always dispatch fresh. **You MUST use the Agent tool** to spawn each worker — do NOT use SendMessage to dispatch. **NEVER use `subagent_type="first-officer"`** — that clones yourself instead of dispatching a worker. Only fill `{named_variables}` — do not expand bracketed placeholders or add behavioral instructions.
@@ -36,11 +36,11 @@ Agent(
     subagent_type="{agent}",
     name="{agent}-{slug}-{stage}",
     team_name="{project_name}-{dir_basename}",
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim]\n\n{if worktree: 'Your working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in entity files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.'}\nRead the entity file at {entity_file_path} for full context.\n\n{if validation stage: insert validation instructions}\n\n### Completion checklist\n\nWrite a ## Stage Report section into the entity file when done. Report the status of each item using the format from your agent instructions.\n\n[CHECKLIST — insert numbered checklist from step 2]"
+    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim]\n\n{if worktree: 'Your working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in entity files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.'}\nRead the entity file at {entity_file_path} for full context.\n\n{if stage has feedback-to: insert feedback instructions}\n\n### Completion checklist\n\nWrite a ## Stage Report section into the entity file when done. Report the status of each item using the format from your agent instructions.\n\n[CHECKLIST — insert numbered checklist from step 2]"
 )
 ```
 
-**Validation instructions** (insert when dispatching a validation stage): You are a validator. You read and judge — you do NOT write code or fix bugs. Determine what work was done in the previous stage. For code changes, check the README for a Testing Resources section — run applicable tests and include results (test failure means recommend REJECTED). For analysis or research, verify correctness and completeness against acceptance criteria. Adapt validation to what was actually produced. If you find issues, describe them precisely in your stage report with a REJECTED recommendation. If an implementer messages you with fixes, re-run tests and update your stage report, then send your updated completion message to the first officer.
+**Feedback instructions** (insert when dispatching a stage that has `feedback-to`): You are reviewing the work from {feedback-to target stage}. You check what was produced — you do not produce the deliverable yourself. If the deliverable is missing or incomplete, that is itself a REJECTED finding. Running the deliverable to verify its behavior is review work; producing new deliverable content is not. Adapt review to what was actually produced — use the stage definition's Outputs and Good/Bad criteria to guide your assessment. If you find issues, describe them precisely in your stage report with a REJECTED recommendation as a numbered list of specific issues with enough detail to locate and address. Report with a Recommendation (PASSED or REJECTED) and numbered Findings. If a prior-stage agent messages you with fixes, re-check and update your stage report, then send your updated completion message to the first officer.
 
 After each completion, run `status --next` again and dispatch any newly ready entities. This is the event loop — repeat until nothing is dispatchable.
 
@@ -71,20 +71,21 @@ Assessment: {N} done, {N} skipped, {N} failed. [Recommend approve / Recommend re
 - **Reject + redo:** Send feedback to the agent for revision. On completion, re-enter stage report review.
 - **Reject + discard:** Shut down the agent, clean up worktree/branch, ask the captain for direction.
 
-## Validation Rejection Flow
+## Feedback Rejection Flow
 
-When a validation stage's gate results in a REJECTED verdict from the captain:
+When a feedback stage's gate results in a REJECTED verdict from the captain:
 
-1. **Check cycle count** — Look for a `### Validation Cycles` section in the entity file body. If it exists, read the current count. If the count is >= 3, escalate to the captain with a summary of all validation findings across cycles and ask for direction. Do not dispatch another cycle.
-2. **Ensure implementer is alive** — If the implementation agent from the prior stage is still running, send it the validator's findings via SendMessage. If it was shut down, dispatch an `ensign` (or the agent type from the entity's prior implementation stage, if a lieutenant was used) into the same worktree. Include the validator's findings from the stage report in the dispatch prompt so the implementer knows exactly what to fix.
-3. **Ensure validator is alive** — Keep the existing validator running. If it was shut down (session boundary, crash), dispatch a fresh validator into the same worktree.
-4. **Implementer fixes and signals validator** — The implementer commits fixes and messages the validator directly via SendMessage. The validator re-checks the code and tests, then reports updated findings to the FO via its completion message.
-5. **FO presents updated result at gate** — Increment the cycle count. Append or update a `### Validation Cycles` section in the entity file body with the new count (e.g., `Cycle: 1`, `Cycle: 2`). Then present the validator's updated stage report at the gate for captain review. Same gate flow as before: captain approves or rejects.
+1. **Read `feedback-to`** — Look up the `feedback-to` property on the rejected stage in the README frontmatter. This names the target stage whose agent receives the findings.
+2. **Check cycle count** — Look for a `### Feedback Cycles` section in the entity file body. If it exists, read the current count. If the count is >= 3, escalate to the captain with a summary of all findings across cycles and ask for direction. Do not dispatch another cycle.
+3. **Ensure target-stage agent is alive** — If the agent from the `feedback-to` target stage is still running, send it the reviewer's findings via SendMessage. If it was shut down, dispatch an agent (using the target stage's `agent` property if set, otherwise `ensign`) into the same worktree. Include the reviewer's findings from the stage report in the dispatch prompt so the agent knows exactly what to fix.
+4. **Ensure reviewer is alive** — Keep the existing feedback-stage agent running. If it was shut down (session boundary, crash), dispatch a fresh agent into the same worktree.
+5. **Target agent fixes and signals reviewer** — The target agent commits fixes and messages the reviewer directly via SendMessage. The reviewer re-checks and reports updated findings to the FO via its completion message.
+6. **FO presents updated result at gate** — Increment the cycle count. Append or update a `### Feedback Cycles` section in the entity file body with the new count (e.g., `Cycle: 1`, `Cycle: 2`). Then present the reviewer's updated stage report at the gate for captain review. Same gate flow as before: captain approves or rejects.
 
 Cycle counting format in the entity file:
 
 ```
-### Validation Cycles
+### Feedback Cycles
 
 Cycle: {N}
 ```

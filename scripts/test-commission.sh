@@ -341,10 +341,10 @@ if [ -f "$FO" ]; then
   else
     fail "first-officer dispatches fresh ensigns"
   fi
-  if grep -qi "validation.*test\|Testing Resources\|run.*test\|test.*harness" "$FO"; then
-    pass "first-officer has smart validation instructions"
+  if grep -qi "feedback-to\|feedback instructions\|deliverable\|produce.*deliverable" "$FO"; then
+    pass "first-officer has feedback protocol instructions"
   else
-    fail "first-officer has smart validation instructions"
+    fail "first-officer has feedback protocol instructions"
   fi
   if grep -qi "_archive\|archive" "$FO"; then
     pass "first-officer references _archive convention"

@@ -120,11 +120,12 @@ Do NOT spawn an Agent for this — a direct file read is sufficient. Look for:
 
 After collecting answers, derive all remaining values from the mission context:
 
-- `{approval_gates}` — default: gate before the terminal stage (e.g., `validation → done`).
+- `{approval_gates}` — default: gate before the terminal stage (e.g., the last stage before terminal).
+- `{rejection_flow}` — for each approval gate, determine which earlier stage gets bounced back to on rejection (default: the stage immediately before the gated stage).
 - `{dir}` — `docs/{mission-slug}/` where `{mission-slug}` is the mission condensed to a short lowercase hyphenated directory name.
 - `{captain}` — "captain".
 
-Present the full summary with all derived values:
+Present the full summary with all derived values. Use plain language for stage behavior — do not expose implementation vocabulary like `worktree`, `gate`, `fresh`, or `feedback-to`:
 
 > **Workflow Design Summary**
 >
@@ -132,7 +133,8 @@ Present the full summary with all derived values:
 > - **Entity:** {entity_description}
 > - **Item label:** {entity_label} (plural: {entity_label_plural})
 > - **Stages:** {stages joined with " → "}
-> - **Approval gates:** {approval_gates, or "none"}
+> - **Approval gates:** {for each gate: "{stage_name} (you review before {next_stage_name})", or "none"}
+> - **On rejection:** {for each gate: "{gated_stage} bounces back to {target_stage}", or "n/a"}
 > - **Seed entities:** {count} items
 >   {for each: "- {title} (score: {score})" or "- {title}" if no score}
 > - **Location:** `{dir}`
@@ -220,8 +222,9 @@ stages:
     {For each middle stage, add an entry with per-stage overrides only when different from defaults:}
     - name: {stage_name}
       {worktree: true — only if the stage modifies code or produces artifacts beyond the entity file}
-      {fresh: true — only if an independent perspective matters, e.g., validation}
-      {gate: true — if this stage is the SOURCE in an approval_gates transition}
+      {fresh: true — only if an independent perspective matters (e.g., a feedback stage that should assess without prior context)}
+      {feedback-to: {target_stage} — if this stage has a rejection flow that bounces back to {target_stage}. Infer from the rejection_flow derived in Confirm Design.}
+      {gate: true — if this stage is an approval gate}
       {agent: {lieutenant-name} — only if {captain} specifies a lieutenant agent for this stage. Omit to use the default ensign. The value is the agent file basename without .md.}
     - name: {last_stage}
       terminal: true
@@ -414,18 +417,6 @@ The template is static — no substitution needed. Copy it verbatim.
 cp "{spacedock_plugin_dir}/templates/ensign.md" {project_root}/.claude/agents/ensign.md
 ```
 
-### 2e2. Generate Validator Agent
-
-Copy the validator agent template to `{project_root}/.claude/agents/validator.md`.
-
-**IMPORTANT: Use Bash to write this file, NOT the Write tool.** The Write tool is often blocked for `.claude/` paths.
-
-The template is static — no substitution needed. Copy it verbatim.
-
-```bash
-cp "{spacedock_plugin_dir}/templates/validator.md" {project_root}/.claude/agents/validator.md
-```
-
 ### 2f. Generate PR Lieutenant Agent (conditional)
 
 Check the README frontmatter for any stages with `agent: pr-lieutenant`. If at least one stage references `pr-lieutenant`, generate the PR lieutenant agent.
@@ -451,13 +442,12 @@ After generating all files, verify before proceeding:
 - [ ] Each seed entity file exists at `{dir}/{slug}.md` with valid YAML frontmatter
 - [ ] `{project_root}/.claude/agents/first-officer.md` exists with all sections
 - [ ] `{project_root}/.claude/agents/ensign.md` exists with all sections
-- [ ] `{project_root}/.claude/agents/validator.md` exists with all sections
 - [ ] `{project_root}/.claude/agents/pr-lieutenant.md` exists (only if a stage references `agent: pr-lieutenant`)
 - [ ] `.worktrees/` is in `{project_root}/.gitignore`
 
 ### Lieutenant Agent Warnings
 
-After generation, check the README frontmatter for any stages with an `agent:` property that is NOT `pr-lieutenant` or `validator` (since these are generated in steps 2e2 and 2f). For each such referenced agent, check whether `{project_root}/.claude/agents/{agent}.md` exists. If a referenced agent file does not exist, warn {captain}:
+After generation, check the README frontmatter for any stages with an `agent:` property that is NOT `pr-lieutenant` (since it is generated in step 2f). For each such referenced agent, check whether `{project_root}/.claude/agents/{agent}.md` exists. If a referenced agent file does not exist, warn {captain}:
 
 > Stage '{stage_name}' references agent '{agent}' but `{project_root}/.claude/agents/{agent}.md` does not exist. You'll need to create this file before running the workflow.
 
@@ -480,7 +470,6 @@ Tell {captain} what was generated:
 > - {for each seed entity: "`{dir}/{slug}.md` — {title}"}
 > - `{project_root}/.claude/agents/first-officer.md` — workflow orchestrator
 > - `{project_root}/.claude/agents/ensign.md` — stage worker agent
-> - `{project_root}/.claude/agents/validator.md` — validation agent
 > - {if pr-lieutenant was generated: "`{project_root}/.claude/agents/pr-lieutenant.md` — PR workflow agent"}
 >
 > To run this workflow in future sessions, start Claude Code with:

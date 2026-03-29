@@ -17,6 +17,7 @@ stages:
     - name: validation
       worktree: true
       fresh: true
+      feedback-to: implementation
       gate: true
     - name: done
       terminal: true
