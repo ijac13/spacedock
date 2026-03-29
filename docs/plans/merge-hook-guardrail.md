@@ -75,13 +75,15 @@ Additionally, update the gate approval "Approve + terminal + worktree" path to:
 3. The gate approval "Approve + terminal + worktree" path no longer has its own inline merge hook instruction — it delegates to Merge and Cleanup.
 4. The guardrail explicitly states: no `git merge`, no archival, and no status advancement until merge hooks have completed.
 5. The guardrail explicitly addresses the PR-created case: if a hook set `pr`, stop — do not local merge.
-6. An E2E test (`tests/test-merge-hook-guardrail.sh`) verifies the merge hook actually fires at merge time. Design:
+6. An E2E test (`tests/test-merge-hook-guardrail.sh`) verifies the merge hook fires at merge time. Design:
    - Create a test mod (`_mods/test-hook.md`) with `## Hook: merge` that appends to `_merge-hook-fired.txt`
    - Commission a no-gates workflow (backlog → work → done), one entity
    - Run `claude -p --agent first-officer` to completion
    - Assert `_merge-hook-fired.txt` exists and contains the entity slug
    - Assert the entity was archived (merge completed after hook)
-7. The E2E test is added to the README's Testing Resources table.
+   - Additional case: run WITHOUT any mods — verify local merge still completes (no-mods fallback)
+7. The guardrail wording references the in-memory hook registry (discovered at startup), not a filesystem scan at merge time. The FO discovers hooks once at startup; mid-session changes to `_mods/` are not picked up.
+8. The E2E test is added to the README's Testing Resources table.
 
 ### Open questions (resolved)
 
@@ -90,6 +92,17 @@ A: No. Startup PR detection (Path 5) and after-completion PR detection (Path 4) 
 
 **Q: Should idle hooks or post-completion hooks also get guardrails?**
 A: Out of scope. The incident was specifically about merge hooks being skipped. If other hook types get skipped, that's a separate issue.
+
+### Staff review findings (independent reviewer)
+
+**Design: PASS** — single-execution-point consolidation is correct, all merge paths identified, guardrail wording handles no-mods fallback.
+
+**Test plan: INSUFFICIENT → ADDRESSED** — Original test plan only covered "hook fires." Reviewer identified missing coverage:
+1. ~~No-mods fallback~~ → Added to AC6 (run without mods, verify local merge completes)
+2. ~~PR-creating hook path~~ → Out of scope for this task; pr-merge mod already has its own E2E test path
+3. Hook failure handling → Out of scope; document as future work
+
+**Gap: ADDRESSED** — Guardrail wording said "check `_mods/*.md`" but hooks are discovered at startup and stored in memory. Updated AC7 to clarify the guardrail references the in-memory registry.
 
 ## Stage Report: ideation
 
