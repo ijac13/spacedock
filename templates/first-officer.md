@@ -112,8 +112,7 @@ Assessment: {N} done, {N} skipped, {N} failed. [Recommend approve / Recommend re
 
 - **Approve + next stage is terminal + current stage has worktree:**
   1. Shut down the agent (gate work is done).
-  2. Run merge hooks (from `_mods/`) here, before any status change. If no merge hooks are registered, skip to step 3.
-  3. After merge hooks return, check the entity's `pr` field on main. If `pr` is set (a PR was created): do NOT advance to terminal. The entity stays at its current stage. Report to the captain that the PR is pending and will be detected on next startup. If `pr` is not set (no pr-merge mod installed, or captain declined the push): fall through to `## Merge and Cleanup` for local merge.
+  2. Fall through to `## Merge and Cleanup` — the merge hook guardrail there handles hook execution, PR detection, and merge.
 - **Approve + next stage is terminal + no worktree:** Fall through to `## Merge and Cleanup` for terminal advancement and archival (no code to merge, no PR needed).
 - **Approve + next stage is NOT terminal:** Shut down the agent. If a kept-alive agent from a prior stage is still running (the `feedback-to` target), shut it down too. Dispatch a fresh agent for the next stage.
 - **Reject + redo:** Send feedback to the agent for revision. On completion, re-enter stage report review.
@@ -142,9 +141,11 @@ The first officer owns this section — update it on main after each fix cycle, 
 
 ## Merge and Cleanup
 
+**MERGE HOOK GUARDRAIL — BEFORE any merge operation (local or otherwise), you MUST run all registered merge hooks from the in-memory hook registry (discovered at startup from `_mods/`).** Do NOT proceed to `git merge`, archival, or status advancement until all merge hooks have completed and you have acted on their results. If a merge hook created a PR (set the `pr` field), do NOT perform a local merge — report to the captain that the PR is pending and stop. If no merge hooks are registered, proceed with default local merge.
+
 When an entity reaches its terminal stage:
 
-1. **Run merge hooks** — For each registered `merge` hook (from `_mods/`), follow its instructions. All merge hooks fire (additive model) in alphabetical order by mod filename. If any merge hook handled the entity (e.g., pushed a branch and created a PR), skip the default local merge. If no merge hooks are registered, fall back to default local merge: read the `worktree` field to get the worktree path, derive the branch name (e.g., worktree `.worktrees/{agent}-{slug}` uses branch `{agent}/{slug}`). Merge: `git merge --no-commit {agent}/{slug}`. If conflict, report to the captain — do not auto-resolve.
+1. **Run merge hooks** — For each registered `merge` hook (from the in-memory hook registry), follow its instructions. All merge hooks fire (additive model) in alphabetical order by mod filename. If any merge hook set the entity's `pr` field (e.g., pushed a branch and created a PR), do NOT perform a local merge — the entity stays at its current stage, report to the captain that the PR is pending. If no merge hooks are registered, fall back to default local merge: read the `worktree` field to get the worktree path, derive the branch name (e.g., worktree `.worktrees/{agent}-{slug}` uses branch `{agent}/{slug}`). Merge: `git merge --no-commit {agent}/{slug}`. If conflict, report to the captain — do not auto-resolve.
 2. Update frontmatter: set `status`, `completed`, `verdict` (PASSED/REJECTED). Clear `worktree`. Archive: `mkdir -p {workflow_dir}/_archive && git mv {workflow_dir}/{slug}.md {workflow_dir}/_archive/{slug}.md && git commit -m "done: {slug} completed workflow"`.
 3. Remove worktree (if one exists): `git worktree remove .worktrees/{agent}-{slug} && git branch -d {agent}/{slug}`.
 
