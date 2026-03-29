@@ -131,10 +131,11 @@ This message should appear once at startup, right after the detection. It is inf
 1. Startup step 1: Replace grep command with the version including `--exclude-dir` flags
 2. Startup step 3: Wrap TeamCreate in a ToolSearch probe. If unavailable, set an internal `bare_mode` flag and report to captain. Skip TeamCreate.
 3. Dispatch section: Conditionally include `team_name` only when not in bare mode. Add a note that dispatch blocks in bare mode (sequential).
-4. Post-completion: No changes needed — the FO processes completions the same way regardless of delivery mechanism.
-5. Feedback rejection flow: Add a bare-mode variant that dispatches sequentially instead of relying on inter-agent messaging.
+4. Dispatch section: In the worktree dispatch prompt, add git branch constraint: "Your git branch is {branch}. All commits MUST be on this branch. Do NOT switch branches or commit to main." This is inside the existing `{if worktree}` block — non-worktree stages (which work on main) are unaffected.
+5. Post-completion: No changes needed — the FO processes completions the same way regardless of delivery mechanism.
+6. Feedback rejection flow: Add a bare-mode variant that dispatches sequentially instead of relying on inter-agent messaging.
 
-**`templates/ensign.md`:** No changes needed. The ensign already naturally probes for SendMessage via ToolSearch and falls back to subagent return (task 033 confirmed this).
+**`templates/ensign.md`:** No changes needed. The ensign already naturally probes for SendMessage via ToolSearch and falls back to subagent return (task 033 confirmed this). The branch constraint is injected via the dispatch prompt, not the ensign template.
 
 ### 5. Acceptance criteria
 
@@ -145,6 +146,8 @@ This message should appear once at startup, right after the detection. It is inf
 5. The feedback rejection flow has a bare-mode variant that dispatches sequentially
 6. No changes to `templates/ensign.md` (natural degradation is sufficient)
 7. Commissioning a workflow and running the FO with `--disallowed-tools "TeamCreate,TeamDelete,SendMessage"` completes a full entity lifecycle (backlog -> work -> done) without errors
+8. Worktree-stage dispatch prompts include a git branch constraint preventing commits to main
+9. Non-worktree-stage dispatch prompts do NOT include the branch constraint (agents work on main)
 
 ## Stage Report: ideation
 
