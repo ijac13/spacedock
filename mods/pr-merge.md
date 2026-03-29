@@ -18,10 +18,21 @@ If `gh` is not available, warn the captain and skip PR state checks.
 
 ## Hook: merge
 
-Push the worktree branch: `git push origin {branch}`. If the push fails (no remote, auth error), report to the captain and fall back to local merge.
+**PR APPROVAL GUARDRAIL — Do NOT push or create a PR without explicit captain approval.** Before pushing, present a draft PR summary to the captain:
+
+- **Title:** {entity title}
+- **Branch:** {branch} -> main
+- **Changes:** {N} file(s) changed across {N} commit(s)
+- **Files:** {list of changed files}
+
+Wait for the captain's explicit approval before pushing. Do NOT infer approval from silence, acknowledgment of the summary, or the gate approval that preceded this step — only an explicit "push it", "go ahead", "yes", or equivalent counts.
+
+**On approval:** Push the worktree branch: `git push origin {branch}`. If the push fails (no remote, auth error), report to the captain and fall back to local merge.
 
 Create a PR: `gh pr create --base main --head {branch} --title "{entity title}" --body "Workflow entity: {entity title}"`. If `gh` is not available, warn the captain and fall back to local merge.
 
 Set the entity's `pr` field to the PR number (e.g., `#57`). Report the PR to the captain.
+
+**On decline:** Do NOT automatically fall back to local merge. Ask the captain how to proceed — options include local merge or leaving the branch unmerged. Only act on the captain's explicit choice.
 
 Do NOT archive yet. The entity stays in its terminal stage with `pr` set until the PR is merged. The startup hook will detect the merge on next FO startup.
