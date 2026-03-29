@@ -4,10 +4,22 @@
 set -euo pipefail
 
 EXTRA_ARGS=()
+HAS_MODEL=false
+HAS_EFFORT=false
 while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --model) HAS_MODEL=true ;;
+    --effort) HAS_EFFORT=true ;;
+  esac
   EXTRA_ARGS+=("$1")
   shift
 done
+if [ "$HAS_MODEL" = false ]; then
+  EXTRA_ARGS+=(--model opus)
+fi
+if [ "$HAS_EFFORT" = false ]; then
+  EXTRA_ARGS+=(--effort low)
+fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TEST_DIR="$(mktemp -d)"
