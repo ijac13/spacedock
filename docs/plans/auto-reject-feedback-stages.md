@@ -1,13 +1,13 @@
 ---
 id: 073
 title: Auto-bounce rejection at feedback stages without captain approval
-status: ideation
+status: implementation
 source: 033 validation incident — FO waited for captain on a clear rejection
 started: 2026-03-29T16:45:00Z
 completed:
 verdict:
 score: 0.75
-worktree:
+worktree: .worktrees/ensign-073-auto-reject
 ---
 
 When a feedback stage (one with `feedback-to`) has `gate: true` and the validator recommends REJECTED, the FO currently presents the rejection at the gate and waits for the captain to explicitly approve or reject. This is unnecessary — the validator already decided REJECTED with specific findings. The captain had to say "do that, and check the workflow to see why we think this needed to be raised."
