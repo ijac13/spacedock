@@ -125,3 +125,18 @@ The root cause is that the FO template has no guidance about cwd management, and
 ### Summary
 
 Added two targeted wording changes to `templates/first-officer.md`: a new "Working Directory" section after Startup that prohibits `cd` and prescribes `git -C`, absolute paths, and the `Read` tool as alternatives; and an absolute-path requirement appended to Dispatch step 7. Commission test harness passes with all 65 checks green.
+
+## Stage Report: validation
+
+- [x] Each acceptance criterion verified with evidence (line numbers, text matches)
+  AC1: "Working Directory" section at first-officer.md:37-43 prohibits `cd`, prescribes `git -C`, absolute paths, `Read` tool. AC2: Absolute path requirement at first-officer.md:55 in Dispatch step 7. AC3: `git diff main -- templates/ensign.md` produces no output — unchanged. AC4: Commit 6d2454c touches only `templates/first-officer.md` — no code files.
+- [x] Commission test harness passes (no regression)
+  65 passed, 0 failed (out of 65 checks) — RESULT: PASS
+- [x] Ensign template unchanged (verify no diff)
+  `git diff 6d2454c main -- templates/ensign.md` produces empty output — identical to main
+- [x] Recommendation: PASSED
+  All four acceptance criteria met with clear evidence. Fix is minimal, targeted, and template-only.
+
+### Summary
+
+Validated the implementation against all four acceptance criteria. The Working Directory section (lines 37-43) contains the `cd` prohibition with three alternative patterns. The dispatch absolute-path requirement is at line 55. Ensign template is unchanged (zero diff vs main). The fix commit touches only `templates/first-officer.md` with no code changes. Commission test harness passes all 65 checks. Recommendation: PASSED.
