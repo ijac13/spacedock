@@ -129,6 +129,45 @@ The prompt change is: replace all `{spacedock_plugin_dir}/templates/` references
 
 2. **Skill prompt self-location:** How does a skill installed via the skills CLI know its own directory path? If the agent (e.g., Claude Code) presents skills by injecting their content into the system prompt, the skill has no way to know its filesystem location. This may require the skill to use a known install path (`.claude/skills/commission/templates/`) instead of a relative reference. Needs investigation.
 
+## Cross-agent compatibility analysis
+
+### Claude Code constructs spacedock depends on
+
+Spacedock uses seven Claude Code-specific constructs, grouped by portability:
+
+**Tier 1 — Portable with phrasing changes:**
+- Tool name references (`Read`, `Write`, `Bash`, `Glob`, `Edit`) — all agents have file/shell equivalents, just different names. Fix: use generic language ("read the file") instead of tool names.
+- `{spacedock_plugin_dir}` template resolution — fix with symlink approach (templates travel with skill directory).
+- Git worktree commands — universal shell commands, work everywhere.
+
+**Tier 2 — Requires architecture decisions:**
+- `.claude/agents/` agent definitions — only Claude Code loads these as spawnable subagent types. Other agents have no equivalent (Codex: none, Gemini CLI: none, OpenCode: `agents.json` config is not equivalent).
+- Slash command invocation (`/commission`) — other agents load skills as ambient context, not on-demand. A 500-line skill as always-loaded context is problematic.
+
+**Tier 3 — Claude Code exclusive (no equivalent):**
+- `Agent()` subagent spawning — the multi-agent orchestration model (first-officer dispatching ensigns). Codex, Gemini CLI, and OpenCode are all single-agent systems.
+- `TeamCreate` / `SendMessage` inter-agent communication — no other agent has this.
+
+### Per-agent assessment
+
+| Agent | Install works? | Commission skill runs? | Generated workflow runs? | Classification |
+|-------|---------------|----------------------|------------------------|----------------|
+| Claude Code (no plugin) | Yes | Yes (with Tier 1 fixes) | Yes | REALISTIC |
+| Codex | Yes | No (Tier 2+3 constructs) | No (single-agent) | ASPIRATIONAL |
+| Gemini CLI | Yes | No (Tier 2+3 constructs) | No (single-agent) | ASPIRATIONAL |
+| OpenCode | Yes | Partial (if Claude backend) | No (single-agent) | ASPIRATIONAL |
+
+### Key insight: distribution vs. execution
+
+The skills CLI solves **distribution** universally — `npx skills add` installs to all agents. But **execution** splits into two layers:
+
+1. **Commission/refit skills** — need only Tier 1 fixes to become portable. These are the install-time tools.
+2. **Generated workflow runtime** (first-officer/ensign orchestration) — depends on Tier 3 constructs (Agent spawning, TeamCreate, SendMessage). This is fundamentally a Claude Code multi-agent system. Making it work on single-agent platforms would require a different execution engine (sequential single-agent mode).
+
+### Decision
+
+Scope this issue to Claude Code (no-plugin) as the realistic target. Cross-agent runtime portability is a separate initiative — follow up in a new issue for ideation on a single-agent execution mode.
+
 ## Stage Report: ideation
 
 - [x] Skills CLI mechanics researched — how it resolves repos, what it installs, expected structure
@@ -141,7 +180,13 @@ The prompt change is: replace all `{spacedock_plugin_dir}/templates/` references
   Option A: symlinks in repo + relative template references in skill prompts + version file for refit
 - [x] Acceptance criteria written — testable conditions for "done"
   7 concrete, testable criteria covering both install methods and no regressions
+- [x] Compatibility assessment per agent (Claude Code no-plugin, Codex, Gemini, OpenCode)
+  Full construct inventory (7 constructs, 3 tiers) with per-agent mapping tables
+- [x] Realistic vs aspirational classification for each
+  Claude Code no-plugin: REALISTIC. Codex, Gemini CLI, OpenCode: ASPIRATIONAL (Tier 3 constructs block execution)
+- [x] Updated approach if compatibility findings change the design direction
+  Scope unchanged for this issue (Claude Code no-plugin target). Cross-agent runtime portability deferred to new issue per CL direction.
 
 ### Summary
 
-The skills CLI copies entire skill directories (not just SKILL.md), which means templates can travel with skills if they're co-located. The core challenge is that spacedock's skills reference templates via `{spacedock_plugin_dir}/templates/`, which only works in plugin mode. The proposed fix: add symlinks from each skill directory to the shared templates, update skill prompts to use relative paths, and add a version marker for refit. Two open questions remain about symlink traversal behavior and skill self-location that should be verified before implementation.
+Audited all seven Claude Code-specific constructs spacedock depends on and mapped equivalents (or lack thereof) across Codex, Gemini CLI, and OpenCode. The constructs fall into three portability tiers. Only Claude Code (no-plugin) is a realistic execution target — other agents lack subagent spawning (Agent tool), team communication (TeamCreate/SendMessage), and agent definitions (.claude/agents/). The proposed symlink approach remains correct for the scoped goal. CL directed that cross-agent runtime portability be spun off as a separate ideation issue.
