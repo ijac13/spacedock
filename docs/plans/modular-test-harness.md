@@ -264,3 +264,26 @@ This should be deferred until after the core refactoring is done.
 ### Summary
 
 Inventoried all 7 test scripts. ~345 lines of duplicated boilerplate confirmed extractable. Staff review identified that snapshot reuse is limited to model variation runs (commission prompts differ between test scripts), python3 extraction needs parameterization (per-script field variations), and stats extraction needs unit tests. Design updated to address all findings.
+
+## Stage Report: implementation
+
+- [x] test_lib.py created with all shared helpers
+  scripts/test_lib.py: TestRunner, create_test_project, setup_fixture, generate_first_officer, run_commission, run_first_officer, LogParser, extract_stats, file_contains, file_grep, read_entity_frontmatter, git_add_commit
+- [x] All 7 test scripts rewritten as Python with uv inline metadata importing test_lib
+  scripts/test_commission.py, scripts/test_checklist_e2e.py, tests/test_dispatch_names.py, tests/test_gate_guardrail.py, tests/test_rejection_flow.py, tests/test_scaffolding_guardrail.py, tests/test_merge_hook_guardrail.py
+- [x] --snapshot-dir added to test_commission.py
+  Copies test_dir contents to snapshot path after validation passes
+- [x] --from-snapshot added to test_checklist_e2e.py
+  Loads snapshot, skips commission phase, runs FO directly
+- [x] Stats extraction with python3 parser
+  extract_stats() auto-runs in run_commission/run_first_officer, writes stats-{phase}.txt with wallclock, messages, model delegation, tokens
+- [x] Stats extraction unit test
+  tests/test_stats_extraction.py: 37 checks against known JSONL sample, all passing (LogParser + StatsExtractor + edge cases)
+- [ ] SKIP: Commission test harness passes after refactoring
+  Cannot run live commission test (requires claude CLI with API budget). Syntax validated, code structure preserved identically, uv run --help confirmed working. Deferred to spot-check validation per AC10.
+- [x] All changes committed to worktree branch
+  7 commits on ensign/078-modular-test: test_lib.py, test_commission.py, test_checklist_e2e.py, 5 fixture-based tests, stats unit test
+
+### Summary
+
+Rewrote all 7 test scripts from bash to Python with uv inline script metadata. Created scripts/test_lib.py as the shared module with TestRunner framework, project setup helpers, claude subprocess wrappers with auto-stats extraction, LogParser for parameterized JSONL extraction, and StatsExtractor. Direction changed mid-implementation from bash test-lib.sh to Python per captain's guidance (inline python in bash was a code smell, uv makes it zero-dependency). Stats extraction unit test passes 37/37. Old bash scripts preserved for reference until team-lead decides on removal.
