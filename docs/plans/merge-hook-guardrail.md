@@ -150,17 +150,17 @@ Added bold MERGE HOOK GUARDRAIL to the Merge and Cleanup section of the first-of
   Line 144: "Do NOT proceed to `git merge`, archival, or status advancement until all merge hooks have completed"
 - [x] AC5: Guardrail addresses PR-created case: if hook set pr, stop — no local merge
   Line 144: "If a merge hook created a PR (set the `pr` field), do NOT perform a local merge — report to the captain that the PR is pending and stop."
-- [ ] FAIL: AC6: E2E test at tests/test-merge-hook-guardrail.sh with test mod + no-mods fallback
-  Test script has a bug: `awk '/^## Merge and Cleanup/,/^## [^#]/' "$TEMPLATE"` (line 52) has a start-end pattern collision — the start line `## Merge and Cleanup` also matches the end pattern `^## [^#]`, so `MERGE_SECTION` captures only the heading line. This causes Checks 2-5 (guardrail in Merge section, in-memory registry, blocks merge/archival/advancement, PR-created stop) to FAIL. Fix: change the awk to `awk '/^## Merge and Cleanup/{found=1; next} found && /^## [^#]/{exit} found' "$TEMPLATE"` or use `sed` instead.
+- [x] AC6: E2E test at tests/test-merge-hook-guardrail.sh with test mod + no-mods fallback
+  Test script present with 8 static checks (Phase 1), hook-fires dynamic test (Phases 2-4), and no-mods fallback (Phases 5-7). Awk section extraction fixed in commit 9853264 — flag-based approach now captures full Merge and Cleanup section. All 8 static checks pass.
 - [x] AC7: Guardrail wording references in-memory hook registry, not filesystem scan
   Line 144: "from the in-memory hook registry (discovered at startup from `_mods/`)" — and Step 1 also says "from the in-memory hook registry".
 - [x] AC8: Test added to README Testing Resources table
   `docs/plans/README.md:182` — row present with correct path and description.
 - [x] Commission test harness passes
   All 65 checks pass with zero failures.
-- [ ] FAIL: Recommendation: REJECTED
-  The E2E test script has a section-extraction bug that causes 4 of 8 static checks to fail when the test is actually run. The template changes themselves are correct and meet all ACs — only the test needs fixing.
+- [x] Recommendation: PASSED
+  All 8 acceptance criteria verified. Template changes correct, test script fixed and passing.
 
 ### Summary
 
-The template changes in `templates/first-officer.md` are correct and satisfy all 8 acceptance criteria. The MERGE HOOK GUARDRAIL is properly placed, worded, and consolidated. However, the E2E test script (`tests/test-merge-hook-guardrail.sh`) has a bug at line 52: the awk range pattern `/^## Merge and Cleanup/,/^## [^#]/` matches start and end on the same line, causing `MERGE_SECTION` to contain only the heading. This makes Checks 2-5 fail even though the template content they check is present and correct. The test must be fixed before this can pass validation.
+All 8 acceptance criteria verified with evidence. The template changes in `templates/first-officer.md` correctly add the MERGE HOOK GUARDRAIL to the Merge and Cleanup section, consolidate all merge paths to a single hook execution point, and handle the PR-created stop condition. The E2E test script had an awk section-extraction bug (start-end pattern collision) that was fixed by the implementer in commit 9853264 using a flag-based approach — re-verified all 8 static checks now pass. Commission test harness passes with all 65 checks green.
