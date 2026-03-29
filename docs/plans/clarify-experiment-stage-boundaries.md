@@ -1,7 +1,7 @@
 ---
 id: 065
 title: Clarify implementation vs validation boundaries for experimental tasks
-status: implementation
+status: validation
 source: CL
 started: 2026-03-28T00:25:00Z
 completed:
