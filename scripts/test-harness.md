@@ -15,7 +15,20 @@ All the checks documented below are automated in `scripts/test-commission.sh`. R
 bash scripts/test-commission.sh
 ```
 
-The script runs commission in a temp directory, validates all checks, reports PASS/FAIL per check, and exits 0 on all-pass / non-zero on any failure. Requires `claude` CLI in PATH.
+Defaults to `--model opus --effort low` (~3 minutes). Override with:
+
+```bash
+bash scripts/test-commission.sh --model sonnet        # ~4.5 minutes
+bash scripts/test-commission.sh --effort high          # ~4.5 minutes
+```
+
+Set `KEEP_LOG=1` to preserve the test log for model verification:
+
+```bash
+KEEP_LOG=1 bash scripts/test-commission.sh
+```
+
+The script runs commission in a temp directory, validates all checks, reports PASS/FAIL per check, and exits 0 on all-pass / non-zero on any failure. Requires `claude` CLI in PATH. Haiku is not supported — it cannot follow the commission skill.
 
 ---
 
