@@ -8,6 +8,7 @@ completed:
 verdict:
 score:
 worktree: .worktrees/ensign-059-guardrails
+pr: "#12"
 ---
 
 ## Problem Statement
