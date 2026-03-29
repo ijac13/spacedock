@@ -1,13 +1,13 @@
 ---
 id: 070
 title: PR lifecycle timing and startup orphan detection
-status: validation
+status: done
 source: CL
 started: 2026-03-28T12:00:00Z
-completed:
-verdict:
+completed: 2026-03-29T04:00:00Z
+verdict: PASSED
 score: 0.80
-worktree: .worktrees/ensign-070-pr-lifecycle
+worktree:
 issue:
 pr: "#11"
 ---
