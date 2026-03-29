@@ -1,13 +1,13 @@
 ---
 id: 077
 title: Add merge hook guardrail to prevent skipping mod hooks at merge time
-status: ideation
+status: implementation
 source: 073 merge incident — FO skipped pr-merge hook and went straight to local merge
 started: 2026-03-29T19:25:00Z
 completed:
 verdict:
 score: 0.75
-worktree:
+worktree: .worktrees/ensign-077-merge-guardrail
 ---
 
 When the captain approved 073 at the validation gate, the FO went straight to `git merge` without running the pr-merge mod's merge hook. The hook should have presented a PR summary and waited for push approval. Instead the entity was locally merged, archived, and cleaned up — bypassing the PR workflow entirely.
