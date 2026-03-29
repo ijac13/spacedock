@@ -1,13 +1,13 @@
 ---
 id: 065
 title: Clarify implementation vs validation boundaries for experimental tasks
-status: ideation
+status: implementation
 source: CL
 started: 2026-03-28T00:25:00Z
 completed:
 verdict:
 score:
-worktree:
+worktree: .worktrees/ensign-065-stage-boundaries
 ---
 
 Experimental tasks (like 058 terminology-experiment) blur the line between implementation and validation. The implementer builds infrastructure (harness, scripts, fixtures), but the experiment results are the actual deliverable. When the validator is told to "run the experiment," it ends up doing implementation work — producing the deliverable rather than verifying it.
