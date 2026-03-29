@@ -1,13 +1,13 @@
 ---
 id: 078
 title: Modular test harness — shared commission snapshot, reusable E2E phases
-status: ideation
+status: implementation
 source: CL — test duplication observed during model variation runs
 started: 2026-03-29T20:30:00Z
 completed:
 verdict:
 score: 0.70
-worktree:
+worktree: .worktrees/ensign-078-modular-test
 ---
 
 The commission test harness and checklist E2E test duplicate the commission phase — both create a temp dir, git init, build a prompt, and run `claude -p`. They share zero code. This wastes API budget when running model variation tests (each model re-commissions from scratch).
