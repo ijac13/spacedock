@@ -30,7 +30,8 @@ Read each scaffolding file and extract its version stamp:
 
 1. **README** — Read `{dir}/README.md`. Extract version from YAML frontmatter `commissioned-by: spacedock@X.Y.Z`. Store as `{readme_version}`.
 2. **Status script** — Read `{dir}/status`. Extract version from `# commissioned-by: spacedock@X.Y.Z`. Store as `{status_version}`.
-3. **Agent files** — Agent templates are static (no version stamps). For each agent (`first-officer.md`, `ensign.md`, and any lieutenants referenced in README `stages.states`), check if `{project_root}/.claude/agents/{agent}.md` exists. Compare its content to the corresponding template at `{spacedock_plugin_dir}/templates/{agent}.md`. Store whether each agent matches its template or differs.
+3. **Agent files** — Agent templates are static (no version stamps). For each agent (`first-officer.md`, `ensign.md`, and any agents referenced in README `stages.states`), check if `{project_root}/.claude/agents/{agent}.md` exists. Compare its content to the corresponding template at `{spacedock_plugin_dir}/templates/{agent}.md`. Store whether each agent matches its template or differs.
+4. **Mod files** — Scan `{dir}/_mods/*.md` for installed mods. For each, read the `version` frontmatter field. Match against canonical mods at `{spacedock_plugin_dir}/mods/{name}.md` by filename. Store the local version and canonical version for each. Also scan `{spacedock_plugin_dir}/mods/*.md` for mods not yet installed.
 
 If a file doesn't exist, note it as missing and skip it.
 
@@ -56,7 +57,8 @@ Each scaffolding file gets a specific upgrade strategy based on how safe it is t
 | `first-officer.md` | **Copy if changed** | Static template — compare on-disk to template, show diff and ask the captain for confirmation before replacing. |
 | `README.md` | **Show diff** | Users customize stages, schema fields, quality criteria. Too risky to auto-replace. Show what the current template would produce and let the captain decide. |
 | `ensign.md` | **Copy if changed** | Static template — compare on-disk to template, show diff and ask the captain for confirmation before replacing. |
-| `{lieutenant}.md` | **Copy if changed** | Static template. Only present for stages that reference a lieutenant agent. Show diff and ask the captain for confirmation before replacing. |
+| `{agent}.md` | **Copy if changed** | Static template. Only present for stages that reference a non-default agent. Show diff and ask the captain for confirmation before replacing. |
+| `_mods/{name}.md` | **Version diff** | Compare `version` frontmatter against canonical. Show diff if changed, ask for confirmation. |
 
 Present the classification to the captain:
 
@@ -68,11 +70,12 @@ Present the classification to the captain:
 > | `first-officer.md` | {matches template / differs from template / missing} | Copy if changed |
 > | `README.md` | {readme_version or "no stamp"} | Show diff (manual review) |
 > | `ensign.md` | {matches template / differs from template / missing} | Copy if changed |
-> | `{lieutenant}.md` (for each) | {matches template / differs from template / missing} | Copy if changed |
+> | `{agent}.md` (for each) | {matches template / differs from template / missing} | Copy if changed |
+> | `_mods/{name}.md` (for each) | {local_version vs canonical_version / custom mod} | Version diff |
 >
 > Proceed?
 
-Only include lieutenant rows for agents actually referenced in the README `stages.states` entries. Omit agent rows where the on-disk file already matches the template.
+Only include agent rows for agents actually referenced in the README `stages.states` entries. Omit agent rows where the on-disk file already matches the template. For mods, include all files found in `_mods/`.
 
 Wait for the captain to confirm before proceeding.
 
@@ -152,9 +155,9 @@ Do NOT auto-modify the README. The captain decides what to adopt.
 
 3. Wait for the captain's confirmation before replacing `{project_root}/.claude/agents/ensign.md`.
 
-### 3e. Lieutenant Agents (Copy if changed)
+### 3e. Stage Agents (Copy if changed)
 
-Scan the README frontmatter `stages.states` for entries with an `agent:` property. For each referenced lieutenant agent:
+Scan the README frontmatter `stages.states` for entries with an `agent:` property. For each referenced agent:
 
 1. Check if the template exists at `{spacedock_plugin_dir}/templates/{agent}.md`. If the template does not exist, warn the captain and skip:
 
@@ -175,6 +178,51 @@ If the agent file does not currently exist at `{project_root}/.claude/agents/{ag
 > {full content}
 >
 > Create the {agent} agent? (y/n)
+
+### 3f. Mods (Version diff)
+
+For each mod file in `{dir}/_mods/*.md`:
+
+1. **Match against canonical** — Check if `{spacedock_plugin_dir}/mods/{name}.md` exists (matching by filename).
+
+2. **If canonical exists** — Compare the `version` frontmatter field in the local file against the canonical file.
+   - If versions match: report "up to date" and skip.
+   - If versions differ: show a diff between the local and canonical files. Ask the captain:
+
+> **Mod update: {name}** (local: {local_version} → canonical: {canonical_version})
+> {diff output}
+>
+> Update this mod? (y/n)
+
+3. **If no canonical match** — The mod is custom (user-authored or third-party). Acknowledge neutrally:
+
+> Found custom mod: **{name}** — {description from frontmatter}. No canonical version to compare against. No action needed.
+
+4. **New mods available** — For each canonical mod in `{spacedock_plugin_dir}/mods/*.md` not present in `{dir}/_mods/`, offer to install:
+
+> New mod available: **{name}** — {description from frontmatter}. Install it? (y/n)
+
+   If accepted, copy the canonical file to `{dir}/_mods/{name}.md`. Create `_mods/` if it doesn't exist.
+
+### 3g. Legacy Migration (pr-lieutenant → pr-merge mod)
+
+If `{project_root}/.claude/agents/pr-lieutenant.md` exists and `{dir}/_mods/pr-merge.md` does not, offer migration:
+
+> **Migration: pr-lieutenant → pr-merge mod**
+>
+> Your workflow uses a pr-lieutenant agent for PR management. Spacedock now uses mods instead. I'll:
+> 1. Create `{dir}/_mods/pr-merge.md` with the PR management mod
+> 2. Remove `agent: pr-lieutenant` from any README stage entries
+> 3. Regenerate the first-officer with mod discovery
+>
+> The pr-lieutenant agent file at `.claude/agents/pr-lieutenant.md` will be left in place. You can delete it manually if no longer needed.
+>
+> Proceed? (y/n)
+
+If accepted:
+1. Copy `{spacedock_plugin_dir}/mods/pr-merge.md` to `{dir}/_mods/pr-merge.md`
+2. Edit the README frontmatter: remove `agent: pr-lieutenant` from any stage entries
+3. The first-officer update in step 3b already handles the FO template change
 
 ---
 
@@ -235,7 +283,8 @@ Show a summary of what was migrated:
 > | `status` | Replaced |
 > | `first-officer.md` | {Replaced / Already current / Skipped} |
 > | `ensign.md` | {Replaced / Already current / Skipped} |
-> | `{lieutenant}.md` (for each) | {Replaced / Already current / Created / Skipped} |
+> | `{agent}.md` (for each) | {Replaced / Already current / Created / Skipped} |
+> | `_mods/{name}.md` (for each) | {Updated / Already current / Installed / Custom (no action)} |
 > | `README.md` | {Stamp updated / User-reviewed / No changes} |
 >
 > Suggest committing:

@@ -88,7 +88,7 @@ if [ -f "$SELF_HOSTED_WORKFLOW/README.md" ]; then
 
     REFIT_PROMPT="/spacedock:refit $SELF_HOSTED_WORKFLOW
 
-Accept all changes from the upstream template. When showing diffs, approve all regenerations (status, first-officer, ensign, lieutenants). Preserve any local customizations in the README — only update the version stamp. Do not ask for confirmation — proceed automatically."
+Accept all changes from the upstream template. When showing diffs, approve all regenerations (status, first-officer, ensign, agents, mods). Preserve any local customizations in the README — only update the version stamp. Do not ask for confirmation — proceed automatically."
 
     CLAUDE_ARGS=(-p "$REFIT_PROMPT" --plugin-dir "$REPO_ROOT" --dangerously-skip-permissions)
     if command -v safehouse >/dev/null 2>&1; then

@@ -10,7 +10,7 @@ user-invocable: true
 
 You are commissioning a plain text workflow. A plain text workflow is a directory of markdown files with YAML frontmatter, where each file is a work entity that moves through stages. The directory's README is the single source of truth for schema and stages, and a self-describing Python script provides workflow status views.
 
-This is a v0 shuttle-mode workflow: an ensign agent handles stages by default, with optional lieutenant agents for stages that need specialized methodology. You will walk {captain} through interactive design, generate all workflow files, then launch a pilot run.
+This is a v0 shuttle-mode workflow: an ensign agent handles all stages, with optional mods that inject behavior at lifecycle points (e.g., PR creation at merge time). You will walk {captain} through interactive design, generate all workflow files, then launch a pilot run.
 
 Follow these three phases in order. Do not skip or combine phases.
 
@@ -225,7 +225,7 @@ stages:
       {fresh: true — only if an independent perspective matters (e.g., a feedback stage that should assess without prior context)}
       {feedback-to: {target_stage} — if this stage has a rejection flow that bounces back to {target_stage}. Infer from the rejection_flow derived in Confirm Design.}
       {gate: true — if this stage is an approval gate}
-      {agent: {lieutenant-name} — only if {captain} specifies a lieutenant agent for this stage. Omit to use the default ensign. The value is the agent file basename without .md.}
+      {agent: {agent-name} — only if {captain} specifies a non-default agent for this stage. Omit to use the default ensign. The value is the agent file basename without .md.}
     - name: {last_stage}
       terminal: true
   transitions:
@@ -417,21 +417,24 @@ The template is static — no substitution needed. Copy it verbatim.
 cp "{spacedock_plugin_dir}/templates/ensign.md" {project_root}/.claude/agents/ensign.md
 ```
 
-### 2f. Generate PR Lieutenant Agent (conditional)
+### 2f. Install Mods (conditional)
 
-Check the README frontmatter for any stages with `agent: pr-lieutenant`. If at least one stage references `pr-lieutenant`, generate the PR lieutenant agent.
+Check the README frontmatter for any stages with `worktree: true`. If at least one stage uses a worktree, offer the pr-merge mod:
 
-Copy the pr-lieutenant agent template to `{project_root}/.claude/agents/pr-lieutenant.md`.
+> This workflow has worktree stages. Install the **pr-merge** mod? (Pushes branches and creates GitHub PRs for completed entities.)
+>
+> (y/n, default: y)
 
-**IMPORTANT: Use Bash to write this file, NOT the Write tool.** The Write tool is often blocked for `.claude/` paths.
+In batch mode, install pr-merge by default for workflows with worktree stages. If the user explicitly says "no mods" or "no pr-merge", skip.
 
-The template is static — no substitution needed. Copy it verbatim.
+If installing, copy the mod:
 
 ```bash
-cp "{spacedock_plugin_dir}/templates/pr-lieutenant.md" {project_root}/.claude/agents/pr-lieutenant.md
+mkdir -p {dir}/_mods
+cp "{spacedock_plugin_dir}/mods/pr-merge.md" {dir}/_mods/pr-merge.md
 ```
 
-If no stage references `pr-lieutenant`, skip this step entirely.
+If no stage uses a worktree, skip this step entirely — do not offer pr-merge.
 
 ### Generation Checklist
 
@@ -442,12 +445,12 @@ After generating all files, verify before proceeding:
 - [ ] Each seed entity file exists at `{dir}/{slug}.md` with valid YAML frontmatter
 - [ ] `{project_root}/.claude/agents/first-officer.md` exists with all sections
 - [ ] `{project_root}/.claude/agents/ensign.md` exists with all sections
-- [ ] `{project_root}/.claude/agents/pr-lieutenant.md` exists (only if a stage references `agent: pr-lieutenant`)
+- [ ] `{dir}/_mods/pr-merge.md` exists (only if a worktree stage exists and pr-merge was accepted)
 - [ ] `.worktrees/` is in `{project_root}/.gitignore`
 
-### Lieutenant Agent Warnings
+### Agent Warnings
 
-After generation, check the README frontmatter for any stages with an `agent:` property that is NOT `pr-lieutenant` (since it is generated in step 2f). For each such referenced agent, check whether `{project_root}/.claude/agents/{agent}.md` exists. If a referenced agent file does not exist, warn {captain}:
+After generation, check the README frontmatter for any stages with an `agent:` property. For each such referenced agent, check whether `{project_root}/.claude/agents/{agent}.md` exists. If a referenced agent file does not exist, warn {captain}:
 
 > Stage '{stage_name}' references agent '{agent}' but `{project_root}/.claude/agents/{agent}.md` does not exist. You'll need to create this file before running the workflow.
 
@@ -470,7 +473,7 @@ Tell {captain} what was generated:
 > - {for each seed entity: "`{dir}/{slug}.md` — {title}"}
 > - `{project_root}/.claude/agents/first-officer.md` — workflow orchestrator
 > - `{project_root}/.claude/agents/ensign.md` — stage worker agent
-> - {if pr-lieutenant was generated: "`{project_root}/.claude/agents/pr-lieutenant.md` — PR workflow agent"}
+> - {if pr-merge mod was installed: "`{dir}/_mods/pr-merge.md` — PR merge mod"}
 >
 > To run this workflow in future sessions, start Claude Code with:
 >

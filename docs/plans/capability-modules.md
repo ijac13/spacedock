@@ -1,13 +1,13 @@
 ---
 id: 064
 title: Replace lieutenant agents with capability modules
-status: validation
+status: done
 source: CL
 started: 2026-03-27T23:10:00Z
-completed:
-verdict:
+completed: 2026-03-29T02:54:00Z
+verdict: PASSED
 score: 0.90
-worktree: .worktrees/ensign-064-mods
+worktree:
 issue:
 pr:
 ---
@@ -646,3 +646,26 @@ Refit acknowledges custom mods with neutral language: "Found custom mod: slack-n
 ### Summary
 
 Revisited the distribution model with CL after discovering that prior "confirmed" decisions were fabricated. CL genuinely confirmed: (1) manual copy distribution — no install tooling or registry; (2) commission offers pr-merge contextually based on whether the workflow has worktree stages, rather than always asking; (3) `_mods/` is an open directory where users can drop custom mod files; (4) refit uses neutral acknowledgment for custom mods, not warnings. The earlier "Question 4 — Capabilities" design (universal mod selection step) is replaced by contextual offering.
+
+## Stage Report: implementation
+
+- [x] `mods/pr-merge.md` exists with frontmatter and hook sections
+  Created with `name`, `description`, `version: 0.8.0` frontmatter and `## Hook: startup` / `## Hook: merge` sections adapted from pr-lieutenant hooks.
+- [x] `templates/pr-lieutenant.md` removed
+  Deleted — replaced by `mods/pr-merge.md`.
+- [x] FO template discovers hooks from `_mods/` instead of agent files
+  Startup step 4 scans `{workflow_dir}/_mods/*.md` instead of agent files from README stages. Alphabetical execution order. "Mod Hook Convention" section replaces "Lieutenant Hook Convention".
+- [x] Commission offers pr-merge contextually, copies to `_mods/`
+  Step 2f checks for worktree stages and offers pr-merge mod (default yes in batch mode). Copies from `mods/pr-merge.md` to `{dir}/_mods/pr-merge.md`. Step 2f no longer generates pr-lieutenant agent.
+- [x] Refit manages `_mods/` files
+  Phase 1 scans `_mods/` for installed mods. Phase 2 classifies with "Version diff" strategy. Phase 3 adds steps 3f (mod version diffing, custom mod acknowledgment, new mod offering) and 3g (legacy pr-lieutenant migration).
+- [x] All "capabilities" references renamed to "mods"
+  Templates, skills, scripts all use "mods" / `_mods/` / `mods/` terminology. Historical docs in `_archive/` and entity ideation sections left unchanged.
+- [x] Tests pass (commission harness + any affected tests)
+  65 passed, 0 failed (out of 65 checks). New checks: pr-merge mod existence, frontmatter, hooks, FO mod discovery.
+- [x] All changes committed to worktree branch
+  Commit `dc03ec3` on `ensign/064-mods` branch.
+
+### Summary
+
+Replaced lieutenant agents with mods across all active codebase files. Created `mods/pr-merge.md` as the canonical mod with startup and merge hooks (content adapted from the former `templates/pr-lieutenant.md`). Updated the FO template to discover hooks by scanning `{workflow_dir}/_mods/*.md` instead of agent files referenced in README stages. Updated commission to contextually offer pr-merge for worktree workflows and copy it to `_mods/`. Updated refit with mod version diffing, custom mod support, and legacy pr-lieutenant migration. Updated test harness: replaced pr-lieutenant checks with pr-merge mod checks, added FO mod discovery check, excluded `_mods/` from leaked variable check. All 65 test checks pass.

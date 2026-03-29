@@ -48,7 +48,7 @@ PROMPT="/spacedock:commission
 All inputs for this workflow:
 - Mission: Design and build Spacedock — a Claude Code plugin for creating plain text workflows
 - Entity: A design idea or feature for Spacedock
-- Stages: ideation → implementation (agent: pr-lieutenant) → validation → done
+- Stages: ideation → implementation → validation → done
 - Approval gates: ideation → implementation (new features), validation → done (merging)
 - Seed entities:
   1. full-cycle-test — Prove the full ideation → implementation → validation → done cycle works end-to-end (score: 22/25)
@@ -86,7 +86,7 @@ check "full-cycle-test.md exists"     test -f "$WORKFLOW_DIR/full-cycle-test.md"
 check "refit-command.md exists"       test -f "$WORKFLOW_DIR/refit-command.md"
 check "multi-pipeline.md exists"      test -f "$WORKFLOW_DIR/multi-pipeline.md"
 check "first-officer.md exists"       test -f "$TEST_DIR/.claude/agents/first-officer.md"
-check "pr-lieutenant.md exists"      test -f "$TEST_DIR/.claude/agents/pr-lieutenant.md"
+check "pr-merge mod exists"           test -f "$WORKFLOW_DIR/_mods/pr-merge.md"
 
 # -- Status script --
 echo ""
@@ -351,33 +351,37 @@ if [ -f "$FO" ]; then
   else
     fail "first-officer references _archive convention"
   fi
+  if grep -qi "_mods\|mod hook" "$FO"; then
+    pass "first-officer discovers mods from _mods/"
+  else
+    fail "first-officer discovers mods from _mods/"
+  fi
 fi
 
-# -- PR lieutenant agent --
+# -- PR merge mod --
 echo ""
-echo "[PR Lieutenant Agent]"
-PRL="$TEST_DIR/.claude/agents/pr-lieutenant.md"
-if [ -f "$PRL" ]; then
-  if head -20 "$PRL" | grep -q "name:.*pr-lieutenant"; then
-    pass "pr-lieutenant has name in frontmatter"
+echo "[PR Merge Mod]"
+PRM="$WORKFLOW_DIR/_mods/pr-merge.md"
+if [ -f "$PRM" ]; then
+  if head -10 "$PRM" | grep -q "name:.*pr-merge"; then
+    pass "pr-merge mod has name in frontmatter"
   else
-    fail "pr-lieutenant has name in frontmatter"
+    fail "pr-merge mod has name in frontmatter"
   fi
-  if grep -qi "ensign" "$PRL"; then
-    pass "pr-lieutenant references ensign"
+  if grep -q "## Hook: startup" "$PRM"; then
+    pass "pr-merge mod has startup hook"
   else
-    fail "pr-lieutenant references ensign"
+    fail "pr-merge mod has startup hook"
   fi
-  if grep -qE '__MISSION__|__SPACEDOCK_VERSION__|__ENTITY_LABEL__' "$PRL"; then
-    fail "pr-lieutenant has no unsubstituted __VAR__ markers"
-    grep -oE '__[A-Z_]+__' "$PRL" | sort -u | head -5
+  if grep -q "## Hook: merge" "$PRM"; then
+    pass "pr-merge mod has merge hook"
   else
-    pass "pr-lieutenant has no unsubstituted __VAR__ markers"
+    fail "pr-merge mod has merge hook"
   fi
 else
-  fail "pr-lieutenant has name in frontmatter (file missing)"
-  fail "pr-lieutenant references ensign (file missing)"
-  fail "pr-lieutenant has no unsubstituted __VAR__ markers (file missing)"
+  fail "pr-merge mod has name in frontmatter (file missing)"
+  fail "pr-merge mod has startup hook (file missing)"
+  fail "pr-merge mod has merge hook (file missing)"
 fi
 
 # -- No leaked template variables --
@@ -385,7 +389,8 @@ echo ""
 echo "[No Leaked Template Variables]"
 if [ -d "$WORKFLOW_DIR" ]; then
   # Look for {variable_name} patterns (but not code like ${...} or JSON {..."key":})
-  LEAKED=$(grep -rE '\{[a-z_]+\}' "$WORKFLOW_DIR" --include="*.md" 2>/dev/null | grep -vE '\$\{' | grep -v 'slug' || true)
+  # Exclude _mods/ — mod files are copied verbatim and use runtime placeholders
+  LEAKED=$(grep -rE '\{[a-z_]+\}' "$WORKFLOW_DIR" --include="*.md" --exclude-dir="_mods" 2>/dev/null | grep -vE '\$\{' | grep -v 'slug' || true)
   if [ -z "$LEAKED" ]; then
     pass "no leaked template variables"
   else
