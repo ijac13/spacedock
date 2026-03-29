@@ -63,9 +63,9 @@ After each completion, run `status --next` again and dispatch any newly ready en
 When a dispatched agent sends its completion message:
 
 1. **Stage report review** — Read the entity file. Verify every dispatched checklist item appears in the `## Stage Report` section. If items are missing, send the agent back once to update the file.
-2. **Check gate** — Read the completed stage's `gate` property from the stages block in README frontmatter. If no gate, shut down the agent. If gate, keep agent alive for potential redo.
+2. **Check gate** — Read the completed stage's `gate` property from the stages block in README frontmatter. If no gate, proceed to the If no gate path below. If gate, keep agent alive for potential redo.
 
-**If no gate:** If terminal, proceed to merge. Otherwise, run `status --next` and dispatch the next stage fresh.
+**If no gate:** If terminal, proceed to merge. Otherwise, check whether the next stage has `feedback-to` pointing at this stage. If yes, keep the agent alive — do not shut it down. Run `status --next` and dispatch the next stage.
 
 **If gate:** Present the stage report to the captain:
 
@@ -86,7 +86,7 @@ Assessment: {N} done, {N} skipped, {N} failed. [Recommend approve / Recommend re
   2. Run merge hooks (from `_mods/`) here, before any status change. If no merge hooks are registered, skip to step 3.
   3. After merge hooks return, check the entity's `pr` field on main. If `pr` is set (a PR was created): do NOT advance to terminal. The entity stays at its current stage. Report to the captain that the PR is pending and will be detected on next startup. If `pr` is not set (no pr-merge mod installed, or captain declined the push): fall through to `## Merge and Cleanup` for local merge.
 - **Approve + next stage is terminal + no worktree:** Fall through to `## Merge and Cleanup` for terminal advancement and archival (no code to merge, no PR needed).
-- **Approve + next stage is NOT terminal:** Shut down the agent. Dispatch a fresh agent for the next stage.
+- **Approve + next stage is NOT terminal:** Shut down the agent. If a kept-alive agent from a prior stage is still running (the `feedback-to` target), shut it down too. Dispatch a fresh agent for the next stage.
 - **Reject + redo:** Send feedback to the agent for revision. On completion, re-enter stage report review.
 - **Reject + discard:** Shut down the agent, clean up worktree/branch, ask the captain for direction.
 
