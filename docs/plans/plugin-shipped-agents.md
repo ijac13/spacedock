@@ -268,3 +268,28 @@ Task 058 is in `validation` status — the terminology experiment has been desig
 ### Summary
 
 Investigated plugin agent discovery across 4 installed plugins — it is purely convention-based (agents/ directory, no plugin.json changes). Designed the full change: move agent templates to agents/, simplify commission (remove agent copying), update FO dispatch to use `spacedock:ensign`, create `/spacedock eject` skill for local pinning, and update refit to remove agent-related phases. One open question remains for implementation: whether bare `ensign` resolves to `spacedock:ensign` when the FO runs as a plugin agent.
+
+### Staff review findings (independent reviewer)
+
+**Design: SOUND** — directory convention confirmed across 3 plugins, eject design clean, namespace change prudent.
+
+**Critical unresolved — agent resolution order:**
+- Does bare `ensign` resolve to `spacedock:ensign` when FO runs as a plugin agent? Not verified.
+- Does local `.claude/agents/first-officer.md` take precedence over `spacedock:first-officer`? Assumed but not confirmed.
+- These are load-bearing assumptions that gate the dispatch design and eject behavior.
+
+**Risk assessment — MODERATE:**
+- Old commissioned projects keep working (local agents shadow plugin agents) — safe but creates two project classes
+- New projects use plugin agents with live updates — better DX
+- Users must understand the shadowing behavior
+
+**Test plan — INADEQUATE, missing:**
+1. No test for plugin agent discovery path (tests only cover ejected/local agents)
+2. No test for agent resolution order (local vs plugin precedence)
+3. Commission Phase 3 auto-run approach unclear — does it dispatch `spacedock:first-officer` via Agent tool or read from plugin path?
+4. Eject skill test is manual-only — needs scripted verification
+
+**Blocking before implementation:**
+1. Verify agent resolution: run `claude --agent spacedock:first-officer` and check if dispatch to `ensign` or `spacedock:ensign` works
+2. Verify local-vs-plugin precedence: set up project with both local and plugin agents, confirm local wins
+3. Clarify Commission Phase 3 approach: dispatch via Agent tool (cleaner) or inline read from plugin path
