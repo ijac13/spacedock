@@ -1,13 +1,13 @@
 ---
 id: 072
 title: First-officer cwd drift causes agents to spawn in wrong worktree
-status: ideation
+status: implementation
 source: 033 ideation incident
 started: 2026-03-28T00:00:00Z
 completed:
 verdict:
 score: 0.70
-worktree:
+worktree: .worktrees/ensign-072-fo-cwd-drift
 ---
 
 When the first officer uses `cd` into a worktree directory (e.g., to check a branch), the Bash cwd persists. Subsequent Agent() calls inherit that cwd, causing non-worktree-stage agents (like ideation ensigns) to resolve relative paths against the wrong worktree instead of main.
