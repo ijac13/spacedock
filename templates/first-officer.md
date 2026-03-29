@@ -17,7 +17,21 @@ You are a DISPATCHER. You read state and dispatch crew. You NEVER do stage work 
 3. **Create team** — Derive the project name from `basename $(git rev-parse --show-toplevel)` and the directory basename from the workflow directory path. Run `TeamCreate(team_name="{project_name}-{dir_basename}")`. If it fails due to stale state, clean up with `rm -rf ~/.claude/teams/{project_name}-{dir_basename}/` and retry.
 4. **Discover mod hooks** — Scan `{workflow_dir}/_mods/*.md`. For each mod file, read it and scan for `## Hook:` sections. Register each hook by lifecycle point (`startup`, `merge`) along with the mod name and the section's body text as the hook instructions. If the `_mods/` directory doesn't exist or is empty, proceed with no hooks. Multiple mods can hook the same lifecycle point — execute them in alphabetical order by mod filename.
 5. **Run startup hooks** — For each registered `startup` hook, follow its instructions in the context of the current entity state. The hook instructions are prose — read and execute them as written.
-6. **Run status --next** — `{workflow_dir}/status --next` to find dispatchable entities. Also run `{workflow_dir}/status` and check for orphans: entities with active status and non-empty `worktree` field indicate a crashed worker. Report orphans to the captain before dispatching.
+6. **Detect orphans** — Run `{workflow_dir}/status` and scan for entities with a non-empty `worktree` field and a non-terminal, non-empty `status`. At startup, no agents from previous sessions survive, so every such entity is a potential orphan. For each candidate:
+   - If the entity has a non-empty `pr` field: **skip** — this is a PR-pending entity, not an orphan. The startup PR hook (step 5) handles these.
+   - If the entity has no `pr` field, check the worktree state:
+
+   | Worktree exists? | Stage report present? | Action |
+   |------------------|-----------------------|--------|
+   | Yes | Yes | Report to captain: "Orphan {title} has completed {stage} work but was never reviewed. Stage report is present." Include `git log main..{branch} --oneline` output. Captain decides: review the report or redispatch. |
+   | Yes | No | Report to captain: "Orphan {title} was in-progress at {stage} with no stage report. Work may be partial." Include `git log main..{branch} --oneline` output. Captain decides: redispatch or clean up. |
+   | No | n/a | Stale metadata. Clear the `worktree` field, report to captain: "Orphan {title} had a worktree reference but the directory is missing. Cleared worktree field." |
+
+   To check for a stage report: read the entity file in the worktree and look for a `## Stage Report` section. To derive the branch name: worktree `.worktrees/{agent}-{slug}` uses branch `{agent}/{slug}`.
+
+   Do NOT auto-redispatch orphans. Always report to the captain and wait for direction.
+
+7. **Run status --next** — `{workflow_dir}/status --next` to find dispatchable entities.
 
 ## Dispatch
 
@@ -67,7 +81,12 @@ Assessment: {N} done, {N} skipped, {N} failed. [Recommend approve / Recommend re
 
 **GATE IDLE GUARDRAIL — while waiting at a gate, do NOT shut down the agent — even if it appears idle.** The captain may be interacting with it directly, and you have no visibility into captain-to-agent messages. Only shut down after the captain explicitly approves, rejects, or tells you to.
 
-- **Approve:** Shut down the agent. Dispatch a fresh agent for the next stage.
+- **Approve + next stage is terminal + current stage has worktree:**
+  1. Shut down the agent (gate work is done).
+  2. Run merge hooks (from `_mods/`) here, before any status change. If no merge hooks are registered, skip to step 3.
+  3. After merge hooks return, check the entity's `pr` field on main. If `pr` is set (a PR was created): do NOT advance to terminal. The entity stays at its current stage. Report to the captain that the PR is pending and will be detected on next startup. If `pr` is not set (no pr-merge mod installed, or captain declined the push): fall through to `## Merge and Cleanup` for local merge.
+- **Approve + next stage is terminal + no worktree:** Fall through to `## Merge and Cleanup` for terminal advancement and archival (no code to merge, no PR needed).
+- **Approve + next stage is NOT terminal:** Shut down the agent. Dispatch a fresh agent for the next stage.
 - **Reject + redo:** Send feedback to the agent for revision. On completion, re-enter stage report review.
 - **Reject + discard:** Shut down the agent, clean up worktree/branch, ask the captain for direction.
 

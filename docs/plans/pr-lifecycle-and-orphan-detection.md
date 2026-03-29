@@ -164,3 +164,45 @@ Cycle: 1
 ### Summary
 
 The core design decision is to decouple gate approval from terminal advancement by moving merge hook execution into the gate-approval path in "Completion and Gates" with explicit ordering: (1) shut down agent, (2) run merge hooks, (3) check `pr` field. The `pr` field is set on main (FO owns frontmatter); the worktree copy diverges, which is consistent with existing state management. Five alternatives were evaluated and rejected, including an explicit `merging` stage. Concurrency tradeoff (stuck PRs consume validation slots) and crash-during-merge-hook gap are documented. Closed-without-merge PR recovery mechanics are deferred to implementation. Orphan detection explicitly skips PR-pending entities and includes branch log output for crash diagnosis.
+
+## Stage Report: implementation
+
+- [x] FO template gate-approval path restructured into 3 cases with explicit ordering (shutdown → merge hooks → check `pr`)
+  `templates/first-officer.md` lines 84-89: "Approve" bullet replaced with 3 cases — terminal+worktree (shutdown, merge hooks, check pr), terminal+no-worktree (fall through to Merge and Cleanup), non-terminal (dispatch next stage).
+- [x] FO template startup step 6 expanded with orphan detection matrix (5 scenarios, skip PR-pending, include branch log, no auto-redispatch)
+  `templates/first-officer.md` lines 20-34: Step 6 renamed to "Detect orphans" with PR-pending skip, 3-row worktree state table (exists+report, exists+no-report, missing), branch log instruction, no-auto-redispatch rule. Step 7 is now `status --next`.
+- [x] pr-merge mod merge hook wording updated (entity stays at current stage, self-documenting lifecycle sentence)
+  `mods/pr-merge.md` line 38: Changed "terminal stage" to "current stage" and added "The FO handles advancement to the terminal stage and archival when it detects the merge on next startup."
+- [x] Commission test harness passes (no regression)
+  All guardrail keyword checks verified against modified template: Agent tool required (1), subagent_type prohibition (1), TeamCreate (1), Report ONCE (2), gate self-approval (1), dispatch name stage (1), plus all content and stages-support checks pass.
+- [x] All changes committed to worktree branch
+  Commit b1465de on `ensign/070-pr-lifecycle`.
+
+### Summary
+
+Implemented all three changes from the approved design. The FO template gate-approval path now has 3 explicit cases with merge hooks firing before any status change. Startup orphan detection expanded from a one-liner to a structured matrix with PR-pending skip, worktree state checks, branch log output, and no auto-redispatch. The pr-merge mod wording now correctly says the entity stays at its current stage (not terminal) with a self-documenting lifecycle sentence explaining what happens next.
+
+## Stage Report: validation
+
+- [x] Each of the 9 acceptance criteria verified with specific evidence (line numbers, text matches)
+  AC1-AC3 verified in gate-approval path (lines 84-89). AC4 verified after fix (commit 1251712) — all three PR states handled in mods/pr-merge.md lines 15-19. AC5 verified at mods/pr-merge.md:42. AC6-AC9 verified in orphan detection (lines 20-32).
+- [x] Commission test harness passes (no regression)
+  All guardrail keyword checks pass: Agent tool required (1), subagent_type prohibition (1), TeamCreate (1), Report ONCE (2), gate self-approval (1), dispatch name stage (1). All content and stages-support checks pass. pr-merge mod retains both hook sections (startup, merge).
+- [x] Gate-approval path has correct 3-case structure with explicit ordering
+  Lines 84-89: (1) terminal+worktree with shutdown->merge hooks->check pr ordering, (2) terminal+no-worktree falls through to Merge and Cleanup, (3) non-terminal dispatches next stage.
+- [x] Orphan detection matrix matches the 5 scenarios from the design
+  PR-pending skip (line 21) covers scenarios 2 and 5. Three-row table (lines 27-29) covers scenarios 1, 3, 4. All 5 design scenarios accounted for.
+- [x] pr-merge mod wording is self-documenting and says "current stage" not "terminal stage"
+  mods/pr-merge.md line 42: "The entity stays at its current stage" (was "terminal stage") plus lifecycle sentence "The FO handles advancement to the terminal stage and archival when it detects the merge on next startup."
+- [x] Recommendation: PASSED or REJECTED with numbered findings
+  PASSED after fix cycle. Original finding (CLOSED PR handling) resolved in commit 1251712.
+
+### Recommendation: PASSED
+
+### Findings
+
+1. **RESOLVED: AC4 CLOSED PR state handling.** Originally missing — the startup hook only handled MERGED. Fixed in commit 1251712: CLOSED reports to captain with three options (reopen, new PR, local merge); OPEN is explicitly no-op. All three PR states now covered.
+
+### Summary
+
+All 9 acceptance criteria are met. The FO template gate-approval path correctly implements 3 cases with merge hooks firing before status changes. Orphan detection covers all 5 design scenarios with PR-pending skip as primary guard and startup hook ordering as defense in depth. The pr-merge mod handles all three PR states (MERGED/OPEN/CLOSED) in the startup hook and uses "current stage" wording in the merge hook. No regressions in guardrail keyword checks.
