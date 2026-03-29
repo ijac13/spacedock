@@ -322,3 +322,20 @@ Additional checks:
 ### Summary
 
 9 of 10 ACs pass. AC7 fails: --disallowed-tools passthrough (from task 033, commit b35ae2d) is broken in the Python rewrite. Both test_commission.py and test_checklist_e2e.py use `argparse` with positional `nargs="*"` for extra_args, which rejects unknown --flags like `--disallowed-tools`. The old bash scripts passed all args through blindly. Fix is straightforward: replace `parse_args()` with `parse_known_args()` or use `argparse.REMAINDER`. All other ACs verified with evidence. Commission test: 65/65. Scaffolding guardrail: 9/9. Stats unit test: 37/37. generate_first_officer correctly simplified to install_agents. Recommendation: REJECTED (one finding, straightforward fix).
+
+## Stage Report: implementation (fix cycle)
+
+- [x] Identified all test scripts that accept extra CLI args for claude passthrough
+  Audited all 10 Python files. Only test_commission.py and test_checklist_e2e.py use argparse with extra_args. The 5 fixture-based tests (dispatch_names, gate_guardrail, rejection_flow, scaffolding_guardrail, merge_hook_guardrail) hardcode their extra_args internally. test_lib.py, test_status_script.py, and test_stats_extraction.py have no CLI passthrough.
+- [x] Replaced parse_args() with parse_known_args() in test_commission.py
+  Removed positional `extra_args` with `nargs="*"`. parse_known_args() returns (namespace, list[str]) tuple. Updated main() to unpack both, changed `args.extra_args` to `extra_args`.
+- [x] Replaced parse_args() with parse_known_args() in test_checklist_e2e.py
+  Same pattern. Updated 3 references: `list(args.extra_args)` in commission phase, `extra_fo.extend(args.extra_args)` in FO phase, and the return type annotation.
+- [x] No other scripts needed changes
+  5 fixture-based E2E tests use hardcoded extra_args lists (e.g., `["--max-budget-usd", "2.00"]`), not CLI passthrough. No fix needed.
+- [x] Changes committed
+  Commit 173bbbd on ensign/078-modular-test.
+
+### Summary
+
+Fixed the argparse passthrough bug found by the validator. Replaced `parse_args()` with `parse_known_args()` in both test_commission.py and test_checklist_e2e.py so unknown CLI flags like `--disallowed-tools` pass through to `claude -p` instead of being rejected. Audited all 10 Python files; only these 2 scripts needed the fix.
