@@ -1,7 +1,7 @@
 ---
 id: 071
 title: Detect PR merges during long-running sessions
-status: implementation
+status: validation
 source: CL
 started: 2026-03-29T05:28:00Z
 completed:
