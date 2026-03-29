@@ -96,7 +96,7 @@ if [ -f "$SELF_HOSTED_WORKFLOW/README.md" ]; then
 
 Accept all changes from the upstream template. When showing diffs, approve all regenerations (status, first-officer, ensign, agents, mods). Preserve any local customizations in the README — only update the version stamp. Do not ask for confirmation — proceed automatically."
 
-    CLAUDE_ARGS=(-p "$REFIT_PROMPT" --plugin-dir "$REPO_ROOT" --dangerously-skip-permissions)
+    CLAUDE_ARGS=(-p "$REFIT_PROMPT" --plugin-dir "$REPO_ROOT" --dangerously-skip-permissions --model opus --effort low)
     if command -v safehouse >/dev/null 2>&1; then
         safehouse claude "${CLAUDE_ARGS[@]}"
     else
@@ -130,7 +130,7 @@ if command -v claude >/dev/null 2>&1; then
     if [ -n "$EXTRA_INSTRUCTIONS" ]; then
         PROMPT="$PROMPT Additional instructions: $EXTRA_INSTRUCTIONS"
     fi
-    echo "$RAW_LOG" | claude -p "$PROMPT" > "$CHANGELOG_FILE" 2>/dev/null || {
+    echo "$RAW_LOG" | claude -p "$PROMPT" --model opus --effort low > "$CHANGELOG_FILE" 2>/dev/null || {
         echo "(Claude unavailable, falling back to git log)"
         echo "$RAW_LOG" > "$CHANGELOG_FILE"
     }
