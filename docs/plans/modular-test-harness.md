@@ -8,6 +8,7 @@ completed:
 verdict:
 score: 0.70
 worktree: .worktrees/ensign-078-modular-test
+pr: "#17"
 ---
 
 The commission test harness and checklist E2E test duplicate the commission phase — both create a temp dir, git init, build a prompt, and run `claude -p`. They share zero code. This wastes API budget when running model variation tests (each model re-commissions from scratch).
