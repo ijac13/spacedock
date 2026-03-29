@@ -1,9 +1,9 @@
 ---
 id: 072
 title: First-officer cwd drift causes agents to spawn in wrong worktree
-status: backlog
+status: ideation
 source: 033 ideation incident
-started:
+started: 2026-03-28T00:00:00Z
 completed:
 verdict:
 score: 0.70
