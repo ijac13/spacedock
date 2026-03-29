@@ -645,8 +645,21 @@ This means the commission skill's Question 2 (stage design) and Confirm Design t
 - **Change 4 (Validator template — no changes):** Superseded. The validator template is dropped entirely.
 - **Change 5 (Commission Confirm Design):** Commission presents stage behavior in human-readable language, not implementation vocabulary. User decides on approval gates and rejection flow; commission infers `worktree`, `fresh`, etc.
 
-### Open questions (for CL to decide)
+### Open questions — resolved
 
-1. **Transition plan:** The current Spacedock workflow uses the validator template. Do we update it in place, or is this a v-next change?
-2. **Findings format:** The current validator template prescribes file paths + line numbers. The generic feedback protocol should prescribe "numbered list of specific issues with enough detail to locate and address" — domain-agnostic. Should the commission help users define what "specific" means for their domain?
-3. **FO template wording:** The generic feedback instructions need to be written. The current FO validation instructions are a starting point but need the software-specific language stripped out.
+1. **Transition plan:** Update in place. Spacedock is the only consumer, pre-v1, no backward compatibility concern.
+2. **Findings format:** No — the commission should not help define domain-specific "specific." The generic instruction "numbered list of specific issues with enough detail to locate and address" is sufficient. Domain-specific reviewers who need more structure use a specialized agent via `agent:`.
+3. **FO template wording:** Strip software-specific language from current FO validation instructions to create generic feedback protocol. The generic version: "You are reviewing the work from {target_stage}. You check what was produced — you do not produce the deliverable yourself. If the deliverable is missing or incomplete, that is itself a REJECTED finding. Running the deliverable to verify its behavior is review work; producing new deliverable content is not. Report with a Recommendation (PASSED or REJECTED) and numbered Findings."
+
+## Stage Report: ideation (final)
+
+- [x] Proposed changes finalized (or confirmed as-is) based on discussion with CL
+  Five changes confirmed: (1) README implementation broadened to "produce the deliverable," (2) README validation adds boundary statement, (3) FO validation instructions become generic feedback protocol with software-specific language stripped, (4) validator template dropped — feedback protocol is FO-injected, (5) commission Confirm Design presents stage behavior in human-readable language. Open questions resolved: update in place, no domain-specific findings format help, generic FO wording drafted.
+- [x] Acceptance criteria confirmed or updated
+  Updated from 6 to 8 criteria: criteria 2-5 revised to reflect validator-drop decision, criteria 7-8 added for commission output simplification.
+- [x] Open questions resolved
+  Three open questions from brainstorm 3 resolved with CL approval: transition plan (in-place), findings format (keep generic), FO template wording (strip software-specific language, draft provided).
+
+### Summary
+
+Finalized ideation across four rounds of brainstorming and direct discussion with CL. The task evolved from targeted wording fixes (Changes 1-3) to a broader architectural shift: drop the validator template entirely, make the feedback protocol FO-owned generic infrastructure triggered by `feedback-to` stage property, and simplify the commission's user-facing presentation to hide implementation vocabulary. Five proposed changes with eight acceptance criteria are ready for implementation.
