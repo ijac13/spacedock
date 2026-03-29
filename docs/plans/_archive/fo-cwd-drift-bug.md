@@ -1,13 +1,13 @@
 ---
 id: 072
 title: First-officer cwd drift causes agents to spawn in wrong worktree
-status: validation
+status: done
 source: 033 ideation incident
 started: 2026-03-28T00:00:00Z
-completed:
-verdict:
+completed: 2026-03-29T16:39:00Z
+verdict: PASSED
 score: 0.70
-worktree: .worktrees/ensign-072-fo-cwd-drift
+worktree:
 ---
 
 When the first officer uses `cd` into a worktree directory (e.g., to check a branch), the Bash cwd persists. Subsequent Agent() calls inherit that cwd, causing non-worktree-stage agents (like ideation ensigns) to resolve relative paths against the wrong worktree instead of main.
@@ -110,3 +110,33 @@ All paths in the dispatch prompt MUST be absolute (rooted at `$project_root`).
 ### Summary
 
 The root cause is that the FO template has no guidance about cwd management, and several FO operations (orphan detection, worktree inspection) naturally encourage `cd` into worktrees. The proposed fix adds a "Working Directory" section to the FO template that prohibits `cd` and prescribes `git -C`, absolute paths, and the `Read` tool as alternatives. A secondary clarification makes `{entity_file_path}` explicitly absolute in the dispatch prompt. The fix is minimal — two additions to the FO template, no code changes.
+
+## Stage Report: implementation
+
+- [x] "Working Directory" section added to FO template after Startup
+  Added between Startup step 7 and Dispatch section at templates/first-officer.md:37-43
+- [x] Absolute path requirement added to Dispatch step 7
+  Appended "All paths in the dispatch prompt MUST be absolute (rooted at `$project_root`)." to step 7 at templates/first-officer.md:55
+- [x] Commission test harness passes (no regression)
+  65 passed, 0 failed (out of 65 checks) — RESULT: PASS
+- [x] All changes committed to worktree branch
+  Commit 6d2454c on ensign/072-fo-cwd-drift
+
+### Summary
+
+Added two targeted wording changes to `templates/first-officer.md`: a new "Working Directory" section after Startup that prohibits `cd` and prescribes `git -C`, absolute paths, and the `Read` tool as alternatives; and an absolute-path requirement appended to Dispatch step 7. Commission test harness passes with all 65 checks green.
+
+## Stage Report: validation
+
+- [x] Each acceptance criterion verified with evidence (line numbers, text matches)
+  AC1: "Working Directory" section at first-officer.md:37-43 prohibits `cd`, prescribes `git -C`, absolute paths, `Read` tool. AC2: Absolute path requirement at first-officer.md:55 in Dispatch step 7. AC3: `git diff main -- templates/ensign.md` produces no output — unchanged. AC4: Commit 6d2454c touches only `templates/first-officer.md` — no code files.
+- [x] Commission test harness passes (no regression)
+  65 passed, 0 failed (out of 65 checks) — RESULT: PASS
+- [x] Ensign template unchanged (verify no diff)
+  `git diff 6d2454c main -- templates/ensign.md` produces empty output — identical to main
+- [x] Recommendation: PASSED
+  All four acceptance criteria met with clear evidence. Fix is minimal, targeted, and template-only.
+
+### Summary
+
+Validated the implementation against all four acceptance criteria. The Working Directory section (lines 37-43) contains the `cd` prohibition with three alternative patterns. The dispatch absolute-path requirement is at line 55. Ensign template is unchanged (zero diff vs main). The fix commit touches only `templates/first-officer.md` with no code changes. Commission test harness passes all 65 checks. Recommendation: PASSED.
