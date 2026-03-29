@@ -302,8 +302,8 @@ Rewrote all 7 test scripts from bash to Python with uv inline script metadata. C
   extract_stats() called in run_commission (line 169) and run_first_officer (line 203). Commission test output confirmed: stats-commission.txt with Wallclock (126s), Messages (27 assistant), Model delegation (claude-opus-4-6: 27), Input/Output tokens.
 - [x] AC6: Fixture-based tests use shared setup_fixture and install_agents helpers
   All 4 fixture-based scripts (dispatch_names, gate_guardrail, rejection_flow, scaffolding_guardrail) use setup_fixture + install_agents. No sed substitution found in any Python test script.
-- [x] AC7: No behavioral regression
-  Commission test: 65/65 pass. Scaffolding guardrail: 9/9 pass. Gate guardrail: 6/9 pass (3 failures are pre-existing template text drift — same checks exist in old bash test-gate-guardrail.sh at lines 79,85 and would fail identically). Stats extraction unit test: 37/37 pass.
+- [ ] FAIL: AC7: No behavioral regression
+  Commission test: 65/65 pass. Scaffolding guardrail: 9/9 pass. Gate guardrail: 6/9 pass (3 failures are pre-existing template text drift). Stats unit test: 37/37 pass. HOWEVER: --disallowed-tools passthrough is broken. The old bash scripts accepted arbitrary CLI flags and passed them to claude -p (e.g., `bash scripts/test-checklist-e2e.sh --disallowed-tools "TeamCreate"`). The Python rewrites use argparse with positional `nargs="*"` which rejects unknown --flags. Both test_commission.py and test_checklist_e2e.py fail with `error: unrecognized arguments: --disallowed-tools`. Workaround exists (`--` separator) but changes the invocation interface. Fix: use `parse_known_args()` or `argparse.REMAINDER` instead of `nargs="*"` for extra_args.
 - [x] AC8: Model flag propagation in stats output
   Commission test stats showed "Model delegation: claude-opus-4-6: 27". run_commission and run_first_officer both accept extra_args for --model passthrough. Stats report model delegation per-phase.
 - [x] AC9: uv inline script metadata, zero-dependency
@@ -321,4 +321,4 @@ Additional checks:
 
 ### Summary
 
-All 10 acceptance criteria verified with evidence. Commission test spot-check: 65/65 pass. Fixture-based spot-check (scaffolding guardrail): 9/9 pass. Gate guardrail test showed 3 pre-existing failures from template text drift (same patterns in old bash tests), not regressions. generate_first_officer correctly simplified to install_agents (plain file copy, no sed). Old bash scripts still present for reference. Recommendation: PASSED.
+9 of 10 ACs pass. AC7 fails: --disallowed-tools passthrough (from task 033, commit b35ae2d) is broken in the Python rewrite. Both test_commission.py and test_checklist_e2e.py use `argparse` with positional `nargs="*"` for extra_args, which rejects unknown --flags like `--disallowed-tools`. The old bash scripts passed all args through blindly. Fix is straightforward: replace `parse_args()` with `parse_known_args()` or use `argparse.REMAINDER`. All other ACs verified with evidence. Commission test: 65/65. Scaffolding guardrail: 9/9. Stats unit test: 37/37. generate_first_officer correctly simplified to install_agents. Recommendation: REJECTED (one finding, straightforward fix).
