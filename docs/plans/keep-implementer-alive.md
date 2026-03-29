@@ -9,7 +9,7 @@ verdict:
 score: 0.60
 worktree: .worktrees/ensign-068-keep-alive
 issue: "#9"
-pr:
+pr: "#13"
 ---
 
 When a feedback stage runs, the FO shuts down the implementer and redispatches on rejection. Keeping the implementer alive during review would enable faster fix cycles — the implementer retains full context and can fix immediately on rejection.
