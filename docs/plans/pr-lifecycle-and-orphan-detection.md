@@ -177,3 +177,28 @@ The core design decision is to decouple gate approval from terminal advancement 
 ### Summary
 
 Implemented all three changes from the approved design. The FO template gate-approval path now has 3 explicit cases with merge hooks firing before any status change. Startup orphan detection expanded from a one-liner to a structured matrix with PR-pending skip, worktree state checks, branch log output, and no auto-redispatch. The pr-merge mod wording now correctly says the entity stays at its current stage (not terminal) with a self-documenting lifecycle sentence explaining what happens next.
+
+## Stage Report: validation
+
+- [x] Each of the 9 acceptance criteria verified with specific evidence (line numbers, text matches)
+  AC1-AC3 verified in gate-approval path (lines 84-89). AC4 partial — see finding 1. AC5 verified at mods/pr-merge.md:38. AC6-AC9 verified in orphan detection (lines 20-32).
+- [x] Commission test harness passes (no regression)
+  All guardrail keyword checks pass: Agent tool required (1), subagent_type prohibition (1), TeamCreate (1), Report ONCE (2), gate self-approval (1), dispatch name stage (1). All content and stages-support checks pass.
+- [x] Gate-approval path has correct 3-case structure with explicit ordering
+  Lines 84-89: (1) terminal+worktree with shutdown->merge hooks->check pr ordering, (2) terminal+no-worktree falls through to Merge and Cleanup, (3) non-terminal dispatches next stage.
+- [x] Orphan detection matrix matches the 5 scenarios from the design
+  PR-pending skip (line 21) covers scenarios 2 and 5. Three-row table (lines 27-29) covers scenarios 1, 3, 4. All 5 design scenarios accounted for.
+- [x] pr-merge mod wording is self-documenting and says "current stage" not "terminal stage"
+  mods/pr-merge.md line 38: "The entity stays at its current stage" (was "terminal stage") plus lifecycle sentence "The FO handles advancement to the terminal stage and archival when it detects the merge on next startup."
+- [ ] FAIL: Recommendation: PASSED or REJECTED with numbered findings
+  See below.
+
+### Recommendation: REJECTED
+
+### Findings
+
+1. **AC4 partially unmet: CLOSED PR state not handled in startup hook.** AC4 requires "closed -> report to captain" but the pr-merge startup hook (mods/pr-merge.md lines 11-17) only handles the MERGED state explicitly. OPEN is implicitly handled (no action, correct). But CLOSED PRs leave the entity stuck at validation with `pr` set indefinitely — never advancing and never reported. The design doc (line 56) says "The startup hook also needs to handle one additional PR state: CLOSED" and defers the recovery mechanics to implementation. The implementation did not modify the startup hook. Fix: add a CLOSED case to the startup hook that reports the stuck entity to the captain with options (reopen PR, create new PR, clear `pr` for local merge).
+
+### Summary
+
+The FO template changes (gate-approval 3-case structure and orphan detection matrix) are correct and complete. The pr-merge mod merge hook wording update is correct. All guardrail keyword checks pass with no regression. The one issue is that AC4's CLOSED PR handling was not implemented in the startup hook — the design explicitly called this out as work for the implementer, and AC4 lists all three PR states (merged/open/closed) as required behavior.
