@@ -16,8 +16,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     TestRunner, LogParser, create_test_project, setup_fixture,
-    run_first_officer, git_add_commit, read_entity_frontmatter,
-    file_contains, extract_stats,
+    install_agents, run_first_officer, git_add_commit,
+    read_entity_frontmatter, file_contains, extract_stats,
 )
 
 
@@ -120,18 +120,14 @@ def main():
 
     # Copy workflow fixture (including _mods/)
     setup_fixture(t, "merge-hook-pipeline", "merge-hook-pipeline")
-
-    # Copy first-officer template verbatim (no substitution needed)
-    agents_dir = t.test_project_dir / ".claude" / "agents"
-    agents_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(template_path, agents_dir / "first-officer.md")
+    install_agents(t)
 
     git_add_commit(t.test_project_dir, "setup: merge hook guardrail test fixture")
 
     print()
     print("[Fixture Setup — With Hook]")
 
-    fo_path = agents_dir / "first-officer.md"
+    fo_path = t.test_project_dir / ".claude" / "agents" / "first-officer.md"
     t.check("generated first-officer contains merge hook guardrail",
             file_contains(fo_path, r"MERGE HOOK GUARDRAIL"))
     if not file_contains(fo_path, r"MERGE HOOK GUARDRAIL"):
@@ -212,10 +208,11 @@ def main():
     if status_script.exists():
         status_script.chmod(status_script.stat().st_mode | 0o111)
 
-    # Copy first-officer template verbatim
-    nomods_agents = nomods_project / ".claude" / "agents"
-    nomods_agents.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(template_path, nomods_agents / "first-officer.md")
+    # Install agents via shared helper (temporarily point runner at nomods project)
+    orig_project = t.test_project_dir
+    t.test_project_dir = nomods_project
+    install_agents(t)
+    t.test_project_dir = orig_project
 
     subprocess.run(["git", "add", "-A"], capture_output=True, check=True, cwd=nomods_project)
     subprocess.run(

@@ -123,42 +123,17 @@ def setup_fixture(runner: TestRunner, fixture_name: str, pipeline_dir: str) -> P
     return dest
 
 
-def generate_first_officer(
-    runner: TestRunner,
-    pipeline_dir: str,
-    mission: str = "Test",
-    entity_label: str = "task",
-    entity_label_plural: str = "tasks",
-    captain: str = "CL",
-    first_stage: str = "backlog",
-    last_stage: str = "done",
-    spacedock_version: str = "test",
-    project_name: str = "test-project",
-) -> Path:
-    """Generate first-officer.md from template with variable substitution."""
-    template = runner.repo_root / "templates" / "first-officer.md"
-    content = template.read_text()
-
-    dir_basename = os.path.basename(pipeline_dir)
-    substitutions = {
-        "__MISSION__": mission,
-        "__DIR__": pipeline_dir,
-        "__DIR_BASENAME__": dir_basename,
-        "__PROJECT_NAME__": project_name,
-        "__ENTITY_LABEL__": entity_label,
-        "__ENTITY_LABEL_PLURAL__": entity_label_plural,
-        "__CAPTAIN__": captain,
-        "__FIRST_STAGE__": first_stage,
-        "__LAST_STAGE__": last_stage,
-        "__SPACEDOCK_VERSION__": spacedock_version,
-    }
-    for placeholder, value in substitutions.items():
-        content = content.replace(placeholder, value)
-
+def install_agents(runner: TestRunner, include_ensign: bool = False) -> Path:
+    """Copy agent templates into the test project's .claude/agents/ directory."""
     agents_dir = runner.test_project_dir / ".claude" / "agents"
     agents_dir.mkdir(parents=True, exist_ok=True)
+
     fo_path = agents_dir / "first-officer.md"
-    fo_path.write_text(content)
+    shutil.copy2(runner.repo_root / "templates" / "first-officer.md", fo_path)
+
+    if include_ensign:
+        shutil.copy2(runner.repo_root / "templates" / "ensign.md", agents_dir / "ensign.md")
+
     return fo_path
 
 

@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     TestRunner, LogParser, create_test_project, setup_fixture,
-    generate_first_officer, run_first_officer, git_add_commit,
+    install_agents, run_first_officer, git_add_commit,
     file_contains,
 )
 
@@ -28,8 +28,7 @@ def main():
 
     create_test_project(t)
     setup_fixture(t, "gated-pipeline", "gated-pipeline")
-    generate_first_officer(t, "gated-pipeline", mission="Scaffolding guardrail test",
-                           project_name="scaffolding-test")
+    install_agents(t)
 
     # Create scaffolding files that the FO should refuse to edit
     (t.test_project_dir / "templates").mkdir(exist_ok=True)

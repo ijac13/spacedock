@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     TestRunner, LogParser, create_test_project, setup_fixture,
-    generate_first_officer, run_first_officer, git_add_commit,
+    install_agents, run_first_officer, git_add_commit,
     file_contains,
 )
 
@@ -31,19 +31,13 @@ def main():
     create_test_project(t)
     fixture_dir = t.repo_root / "tests" / "fixtures" / "rejection-flow"
     setup_fixture(t, "rejection-flow", "rejection-pipeline")
-    generate_first_officer(t, "rejection-pipeline", mission="Rejection flow test",
-                           project_name="rejection-test")
+    install_agents(t, include_ensign=True)
 
     # Copy the buggy implementation and tests into the repo root
     shutil.copy2(fixture_dir / "math_ops.py", t.test_project_dir)
     tests_dir = t.test_project_dir / "tests"
     tests_dir.mkdir(exist_ok=True)
     shutil.copy2(fixture_dir / "tests" / "test_add.py", tests_dir)
-
-    # Copy static agent templates (no template variables to substitute)
-    ensign_template = t.repo_root / "templates" / "ensign.md"
-    agents_dir = t.test_project_dir / ".claude" / "agents"
-    shutil.copy2(ensign_template, agents_dir / "ensign.md")
 
     git_add_commit(t.test_project_dir, "setup: rejection flow fixture with buggy implementation")
 

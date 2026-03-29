@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     TestRunner, LogParser, create_test_project, setup_fixture,
-    generate_first_officer, run_first_officer, git_add_commit,
+    install_agents, run_first_officer, git_add_commit,
     read_entity_frontmatter, file_contains,
 )
 
@@ -29,8 +29,7 @@ def main():
 
     create_test_project(t)
     setup_fixture(t, "multi-stage-pipeline", "dispatch-pipeline")
-    generate_first_officer(t, "dispatch-pipeline", mission="Dispatch name collision test",
-                           project_name="dispatch-test")
+    install_agents(t)
 
     git_add_commit(t.test_project_dir, "setup: no-gate pipeline fixture")
 
