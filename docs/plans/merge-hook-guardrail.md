@@ -118,3 +118,22 @@ A: Out of scope. The incident was specifically about merge hooks being skipped. 
 ### Summary
 
 Mapped all five merge-related code paths in the FO template. The root cause of the 073 incident was that merge hook instructions existed in two places (gate approval path and Merge and Cleanup section), making it easy to skip one and jump to local merge. The proposed fix consolidates to a single hook execution point in Merge and Cleanup with a bold ALL-CAPS guardrail, and rewrites the gate approval path to delegate to Merge and Cleanup instead of having its own inline hook step.
+
+## Stage Report: implementation
+
+- [x] MERGE HOOK GUARDRAIL added to Merge and Cleanup section
+  Bold ALL-CAPS guardrail added at top of Merge and Cleanup in `templates/first-officer.md:144`, matching GATE APPROVAL and GATE IDLE guardrail style.
+- [x] Gate approval path delegates to Merge and Cleanup (no inline hook instruction)
+  Replaced 2-step inline merge hook logic at line 113-116 with single delegation: "Fall through to Merge and Cleanup."
+- [x] E2E test script created at tests/test-merge-hook-guardrail.sh
+  Test has 8 static template checks (Phase 1), hook-fires-at-merge-time dynamic test (Phases 2-4), and no-mods fallback test (Phases 5-7).
+- [x] Test added to README Testing Resources table
+  Added row to `docs/plans/README.md` Testing Resources table.
+- [x] Commission test harness passes (no regression)
+  All 65 checks pass: `scripts/test-commission.sh` run in worktree with zero failures.
+- [x] All changes committed to worktree branch
+  Committed to `ensign/077-merge-guardrail` as `5136c1b`.
+
+### Summary
+
+Added bold MERGE HOOK GUARDRAIL to the Merge and Cleanup section of the first-officer template, consolidating merge hook execution to a single point. Removed the inline merge hook instruction from the gate approval path so it delegates to Merge and Cleanup. The guardrail references the in-memory hook registry (discovered at startup), blocks git merge/archival/status advancement until hooks complete, and handles the PR-created stop condition. Created E2E test with fixture, static guardrail validation, and two dynamic test cases (with-hook and no-mods fallback). Commission test harness passes with all 65 checks green.
