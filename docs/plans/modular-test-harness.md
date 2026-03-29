@@ -220,6 +220,12 @@ This should be deferred until after the core refactoring is done.
 7. **No behavioral regression — all tests pass identically to before**
    - Test: run all 7 scripts, all return exit 0
 
+8. **Model flag propagation verified in stats output**
+   - Test: run `test-checklist-e2e.sh --model haiku`, verify stats show haiku as the primary model in both commission and FO phases
+   - Test: run with `--model sonnet`, verify sonnet appears in stats
+   - Stats must report model delegation per-phase (commission vs FO) so model override issues are visible
+   - If `--agent` overrides `--model` for subagents, document this and propose a fix (e.g., passing model to Agent() calls)
+
 ## Test Plan
 
 - **Unit-level**: validate `test-lib.sh` functions in isolation with a small shell test script that sources it and exercises pass/fail/check/test_results
