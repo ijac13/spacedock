@@ -234,17 +234,33 @@ This should be deferred until after the core refactoring is done.
 - **Cost**: the refactoring is shell-only, no API calls needed for the refactoring itself. Validation requires running the same tests that already exist (~$2-5 per full suite run)
 - **E2E test needed?**: No new E2E test — this is infrastructure refactoring; the existing E2E tests serve as the validation suite
 
+### Staff review findings (independent reviewer)
+
+**Design: SOUND with reservations.**
+
+**Major gap — snapshot reuse scope:** The two commission scripts use different prompts (4-stage vs 3-stage workflow). Snapshot from `test-commission.sh` can't be reused by `test-checklist-e2e.sh`. Snapshot only helps model variation runs on the same workflow. Updated: snapshot is for model variation only, not cross-test reuse.
+
+**Duplication: Overstated.** ~345 lines confirmed, not 500+. Commission shouldn't count (different prompts). Sed substitution (4 scripts, identical) and python3 log extraction (4 scripts, similar with per-script field variations) are genuinely extractable.
+
+**Python3 extraction needs parameterization.** Scripts extract different fields — need a flag-based helper (`--extract-agent-calls`, `--extract-texts`, `--extract-all-tools`) rather than one-size-fits-all.
+
+**Actionable items incorporated:**
+1. Snapshot scope clarified — model variation only, document the boundary
+2. Stats extraction needs unit tests against known log samples before integration
+3. Snapshot must be committed-clean state only; document that test modifications (e.g., adding acceptance criteria) are ephemeral and applied post-snapshot
+4. test-lib.sh single-point-of-failure risk — add syntax validation and a unit test script
+
 ## Stage Report: ideation
 
 - [x] All test scripts inventoried with shared/duplicated code identified
-  See "Inventory of Test Scripts" and "Duplicated Code Analysis" sections above
+  7 scripts inventoried. ~345 lines of confirmed duplicated boilerplate (pass/fail, cleanup, git init, sed substitution, python3 extraction).
 - [x] Modular design proposed (test-lib, snapshot mechanism, from-snapshot)
-  See "Proposed Modular Design" sections 1-3
+  test-lib.sh with shared helpers. Snapshot for model variation runs only (not cross-test). Parameterized python3 extraction.
 - [x] Stats extraction built into design (messages, model delegation, wallclock)
-  See section 3: wallclock, message count, model delegation, token usage — auto-extracted from stream-json
+  Auto-extracted from stream-json per-phase. AC8 added for model flag propagation verification.
 - [x] Acceptance criteria with test plan
-  7 acceptance criteria with specific test commands, plus test plan section
+  8 acceptance criteria. Staff review incorporated: snapshot scope clarified, stats unit tests added, single-point-of-failure mitigation.
 
 ### Summary
 
-Inventoried all 7 test scripts (2 in `scripts/`, 5 in `tests/`). Found ~500+ lines of duplicated boilerplate across them: pass/fail counters, cleanup traps, results summaries, git init setup, first-officer sed substitution, and python3 log extraction. The commission duplication is limited to 2 scripts (`test-commission.sh` and `test-checklist-e2e.sh`); the other 5 use static fixtures. Proposed `test-lib.sh` with shared helpers, snapshot mechanism for commission reuse, and automatic stats extraction from stream-json logs. The fixture-based tests in `tests/` also benefit from shared `setup_fixture` and `generate_first_officer` helpers to eliminate the repeated 11-flag sed pattern.
+Inventoried all 7 test scripts. ~345 lines of duplicated boilerplate confirmed extractable. Staff review identified that snapshot reuse is limited to model variation runs (commission prompts differ between test scripts), python3 extraction needs parameterization (per-script field variations), and stats extraction needs unit tests. Design updated to address all findings.
