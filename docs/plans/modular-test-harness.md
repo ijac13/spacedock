@@ -268,7 +268,7 @@ Inventoried all 7 test scripts. ~345 lines of duplicated boilerplate confirmed e
 ## Stage Report: implementation
 
 - [x] test_lib.py created with all shared helpers
-  scripts/test_lib.py: TestRunner, create_test_project, setup_fixture, generate_first_officer, run_commission, run_first_officer, LogParser, extract_stats, file_contains, file_grep, read_entity_frontmatter, git_add_commit
+  scripts/test_lib.py: TestRunner, create_test_project, setup_fixture, install_agents, run_commission, run_first_officer, LogParser, extract_stats, file_contains, file_grep, read_entity_frontmatter, git_add_commit
 - [x] All 7 test scripts rewritten as Python with uv inline metadata importing test_lib
   scripts/test_commission.py, scripts/test_checklist_e2e.py, tests/test_dispatch_names.py, tests/test_gate_guardrail.py, tests/test_rejection_flow.py, tests/test_scaffolding_guardrail.py, tests/test_merge_hook_guardrail.py
 - [x] --snapshot-dir added to test_commission.py
@@ -286,4 +286,4 @@ Inventoried all 7 test scripts. ~345 lines of duplicated boilerplate confirmed e
 
 ### Summary
 
-Rewrote all 7 test scripts from bash to Python with uv inline script metadata. Created scripts/test_lib.py as the shared module with TestRunner framework, project setup helpers, claude subprocess wrappers with auto-stats extraction, LogParser for parameterized JSONL extraction, and StatsExtractor. Direction changed mid-implementation from bash test-lib.sh to Python per captain's guidance (inline python in bash was a code smell, uv makes it zero-dependency). Stats extraction unit test passes 37/37. Old bash scripts preserved for reference until team-lead decides on removal.
+Rewrote all 7 test scripts from bash to Python with uv inline script metadata. Created scripts/test_lib.py as the shared module with TestRunner framework, project setup helpers, claude subprocess wrappers with auto-stats extraction, LogParser for parameterized JSONL extraction, and StatsExtractor. Direction changed mid-implementation from bash test-lib.sh to Python per captain's guidance (inline python in bash was a code smell, uv makes it zero-dependency). Stats extraction unit test passes 37/37. Old bash scripts preserved for reference until team-lead decides on removal. Simplified generate_first_officer to install_agents (plain file copy) after confirming the FO template has been fully static since task 063.
