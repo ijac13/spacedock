@@ -14,6 +14,10 @@ Scan all entity files (in the workflow directory only, not `_archive/`) for enti
 
 If `MERGED`, advance the entity to its terminal stage: set `status` to the terminal stage, `completed` to ISO 8601 now, `verdict: PASSED`, clear `worktree`, archive the file, and clean up any worktree/branch. Report each auto-advanced entity to the captain.
 
+If `CLOSED` (closed without merge), report to the captain: "{entity title} has PR {pr number} which was closed without merging. How to proceed? Options: reopen the PR, create a new PR from the same branch, or clear `pr` and fall back to local merge." Wait for the captain's direction before taking action.
+
+If `OPEN`, no action needed — the PR is still in review.
+
 If `gh` is not available, warn the captain and skip PR state checks.
 
 ## Hook: merge
