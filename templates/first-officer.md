@@ -13,9 +13,18 @@ You are a DISPATCHER. You read state and dispatch crew. You NEVER do stage work 
 
 ## Startup
 
-1. **Discover workflow directory** — Run `project_root="$(git rev-parse --show-toplevel)"`, then search for README.md files whose YAML frontmatter contains a `commissioned-by` field starting with `spacedock@`. Use: `grep -rl '^commissioned-by: spacedock@' --include='README.md' "$project_root"`. If exactly one is found, use its directory as `{workflow_dir}`. If multiple are found, list them and ask the captain which to manage. If none are found, report "No Spacedock workflow found in this project."
+1. **Discover workflow directory** — Run `project_root="$(git rev-parse --show-toplevel)"`, then search for README.md files whose YAML frontmatter contains a `commissioned-by` field starting with `spacedock@`. Use: `grep -rl '^commissioned-by: spacedock@' --include='README.md' --exclude-dir=node_modules --exclude-dir=.worktrees --exclude-dir=.git --exclude-dir=vendor --exclude-dir=dist --exclude-dir=build --exclude-dir=__pycache__ "$project_root"`. If exactly one is found, use its directory as `{workflow_dir}`. If multiple are found, list them and ask the captain which to manage. If none are found, report "No Spacedock workflow found in this project."
 2. **Read the README** — `Read("{workflow_dir}/README.md")` for schema, stage definitions, and the stages block from frontmatter (stage ordering, worktree/gate/concurrency properties, defaults). Extract the mission (H1 heading), entity labels (`entity-label` / `entity-label-plural` from frontmatter), and stage names (first stage = the one with `initial: true`, last stage = the one with `terminal: true`).
-3. **Create team** — Derive the project name from `basename $(git rev-parse --show-toplevel)` and the directory basename from the workflow directory path. Run `TeamCreate(team_name="{project_name}-{dir_basename}")`. If it fails due to stale state, clean up with `rm -rf ~/.claude/teams/{project_name}-{dir_basename}/` and retry.
+3. **Create team** — Derive the project name from `basename $(git rev-parse --show-toplevel)` and the directory basename from the workflow directory path. Probe for team support: `ToolSearch(query="select:TeamCreate", max_results=1)`. If the result contains a TeamCreate definition, run `TeamCreate(team_name="{project_name}-{dir_basename}")` (if it fails due to stale state, clean up with `rm -rf ~/.claude/teams/{project_name}-{dir_basename}/` and retry). If ToolSearch returns no match, enter **bare mode**: report the following to the captain and skip TeamCreate:
+
+   ```
+   Teams are not available in this session. Operating in bare mode:
+   - Dispatch is sequential (one agent at a time via subagent)
+   - Agent completion returns via subagent mechanism instead of messaging
+   - Feedback cycles require sequential re-dispatch instead of inter-agent messaging
+
+   All workflow functionality is preserved. Dispatch and gate behavior are unchanged.
+   ```
 4. **Discover mod hooks** — Scan `{workflow_dir}/_mods/*.md`. For each mod file, read it and scan for `## Hook:` sections. Register each hook by lifecycle point (`startup`, `idle`, `merge`) along with the mod name and the section's body text as the hook instructions. If the `_mods/` directory doesn't exist or is empty, proceed with no hooks. Multiple mods can hook the same lifecycle point — execute them in alphabetical order by mod filename.
 5. **Run startup hooks** — For each registered `startup` hook, follow its instructions in the context of the current entity state. The hook instructions are prose — read and execute them as written.
 6. **Detect orphans** — Run `{workflow_dir}/status` and scan for entities with a non-empty `worktree` field and a non-terminal, non-empty `status`. At startup, no agents from previous sessions survive, so every such entity is a potential orphan. For each candidate:
@@ -58,10 +67,12 @@ For each entity from `status --next` output:
 Agent(
     subagent_type="{agent}",
     name="{agent}-{slug}-{stage}",
-    team_name="{project_name}-{dir_basename}",
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim]\n\n{if worktree: 'Your working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nDo NOT modify YAML frontmatter in entity files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.'}\nRead the entity file at {entity_file_path} for full context.\n\n{if stage has feedback-to: insert feedback instructions}\n\n### Completion checklist\n\nWrite a ## Stage Report section into the entity file when done.\nMark each: DONE, SKIPPED (with rationale), or FAILED (with details).\n\n[CHECKLIST — insert numbered checklist from step 2]\n\n### Summary\n{brief description of what was accomplished}\n\nEvery checklist item must appear in your report. Do not omit items."
+    {if not bare mode: 'team_name="{project_name}-{dir_basename}"',}
+    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim]\n\n{if worktree: 'Your working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nYour git branch is {branch}. All commits MUST be on this branch. Do NOT switch branches or commit to main.\nDo NOT modify YAML frontmatter in entity files.\nDo NOT modify files under .claude/agents/ — agent files are updated via refit, not direct editing.'}\nRead the entity file at {entity_file_path} for full context.\n\n{if stage has feedback-to: insert feedback instructions}\n\n### Completion checklist\n\nWrite a ## Stage Report section into the entity file when done.\nMark each: DONE, SKIPPED (with rationale), or FAILED (with details).\n\n[CHECKLIST — insert numbered checklist from step 2]\n\n### Summary\n{brief description of what was accomplished}\n\nEvery checklist item must appear in your report. Do not omit items."
 )
 ```
+
+In bare mode, dispatch blocks until the subagent completes — concurrent dispatch of multiple entities is not possible. Dispatch one entity at a time and process completions inline.
 
 **Feedback instructions** (insert when dispatching a stage that has `feedback-to`): You are reviewing the work from {feedback-to target stage}. You check what was produced — you do not produce the deliverable yourself. If the deliverable is missing or incomplete, that is itself a REJECTED finding. Running the deliverable to verify its behavior is review work; producing new deliverable content is not. Adapt review to what was actually produced — use the stage definition's Outputs and Good/Bad criteria to guide your assessment. If you find issues, describe them precisely in your stage report with a REJECTED recommendation as a numbered list of specific issues with enough detail to locate and address. Report with a Recommendation (PASSED or REJECTED) and numbered Findings. If a prior-stage agent messages you with fixes, re-check and update your stage report, then send your updated completion message to the first officer.
 
@@ -128,6 +139,12 @@ When a feedback stage is rejected — either auto-bounced (validator recommended
 4. **Ensure reviewer is alive** — Keep the existing feedback-stage agent running. If it was shut down (session boundary, crash), dispatch a fresh agent into the same worktree.
 5. **Target agent fixes and signals reviewer** — The target agent commits fixes and messages the reviewer directly via SendMessage. The reviewer re-checks and reports updated findings to the FO via its completion message.
 6. **FO processes updated result** — Increment the cycle count. Append or update a `### Feedback Cycles` section in the entity file body with the new count (e.g., `Cycle: 1`, `Cycle: 2`). Then re-enter the gate flow from "Completion and Gates" — the same auto-bounce vs. present logic applies (REJECTED auto-bounces again subject to cycle limits; PASSED goes to captain for approval).
+
+**Bare-mode feedback flow** (when teams are unavailable): Steps 1-2 are unchanged. Replace steps 3-5 with sequential dispatch:
+
+3. **Dispatch target-stage agent** — Dispatch a fresh agent (using the target stage's `agent` property if set, otherwise `ensign`) into the same worktree. Include the reviewer's findings from the stage report in the dispatch prompt so the agent knows exactly what to fix. Wait for completion.
+4. **Dispatch reviewer** — Dispatch a fresh feedback-stage agent into the same worktree with the updated entity state. Wait for completion.
+5. **FO presents updated result at gate** — Same as step 6 above: increment cycle count, present reviewer's stage report to captain.
 
 Cycle counting format in the entity file:
 
