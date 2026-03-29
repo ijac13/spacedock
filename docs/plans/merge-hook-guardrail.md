@@ -119,3 +119,49 @@ A: Out of scope. The incident was specifically about merge hooks being skipped. 
 ### Summary
 
 Mapped all five merge-related code paths in the FO template. The root cause of the 073 incident was that merge hook instructions existed in two places (gate approval path and Merge and Cleanup section), making it easy to skip one and jump to local merge. The proposed fix consolidates to a single hook execution point in Merge and Cleanup with a bold ALL-CAPS guardrail, and rewrites the gate approval path to delegate to Merge and Cleanup instead of having its own inline hook step.
+
+## Stage Report: implementation
+
+- [x] MERGE HOOK GUARDRAIL added to Merge and Cleanup section
+  Bold ALL-CAPS guardrail added at top of Merge and Cleanup in `templates/first-officer.md:144`, matching GATE APPROVAL and GATE IDLE guardrail style.
+- [x] Gate approval path delegates to Merge and Cleanup (no inline hook instruction)
+  Replaced 2-step inline merge hook logic at line 113-116 with single delegation: "Fall through to Merge and Cleanup."
+- [x] E2E test script created at tests/test-merge-hook-guardrail.sh
+  Test has 8 static template checks (Phase 1), hook-fires-at-merge-time dynamic test (Phases 2-4), and no-mods fallback test (Phases 5-7).
+- [x] Test added to README Testing Resources table
+  Added row to `docs/plans/README.md` Testing Resources table.
+- [x] Commission test harness passes (no regression)
+  All 65 checks pass: `scripts/test-commission.sh` run in worktree with zero failures.
+- [x] All changes committed to worktree branch
+  Committed to `ensign/077-merge-guardrail` as `5136c1b`.
+
+### Summary
+
+Added bold MERGE HOOK GUARDRAIL to the Merge and Cleanup section of the first-officer template, consolidating merge hook execution to a single point. Removed the inline merge hook instruction from the gate approval path so it delegates to Merge and Cleanup. The guardrail references the in-memory hook registry (discovered at startup), blocks git merge/archival/status advancement until hooks complete, and handles the PR-created stop condition. Created E2E test with fixture, static guardrail validation, and two dynamic test cases (with-hook and no-mods fallback). Commission test harness passes with all 65 checks green.
+
+## Stage Report: validation
+
+- [x] AC1: MERGE HOOK GUARDRAIL exists in Merge and Cleanup (bold ALL-CAPS)
+  `templates/first-officer.md:144` — bold ALL-CAPS guardrail matching GATE APPROVAL and GATE IDLE style.
+- [x] AC2: All merge paths funnel through single hook execution point
+  Gate approval path no longer has inline hook instructions; all paths delegate to Merge and Cleanup.
+- [x] AC3: Gate approval path delegates to Merge and Cleanup (no inline hook instruction)
+  Line 115: "Fall through to `## Merge and Cleanup` — the merge hook guardrail there handles hook execution, PR detection, and merge."
+- [x] AC4: Guardrail states: no git merge, no archival, no status advancement until hooks complete
+  Line 144: "Do NOT proceed to `git merge`, archival, or status advancement until all merge hooks have completed"
+- [x] AC5: Guardrail addresses PR-created case: if hook set pr, stop — no local merge
+  Line 144: "If a merge hook created a PR (set the `pr` field), do NOT perform a local merge — report to the captain that the PR is pending and stop."
+- [x] AC6: E2E test at tests/test-merge-hook-guardrail.sh with test mod + no-mods fallback
+  Test script present with 8 static checks (Phase 1), hook-fires dynamic test (Phases 2-4), and no-mods fallback (Phases 5-7). Awk section extraction fixed in commit 9853264 — flag-based approach now captures full Merge and Cleanup section. All 8 static checks pass.
+- [x] AC7: Guardrail wording references in-memory hook registry, not filesystem scan
+  Line 144: "from the in-memory hook registry (discovered at startup from `_mods/`)" — and Step 1 also says "from the in-memory hook registry".
+- [x] AC8: Test added to README Testing Resources table
+  `docs/plans/README.md:182` — row present with correct path and description.
+- [x] Commission test harness passes
+  All 65 checks pass with zero failures.
+- [x] Recommendation: PASSED
+  All 8 acceptance criteria verified. Template changes correct, test script fixed and passing.
+
+### Summary
+
+All 8 acceptance criteria verified with evidence. The template changes in `templates/first-officer.md` correctly add the MERGE HOOK GUARDRAIL to the Merge and Cleanup section, consolidate all merge paths to a single hook execution point, and handle the PR-created stop condition. The E2E test script had an awk section-extraction bug (start-end pattern collision) that was fixed by the implementer in commit 9853264 using a flag-based approach — re-verified all 8 static checks now pass. Commission test harness passes with all 65 checks green.
