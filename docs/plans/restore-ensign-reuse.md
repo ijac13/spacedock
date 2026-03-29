@@ -41,3 +41,9 @@ The FO template's completion/dispatch flow should check the next stage's `fresh`
 - If worktree mode changes between stages: always dispatch fresh (can't reuse across worktree boundaries)
 
 This interacts with 068 (keep-alive for feedback-to) — the keep-alive logic is a special case of the general reuse pattern.
+
+## Open question: reuse without teams (bare mode)
+
+With teams, reuse is straightforward — the ensign stays alive and the FO sends new instructions via SendMessage. Without teams (bare mode from 074), each `Agent()` call creates a new subprocess that's gone when it returns. The question is whether `Agent()` with the same `name` parameter can reconnect to an existing agent, or if each invocation is always fresh regardless of name.
+
+If bare-mode reuse is impossible, `fresh` would only be meaningful in team mode. Need to investigate the Agent() tool's behavior with named agents before designing the reuse flow.
