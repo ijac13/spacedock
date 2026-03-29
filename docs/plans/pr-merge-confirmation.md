@@ -1,13 +1,13 @@
 ---
 id: 069
 title: pr-merge mod shows draft PR and gets captain approval before pushing
-status: ideation
+status: implementation
 source: https://github.com/clkao/spacedock/issues/10
 started: 2026-03-29T03:12:00Z
 completed:
 verdict:
 score: 0.85
-worktree:
+worktree: .worktrees/ensign-069-pr-confirm
 issue: "#10"
 pr:
 ---
