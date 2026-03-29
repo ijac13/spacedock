@@ -1,13 +1,13 @@
 ---
 id: 064
 title: Replace lieutenant agents with capability modules
-status: ideation
+status: implementation
 source: CL
 started: 2026-03-27T23:10:00Z
 completed:
 verdict:
 score: 0.90
-worktree:
+worktree: .worktrees/ensign-064-mods
 issue:
 pr:
 ---
