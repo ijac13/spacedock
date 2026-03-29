@@ -6,7 +6,7 @@ source: CL
 started:
 completed:
 verdict:
-score: 0.70
+score: 0.65
 worktree:
 ---
 

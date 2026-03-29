@@ -6,7 +6,7 @@ source: testflight sd11-test observation
 started:
 completed:
 verdict:
-score: 0.75
+score: 0.80
 worktree:
 ---
 

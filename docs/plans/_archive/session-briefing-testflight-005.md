@@ -1,11 +1,11 @@
 ---
 id: 032
 title: Session Briefing — Testflight 005
-status: backlog
+status: done
 source: testflight-005
 started:
-completed:
-verdict:
+completed: 2026-03-29T04:15:00Z
+verdict: PASSED
 score: 0.30
 worktree:
 ---
