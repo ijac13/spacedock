@@ -1,13 +1,13 @@
 ---
 id: 069
 title: pr-merge mod shows draft PR and gets captain approval before pushing
-status: validation
+status: done
 source: https://github.com/clkao/spacedock/issues/10
 started: 2026-03-29T03:12:00Z
-completed:
-verdict:
+completed: 2026-03-29T03:39:00Z
+verdict: PASSED
 score: 0.85
-worktree: .worktrees/ensign-069-pr-confirm
+worktree:
 issue: "#10"
 pr:
 ---
@@ -80,3 +80,18 @@ Do NOT archive yet. The entity stays in its terminal stage with `pr` set until t
 ### Summary
 
 The pr-merge mod's merge hook needs a confirmation step before pushing and creating PRs. The proposed change replaces the `## Hook: merge` section with an updated version that adds a PR approval guardrail (bold ALL-CAPS pattern matching existing guardrails), presents a draft summary, and waits for explicit captain approval. On decline, the FO asks the captain how to proceed rather than assuming local merge. All existing fallback behavior (gh unavailable, push failure) is preserved.
+
+## Stage Report: implementation
+
+- [x] `mods/pr-merge.md` merge hook updated with PR approval guardrail
+  Replaced `## Hook: merge` section with guardrail version from entity spec (commit 0615d7e)
+- [x] Startup hook and frontmatter unchanged
+  `git diff --stat` confirmed only `mods/pr-merge.md` changed; 12 insertions, 1 deletion
+- [x] Commission test harness passes
+  `scripts/test-commission.sh` — 65 passed, 0 failed (out of 65 checks), RESULT: PASS
+- [x] All changes committed to worktree branch
+  Committed to `ensign/069-pr-confirm` branch as 0615d7e
+
+### Summary
+
+Replaced the `## Hook: merge` section in `mods/pr-merge.md` with the PR approval guardrail version specified in the entity. The updated hook presents a draft PR summary (title, branch, change count, file list), waits for explicit captain approval before pushing, and on decline asks the captain how to proceed rather than assuming local merge. All 65 commission test checks pass.
