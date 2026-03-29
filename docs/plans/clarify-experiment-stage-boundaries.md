@@ -663,3 +663,22 @@ This means the commission skill's Question 2 (stage design) and Confirm Design t
 ### Summary
 
 Finalized ideation across four rounds of brainstorming and direct discussion with CL. The task evolved from targeted wording fixes (Changes 1-3) to a broader architectural shift: drop the validator template entirely, make the feedback protocol FO-owned generic infrastructure triggered by `feedback-to` stage property, and simplify the commission's user-facing presentation to hide implementation vocabulary. Five proposed changes with eight acceptance criteria are ready for implementation.
+
+## Stage Report: implementation
+
+- [x] README implementation stage uses "produce the deliverable" language (Change 1)
+  `docs/plans/README.md` line 93: "produce the deliverable: write code, run experiments, generate analysis" with broadened Outputs, Good, and Bad criteria
+- [x] README validation stage has explicit boundary statement (Change 2)
+  `docs/plans/README.md` line 103: "The validator checks what was produced — it does not produce the deliverable itself"
+- [x] FO validation instructions are generic feedback protocol without software-specific language (Change 3)
+  `templates/first-officer.md` line 43: Feedback instructions triggered by `feedback-to`, generic wording covering all deliverable types, "missing deliverable = REJECTED" rule included
+- [x] Validator template removed or deprecated (Change 4)
+  `templates/validator.md` deleted via git rm. All references removed from SKILL.md (generation step 2e2, checklist, announcement, warnings) and test-rejection-flow.sh
+- [x] Commission Confirm Design presents stage behavior in plain language (Change 5)
+  `skills/commission/SKILL.md` Confirm Design now shows "Approval gates" with human-readable descriptions and "On rejection" with bounce targets. Implementation vocabulary (worktree, gate, fresh, feedback-to) not exposed to user
+- [x] All changes committed to worktree branch
+  Commit 21035b2 on ensign/065-stage-boundaries with all 6 files changed
+
+### Summary
+
+Implemented all five proposed changes from ideation. The core architectural shift: the validator template is removed entirely, and the feedback protocol becomes FO-owned generic infrastructure injected at dispatch time when a stage has `feedback-to`. The FO dispatch step 4 no longer couples `fresh: true` to a validator agent type — all agents are ensigns, with feedback behavior injected via dispatch instructions. The Feedback Rejection Flow reads `feedback-to` to determine which stage receives findings on rejection. The commission skill's Confirm Design now presents stage behavior in human-readable language, inferring implementation properties without exposing them. Tests updated to match the new model.
