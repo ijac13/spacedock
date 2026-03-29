@@ -3,6 +3,12 @@
 
 set -euo pipefail
 
+EXTRA_ARGS=()
+while [[ $# -gt 0 ]]; do
+  EXTRA_ARGS+=("$1")
+  shift
+done
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TEST_DIR="$(mktemp -d)"
 WORKFLOW_DIR="$TEST_DIR/v0-test-1"
@@ -66,6 +72,7 @@ claude -p "$PROMPT" \
   --permission-mode bypassPermissions \
   --verbose \
   --output-format stream-json \
+  "${EXTRA_ARGS[@]}" \
   2>&1 > "$TEST_DIR/test-log.jsonl" || CLAUDE_EXIT=$?
 
 echo ""
