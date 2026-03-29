@@ -1,9 +1,9 @@
 ---
 id: 071
 title: Detect PR merges during long-running sessions
-status: backlog
+status: ideation
 source: CL
-started:
+started: 2026-03-29T05:28:00Z
 completed:
 verdict:
 score: 0.80
