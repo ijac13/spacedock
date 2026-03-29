@@ -22,7 +22,7 @@ Additionally, startup orphan detection needs improvement. When the FO starts a n
 
 When a gated worktree stage (validation) is approved by the captain, the FO currently advances the entity straight to `done` (the terminal stage), which triggers the merge hooks. The pr-merge mod fires at `done`, presents a draft PR, gets captain approval, pushes, and creates the PR. But by that point the entity already has `status: done`, `completed` timestamp, and `verdict: PASSED` — while the PR is still open and unmerged.
 
-This happened concretely with task 069 (pr-merge-confirmation): the entity was archived as `done` even though the PR hadn't merged yet. The startup hook on the *next* FO session detects merged PRs, but the entity has already been archived with `done` status. This creates a semantic mismatch: the entity says "done" but the code hasn't landed on main.
+Under the current design, the entity gets archived as `done` with `completed` timestamp and `verdict: PASSED` at the moment the merge hooks fire — before the PR is even created, let alone merged. The startup hook on the *next* FO session can detect merged PRs, but by then the entity is already archived with `done` status. This creates a semantic mismatch: `status: done` while the code hasn't landed on main. Any `status` query shows the entity as finished when it isn't.
 
 The root cause is that there's no state between "gate approved" and "terminal/done." When the captain approves at a gate, the FO has two things to do: (1) advance the entity and (2) merge the code. Currently these are conflated — advancement to `done` triggers the merge, but `done` semantically means "finished." The entity needs to stay in a non-terminal state while the PR is pending.
 
@@ -49,17 +49,25 @@ When a gated worktree stage is approved by the captain, instead of immediately a
 
 The `pr` field being non-empty while the entity is at a non-terminal gated stage means "gate approved, PR pending." This is the "ready to transition" signal — no new field needed.
 
-**On next startup:** The existing startup hook already scans for entities with non-empty `pr` fields and checks merge status via `gh pr view`. When the PR is detected as merged, *then* the entity advances to `done` with `completed` timestamp and `verdict: PASSED`, gets archived, and worktree/branch are cleaned up.
+**On next startup:** The pr-merge mod's startup hook already says "scan all entity files for entities with a non-empty `pr` field and a non-terminal status" — this wording already covers the new scenario where PR-pending entities sit at a non-terminal stage like `validation`. No change to the startup hook's scan criteria is needed. When the PR is detected as merged, the hook advances the entity to the terminal stage with `completed` timestamp and `verdict: PASSED`, archives it, and cleans up the worktree/branch.
 
-**Where this changes in the FO template:**
+The startup hook also needs to handle one additional PR state: `CLOSED` (without merge). If a PR was closed without merging (e.g., abandoned, superseded), the entity is stuck — it can't advance via merge detection and it's not dispatchable. The startup hook should report closed PRs to the captain with options: reopen and fix, create a new PR, or fall back to local merge.
 
-The "Completion and Gates" section currently says: when a gate is approved, "dispatch a fresh agent for the next stage." For the case where the next stage is terminal, it says "proceed to merge." The change is:
+**Exactly where this changes in the FO template:**
 
-- **Gate approved + next stage is terminal + worktree stage:** Run merge hooks first. If a merge hook created a PR (indicated by `pr` field becoming non-empty), do NOT advance to terminal. The entity stays at its current stage. Report to the captain that the PR is pending.
-- **Gate approved + next stage is terminal + no worktree:** Advance to terminal as today (no code to merge, no PR needed).
-- **Gate approved + next stage is NOT terminal:** Advance and dispatch as today (mid-pipeline gates like ideation don't trigger merge).
+The critical change is in `## Completion and Gates`, in the gate-approval path. Currently the "Approve" bullet says: "Shut down the agent. Dispatch a fresh agent for the next stage." And the "If no gate" path says: "If terminal, proceed to merge." Both funnel into `## Merge and Cleanup`, which triggers merge hooks only when the entity *reaches* the terminal stage.
 
-This means the pr-merge mod's `## Hook: merge` needs a small update too: the hook currently says "Do NOT archive yet. The entity stays in its terminal stage with `pr` set until the PR is merged." The updated behavior is: the entity stays in its *current* stage (not terminal) with `pr` set until the PR is merged.
+The problem: merge hooks fire inside "Merge and Cleanup," which is entered *after* terminal advancement. We need merge hooks to fire *before* terminal advancement when a PR might be created.
+
+The fix restructures the gate-approval "Approve" path into three cases:
+
+- **Approve + next stage is terminal + current stage has worktree:** Run merge hooks *here*, in the gate-approval path, before any status change. If a merge hook set the `pr` field (indicating a PR was created), do NOT advance to terminal. The entity stays at its current stage. Shut down the agent. Report to the captain that the PR is pending and will be detected on next startup. If no merge hook set `pr` (no pr-merge mod installed, or captain declined the push), fall through to the existing "Merge and Cleanup" section for local merge.
+- **Approve + next stage is terminal + no worktree:** Fall through to existing "Merge and Cleanup" for terminal advancement and archival (no code to merge, no PR needed).
+- **Approve + next stage is NOT terminal:** Advance and dispatch as today (mid-pipeline gates like ideation).
+
+The `## Merge and Cleanup` section itself is unchanged — it still handles local merge for entities that reach terminal without a PR. The change is that the gate-approval path can now short-circuit before reaching it.
+
+The pr-merge mod's `## Hook: merge` also needs a wording update. It currently says "Do NOT archive yet. The entity stays in its terminal stage with `pr` set until the PR is merged." The updated behavior: the entity stays in its *current* stage (not terminal) with `pr` set until the PR is merged. The mod doesn't need to know about archival timing — it just sets `pr` and the FO handles the rest.
 
 ### Why this approach over alternatives
 
@@ -79,6 +87,14 @@ Ideation is gated but has no worktree — the entity is on main, no branch to me
 
 This is the minimal, stage-aware condition. Mid-pipeline worktree stages (like implementation, which feeds into validation) don't trigger it either — they advance normally because the next stage isn't terminal (the worktree carries forward to validation).
 
+### Part 2b: `status --next` and concurrency implications
+
+When an entity stays at `validation` with `pr` set and `worktree` still populated (worktree is kept alive for post-PR fixes like CI failures or code review feedback):
+
+- **Not dispatchable:** Validation has `gate: true`, so `status --next` Rule 2 (not gate-blocked) filters it out. Correct — we don't want it redispatched.
+- **Concurrency slot occupied:** The non-empty `worktree` counts toward validation's `active_counts`, consuming a concurrency slot. This is intentional — the worktree is still alive and may need an agent dispatched into it for PR fixes. The slot should stay occupied until the PR merges and the worktree is cleaned up.
+- **Orphan detection interaction:** On next startup, this entity has non-empty `worktree` and non-terminal status, which matches the orphan detection criteria. However, it also has `pr` set. Orphan detection must explicitly skip entities with non-empty `pr` — these are PR-pending, not orphaned. The ordering (startup PR hook runs before orphan detection) provides defense in depth, but the orphan detector itself should also check for `pr` to avoid misclassification if the startup hook doesn't clear the entity (e.g., PR is still open).
+
 ### Part 3: Startup orphan detection
 
 On FO startup, after reading the README and discovering mods, but before running `status --next`:
@@ -95,9 +111,10 @@ On FO startup, after reading the README and discovering mods, but before running
    | Worktree state | Entity has `pr`? | Action |
    |----------------|-----------------|--------|
    | Worktree exists, stage report present | No | Report to captain: "Orphan {title} has completed {stage} work but was never reviewed. Stage report is present." Captain decides: review the report (re-enter gate flow), or redispatch. |
-   | Worktree exists, stage report present | Yes | PR-pending entity — handled by existing startup PR merge detection hook. No additional action needed. |
+   | Worktree exists, any | Yes | PR-pending entity — skip orphan handling entirely. Handled by the startup PR hook (merged/open/closed detection). |
    | Worktree exists, no stage report | No | Report to captain: "Orphan {title} was in-progress at {stage} with no stage report. Work may be partial." Captain decides: redispatch (start fresh in same worktree), or clean up. |
    | Worktree missing | No | Stale metadata. Clear `worktree` field, report to captain. |
+   | Worktree missing | Yes | PR was pushed but worktree was cleaned up (partial cleanup from crash). Handled by startup PR hook — the branch exists on remote even though the local worktree is gone. If PR is merged, advance to done. If open/closed, report to captain. |
 
 4. **Do NOT auto-redispatch.** Always report to captain and wait for direction. Auto-redispatch risks duplicating partial work or ignoring completed-but-unreviewed results.
 
@@ -108,29 +125,30 @@ On FO startup, after reading the README and discovering mods, but before running
 
 ## Acceptance Criteria
 
-1. When a gated worktree stage is approved and the next stage is terminal, the FO runs merge hooks but does NOT advance to the terminal stage if a PR was created. The entity stays at its current stage with `pr` set.
+1. When a gated worktree stage is approved and the next stage is terminal, the FO runs merge hooks in the gate-approval path (not in "Merge and Cleanup"). If a merge hook set the `pr` field, the entity stays at its current stage — no terminal advancement. If no `pr` was set, fall through to existing "Merge and Cleanup" for local merge.
 2. When a gated worktree stage is approved and the next stage is NOT terminal, the FO advances normally (no change).
 3. When a gated non-worktree stage is approved, the FO advances normally (no change).
-4. The FO startup PR hook detects merged PRs for entities at non-terminal stages (not just terminal stages as today) and advances them to done with proper cleanup.
-5. The pr-merge mod's merge hook documentation is updated: entity stays at current stage (not terminal) while PR is pending.
-6. On FO startup, entities with non-empty `worktree` and non-terminal status are detected as orphans.
-7. Orphans are categorized by worktree state (exists/missing) and stage report presence, and reported to the captain with actionable options.
-8. The FO does not auto-redispatch orphans — captain approval is required.
-9. Orphan detection runs after startup hooks (so PR-pending entities are handled first).
+4. The pr-merge startup hook's existing "non-terminal status" scan criteria already covers PR-pending entities at non-terminal stages — no scan change needed, but confirm this in implementation.
+5. The pr-merge startup hook handles `CLOSED` (without merge) PRs: report to captain with options (reopen, new PR, or local merge).
+6. The pr-merge mod's merge hook documentation is updated: entity stays at current stage (not terminal) while PR is pending.
+7. On FO startup, entities with non-empty `worktree`, non-terminal status, and empty `pr` are detected as orphans. Entities with `pr` set are PR-pending, not orphans.
+8. Orphans are categorized by worktree state (exists/missing) and stage report presence, and reported to the captain with actionable options.
+9. The FO does not auto-redispatch orphans — captain approval is required.
+10. Orphan detection runs after startup hooks (defense in depth), and also explicitly skips entities with non-empty `pr` (primary guard).
 
 ## Stage Report: ideation
 
 - [x] Problem statement grounded in the specific lifecycle mismatch (with concrete examples from how 069 played out)
-  Documented the exact flow: validation approved -> entity set to done -> PR still open. Task 069 was the concrete example where this mismatch was observable.
+  Documented the exact flow: validation approved -> entity set to done -> PR still open. Described as the expected behavior under the current design (the pr-merge mod was only just implemented with 069).
 - [x] Proposed approach for representing "gate approved, PR pending" state — with rationale for why this approach over alternatives
-  Use existing `pr` field at a non-terminal stage as the state signal. Four alternatives evaluated and rejected (new field, status suffix, new hook, delay archival with done status). The key insight: decouple gate approval from terminal advancement.
+  Use existing `pr` field at a non-terminal stage as the state signal. Four alternatives evaluated and rejected (new field, status suffix, new hook, delay archival with done status). The key insight: decouple gate approval from terminal advancement. Merge hooks fire in the gate-approval path, not in "Merge and Cleanup."
 - [x] How PR creation integrates with the stage/gate flow without breaking non-worktree gates (like ideation)
-  The PR-pending hold only applies when: approved stage has `worktree: true` AND next stage is terminal. Ideation gates, mid-pipeline worktree stages all advance normally.
+  The PR-pending hold only applies when: approved stage has `worktree: true` AND next stage is terminal. Ideation gates, mid-pipeline worktree stages all advance normally. Concurrency slot stays occupied (worktree kept alive for post-PR fixes). Orphan detection explicitly skips pr-pending entities.
 - [x] Proposed approach for startup orphan detection — what the FO checks, what actions it takes
-  Detection matrix: scan for non-empty worktree + non-terminal status. Categorize by worktree existence and stage report presence. Four scenarios with specific actions. Never auto-redispatch — always report to captain.
+  Detection matrix: scan for non-empty worktree + non-terminal status + empty pr. Five scenarios with specific actions (including worktree-missing+pr-set edge case). Never auto-redispatch — always report to captain. Startup PR hook handles closed-without-merge PRs.
 - [x] Acceptance criteria — testable conditions for "done"
-  Nine acceptance criteria covering gate-approval flow (3 cases), startup PR detection update, mod documentation, and orphan detection (4 criteria).
+  Ten acceptance criteria covering gate-approval flow (3 cases), startup PR hook confirmation, closed-PR handling, mod documentation, and orphan detection (4 criteria).
 
 ### Summary
 
-The core design decision is to decouple gate approval from terminal advancement. When a gated worktree stage is approved and the next stage is terminal, the FO runs merge hooks (creating the PR) but keeps the entity at its current stage. The `pr` field being non-empty at a non-terminal stage is the "gate approved, PR pending" signal — no new schema fields needed. The startup hook already checks PR merge status; it just needs to handle entities at non-terminal stages too. Non-worktree gates and mid-pipeline gates are unaffected. Orphan detection is a separate startup step that categorizes stranded entities by worktree state and stage report presence, always deferring to the captain for action.
+The core design decision is to decouple gate approval from terminal advancement by moving merge hook execution into the gate-approval path in "Completion and Gates." When a gated worktree stage is approved and the next stage is terminal, the FO runs merge hooks before any status change. If a PR was created (`pr` field set), the entity stays at its current stage — the worktree remains alive for post-PR fixes. The pr-merge startup hook already scans "non-terminal status" entities, so it covers the new scenario without scan changes; it also needs to handle `CLOSED` (without merge) PRs. Orphan detection explicitly skips entities with `pr` set (PR-pending, not orphaned) and categorizes the rest by worktree state and stage report presence.
