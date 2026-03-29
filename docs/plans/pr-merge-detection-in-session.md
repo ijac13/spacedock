@@ -139,3 +139,22 @@ The startup flow is unchanged — startup hooks still fire once at session start
 ### Summary
 
 The original two-part approach (first-class PR scan + idle hook) simplifies to one: the `idle` lifecycle hook point. The FO doesn't hardcode domain logic — PR checking belongs in the pr-merge mod's idle hook, not in the core event loop. The idle hook fires when `status --next` returns nothing dispatchable, mod hooks run, then `status --next` re-runs. Three sections of the FO template change: event loop paragraph, Mod Hook Convention (add idle), and the "future lifecycle points" sentence. The pr-merge mod gets a `## Hook: idle` section that references its startup hook logic. Acceptance criteria updated from the seed's 5 items to 7 refined items reflecting the consolidated design.
+
+## Stage Report: implementation
+
+- [x] Event loop paragraph updated with idle hook firing and re-check behavior
+  Updated line 59 area in templates/first-officer.md with 3-step event loop: PR check, status --next, idle hooks
+- [x] `idle` documented in Mod Hook Convention as available lifecycle point
+  Added to the bullet list in the Mod Hook Convention section of templates/first-officer.md
+- [x] `idle` removed from "Future lifecycle points" sentence
+  Sentence now lists only dispatch and gate
+- [x] pr-merge mod has `## Hook: idle` section
+  Added between startup and merge hooks in mods/pr-merge.md, references startup hook logic
+- [x] Commission test harness passes (no regression)
+  All checks pass: file existence, status script, entity frontmatter, README completeness, first-officer guardrails, stages support, pr-merge mod, no leaked variables, no absolute paths
+- [x] All changes committed to worktree branch
+  Commit a70bb5f on ensign/071-pr-merge-detection
+
+### Summary
+
+Added in-session PR merge detection by expanding the FO event loop to check PR-pending entities after each agent completion and introducing `idle` as a new mod hook lifecycle point. The pr-merge mod hooks idle for defense-in-depth. Also updated the hook discovery step to list idle alongside startup and merge, and updated the pr-merge mod's closing paragraph to reflect all three detection paths.
