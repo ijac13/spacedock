@@ -9,7 +9,7 @@ verdict:
 score: 0.80
 worktree: .worktrees/ensign-070-pr-lifecycle
 issue:
-pr:
+pr: "#11"
 ---
 
 When a gated worktree stage (e.g., validation) is approved, the pr-merge mod should create the PR before advancing to the terminal stage. Currently the merge hook fires at the terminal stage, which means the entity is marked `done` while the PR is still open — semantically wrong. The entity should stay at its current stage until the PR merges.
