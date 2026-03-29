@@ -56,6 +56,10 @@ No change needed. Already says: "If the agent from the `feedback-to` target stag
 | Approval (happy path) | Gate approve shuts down both reviewer and kept-alive implementer. |
 | Non-adjacent `feedback-to` | Only the immediate next stage is checked. Non-adjacent `feedback-to` uses the existing redispatch fallback. |
 
+### Feedback Cycles
+
+Cycle: 1
+
 ## Acceptance Criteria
 
 1. FO template Completion section keeps the agent alive when the next stage has `feedback-to` pointing at the completing stage
