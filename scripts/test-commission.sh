@@ -16,7 +16,11 @@ FAILURES=0
 PASSES=0
 
 cleanup() {
-  rm -rf "$TEST_DIR"
+  if [ -n "${KEEP_LOG:-}" ] && [ -f "$TEST_DIR/test-log.jsonl" ]; then
+    echo "Log preserved at: $TEST_DIR/test-log.jsonl"
+  else
+    rm -rf "$TEST_DIR"
+  fi
 }
 trap cleanup EXIT
 

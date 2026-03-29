@@ -9,7 +9,7 @@ verdict:
 score: 0.80
 worktree: .worktrees/ensign-071-pr-merge-detection
 issue:
-pr:
+pr: "#14"
 ---
 
 In a long-running FO session, merged PRs go undetected until the next startup — the pr-merge startup hook only fires once. An entity sitting at `validation` with `pr` set will stay there indefinitely even after the PR merges.
