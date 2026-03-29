@@ -1,13 +1,13 @@
 ---
 id: 033
 title: First-officer graceful degradation without agent teams
-status: ideation
+status: implementation
 source: testflight sd11-test observation
 started: 2026-03-28T00:00:00Z
 completed:
 verdict:
 score: 0.80
-worktree:
+worktree: .worktrees/ensign-033-graceful-degradation
 ---
 
 The generated first-officer requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 (research preview, v2.1.32+). Without teams, TeamCreate and SendMessage don't exist, so the first-officer's current dispatch pattern fails at startup step 1.
