@@ -1,7 +1,7 @@
 ---
 id: 033
 title: First-officer graceful degradation without agent teams
-status: implementation
+status: validation
 source: testflight sd11-test observation
 started: 2026-03-28T00:00:00Z
 completed:
