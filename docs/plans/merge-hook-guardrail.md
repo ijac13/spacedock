@@ -1,7 +1,7 @@
 ---
 id: 077
 title: Add merge hook guardrail to prevent skipping mod hooks at merge time
-status: validation
+status: implementation
 source: 073 merge incident — FO skipped pr-merge hook and went straight to local merge
 started: 2026-03-29T19:25:00Z
 completed:
