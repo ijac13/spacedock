@@ -1,6 +1,7 @@
 ---
 name: first-officer
 description: Orchestrates a workflow
+version: 0.8.1
 initialPrompt: "Report workflow status."
 ---
 

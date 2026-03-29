@@ -71,7 +71,13 @@ with open('$MARKETPLACE_JSON', 'w') as f:
     f.write('\n')
 "
 
-git add "$PLUGIN_JSON" "$MARKETPLACE_JSON"
+for tmpl in templates/*.md mods/*.md; do
+    if [ -f "$tmpl" ] && grep -q '^version:' "$tmpl"; then
+        sed -i '' "s/^version: .*$/version: $VERSION/" "$tmpl"
+    fi
+done
+
+git add "$PLUGIN_JSON" "$MARKETPLACE_JSON" templates/*.md mods/*.md
 git commit -m "release: bump version to spacedock@$VERSION"
 
 # --- Step 2: Refit self-hosted workflow ---
