@@ -166,3 +166,16 @@ No special handling needed. The Feedback Rejection Flow already handles worktree
 ### Summary
 
 Identified four template sections that need modification in `templates/first-officer.md` to implement auto-bounce rejection. The key design decision is that auto-bounce applies only when both conditions are met: the stage has `feedback-to` AND the validator recommends REJECTED. This preserves captain authority for consequential actions (approvals, non-feedback rejections) while eliminating unnecessary round-trips on the common "try again" path. The captain retains an "override" escape hatch and the existing cycle-limit escalation prevents infinite auto-bounce loops.
+
+## Stage Report: implementation
+
+- [x] All 4 template sections updated with proposed wording
+  Gate flow (L85): added feedback-rejection check before standard gate presentation; Feedback trigger (L124): expanded to include auto-bounce; Cycle count check (L127): clarified auto-bounce doesn't bypass cycle limit; Gate re-presentation (L131): re-enters gate flow with auto-bounce logic
+- [x] Commission test harness passes (no regression)
+  65 passed, 0 failed — all file existence, guardrail, frontmatter, and completeness checks green
+- [x] All changes committed to worktree branch
+  Commit fb53113 on ensign/073-auto-reject branch
+
+### Summary
+
+Applied the four proposed wording changes from ideation to `templates/first-officer.md`. The changes add an auto-bounce path for feedback stages with REJECTED recommendations (skipping captain wait), while preserving full gate presentation for PASSED recommendations and non-feedback stages. Commission test harness confirms no regressions (65/65 checks pass).
