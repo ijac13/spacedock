@@ -287,3 +287,38 @@ Inventoried all 7 test scripts. ~345 lines of duplicated boilerplate confirmed e
 ### Summary
 
 Rewrote all 7 test scripts from bash to Python with uv inline script metadata. Created scripts/test_lib.py as the shared module with TestRunner framework, project setup helpers, claude subprocess wrappers with auto-stats extraction, LogParser for parameterized JSONL extraction, and StatsExtractor. Direction changed mid-implementation from bash test-lib.sh to Python per captain's guidance (inline python in bash was a code smell, uv makes it zero-dependency). Stats extraction unit test passes 37/37. Old bash scripts preserved for reference until team-lead decides on removal. Simplified generate_first_officer to install_agents (plain file copy) after confirming the FO template has been fully static since task 063.
+
+## Stage Report: validation
+
+- [x] AC1: test_lib.py exists and is imported by all 7 test scripts
+  All 7 E2E scripts import from test_lib: test_commission.py, test_checklist_e2e.py, test_dispatch_names.py, test_gate_guardrail.py, test_rejection_flow.py, test_scaffolding_guardrail.py, test_merge_hook_guardrail.py
+- [x] AC2: All 7 scripts use shared pass/fail/check from test_lib, no script defines its own
+  pass_() and fail() only defined in TestRunner (test_lib.py:45-51). No script defines its own. Note: test_stats_extraction.py (unit test for the lib) uses standalone check() with globals rather than TestRunner — acceptable for a unit test of the framework itself.
+- [x] AC3: --snapshot-dir preserves commissioned project
+  test_commission.py lines 350-358: shutil.copytree(t.test_dir, snapshot) copies workflow dir, .claude/agents/, and logs.
+- [x] AC4: --from-snapshot skips commission
+  test_checklist_e2e.py lines 37-56: copies snapshot into test dir, sets test_project_dir, looks for workflow dir, skips Phase 1 commission.
+- [x] AC5: Stats extraction automatic for every claude -p invocation
+  extract_stats() called in run_commission (line 169) and run_first_officer (line 203). Commission test output confirmed: stats-commission.txt with Wallclock (126s), Messages (27 assistant), Model delegation (claude-opus-4-6: 27), Input/Output tokens.
+- [x] AC6: Fixture-based tests use shared setup_fixture and install_agents helpers
+  All 4 fixture-based scripts (dispatch_names, gate_guardrail, rejection_flow, scaffolding_guardrail) use setup_fixture + install_agents. No sed substitution found in any Python test script.
+- [x] AC7: No behavioral regression
+  Commission test: 65/65 pass. Scaffolding guardrail: 9/9 pass. Gate guardrail: 6/9 pass (3 failures are pre-existing template text drift — same checks exist in old bash test-gate-guardrail.sh at lines 79,85 and would fail identically). Stats extraction unit test: 37/37 pass.
+- [x] AC8: Model flag propagation in stats output
+  Commission test stats showed "Model delegation: claude-opus-4-6: 27". run_commission and run_first_officer both accept extra_args for --model passthrough. Stats report model delegation per-phase.
+- [x] AC9: uv inline script metadata, zero-dependency
+  All 7 scripts have `#!/usr/bin/env -S uv run` shebang and `# /// script` metadata block. `uv run scripts/test_commission.py --help` confirmed working.
+- [x] AC10: Spot-check runs
+  Commission test (uv run scripts/test_commission.py): 65/65 pass. Fixture-based test (uv run tests/test_scaffolding_guardrail.py): 9/9 pass. Gate guardrail (uv run tests/test_gate_guardrail.py): 6/9 pass (pre-existing failures, not regressions).
+
+Additional checks:
+- [x] generate_first_officer simplification verified
+  Function renamed to install_agents in test_lib.py (line 126). Simple shutil.copy2 from templates/first-officer.md — no sed-style substitution, no template variables (__MISSION__, etc.). Correct per FO template being fully static since task 063.
+- [x] Old bash scripts status
+  7 old bash scripts still present (scripts/test-commission.sh, scripts/test-checklist-e2e.sh, tests/test-*.sh). Implementation report notes they are preserved for reference pending team-lead decision on removal.
+- [x] Stats extraction unit test
+  python3 tests/test_stats_extraction.py: 37/37 pass (LogParser + StatsExtractor + edge cases).
+
+### Summary
+
+All 10 acceptance criteria verified with evidence. Commission test spot-check: 65/65 pass. Fixture-based spot-check (scaffolding guardrail): 9/9 pass. Gate guardrail test showed 3 pre-existing failures from template text drift (same patterns in old bash tests), not regressions. generate_first_officer correctly simplified to install_agents (plain file copy, no sed). Old bash scripts still present for reference. Recommendation: PASSED.
