@@ -1,7 +1,7 @@
 ---
 id: 073
 title: Auto-bounce rejection at feedback stages without captain approval
-status: implementation
+status: validation
 source: 033 validation incident — FO waited for captain on a clear rejection
 started: 2026-03-29T16:45:00Z
 completed:
