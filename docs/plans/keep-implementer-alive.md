@@ -81,3 +81,20 @@ Cycle: 1
 ### Summary
 
 The change is narrowly scoped to the FO template's Completion section. When a non-gated stage completes, the FO checks whether the immediate next stage has `feedback-to` pointing back. If yes, the agent stays alive instead of being shut down. The Feedback Rejection Flow already handles the keep-alive case — this change just ensures the agent is actually alive when rejection happens. On approval, both agents are shut down. Crash and session-boundary fallbacks work unchanged.
+
+## Stage Report: implementation
+
+- [x] FO template Completion section updated with keep-alive look-ahead
+  Line 54: "If no gate" path now checks whether next stage has `feedback-to` pointing at this stage; if yes, keeps agent alive.
+- [x] FO template Gate Approve path updated to clean up kept-alive agent
+  Line 70: Approve path now shuts down kept-alive agent from `feedback-to` target alongside the feedback-stage agent.
+- [x] Feedback Rejection Flow step 3 unchanged (verify)
+  Line 80: Step 3 text verified identical — "If the agent from the `feedback-to` target stage is still running, send it the reviewer's findings via SendMessage."
+- [x] Commission test harness passes
+  65 passed, 0 failed (out of 65 checks). RESULT: PASS.
+- [x] All changes committed to worktree branch
+  Commit 25e5b78 on branch ensign/068-keep-alive: 1 file changed, 2 insertions, 2 deletions.
+
+### Summary
+
+Two lines changed in `templates/first-officer.md`. The "If no gate" Completion path now does a look-ahead check for `feedback-to` on the next stage and keeps the completing agent alive if found. The Gate Approve path now cleans up any kept-alive agent alongside the feedback-stage agent. The Feedback Rejection Flow step 3 required no changes — verified unchanged. Commission test harness passes all 65 checks.
