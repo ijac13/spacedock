@@ -25,7 +25,8 @@ from test_lib import (
 def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(description="Checklist protocol E2E test")
     parser.add_argument("--from-snapshot", default=None, help="Use a snapshot dir instead of commissioning")
-    parser.add_argument("--model", default=None, help="Model override for claude")
+    parser.add_argument("--model", default="opus", help="Model to use (default: opus)")
+    parser.add_argument("--effort", default="low", help="Effort level (default: low)")
     return parser.parse_known_args()
 
 
@@ -90,8 +91,7 @@ All inputs for this workflow:
 Skip interactive questions and confirmation — use these inputs directly. Make reasonable assumptions for anything not specified. Do NOT run the pilot phase — just generate the files and stop."""
 
         extra = list(extra_args)
-        if args.model:
-            extra.extend(["--model", args.model])
+        extra.extend(["--model", args.model, "--effort", args.effort])
         run_commission(t, prompt, extra_args=extra)
 
         print("[Commission Output]")
@@ -132,8 +132,7 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
     print("--- Phase 2: Run first officer (this takes ~60-120s) ---")
 
     extra_fo = ["--max-budget-usd", "2.00"]
-    if args.model:
-        extra_fo.extend(["--model", args.model])
+    extra_fo.extend(["--model", args.model, "--effort", args.effort])
     extra_fo.extend(extra_args)
 
     run_first_officer(
