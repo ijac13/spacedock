@@ -1,5 +1,3 @@
-<!-- ABOUTME: Skill prompt for /spacedock commission — guides Claude through -->
-<!-- ABOUTME: interactive plain text workflow design, file generation, and pilot run. -->
 ---
 name: commission
 description: "This skill should be used when the user asks to \"commission a workflow\", \"create a workflow\", \"design a workflow\", \"launch a workflow\", or wants to interactively design and generate a plain text workflow with stages, entities, and a first-officer agent."

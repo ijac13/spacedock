@@ -1,5 +1,3 @@
-<!-- ABOUTME: Skill prompt for /spacedock refit — guides Claude through -->
-<!-- ABOUTME: upgrading existing workflow scaffolding to the current Spacedock version. -->
 ---
 name: refit
 description: "This skill should be used when the user asks to \"refit a workflow\", \"upgrade a workflow\", \"update workflow scaffolding\", or wants to bring an existing workflow's scaffolding files up to date with the current Spacedock version."
