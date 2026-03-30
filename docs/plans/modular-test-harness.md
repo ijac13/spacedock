@@ -339,3 +339,47 @@ Additional checks:
 ### Summary
 
 Fixed the argparse passthrough bug found by the validator. Replaced `parse_args()` with `parse_known_args()` in both test_commission.py and test_checklist_e2e.py so unknown CLI flags like `--disallowed-tools` pass through to `claude -p` instead of being rejected. Audited all 10 Python files; only these 2 scripts needed the fix.
+
+## Stage Report: implementation (final fixes + model matrix)
+
+- [x] Gate guardrail test: 3 failing checks fixed, 9/9 passing
+  Test patterns updated to match current FO template wording: "agent completion messages" (not "ensign messages"), "GATE IDLE GUARDRAIL" (not "Gate waiting:"), and "presented gate review" (not "dispatched an ensign" — fixture has pre-completed entity).
+- [x] Old bash test scripts removed (7 files, 1998 lines deleted)
+  Removed: scripts/test-commission.sh, scripts/test-checklist-e2e.sh, tests/test-dispatch-names.sh, tests/test-gate-guardrail.sh, tests/test-rejection-flow.sh, tests/test-scaffolding-guardrail.sh, tests/test-merge-hook-guardrail.sh
+- [x] Commission test uses create_test_project() for snapshot compatibility
+  Fixed snapshot structure mismatch: commission test now creates a git project so snapshots contain test-project/ directory expected by checklist E2E's --from-snapshot. Checklist E2E adds acceptance criteria to snapshot entities for consistent validation.
+- [x] --model flag verified working
+  Commission with --model haiku: stats show "Model delegation: claude-haiku-4-5-20251001: 52". 61/65 checks pass (4 failures = pr-merge mod not generated, known haiku reliability issue).
+- [x] --disallowed-tools flag verified working
+  Checklist E2E with --model haiku --disallowed-tools "TeamCreate,TeamDelete,SendMessage": 9/9 pass. Flag passes through correctly via parse_known_args().
+- [x] Full model variation matrix completed
+  See matrix table below.
+
+### Commission Stats (single run, opus default)
+
+| Metric | Value |
+|--------|-------|
+| Wallclock | 153s |
+| Messages | 22 assistant |
+| Model | claude-opus-4-6 |
+| Result | 65/65 PASS |
+
+### FO Phase Model Variation Matrix (from snapshot)
+
+| Model | Effort | Result | Wallclock | Messages | Model Delegation |
+|-------|--------|--------|-----------|----------|-----------------|
+| haiku | default | 5/7 | 165s | 64 | claude-haiku-4-5-20251001: 64 |
+| sonnet | default | 6/8 | 168s | 41 | claude-sonnet-4-6: 41 |
+| opus | low | 8/8 PASS | 128s | 41 | claude-opus-4-6: 41 |
+| opus | medium | 8/8 PASS | 236s | 65 | claude-opus-4-6: 65 |
+
+### Matrix Analysis
+
+- **Opus low** is the sweet spot: fastest (128s), fewest messages (41), 100% pass rate.
+- **Opus medium** passes fully but takes 1.8x longer and uses 1.6x more messages.
+- **Haiku** and **sonnet** fail on "checklist review" and "item statuses" checks — the FO dispatches an ensign but the $2 budget runs out before the FO can review the completed checklist. This is a budget/timing limitation, not a functional failure. All dispatch-prompt checks pass.
+- **No haiku delegation by FO subagents observed** — the --model flag controls the FO itself, not dispatched subagents. All model delegation shows a single model per run.
+
+### Summary
+
+Fixed 3 gate guardrail test failures (pattern mismatches with current FO template), removed 7 old bash scripts (1998 lines), fixed snapshot compatibility between commission and checklist E2E tests, and ran full model variation matrix. Opus low is the recommended default — fastest, cheapest, 100% pass rate. Haiku/sonnet fail checklist review checks due to budget exhaustion before review phase, not functional bugs.
