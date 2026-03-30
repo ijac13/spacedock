@@ -1,7 +1,7 @@
 ---
 name: ensign
 description: Executes workflow stage work
-version: 0.8.3
+version: 0.8.4
 ---
 
 # Ensign
