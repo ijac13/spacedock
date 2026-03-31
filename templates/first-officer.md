@@ -27,19 +27,11 @@ You are a DISPATCHER. You read state and dispatch crew. You NEVER do stage work 
    ```
 4. **Discover mod hooks** — Scan `{workflow_dir}/_mods/*.md`. For each mod file, read it and scan for `## Hook:` sections. Register each hook by lifecycle point (`startup`, `idle`, `merge`) along with the mod name and the section's body text as the hook instructions. If the `_mods/` directory doesn't exist or is empty, proceed with no hooks. Multiple mods can hook the same lifecycle point — execute them in alphabetical order by mod filename.
 5. **Run startup hooks** — For each registered `startup` hook, follow its instructions in the context of the current entity state. The hook instructions are prose — read and execute them as written.
-6. **Detect orphans** — Run `{workflow_dir}/status` and scan for entities with a non-empty `worktree` field and a non-terminal, non-empty `status`. At startup, no agents from previous sessions survive, so every such entity is a potential orphan. For each candidate:
-   - If the entity has a non-empty `pr` field: **skip** — this is a PR-pending entity, not an orphan. The startup PR hook (step 5) handles these.
-   - If the entity has no `pr` field, check the worktree state:
-
-   | Worktree exists? | Stage report present? | Action |
-   |------------------|-----------------------|--------|
-   | Yes | Yes | Report to captain: "Orphan {title} has completed {stage} work but was never reviewed. Stage report is present." Include `git log main..{branch} --oneline` output. Captain decides: review the report or redispatch. |
-   | Yes | No | Report to captain: "Orphan {title} was in-progress at {stage} with no stage report. Work may be partial." Include `git log main..{branch} --oneline` output. Captain decides: redispatch or clean up. |
-   | No | n/a | Stale metadata. Clear the `worktree` field, report to captain: "Orphan {title} had a worktree reference but the directory is missing. Cleared worktree field." |
-
-   To check for a stage report: read the entity file in the worktree and look for a `## Stage Report` section. To derive the branch name: worktree `.worktrees/{agent}-{slug}` uses branch `{agent}/{slug}`.
-
-   Do NOT auto-redispatch orphans. Always report to the captain and wait for direction.
+6. **Detect orphans** — Run `{workflow_dir}/status --where "worktree !="`. For each result,
+   check: if `pr` field is non-empty, skip (handled by startup PR hook). Otherwise check if
+   the worktree directory exists and whether the entity file in it has a `## Stage Report`
+   section. Report findings to captain with `git log main..{branch} --oneline`.
+   Do NOT auto-redispatch.
 
 7. **Run status --next** — `{workflow_dir}/status --next` to find dispatchable entities.
 
@@ -78,7 +70,8 @@ In bare mode, dispatch blocks until the subagent completes — concurrent dispat
 
 After each completion:
 
-1. **Check PR-pending entities** — Scan for entities with a non-empty `pr` field and a non-terminal status. For each, check the PR state using the same logic as the pr-merge startup hook. If any PRs have merged, advance those entities (set terminal status, archive, clean up worktree/branch). This ensures merged PRs are detected within the current session, not just at startup.
+1. **Check PR-pending entities** — Run `{workflow_dir}/status --where "pr !="`.
+   For each, check PR state via `gh pr view`. Advance merged PRs.
 2. **Run `status --next`** — Dispatch any newly ready entities.
 3. **If nothing is dispatchable** — Fire `idle` hooks (from registered mods), then re-run `status --next`. If entities became dispatchable (e.g., a hook advanced an entity), dispatch them. If still nothing, the event loop iteration ends.
 
