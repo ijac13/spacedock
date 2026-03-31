@@ -149,7 +149,7 @@ def main():
     run_first_officer(
         t,
         "Process all tasks through the workflow to completion.",
-        extra_args=["--max-budget-usd", "2.00"],
+        extra_args=["--model", "haiku", "--max-budget-usd", "2.00"],
     )
 
     # --- Phase 4: Validate hook fired ---
@@ -235,7 +235,7 @@ def main():
     run_first_officer(
         t,
         "Process all tasks through the workflow to completion.",
-        extra_args=["--max-budget-usd", "2.00"],
+        extra_args=["--model", "haiku", "--max-budget-usd", "2.00"],
         log_name=nomods_log,
     )
 
