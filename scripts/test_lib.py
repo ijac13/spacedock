@@ -156,10 +156,14 @@ def run_commission(
         cmd.extend(extra_args)
 
     with open(log_path, "w") as log_file:
-        result = subprocess.run(
-            cmd, stdout=log_file, stderr=subprocess.STDOUT,
-            cwd=runner.test_project_dir,
-        )
+        try:
+            result = subprocess.run(
+                cmd, stdout=log_file, stderr=subprocess.STDOUT,
+                cwd=runner.test_project_dir, timeout=600,
+            )
+        except subprocess.TimeoutExpired:
+            print("\n  TIMEOUT: commission exceeded 600s limit")
+            return 124
 
     print()
     if result.returncode != 0:
@@ -190,10 +194,14 @@ def run_first_officer(
         cmd.extend(extra_args)
 
     with open(log_path, "w") as log_file:
-        result = subprocess.run(
-            cmd, stdout=log_file, stderr=subprocess.STDOUT,
-            cwd=runner.test_project_dir,
-        )
+        try:
+            result = subprocess.run(
+                cmd, stdout=log_file, stderr=subprocess.STDOUT,
+                cwd=runner.test_project_dir, timeout=600,
+            )
+        except subprocess.TimeoutExpired:
+            print("\n  TIMEOUT: first officer exceeded 600s limit")
+            return 124
 
     print()
     if result.returncode != 0:
