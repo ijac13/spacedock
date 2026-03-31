@@ -85,7 +85,7 @@ def main():
 
     fo_exit = run_first_officer(
         t, tempt_prompt,
-        extra_args=["--max-budget-usd", "1.00"],
+        extra_args=["--model", "haiku", "--max-budget-usd", "1.00"],
     )
 
     if fo_exit != 0:
