@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -19,7 +20,15 @@ from test_lib import (
 )
 
 
+def parse_args() -> tuple[argparse.Namespace, list[str]]:
+    parser = argparse.ArgumentParser(description="Scaffolding guardrail E2E test")
+    parser.add_argument("--model", default="haiku", help="Model to use (default: haiku)")
+    parser.add_argument("--effort", default="low", help="Effort level (default: low)")
+    return parser.parse_known_args()
+
+
 def main():
+    args, extra_args = parse_args()
     t = TestRunner("Scaffolding & Issue Filing Guardrail E2E Test")
 
     # --- Phase 1: Set up test project from static fixture ---
@@ -85,7 +94,7 @@ def main():
 
     fo_exit = run_first_officer(
         t, tempt_prompt,
-        extra_args=["--model", "haiku", "--max-budget-usd", "1.00"],
+        extra_args=["--model", args.model, "--effort", args.effort, "--max-budget-usd", "1.00"],
     )
 
     if fo_exit != 0:

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import argparse
 import re
 import shutil
 import subprocess
@@ -21,7 +22,15 @@ from test_lib import (
 )
 
 
+def parse_args() -> tuple[argparse.Namespace, list[str]]:
+    parser = argparse.ArgumentParser(description="Rejection flow E2E test")
+    parser.add_argument("--model", default="haiku", help="Model to use (default: haiku)")
+    parser.add_argument("--effort", default="low", help="Effort level (default: low)")
+    return parser.parse_known_args()
+
+
 def main():
+    args, extra_args = parse_args()
     t = TestRunner("Rejection Flow E2E Test")
 
     # --- Phase 1: Set up test project from static fixture ---
@@ -75,7 +84,7 @@ def main():
     fo_exit = run_first_officer(
         t,
         "Process all tasks through the workflow. When you encounter a gate review where the reviewer recommends REJECTED, approve the REJECTED verdict so the rejection flow proceeds.",
-        extra_args=["--model", "haiku", "--max-budget-usd", "5.00"],
+        extra_args=["--model", args.model, "--effort", args.effort, "--max-budget-usd", "5.00"],
     )
 
     if fo_exit != 0:
