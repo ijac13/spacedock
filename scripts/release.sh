@@ -98,7 +98,7 @@ Accept all changes from the upstream template. When showing diffs, approve all r
 
     CLAUDE_ARGS=(-p "$REFIT_PROMPT" --plugin-dir "$REPO_ROOT" --dangerously-skip-permissions --model opus --effort low)
     if command -v safehouse >/dev/null 2>&1; then
-        safehouse claude "${CLAUDE_ARGS[@]}"
+        safehouse --add-dirs ~/.local/state claude "${CLAUDE_ARGS[@]}"
     else
         claude "${CLAUDE_ARGS[@]}"
     fi
