@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+# commissioned-by: spacedock@{spacedock_version}
+# ABOUTME: Workflow status viewer — shows entity overview from YAML frontmatter.
+# ABOUTME: Supports default table, --archived, and --next (dispatchable entity detection).
+#
+# goal: Show one-line-per-{entity_label} workflow overview from YAML frontmatter.
+#
+# instruction: For every .md file in this directory (excluding README.md),
+#   extract slug (filename without .md), id, status, title, score, source from YAML frontmatter.
+#   Print aligned table with columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
+#   Sorted by stage order ascending, then score descending.
+#   Default: scan only $DIR/*.md. With --archived, also scan $DIR/_archive/*.md.
+#   With --next, read stage metadata from README frontmatter and output dispatchable entities.
+#
+# YAML parsing: Read lines between the first and second "---" delimiters.
+#   For each field, split on first ":" to get key and value.
+#   This handles both "field: value" and "field:" (empty). No PyYAML dependency.
+#
+# Empty field handling: YAML frontmatter fields may be empty (e.g., "score:" with nothing
+#   after the colon). After extraction, empty fields yield an empty string.
+#   Display empty fields as blank (empty string), NOT as "-" or "0" or the field name.
+#   For sort purposes, treat empty scores as lowest priority (sort after all scored items).
+#
+# Stage ordering: Map each status to a numeric order from the stages list.
+#   Unknown statuses get order 99 (sort last).
+#
+# Output format: Use fixed column widths. Header row, then separator row
+#   of dashes, then data rows.
+#
+# --next dispatch rules: An entity is dispatchable if ALL of:
+#   1. Not terminal — its current stage has a defined next stage
+#   2. Not gate-blocked — its current stage does NOT have gate: true
+#   3. Not actively worked — entity does NOT have a non-empty worktree field
+#   4. Concurrency available — count of actively-worked entities (non-empty worktree) in the next stage < that stage's concurrency limit
+#
+# constraints: Python 3 stdlib only (no PyYAML), resolves paths relative to this script, skips README.md.
+# valid status values: {stage1}, {stage2}, ..., {last_stage}.
+
+import glob
+import os
+import sys
+
+
+def parse_frontmatter(filepath):
+    """Extract YAML frontmatter fields from a markdown file."""
+    fields = {}
+    in_fm = False
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.rstrip('\n')
+            if line == '---':
+                if in_fm:
+                    break
+                in_fm = True
+                continue
+            if in_fm:
+                if ':' in line:
+                    key, _, val = line.partition(':')
+                    key = key.strip()
+                    val = val.strip()
+                    if not line[0].isspace():
+                        fields[key] = val
+    return fields
+
+
+def parse_stages_block(filepath):
+    lines = []
+    in_fm = False
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.rstrip('\n')
+            if line == '---':
+                if in_fm:
+                    break
+                in_fm = True
+                continue
+            if in_fm:
+                lines.append(line)
+
+    stages_start = None
+    for i, line in enumerate(lines):
+        if line.rstrip() == 'stages:':
+            stages_start = i
+            break
+
+    if stages_start is None:
+        return None
+
+    defaults = {}
+    states = []
+    i = stages_start + 1
+    stages_indent = None
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.lstrip()
+        if not stripped:
+            i += 1
+            continue
+        indent = len(line) - len(stripped)
+
+        if stages_indent is None:
+            stages_indent = indent
+        elif indent < stages_indent:
+            break
+
+        if indent == stages_indent:
+            if stripped == 'defaults:':
+                i += 1
+                while i < len(lines):
+                    dline = lines[i]
+                    dstripped = dline.lstrip()
+                    if not dstripped:
+                        i += 1
+                        continue
+                    dindent = len(dline) - len(dstripped)
+                    if dindent <= stages_indent:
+                        break
+                    if ':' in dstripped:
+                        k, _, v = dstripped.partition(':')
+                        defaults[k.strip()] = v.strip()
+                    i += 1
+                continue
+            elif stripped == 'states:':
+                i += 1
+                current_state = None
+                while i < len(lines):
+                    sline = lines[i]
+                    sstripped = sline.lstrip()
+                    if not sstripped:
+                        i += 1
+                        continue
+                    sindent = len(sline) - len(sstripped)
+                    if sindent <= stages_indent:
+                        break
+                    if sstripped.startswith('- name:'):
+                        _, _, name = sstripped.partition('- name:')
+                        current_state = {'name': name.strip()}
+                        states.append(current_state)
+                    elif current_state is not None and ':' in sstripped and not sstripped.startswith('- '):
+                        k, _, v = sstripped.partition(':')
+                        current_state[k.strip()] = v.strip()
+                    i += 1
+                continue
+        i += 1
+
+    if not states:
+        return None
+
+    default_worktree = defaults.get('worktree', 'false').lower() == 'true'
+    default_concurrency = int(defaults.get('concurrency', '2'))
+
+    result = []
+    for state in states:
+        result.append({
+            'name': state['name'],
+            'worktree': state.get('worktree', str(default_worktree)).lower() == 'true',
+            'concurrency': int(state.get('concurrency', str(default_concurrency))),
+            'gate': state.get('gate', 'false').lower() == 'true',
+            'terminal': state.get('terminal', 'false').lower() == 'true',
+            'initial': state.get('initial', 'false').lower() == 'true',
+        })
+
+    return result
+
+
+def scan_entities(directory):
+    entities = []
+    pattern = os.path.join(directory, '*.md')
+    for filepath in sorted(glob.glob(pattern)):
+        if os.path.basename(filepath) == 'README.md':
+            continue
+        slug = os.path.splitext(os.path.basename(filepath))[0]
+        fields = parse_frontmatter(filepath)
+        entities.append({
+            'slug': slug,
+            'id': fields.get('id', ''),
+            'status': fields.get('status', ''),
+            'title': fields.get('title', ''),
+            'score': fields.get('score', ''),
+            'source': fields.get('source', ''),
+            'worktree': fields.get('worktree', ''),
+        })
+    return entities
+
+
+def stage_order(status, stages):
+    if stages:
+        for i, stage in enumerate(stages):
+            if stage['name'] == status:
+                return i + 1
+    return 99
+
+
+def sort_key_default(entity, stages):
+    order = stage_order(entity['status'], stages)
+    score_str = entity['score']
+    if score_str:
+        try:
+            score_val = -float(score_str)
+        except ValueError:
+            score_val = 0
+    else:
+        score_val = 1
+    return (order, score_val, entity['slug'])
+
+
+def next_stage(current_status, stages):
+    for i, stage in enumerate(stages):
+        if stage['name'] == current_status:
+            if stage.get('terminal', False):
+                return None
+            if i + 1 < len(stages):
+                return stages[i + 1]
+    return None
+
+
+def active_count_for_stage(stage_name, entities, stages):
+    count = 0
+    for entity in entities:
+        if entity['worktree'] and entity['status'] == stage_name:
+            count += 1
+    return count
+
+
+def print_default(entities, stages):
+    print(f"{'ID':<6} {'SLUG':<30} {'STATUS':<20} {'TITLE':<30} {'SCORE':<8} {'SOURCE'}")
+    print(f"{'--':<6} {'----':<30} {'------':<20} {'-----':<30} {'-----':<8} {'------'}")
+    for entity in sorted(entities, key=lambda e: sort_key_default(e, stages)):
+        print(f"{entity['id']:<6} {entity['slug']:<30} {entity['status']:<20} {entity['title'][:30]:<30} {entity['score']:<8} {entity['source']}")
+
+
+def print_next(entities, stages):
+    print(f"{'ID':<6} {'SLUG':<30} {'CURRENT':<20} {'NEXT':<20} {'WORKTREE'}")
+    print(f"{'--':<6} {'----':<30} {'-------':<20} {'----':<20} {'--------'}")
+    for entity in sorted(entities, key=lambda e: sort_key_default(e, stages)):
+        current_stage = next((s for s in stages if s['name'] == entity['status']), None)
+        next_stage_info = next_stage(entity['status'], stages)
+        if not current_stage or not next_stage_info:
+            continue
+        if current_stage.get('gate', False):
+            continue
+        if entity['worktree']:
+            continue
+        active = active_count_for_stage(next_stage_info['name'], entities, stages)
+        if active >= next_stage_info.get('concurrency', 2):
+            continue
+        worktree_needed = 'yes' if next_stage_info.get('worktree', False) else 'no'
+        print(f"{entity['id']:<6} {entity['slug']:<30} {entity['status']:<20} {next_stage_info['name']:<20} {worktree_needed}")
+
+
+def main():
+    directory = os.path.dirname(os.path.abspath(__file__))
+    readme = os.path.join(directory, 'README.md')
+    stages = parse_stages_block(readme) or []
+    entities = scan_entities(directory)
+
+    if len(sys.argv) > 1 and sys.argv[1] == '--next':
+        print_next(entities, stages)
+    else:
+        print_default(entities, stages)
+
+
+if __name__ == '__main__':
+    main()

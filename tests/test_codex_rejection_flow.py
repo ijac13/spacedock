@@ -95,6 +95,20 @@ def main():
 
     t.check("follow-up work after rejection was observable", follow_up_observed)
 
+    if worktrees_dir.is_dir():
+        worktree_names = [wt.name for wt in worktrees_dir.iterdir()]
+    else:
+        worktree_names = []
+
+    t.check(
+        "packaged worker uses safe worktree key",
+        any("spacedock-ensign" in name for name in worktree_names),
+    )
+    t.check(
+        "logical packaged id does not leak into worktree names",
+        not any("spacedock:ensign" in name for name in worktree_names),
+    )
+
     t.results()
 
 

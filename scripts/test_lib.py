@@ -12,8 +12,132 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 from datetime import datetime
 from pathlib import Path
+
+
+def _codex_packaged_agents_path(repo_root: Path) -> Path:
+    return repo_root / "references" / "codex-packaged-agents.json"
+
+
+def _codex_skill_namespace_root(home_dir: Path) -> Path:
+    return home_dir / ".agents" / "skills" / "spacedock"
+
+
+def prepare_codex_skill_home(test_root: Path, repo_root: Path) -> Path:
+    """Create an isolated HOME that exposes the current repo as the spacedock Codex skill namespace."""
+    home_dir = test_root / "codex-home"
+    namespace_root = _codex_skill_namespace_root(home_dir)
+    namespace_root.mkdir(parents=True, exist_ok=True)
+
+    skills_root = repo_root / "skills"
+    for skill_dir in sorted(skills_root.iterdir()):
+        if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").is_file():
+            continue
+        link_path = namespace_root / skill_dir.name
+        if link_path.exists() or link_path.is_symlink():
+            link_path.unlink()
+        link_path.symlink_to(skill_dir, target_is_directory=True)
+
+    for name, target in {
+        "skills": skills_root,
+        "references": repo_root / "references",
+    }.items():
+        link_path = namespace_root / name
+        if link_path.exists() or link_path.is_symlink():
+            link_path.unlink()
+        link_path.symlink_to(target, target_is_directory=True)
+
+    real_codex_home = Path(os.path.expanduser("~")) / ".codex"
+    codex_home_link = home_dir / ".codex"
+    if codex_home_link.exists() or codex_home_link.is_symlink():
+        codex_home_link.unlink()
+    codex_home_link.symlink_to(real_codex_home, target_is_directory=True)
+
+    return home_dir
+
+
+def resolve_codex_worker(agent_id: str, repo_root: Path | None = None) -> dict[str, object]:
+    """Resolve a logical Codex worker id to a packaged asset and safe worker key."""
+    if repo_root is None:
+        repo_root = Path(__file__).resolve().parent.parent
+
+    if not agent_id:
+        raise ValueError("Codex worker id must not be empty")
+
+    registry_path = _codex_packaged_agents_path(repo_root)
+    registry = json.loads(registry_path.read_text())
+    entry = registry.get(agent_id)
+
+    if entry is not None:
+        asset_path = repo_root / entry["asset_path"]
+        return {
+            "dispatch_agent_id": agent_id,
+            "worker_key": entry["worker_key"],
+            "asset_kind": entry["asset_kind"],
+            "asset_path": asset_path,
+        }
+
+    if agent_id.startswith("spacedock:"):
+        raise ValueError(f"Unknown Codex worker id: {agent_id}")
+
+    worker_key = re.sub(r"[^A-Za-z0-9._-]", "-", agent_id)
+    asset_path = repo_root / "references" / "codex-worker-prompt.md"
+    return {
+        "dispatch_agent_id": agent_id,
+        "worker_key": worker_key,
+        "asset_kind": "prompt",
+        "asset_path": asset_path,
+    }
+
+
+def build_codex_first_officer_invocation_prompt(workflow_dir: str | Path) -> str:
+    workflow_dir = Path(workflow_dir)
+    return textwrap.dedent(
+        f"""
+        Use the `spacedock:first-officer` skill to manage the workflow at `{workflow_dir}`.
+
+        Treat that path as the explicit workflow target. Do not ask to discover alternatives.
+        Do not narrate setup beyond what is needed to report a blocker or final outcome.
+        Once you have enough context to dispatch the first worker, dispatch immediately.
+        Stop after the first meaningful outcome for this run.
+        """
+    ).strip()
+
+
+def build_codex_worker_bootstrap_prompt(
+    resolved_worker: dict[str, object],
+    workflow_dir: Path,
+    entity_path: Path,
+    stage_name: str,
+    stage_definition_text: str,
+    worktree_path: Path | None,
+    checklist: list[str],
+) -> str:
+    asset_path = Path(str(resolved_worker["asset_path"]))
+    bootstrap_verb = "Read"
+    bootstrap_object = "skill asset" if resolved_worker["asset_kind"] == "skill" else "prompt asset"
+    lines = [
+        f"{bootstrap_verb} {asset_path} first and follow it for this task before doing anything else.",
+        f"This is a packaged {bootstrap_object} bootstrap for a Spacedock worker assignment.",
+        "",
+        "Assignment:",
+        f"dispatch_agent_id: {resolved_worker['dispatch_agent_id']}",
+        f"worker_key: {resolved_worker['worker_key']}",
+        f"role_asset_kind: {resolved_worker['asset_kind']}",
+        f"role_asset_path: {asset_path}",
+        f"workflow_dir: {workflow_dir}",
+        f"entity_path: {entity_path}",
+        f"stage_name: {stage_name}",
+        "stage_definition_text:",
+        stage_definition_text,
+    ]
+    if worktree_path is not None:
+        lines.append(f"worktree_path: {worktree_path}")
+    if checklist:
+        lines.extend(["checklist:"] + [f"- {item}" for item in checklist])
+    return "\n".join(lines)
 
 
 class TestRunner:
@@ -219,25 +343,47 @@ def run_codex_first_officer(
     extra_args: list[str] | None = None,
     log_name: str = "codex-fo-log.txt",
 ) -> int:
-    """Run the Codex first-officer prototype. Returns exit code."""
+    """Run the Codex first-officer skill via codex exec. Returns exit code."""
     log_path = runner.log_dir / log_name
-    script_path = runner.repo_root / "scripts" / "run_codex_first_officer.sh"
+    workflow_path = (runner.test_project_dir / workflow_dir).resolve()
+    prompt = build_codex_first_officer_invocation_prompt(workflow_path)
+    (runner.log_dir / "codex-fo-invocation.txt").write_text(prompt + "\n")
 
-    cmd = [str(script_path), workflow_dir]
+    skill_home = prepare_codex_skill_home(runner.test_dir, runner.repo_root)
+    env = os.environ.copy()
+    env["HOME"] = str(skill_home)
+    env["CODEX_HOME"] = str(skill_home / ".codex")
+
+    cmd = [
+        "codex",
+        "exec",
+        "--json",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "--enable",
+        "multi_agent",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "-C",
+        str(runner.test_project_dir),
+    ]
     if extra_args:
         cmd.extend(extra_args)
+    cmd.append("-")
 
     with open(log_path, "w") as log_file:
         try:
             result = subprocess.run(
                 cmd,
+                input=prompt,
+                text=True,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 cwd=runner.test_project_dir,
-                timeout=90,
+                timeout=120,
+                env=env,
             )
         except subprocess.TimeoutExpired:
-            print("\n  TIMEOUT: codex first officer exceeded 90s limit")
+            print("\n  TIMEOUT: codex first officer exceeded 120s limit")
             return 124
 
     print()

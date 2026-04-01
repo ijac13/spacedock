@@ -1,0 +1,134 @@
+# First Officer Shared Core
+
+This file captures the shared first-officer semantics derived from the current Spacedock template. Keep it aligned with `templates/first-officer.md`.
+
+## Startup
+
+1. Discover the project root with `git rev-parse --show-toplevel`.
+2. Discover the workflow directory. Prefer an explicit user-provided path. Otherwise search for `README.md` files whose YAML frontmatter contains `commissioned-by: spacedock@...`. Ignore `.git`, `.worktrees`, `node_modules`, `vendor`, `dist`, `build`, and `__pycache__`.
+3. Read `{workflow_dir}/README.md` to extract:
+   - mission
+   - entity labels
+   - stage ordering and defaults from `stages.defaults` / `stages.states`
+   - stage properties such as `initial`, `terminal`, `gate`, `worktree`, `concurrency`, `feedback-to`, and `agent`
+4. Discover mod hooks by scanning `{workflow_dir}/_mods/*.md` for `## Hook:` sections. Register `startup`, `idle`, and `merge` hooks in alphabetical order by mod filename.
+5. Run startup hooks before normal dispatch.
+6. Detect orphaned worktree entities by checking `status --where "worktree !="` and report anomalies rather than auto-redispatching.
+7. Run `{workflow_dir}/status --next` to identify dispatchable entities.
+
+## Working Directory
+
+Your working directory stays at the project root. Do not `cd` into worktrees. Use:
+- absolute paths
+- `git -C {path}` for git operations outside the root
+- worktree-local file paths only when operating inside that worktree
+
+## Dispatch
+
+For each entity reported by `status --next`:
+
+1. Read the entity file and the target stage definition.
+2. Build a numbered checklist from stage outputs and entity acceptance criteria.
+3. Check for obvious conflicts if multiple worktree stages would touch overlapping files.
+4. Determine `dispatch_agent_id` from the stage `agent:` property. Default to `ensign` when absent.
+5. Update main-branch frontmatter for dispatch:
+   - set `status: {next_stage}`
+   - set `worktree: .worktrees/{worker_key}-{slug}` for worktree stages
+   - set `started:` when the entity first moves beyond the initial stage
+6. Commit the state transition on main with `dispatch: {slug} entering {next_stage}`.
+7. Create the worktree on first dispatch to a worktree stage.
+8. Dispatch a fresh worker using the runtime-specific mechanism. The worker assignment must include:
+   - entity identity and title
+   - target stage name
+   - the full stage definition
+   - the entity path
+   - the worktree path and branch when applicable
+   - the checklist
+   - feedback instructions when the stage has `feedback-to`
+9. Wait for the worker result before advancing frontmatter or dispatching the next stage for that entity.
+
+Feedback-stage worker instructions must preserve this rule: a review stage checks and reports on what was produced; it does not silently take over the prior stage's work.
+
+## Completion and Gates
+
+When a worker completes:
+
+1. Read the entity file.
+2. Review the `## Stage Report` section against the checklist. Every dispatched checklist item must be represented as DONE, SKIPPED, or FAILED.
+3. If checklist items are missing, send the worker back once to repair the report.
+4. Check whether the completed stage is gated.
+
+If the stage is not gated:
+- advance normally
+- if the next stage is terminal, continue into merge handling
+- if the next stage has `feedback-to` pointing at the current stage, keep the current worker available for potential follow-up
+
+If the stage is gated:
+- never self-approve
+- present the stage report to the human operator
+- keep the worker alive while waiting at the gate
+
+## Feedback Rejection Flow
+
+When a feedback stage recommends REJECTED:
+
+1. Read the stage's `feedback-to` target.
+2. Track feedback cycles in a `### Feedback Cycles` section in the entity body.
+3. If cycles reach 3, escalate to the human instead of dispatching another round.
+4. Route the findings back to the target stage in the same worktree.
+5. Re-run the reviewer after fixes.
+6. Re-enter the normal gate flow with the updated result.
+
+The first officer owns the `### Feedback Cycles` section and keeps it on the main branch.
+
+## Merge and Cleanup
+
+When an entity reaches its terminal stage:
+
+1. Run registered merge hooks before any local merge.
+2. If a merge hook created or set a `pr` field, report the PR-pending state and do not local-merge.
+3. If no merge hook handled the merge, perform the default local merge from the stage worktree branch.
+4. Set `completed:` and `verdict:` in frontmatter and clear `worktree:`.
+5. Archive the entity into `{workflow_dir}/_archive/`.
+6. Remove the worktree and delete the temporary branch after successful merge or deliberate discard.
+
+## State Management
+
+- The first officer owns YAML frontmatter on the main branch.
+- Workers do not edit frontmatter.
+- Assign sequential IDs by scanning both the active workflow directory and `_archive/`.
+- Commit state changes at dispatch and merge boundaries.
+
+## Mod Hook Convention
+
+Mods live in `{workflow_dir}/_mods/` and use `## Hook: {point}` headings.
+
+Supported lifecycle points:
+- `startup`
+- `idle`
+- `merge`
+
+Hooks are additive and run in alphabetical order by mod filename.
+
+## Clarification and Communication
+
+Ask the human before dispatch when:
+- requirements are materially ambiguous
+- a design choice would change output meaningfully
+- scope is too unclear to turn into concrete criteria
+
+If one entity is blocked on clarification, continue dispatching other ready entities.
+
+Report workflow state once when you reach idle or a gate. Do not spam status updates while waiting.
+
+## Scaffolding and Issue Filing
+
+Treat these as scaffolding files:
+- `templates/`
+- `skills/`
+- `.claude/agents/`
+- `plugin.json`
+- workflow `README.md` files with `commissioned-by` frontmatter
+
+Do not directly commit scaffolding changes without a tracking artifact such as a workflow task or approved issue. Do not file GitHub issues without explicit human approval.
+
