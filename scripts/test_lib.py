@@ -94,9 +94,9 @@ class TestRunner:
             sys.exit(0)
 
 
-def create_test_project(runner: TestRunner) -> Path:
+def create_test_project(runner: TestRunner, name: str = "test-project") -> Path:
     """Create a temp git project with an empty initial commit."""
-    project_dir = runner.test_dir / "test-project"
+    project_dir = runner.test_dir / name
     subprocess.run(["git", "init", str(project_dir)], capture_output=True, check=True)
     subprocess.run(
         ["git", "commit", "--allow-empty", "-m", "init"],

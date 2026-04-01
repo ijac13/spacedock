@@ -49,7 +49,7 @@ def main():
 
     print("--- Phase 2: Run FO with custom output format (already-terminal entity) ---")
 
-    create_test_project(t)
+    create_test_project(t, "project-custom")
     setup_fixture(t, "output-format-custom", "output-format-custom")
     install_agents(t)
     git_add_commit(t.test_project_dir, "setup: output-format-custom fixture")
@@ -84,11 +84,10 @@ def main():
 
     print("--- Phase 3: Run FO with default output format (entity starts at backlog) ---")
 
-    # Create a fresh test project for the default fixture.
+    # Create a separate test project for the default fixture.
     # The entity starts at backlog so the FO must dispatch an ensign to process it
     # through work -> done, then print the default output format.
-    t.test_project_dir = None
-    create_test_project(t)
+    create_test_project(t, "project-default")
     setup_fixture(t, "output-format-default", "output-format-default")
     install_agents(t, include_ensign=True)
     git_add_commit(t.test_project_dir, "setup: output-format-default fixture")
