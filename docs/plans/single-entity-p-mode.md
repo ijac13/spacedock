@@ -279,3 +279,7 @@ If the user's prompt matches multiple entities (e.g., "Process test" matches "te
 ### Summary
 
 Revised ideation to acknowledge the root issue: the FO literally never terminates in `-p` mode. Existing tests use budget caps to kill sessions. Added a spike phase (3 experiments, ~$1.50-3.00) to answer the fundamental question: what controls session termination in `claude -p`? The proposed template approach is contingent on the spike confirming that LLM-driven or explicit termination works. If the spike reveals termination is unreliable, alternative approaches are documented: separate agent file, wrapper script, or accept budget-cap termination. Implementation acceptance criteria and tests are contingent on spike results.
+
+### Feedback Cycles
+
+Cycle: 1
