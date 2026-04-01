@@ -29,11 +29,11 @@ def main():
     fo_template = t.repo_root / "templates" / "first-officer.md"
     fo_text = fo_template.read_text()
 
-    t.check("item 5 references Output Format section from README",
+    t.check("item 6 references Output Format section from README",
             "## Output Format" in fo_text and "fall back" in fo_text)
 
-    t.check("item 6 references same output format rule as item 5",
-            bool(re.search(r"Same rule as item 5.*Output Format", fo_text)))
+    t.check("item 7 references same output format rule as item 6",
+            bool(re.search(r"Same rule as item 6.*Output Format", fo_text)))
 
     t.check("custom format fixture has ## Output Format section",
             file_contains(t.repo_root / "tests" / "fixtures" / "output-format-custom" / "README.md",
