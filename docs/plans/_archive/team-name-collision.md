@@ -1,13 +1,13 @@
 ---
 id: 081
 title: Team name collision across sessions
-status: validation
+status: done
 source: CL
 started: 2026-04-01T00:00:00Z
-completed:
-verdict:
+completed: 2026-04-01T00:00:00Z
+verdict: PASSED
 score:
-worktree: .worktrees/validator-team-name-collision
+worktree:
 pr: "#21"
 ---
 
