@@ -1,13 +1,13 @@
 ---
 id: 079
 title: Status script --where filtering and FO template simplification
-status: done
+status: validation
 source: experiment/status-filters branch (FO template token reduction experiment)
 started: 2026-03-31T00:00:00Z
-completed: 2026-04-01T00:00:00Z
-verdict: PASSED
+completed:
+verdict:
 score: 0.75
-worktree:
+worktree: .worktrees/pr-19-test
 pr: "#19"
 ---
 
@@ -35,20 +35,3 @@ Uses the new filter to simplify first-officer template prose:
 5. `--where` composes with `--next` and `--archived`
 6. Unit tests cover all --where operators and edge cases
 7. E2E test suite passes with modified FO template
-
-## Stage Report: validation
-
-- [x] Unit tests added for all --where operators (=, !=) with and without values
-  10 tests in TestWhereFilter: exact match, not-equal-with-value, non-empty, empty, pr non-empty, multiple AND, compose-next, compose-archived, no-match header-only, nonexistent field
-- [x] Unit tests cover --where composition with --next and --archived
-  test_where_composes_with_next and test_where_composes_with_archived both pass
-- [x] All existing + new unit tests pass
-  32/32 pass after scan_entities fix (commit 2c2f041) to pass through all frontmatter fields
-- [x] E2E checklist test passes on opus/low
-  9/9 checks pass after FO template fix (commit 6cc2e77) renamed "Stage report review" to "Checklist review"
-- [x] Any issues found in the --where implementation documented
-  Found and reported scan_entities() hardcoded field bug; fixed in commit 2c2f041. No remaining --where issues.
-
-### Summary
-
-Added 10 unit tests covering all --where operators and edge cases. Initial run found scan_entities() bug (hardcoded fields blocked --where on pr); fixed in 2c2f041, all 32 unit tests now pass. E2E rerun after FO template fix (commit 6cc2e77) passes 9/9 checks. All acceptance criteria met.
