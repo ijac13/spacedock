@@ -100,7 +100,9 @@ When a dispatched agent sends its completion message:
 
 **If no gate:** If terminal, proceed to merge. Otherwise, check whether the next stage has `feedback-to` pointing at this stage. If yes, keep the agent alive. Run `status --next` and dispatch the next stage.
 
-**If gate:** Present the stage report to the captain with your assessment:
+**If gate + feedback-to + REJECTED:** Skip captain review — auto-bounce directly into Feedback Rejection Flow. Notify captain: "Auto-bounced: {entity title} — {stage} REJECTED. Say 'override' to intervene."
+
+**If gate (all other cases):** Present the stage report to the captain with your assessment:
 
 ```
 Gate review: {entity title} — {stage}
