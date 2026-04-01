@@ -265,14 +265,18 @@ Task 058 is in `validation` status — the terminology experiment has been desig
    - `skills/eject/SKILL.md` copies `agents/*.md` to `.claude/agents/`
    - Test: manual test — run eject, verify files appear
 
-8. **Behavioral equivalence**
-   - Claude Code FO running via thin wrapper + references produces the same behavior as the current monolithic template
-   - Test: run existing E2E tests (gate guardrail, rejection flow, output format) against the new layered agents
+8. **Behavioral equivalence — content coverage**
+   - Thin wrapper + shared core + Claude runtime adapter, when assembled, cover every behavioral section present in the monolithic template
+   - Test: section-by-section diff of assembled output vs monolithic template; semantic differences (rewording) acceptable, behavioral differences (missing logic) not
+
+9. **Behavioral equivalence — runtime**
+   - Existing E2E tests pass with the new layered agents (gate guardrail, rejection flow, output format)
+   - Test: delete `templates/first-officer.md` and `templates/ensign.md` in worktree so tests can't accidentally use them, run all E2E tests against plugin `agents/` entry points
    - All test scripts pass with no regression
 
-9. **Codex spike merged cleanly**
-   - `codex/multi-agent-spike` branch changes are incorporated
-   - Codex-specific files coexist with Claude Code files without conflict
+10. **Codex spike merged cleanly**
+    - `codex/multi-agent-spike` branch changes are incorporated
+    - Codex-specific files coexist with Claude Code files without conflict
 
 ## Test Plan
 
@@ -327,3 +331,39 @@ Investigated plugin agent discovery across 4 installed plugins — it is purely 
 1. Verify agent resolution: run `claude --agent spacedock:first-officer` and check if dispatch to `ensign` or `spacedock:ensign` works
 2. Verify local-vs-plugin precedence: set up project with both local and plugin agents, confirm local wins
 3. Clarify Commission Phase 3 approach: dispatch via Agent tool (cleaner) or inline read from plugin path
+
+### Staff review findings — round 2 (layered architecture review)
+
+Two independent reviewers assessed the updated plan after incorporating the codex multi-agent spike's layered architecture. Both reached the same conclusions.
+
+**Assessment: SOUND architecture, NEEDS WORK on scope and specifics**
+
+**Consensus findings:**
+
+1. **Claude runtime adapter is ~100-150 lines, not trivial.** The shared core is a summarized spec (~134 lines). The monolithic template is 179 lines of operational instructions. The delta — teams, Agent() dispatch call, SendMessage, single-entity mode (all 7 rules), gate idle guardrail, auto-bounce logic, merge hook guardrail, event loop — all goes in the Claude adapter. This is the critical path and the largest implementation risk.
+
+2. **Need a decomposition map before implementing.** Table: Template Section → Shared Core Location → Claude Runtime Adapter Location. Every line of the monolithic template must have a home. Makes implementation mechanical.
+
+3. **Worker_key derivation belongs in shared core.** Both runtimes need the same `dispatch_agent_id` / `worker_key` split. Don't duplicate — add to `first-officer-shared-core.md`.
+
+4. **Ensign guardrail wording conflicts with plugin agents.** "Don't modify `.claude/agents/`" is misleading when agents live in the plugin directory. Update shared core `code-project-guardrails.md` to cover both locations.
+
+5. **Commission Phase 3 approach:** Recommend option (a) — commission reads `agents/first-officer.md` from the plugin path, which triggers the read chain (shared core → guardrails → runtime). Tests the actual runtime path.
+
+6. **Migration:** Existing commissioned projects with local agent files continue working via shadowing. Need a documented migration note: "delete `.claude/agents/first-officer.md` and `ensign.md` to switch to plugin-managed agents."
+
+**Implementation strategy:**
+
+1. Resolve the 3 blocking verification tests (5 min experiments)
+2. Merge codex spike branch
+3. Write decomposition map (template → shared core / Claude adapter)
+4. Write `claude-first-officer-runtime.md` and `claude-ensign-runtime.md` — this is the hard part
+5. Create thin `agents/first-officer.md` and `agents/ensign.md` entry points
+6. Delete `templates/first-officer.md` and `templates/ensign.md` in dev worktree so tests can't use them
+7. Run E2E tests against layered agents — AC #9
+8. Commission/refit/eject skill changes — the easy parts, last
+
+**Test harness notes:**
+- Delete templates in worktree during development so tests can't accidentally source from them
+- Claude Code needs the same `_clean_home_dir` pattern as the codex spike's `run_codex_first_officer.sh` — isolated `$HOME` with symlinked plugin/agent structure so `claude -p` discovers the right agents
+- `install_agents()` in `test_lib.py` must copy from `agents/` (thin wrappers) AND `references/` (shared core + runtime) into the test project
