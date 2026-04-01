@@ -8,7 +8,7 @@ completed:
 verdict:
 score:
 worktree: .worktrees/validator-team-name-collision
-pr:
+pr: "#21"
 ---
 
 The first-officer startup step 3 deletes stale team directories (`rm -rf ~/.claude/teams/{name}/`) and recreates with the same name. This causes orphaned agent processes, phantom team members, and "two ensigns working" scenarios when a session creates/destroys teams multiple times.
