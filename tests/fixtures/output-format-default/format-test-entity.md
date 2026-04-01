@@ -1,22 +1,13 @@
 ---
 id: "001"
 title: Default format test entity
-status: done
-score: 0.90
+status: backlog
+score: 0.50
 source: test
-started: 2026-04-01T00:00:00Z
-completed: 2026-04-01T01:00:00Z
-verdict: PASSED
+started:
+completed:
+verdict:
 worktree:
 ---
 
-This entity completed successfully.
-
-## Stage Report: work
-
-- [x] Summary written
-  Wrote a one-line summary.
-
-### Summary
-
-Work completed as expected.
+Write a one-line summary: "Default output format test complete."

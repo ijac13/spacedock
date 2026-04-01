@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     TestRunner, LogParser, create_test_project, setup_fixture,
     install_agents, run_first_officer, git_add_commit,
-    file_contains,
+    file_contains, read_entity_frontmatter,
 )
 
 
@@ -80,21 +80,23 @@ def main():
 
     print()
 
-    # --- Phase 3: E2E — default output format ---
+    # --- Phase 3: E2E — default output format (real dispatch) ---
 
-    print("--- Phase 3: Run FO with default output format (already-terminal entity) ---")
+    print("--- Phase 3: Run FO with default output format (entity starts at backlog) ---")
 
-    # Create a fresh test project for the default fixture
+    # Create a fresh test project for the default fixture.
+    # The entity starts at backlog so the FO must dispatch an ensign to process it
+    # through work -> done, then print the default output format.
     t.test_project_dir = None
     create_test_project(t)
     setup_fixture(t, "output-format-default", "output-format-default")
-    install_agents(t)
+    install_agents(t, include_ensign=True)
     git_add_commit(t.test_project_dir, "setup: output-format-default fixture")
 
     fo_exit_default = run_first_officer(
         t,
         "Process format-test-entity through all stages.",
-        extra_args=["--max-budget-usd", "1.00"],
+        extra_args=["--max-budget-usd", "3.00"],
         log_name="fo-log-default.jsonl",
     )
 
@@ -105,6 +107,15 @@ def main():
     print()
     print("[Default Output Format Checks]")
 
+    # Verify the entity actually reached terminal status (was processed, not skipped)
+    entity_path = t.test_project_dir / "output-format-default" / "_archive" / "format-test-entity.md"
+    if not entity_path.exists():
+        entity_path = t.test_project_dir / "output-format-default" / "format-test-entity.md"
+    entity_fm = read_entity_frontmatter(entity_path)
+
+    t.check("entity reached terminal status (done)",
+            entity_fm.get("status") == "done")
+
     # Default format: terminal state (status and verdict) and entity ID
     t.check("default output mentions terminal status (done)",
             bool(re.search(r"\bdone\b", default_output, re.IGNORECASE)))
@@ -112,13 +123,8 @@ def main():
     t.check("default output mentions entity ID (001)",
             "001" in default_output)
 
-    # The default output should NOT follow the custom RESULT:/ENTITY:/TITLE: format
-    # (since the README has no Output Format section, the FO uses its own default)
-    # We don't enforce absence of those keywords since the FO might naturally mention
-    # "result" or "entity" — we just check the default info is present.
-
-    t.check("default output mentions verdict (PASSED)",
-            bool(re.search(r"PASSED", default_output)))
+    t.check("default output mentions verdict",
+            bool(re.search(r"PASSED|REJECTED", default_output)))
 
     print()
 
