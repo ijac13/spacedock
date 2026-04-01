@@ -186,15 +186,12 @@ def scan_entities(directory):
             continue
         slug = os.path.splitext(os.path.basename(filepath))[0]
         fields = parse_frontmatter(filepath)
-        entities.append({
-            'slug': slug,
-            'id': fields.get('id', ''),
-            'status': fields.get('status', ''),
-            'title': fields.get('title', ''),
-            'score': fields.get('score', ''),
-            'source': fields.get('source', ''),
-            'worktree': fields.get('worktree', ''),
-        })
+        entity = {k: v for k, v in fields.items()}
+        entity['slug'] = slug
+        # Ensure display fields default to empty string
+        for key in ('id', 'status', 'title', 'score', 'source', 'worktree'):
+            entity.setdefault(key, '')
+        entities.append(entity)
     return entities
 
 
