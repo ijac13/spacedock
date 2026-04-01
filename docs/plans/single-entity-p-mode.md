@@ -296,10 +296,18 @@ Cycle: 2
   Added `## Single-Entity Mode` section (6 behavior items: scoped dispatch, entity resolution, gate auto-approval, orphan auto-decision, termination, already-terminal). Added gate guardrail exception for single-entity mode. Updated event loop termination clause. Changes at `templates/first-officer.md`.
 - [ ] SKIP: Commission skill updated to emit the new FO section (if spike confirms viability)
   The commission skill copies the FO template verbatim (`cp` in step 2d of SKILL.md). No commission changes are needed — the template update is sufficient.
+- [x] Update FO template items 5 and 6 to support README-configurable output format
+  Items 5 and 6 in `## Single-Entity Mode` now check for a `## Output Format` section in the workflow README. If present, the FO follows those formatting instructions. If absent, falls back to printing terminal state (status and verdict) and entity ID. See `templates/first-officer.md` lines 56-57.
+- [x] Create test fixture(s) with and without `## Output Format` sections
+  Two fixtures created: `tests/fixtures/output-format-custom/` (README has `## Output Format` with RESULT/ENTITY/TITLE format) and `tests/fixtures/output-format-default/` (README has no Output Format section). Both use already-terminal entities for fast testing.
+- [x] Create test script(s) that verify the output format behavior
+  `tests/test_output_format.py` — static checks verify template references and fixture correctness; E2E phases run the FO against both fixtures and check the output matches expected format (custom: RESULT/ENTITY/TITLE lines; default: terminal status, entity ID, verdict).
+- [x] Commit all changes on the ensign/single-entity-p-mode branch
+  Committed as `9c17166` on `ensign/single-entity-p-mode`.
 
 ### Summary
 
-Spike phase confirmed that `claude -p` sessions terminate reliably via LLM-driven natural end (3/3 experiments). The `-p` prompt reaches the FO and directs its behavior. Template approach is viable. Implemented three changes to `templates/first-officer.md`: a new Single-Entity Mode section defining scoped dispatch, entity resolution, gate auto-approval, orphan auto-decision, and termination; a gate guardrail exception for single-entity mode; and an event loop termination clause. The commission skill needs no changes since it copies the template verbatim.
+Spike phase confirmed that `claude -p` sessions terminate reliably via LLM-driven natural end (3/3 experiments). The `-p` prompt reaches the FO and directs its behavior. Template approach is viable. Implemented three changes to `templates/first-officer.md`: a new Single-Entity Mode section defining scoped dispatch, entity resolution, gate auto-approval, orphan auto-decision, and termination; a gate guardrail exception for single-entity mode; and an event loop termination clause. The commission skill needs no changes since it copies the template verbatim. Post-validation feedback: updated items 5 and 6 to support workflow-configurable output format via README `## Output Format` section, with fallback to default (terminal state + entity ID). Added test fixtures and E2E test script verifying both paths.
 
 ## Stage Report: validation
 
