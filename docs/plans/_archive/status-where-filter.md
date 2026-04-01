@@ -1,13 +1,13 @@
 ---
 id: 079
 title: Status script --where filtering and FO template simplification
-status: validation
+status: done
 source: experiment/status-filters branch (FO template token reduction experiment)
 started: 2026-03-31T00:00:00Z
-completed:
-verdict:
+completed: 2026-04-01T00:00:00Z
+verdict: PASSED
 score: 0.75
-worktree: .worktrees/pr-19-test
+worktree:
 pr: "#19"
 ---
 
