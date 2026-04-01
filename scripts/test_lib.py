@@ -213,6 +213,40 @@ def run_first_officer(
     return result.returncode
 
 
+def run_codex_first_officer(
+    runner: TestRunner,
+    workflow_dir: str,
+    extra_args: list[str] | None = None,
+    log_name: str = "codex-fo-log.txt",
+) -> int:
+    """Run the Codex first-officer prototype. Returns exit code."""
+    log_path = runner.log_dir / log_name
+    script_path = runner.repo_root / "scripts" / "run_codex_first_officer.sh"
+
+    cmd = [str(script_path), workflow_dir]
+    if extra_args:
+        cmd.extend(extra_args)
+
+    with open(log_path, "w") as log_file:
+        try:
+            result = subprocess.run(
+                cmd,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                cwd=runner.test_project_dir,
+                timeout=180,
+            )
+        except subprocess.TimeoutExpired:
+            print("\n  TIMEOUT: codex first officer exceeded 180s limit")
+            return 124
+
+    print()
+    if result.returncode != 0:
+        print(f"WARNING: codex first officer exited with code {result.returncode}")
+
+    return result.returncode
+
+
 class LogParser:
     """Parses a stream-json JSONL log file from claude."""
 
@@ -306,6 +340,54 @@ class LogParser:
         """Write the agent prompt to a file."""
         with open(output_path, "w") as f:
             f.write(self.agent_prompt())
+
+
+class CodexLogParser:
+    """Parses a mixed JSONL/plain-text log file from `codex exec --json`."""
+
+    def __init__(self, log_path: Path | str):
+        self.log_path = Path(log_path)
+        self._raw_lines: list[str] | None = None
+        self._json_entries: list[dict] | None = None
+
+    @property
+    def raw_lines(self) -> list[str]:
+        if self._raw_lines is None:
+            self._raw_lines = self.log_path.read_text().splitlines() if self.log_path.exists() else []
+        return self._raw_lines
+
+    @property
+    def json_entries(self) -> list[dict]:
+        if self._json_entries is None:
+            entries: list[dict] = []
+            for line in self.raw_lines:
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+            self._json_entries = entries
+        return self._json_entries
+
+    def full_text(self) -> str:
+        texts = list(self.raw_lines)
+        for entry in self.json_entries:
+            item = entry.get("item", {})
+            if isinstance(item, dict):
+                text = item.get("text")
+                if text:
+                    texts.append(text)
+        return "\n".join(texts)
+
+    def spawn_count(self) -> int:
+        count = 0
+        for line in self.raw_lines:
+            if "spawn_agent" in line:
+                count += 1
+        return count
+
+    def write_text(self, output_path: Path | str):
+        with open(output_path, "w") as f:
+            f.write(self.full_text())
 
 
 def extract_stats(log_path: Path | str, phase_name: str, output_dir: Path | str) -> dict:
