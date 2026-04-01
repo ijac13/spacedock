@@ -126,7 +126,7 @@ fi
 RAW_LOG=$(git log "$LOG_RANGE" --oneline --no-decorate)
 
 if command -v claude >/dev/null 2>&1; then
-    PROMPT="Summarize these git commits into a concise release changelog for spacedock v$VERSION. Focus on shipped user value — what a user of the spacedock plugin gets from upgrading. Ignore workflow state changes (dispatch/done/backlog/validation commits, archived task frontmatter updates, entity file changes under docs/plans/). Group by features and fixes. Be brief — one line per item, no markdown headers, just bullet points."
+    PROMPT="Summarize these git commits into a release changelog for spacedock v$VERSION. No markdown formatting — plain text only, no bullet characters, no headers, no bold/italic. One line per change. For each change, lead with the user value (what upgrading gives you), then briefly describe what changed at a high level. Ignore workflow state changes (dispatch/done/backlog/validation commits, archived task frontmatter updates, entity file changes under docs/plans/). Group related commits into single entries."
     if [ -n "$EXTRA_INSTRUCTIONS" ]; then
         PROMPT="$PROMPT Additional instructions: $EXTRA_INSTRUCTIONS"
     fi
