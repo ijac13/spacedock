@@ -311,26 +311,26 @@ Spike phase confirmed that `claude -p` sessions terminate reliably via LLM-drive
 
 ## Stage Report: validation
 
-- [x] Verify the template changes correctly implement README-configurable output format (items 5 and 6)
-  Item 5 (line 56): "Check the workflow README for a `## Output Format` section. If present, follow those formatting instructions for the final output. If no `## Output Format` section exists, fall back to printing the terminal state (status and verdict) and entity ID." Item 6 (line 57): "Same rule as item 5 — use the README's `## Output Format` section if present, otherwise print the terminal state and entity ID." Both items now delegate to the README for output format, with a clearly defined fallback.
-- [x] Run the output format test script (`tests/test_output_format.py`) — Phase 1 static checks
-  Phase 1 (4 static checks): all PASS. (1) item 5 references `## Output Format` section from README, (2) item 6 references same rule as item 5, (3) custom fixture has `## Output Format` section, (4) default fixture has no `## Output Format` section. Phase 2/3 E2E tests could not run — `claude` cannot be launched inside another `claude` session (expected infrastructure limitation, not a test defect). E2E test logic is sound: custom fixture checks for RESULT/ENTITY/TITLE lines; default fixture checks for terminal status, entity ID, verdict.
-- [x] Verify original acceptance criteria (AC 1-6) still hold after the template changes
-  AC 1 (entity targeting): Item 1 (line 52) scopes dispatch, item 2 (line 53) resolves by slug/title/ID — unchanged. AC 2 (gate auto-approval): Item 3 (line 54) references gate guardrail exception at line 135 — unchanged. AC 3 (reliable termination): Item 5 (line 56) defines termination; event loop clause at line 98 — unchanged, output format addition does not alter termination logic. AC 4 (entity not found): Item 2 (line 53) handles not-found — unchanged. AC 5 (interactive unaffected): "NEVER self-approve" guardrail at line 133 preserved; exception at line 135 scoped to single-entity mode — unchanged. AC 6 (stdout output): Items 5 and 6 now configurable via README `## Output Format` section with sensible fallback — this is the enhancement from feedback cycle 1, strictly additive.
-- [x] Static checks: gate guardrail still contains "NEVER self-approve", single-entity mode exception is scoped, output format fallback is clearly defined
-  Confirmed via grep: "NEVER self-approve" at line 133. "ONLY applies in single-entity mode" at line 135. Output format fallback at line 56: "fall back to printing the terminal state (status and verdict) and entity ID." All three checks pass.
-- [x] Overall PASSED/REJECTED recommendation with evidence
+- [x] Verify the default fixture entity starts at `backlog` (not `done`) and the workflow is gate-free
+  `tests/fixtures/output-format-default/format-test-entity.md` has `status: backlog` (line 4). README frontmatter has `gate: false` in defaults with no per-stage overrides.
+- [x] Verify Phase 3 of `test_output_format.py` exercises real dispatch (budget adequate, checks entity reached terminal, checks output format)
+  Phase 3: creates fresh test project, installs ensign agent (`include_ensign=True`, line 93), uses `--max-budget-usd 3.00` (line 99). Checks entity file reached `status: done` (lines 111-117, checks both `_archive/` and original path). Checks default output contains `done`, entity ID `001`, and verdict (lines 120-127). This exercises real dispatch: FO must dispatch ensign through work -> done.
+- [x] Run the test script Phase 1 (static checks) to confirm they still pass
+  Executed Phase 1 checks: (1) item 5 references `## Output Format` section from README -- PASS, (2) item 6 references same rule as item 5 -- PASS, (3) custom fixture has `## Output Format` section -- PASS, (4) default fixture has no `## Output Format` section -- PASS. All 4/4 pass.
+- [x] Verify original ACs and output format logic still intact in the template
+  AC 1 (entity targeting): "Scope dispatch to only the named entity" present. AC 2 (gate auto-approval): "Auto-approve gates" and "Single-entity mode exception" present. AC 3 (reliable termination): "Terminate after the target entity is resolved" and event loop clause present. AC 4 (entity not found): "Entity not found" handling present. AC 5 (interactive unaffected): "NEVER self-approve" guardrail present, "ONLY applies in single-entity mode" scoping present. AC 6 (stdout output): `## Output Format` from README with fallback to default present. All 6 ACs verified.
+- [x] Overall PASSED/REJECTED recommendation
 
 ### Recommendation: PASSED
 
 ### Findings
 
-1. Items 5 and 6 in the Single-Entity Mode section correctly implement README-configurable output format: check for `## Output Format` in the workflow README, follow those instructions if present, fall back to terminal state + entity ID if absent.
-2. Test fixtures are correctly structured: `output-format-custom/README.md` has a `## Output Format` section with RESULT/ENTITY/TITLE format; `output-format-default/README.md` has no such section. Both entities are already-terminal (`status: done`, `verdict: PASSED`) for fast testing.
-3. The test script (`tests/test_output_format.py`) has sound Phase 1 static checks (4/4 pass) and well-structured E2E phases that verify both custom and default output format paths. E2E phases could not execute in this session (nested `claude` limitation) but test logic is correct.
-4. All 6 original acceptance criteria remain satisfied after the output format changes — the enhancement is strictly additive and does not alter entity targeting, gate auto-approval, termination, not-found handling, or the interactive mode guardrail.
-5. The "NEVER self-approve" guardrail is intact at line 133, the single-entity mode exception is narrowly scoped at line 135, and the output format fallback is clearly defined at line 56.
+1. The default fixture entity correctly starts at `backlog` (not `done`), requiring real FO dispatch through work -> done. The workflow is gate-free (`gate: false` in defaults, no per-stage overrides).
+2. Phase 3 of `test_output_format.py` exercises real single-entity mode dispatch: installs both FO and ensign agents, uses $3 budget (adequate for FO + ensign), verifies the entity file reaches terminal `done` status, and checks default output format (status, entity ID, verdict).
+3. Phase 1 static checks all pass (4/4): template references Output Format section, fixture structure is correct.
+4. All 6 original acceptance criteria remain intact in the template. The output format enhancement (items 5 and 6) is strictly additive -- it does not alter entity targeting, gate auto-approval, termination, not-found handling, or the interactive mode guardrail.
+5. Key guardrails verified: "NEVER self-approve" at line 133, single-entity mode exception scoped with "ONLY applies in single-entity mode" at line 135, output format fallback clearly defined at line 56.
 
 ### Summary
 
-Re-validated after feedback cycle 1. The implementation agent added README-configurable output format to items 5 and 6 of the Single-Entity Mode section. The template now checks for a `## Output Format` section in the workflow README and follows those instructions if present, falling back to terminal state + entity ID if absent. Test fixtures and test script are correctly structured. All original acceptance criteria (AC 1-6) remain satisfied — the output format change is strictly additive. Static checks confirm the gate guardrail, scoping, and fallback are all in place.
+Re-validated after feedback cycle 2. The implementer updated Phase 3 of `test_output_format.py` to exercise real dispatch: the default fixture entity now starts at `backlog` (not `done`), forcing the FO to dispatch an ensign through work -> done. Budget increased to $3 to accommodate the dispatch. The test verifies the entity file reaches terminal status and checks default output format. All Phase 1 static checks pass. All 6 original ACs remain intact in the template.
