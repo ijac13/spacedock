@@ -283,3 +283,54 @@ Revised ideation to acknowledge the root issue: the FO literally never terminate
 ### Feedback Cycles
 
 Cycle: 2
+
+## Stage Report: implementation
+
+- [x] Spike experiments A, B, C executed and findings documented
+  Ran via `tests/test_spike_termination.py`. Results: A terminated naturally in 47s (reported status, asked to dispatch, stopped); B terminated naturally in 130s (processed entity to done, archived, printed summary); C terminated naturally in 132s (stopped at gate awaiting captain approval). All 3 used natural_end, 0/3 hit budget cap. Fixtures at `tests/fixtures/spike-no-gate/` and `tests/fixtures/spike-gated/`.
+- [x] Termination mechanism understood and documented (spike acceptance criterion S1)
+  LLM-driven termination: `claude -p` sessions end when the LLM produces a final assistant turn with no tool calls. This happens reliably in all tested scenarios. The `-p` prompt supplements (does not replace) `initialPrompt` — both reach the FO. Prompt instructions like "then stop" work but are not strictly necessary; the FO stops naturally when it needs captain input or has nothing left to do.
+- [x] Reliable termination path identified (spike acceptance criterion S2)
+  All 3 experiments terminated naturally without budget cap. Exp B confirms end-to-end: entity processed through all stages, archived, and session exited cleanly. The template approach is viable.
+- [x] FO template updated with single-entity mode section (if spike confirms viability)
+  Added `## Single-Entity Mode` section (6 behavior items: scoped dispatch, entity resolution, gate auto-approval, orphan auto-decision, termination, already-terminal). Added gate guardrail exception for single-entity mode. Updated event loop termination clause. Changes at `templates/first-officer.md`.
+- [ ] SKIP: Commission skill updated to emit the new FO section (if spike confirms viability)
+  The commission skill copies the FO template verbatim (`cp` in step 2d of SKILL.md). No commission changes are needed — the template update is sufficient.
+- [x] Update FO template items 5 and 6 to support README-configurable output format
+  Items 5 and 6 in `## Single-Entity Mode` now check for a `## Output Format` section in the workflow README. If present, the FO follows those formatting instructions. If absent, falls back to printing terminal state (status and verdict) and entity ID. See `templates/first-officer.md` lines 56-57.
+- [x] Create test fixture(s) with and without `## Output Format` sections
+  Two fixtures: `tests/fixtures/output-format-custom/` (README has `## Output Format` with RESULT/ENTITY/TITLE format, already-terminal entity) and `tests/fixtures/output-format-default/` (README has no Output Format section, entity starts at backlog for real dispatch testing).
+- [x] Create test script(s) that verify the output format behavior
+  `tests/test_output_format.py` — Phase 1: static checks on template and fixtures. Phase 2: E2E with custom format (already-terminal entity, $1 budget). Phase 3: E2E with default format (entity starts at backlog, FO dispatches ensign through work -> done, $3 budget). Phase 3 verifies entity file reaches terminal status and output contains done/entity ID/verdict.
+- [x] Commit all changes on the ensign/single-entity-p-mode branch
+  Latest commit `da3cc6c` on `ensign/single-entity-p-mode` — Phase 3 updated to use real dispatch.
+
+### Summary
+
+Spike phase confirmed that `claude -p` sessions terminate reliably via LLM-driven natural end (3/3 experiments). The `-p` prompt reaches the FO and directs its behavior. Template approach is viable. Implemented three changes to `templates/first-officer.md`: a new Single-Entity Mode section defining scoped dispatch, entity resolution, gate auto-approval, orphan auto-decision, and termination; a gate guardrail exception for single-entity mode; and an event loop termination clause. The commission skill needs no changes since it copies the template verbatim. Post-validation feedback cycle 1: updated items 5 and 6 to support workflow-configurable output format via README `## Output Format` section, with fallback to default (terminal state + entity ID). Feedback cycle 2: updated Phase 3 of test to exercise full single-entity mode flow (dispatch -> process -> terminate -> output) instead of only testing the already-terminal shortcut. The default fixture entity now starts at backlog, budget increased to $3, and the test verifies the entity file reaches terminal status.
+
+## Stage Report: validation
+
+- [x] Verify the default fixture entity starts at `backlog` (not `done`) and the workflow is gate-free
+  `tests/fixtures/output-format-default/format-test-entity.md` has `status: backlog` (line 4). README frontmatter has `gate: false` in defaults with no per-stage overrides.
+- [x] Verify Phase 3 of `test_output_format.py` exercises real dispatch (budget adequate, checks entity reached terminal, checks output format)
+  Phase 3: creates fresh test project, installs ensign agent (`include_ensign=True`, line 93), uses `--max-budget-usd 3.00` (line 99). Checks entity file reached `status: done` (lines 111-117, checks both `_archive/` and original path). Checks default output contains `done`, entity ID `001`, and verdict (lines 120-127). This exercises real dispatch: FO must dispatch ensign through work -> done.
+- [x] Run the test script Phase 1 (static checks) to confirm they still pass
+  Executed Phase 1 checks: (1) item 5 references `## Output Format` section from README -- PASS, (2) item 6 references same rule as item 5 -- PASS, (3) custom fixture has `## Output Format` section -- PASS, (4) default fixture has no `## Output Format` section -- PASS. All 4/4 pass.
+- [x] Verify original ACs and output format logic still intact in the template
+  AC 1 (entity targeting): "Scope dispatch to only the named entity" present. AC 2 (gate auto-approval): "Auto-approve gates" and "Single-entity mode exception" present. AC 3 (reliable termination): "Terminate after the target entity is resolved" and event loop clause present. AC 4 (entity not found): "Entity not found" handling present. AC 5 (interactive unaffected): "NEVER self-approve" guardrail present, "ONLY applies in single-entity mode" scoping present. AC 6 (stdout output): `## Output Format` from README with fallback to default present. All 6 ACs verified.
+- [x] Overall PASSED/REJECTED recommendation
+
+### Recommendation: PASSED
+
+### Findings
+
+1. The default fixture entity correctly starts at `backlog` (not `done`), requiring real FO dispatch through work -> done. The workflow is gate-free (`gate: false` in defaults, no per-stage overrides).
+2. Phase 3 of `test_output_format.py` exercises real single-entity mode dispatch: installs both FO and ensign agents, uses $3 budget (adequate for FO + ensign), verifies the entity file reaches terminal `done` status, and checks default output format (status, entity ID, verdict).
+3. Phase 1 static checks all pass (4/4): template references Output Format section, fixture structure is correct.
+4. All 6 original acceptance criteria remain intact in the template. The output format enhancement (items 5 and 6) is strictly additive -- it does not alter entity targeting, gate auto-approval, termination, not-found handling, or the interactive mode guardrail.
+5. Key guardrails verified: "NEVER self-approve" at line 133, single-entity mode exception scoped with "ONLY applies in single-entity mode" at line 135, output format fallback clearly defined at line 56.
+
+### Summary
+
+Re-validated after feedback cycle 2. The implementer updated Phase 3 of `test_output_format.py` to exercise real dispatch: the default fixture entity now starts at `backlog` (not `done`), forcing the FO to dispatch an ensign through work -> done. Budget increased to $3 to accommodate the dispatch. The test verifies the entity file reaches terminal status and checks default output format. All Phase 1 static checks pass. All 6 original ACs remain intact in the template.

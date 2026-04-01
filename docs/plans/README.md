@@ -185,6 +185,14 @@ The test harness documents how to run `claude -p` with `--plugin-dir` for non-in
 
 All tests run via `claude -p` in worktrees. E2E tests that invoke `claude -p` (commission harness, gate guardrail, dispatch names, rejection flow, terminology benchmark) work within the standard dispatch environment and should be run as part of validation.
 
+### Running E2E tests
+
+Tests use `uv run`. When running from inside a Claude Code session, unset `CLAUDECODE` first (claude refuses to launch as a subprocess when this variable is set):
+
+    unset CLAUDECODE && uv run tests/test_output_format.py
+
+This applies to all E2E test scripts under `tests/` and `scripts/`.
+
 ## Commit Discipline
 
 - Commit status changes at dispatch and merge boundaries

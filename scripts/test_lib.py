@@ -16,6 +16,11 @@ from datetime import datetime
 from pathlib import Path
 
 
+def _clean_env() -> dict[str, str]:
+    """Return a copy of os.environ without CLAUDECODE so subprocess can launch claude."""
+    return {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+
+
 class TestRunner:
     """Test framework with pass/fail counters, check helpers, and results summary."""
 
@@ -89,9 +94,9 @@ class TestRunner:
             sys.exit(0)
 
 
-def create_test_project(runner: TestRunner) -> Path:
+def create_test_project(runner: TestRunner, name: str = "test-project") -> Path:
     """Create a temp git project with an empty initial commit."""
-    project_dir = runner.test_dir / "test-project"
+    project_dir = runner.test_dir / name
     subprocess.run(["git", "init", str(project_dir)], capture_output=True, check=True)
     subprocess.run(
         ["git", "commit", "--allow-empty", "-m", "init"],
@@ -159,7 +164,7 @@ def run_commission(
         try:
             result = subprocess.run(
                 cmd, stdout=log_file, stderr=subprocess.STDOUT,
-                cwd=runner.test_project_dir, timeout=600,
+                cwd=runner.test_project_dir, env=_clean_env(), timeout=600,
             )
         except subprocess.TimeoutExpired:
             print("\n  TIMEOUT: commission exceeded 600s limit")
@@ -197,7 +202,7 @@ def run_first_officer(
         try:
             result = subprocess.run(
                 cmd, stdout=log_file, stderr=subprocess.STDOUT,
-                cwd=runner.test_project_dir, timeout=600,
+                cwd=runner.test_project_dir, env=_clean_env(), timeout=600,
             )
         except subprocess.TimeoutExpired:
             print("\n  TIMEOUT: first officer exceeded 600s limit")

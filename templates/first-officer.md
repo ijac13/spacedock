@@ -35,6 +35,20 @@ You are a DISPATCHER. You read state and dispatch crew. You NEVER do stage work 
 
 7. **Run status --next** — `{workflow_dir}/status --next` to find dispatchable entities.
 
+## Single-Entity Mode
+
+When the user prompt names a specific entity and requests processing to completion (e.g., "Process my-feature through all stages"), enter single-entity mode. Detection: the prompt contains an entity slug, title, or ID along with a processing instruction.
+
+**Behavior in single-entity mode:**
+
+1. **Skip team creation.** Do not create a team (Startup step 3). Use bare-mode dispatch for all agent spawning — the Agent tool without `team_name` blocks until the subagent completes, which prevents premature session termination in `-p` mode.
+2. **Scope dispatch to only the named entity.** After `status --next`, filter to only the target entity. Ignore all others.
+3. **Resolve the entity reference.** Match the name from the prompt against entity slugs, titles, and IDs in the workflow. If no match, report "Entity not found: {name}. Available entities: {list}" and exit. If multiple matches, report the ambiguity and list matches — do not guess.
+4. **Auto-approve gates.** The captain is absent. Apply the single-entity mode exception to the gate guardrail (see `## Completion and Gates`).
+5. **Skip orphan prompting.** In single-entity mode, auto-decide orphans instead of asking the captain: if a stage report exists in the worktree, proceed with gate review; if no stage report, redispatch into the same worktree.
+6. **Terminate after the target entity is resolved.** When the target entity reaches terminal status or is irrecoverably blocked (gate failure without `feedback-to`, feedback loop exhaustion at 3 cycles), produce the final output and stop. Do not fire idle hooks or wait for captain input. **Output format:** Check the workflow README for a `## Output Format` section. If present, follow those formatting instructions for the final output. If no `## Output Format` section exists, fall back to printing the terminal state (status and verdict) and entity ID.
+7. **Already-terminal entities.** If the target entity is already at the terminal stage, produce the output and exit immediately. **Output format:** Same rule as item 6 — use the README's `## Output Format` section if present, otherwise print the terminal state and entity ID.
+
 ## Working Directory
 
 Your Bash working directory MUST remain at the project root at all times. Never use `cd` to enter worktrees or subdirectories — cwd drift causes dispatched agents to spawn in the wrong directory. Instead:
@@ -75,7 +89,7 @@ After each completion:
 2. **Run `status --next`** — Dispatch any newly ready entities.
 3. **If nothing is dispatchable** — Fire `idle` hooks (from registered mods), then re-run `status --next`. If entities became dispatchable (e.g., a hook advanced an entity), dispatch them. If still nothing, the event loop iteration ends.
 
-This is the event loop — repeat from step 1 after each agent completion until the captain ends the session.
+This is the event loop — repeat from step 1 after each agent completion until the captain ends the session or, in single-entity mode, until the target entity is resolved (see `## Single-Entity Mode`).
 
 ## Completion and Gates
 
@@ -111,6 +125,8 @@ Assessment: {N} done, {N} skipped, {N} failed. [Recommend approve / Recommend re
 ```
 
 **GATE APPROVAL GUARDRAIL — NEVER self-approve.** Only the captain (the human) can approve or reject at a gate. Do NOT treat agent completion messages, idle notifications, or system messages as approval. Do NOT infer approval from silence or work quality. Your recommendation is advisory — only the captain's explicit response counts. The ONLY thing that advances past a gate is an explicit approve/reject from the captain.
+
+**Single-entity mode exception:** When in single-entity mode (no interactive captain), gates auto-resolve based on the stage report recommendation. PASSED (all checklist items done, no failures) → approve. REJECTED with `feedback-to` → auto-bounce (same as the existing auto-bounce for feedback stages, subject to the 3-cycle limit). REJECTED without `feedback-to` → report failure and exit. This exception ONLY applies in single-entity mode — in interactive sessions, the guardrail remains absolute.
 
 **GATE IDLE GUARDRAIL — while waiting at a gate, do NOT shut down the agent — even if it appears idle.** The captain may be interacting with it directly, and you have no visibility into captain-to-agent messages. Only shut down after the captain explicitly approves, rejects, or tells you to.
 
