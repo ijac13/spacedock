@@ -186,15 +186,12 @@ def scan_entities(directory):
             continue
         slug = os.path.splitext(os.path.basename(filepath))[0]
         fields = parse_frontmatter(filepath)
-        entities.append({
-            'slug': slug,
-            'id': fields.get('id', ''),
-            'status': fields.get('status', ''),
-            'title': fields.get('title', ''),
-            'score': fields.get('score', ''),
-            'source': fields.get('source', ''),
-            'worktree': fields.get('worktree', ''),
-        })
+        entity = {k: v for k, v in fields.items()}
+        entity['slug'] = slug
+        # Ensure display fields default to empty string
+        for key in ('id', 'status', 'title', 'score', 'source', 'worktree'):
+            entity.setdefault(key, '')
+        entities.append(entity)
     return entities
 
 
@@ -306,12 +303,104 @@ def print_next_table(entities, stages):
         print(fmt % (e['id'], e['slug'], e['status'], e['next'], e['next_worktree']))
 
 
+def parse_where_filters(args):
+    """Parse --where arguments from sys.argv.
+
+    Returns a list of (field, op, value) tuples.
+    Raises ValueError if parsing fails.
+    """
+    filters = []
+    i = 0
+    while i < len(args):
+        if args[i] == '--where':
+            if i + 1 >= len(args):
+                raise ValueError('--where requires an argument')
+            where_arg = args[i + 1]
+            # Split on first space to get field and remainder
+            parts = where_arg.split(None, 1)
+            if not parts:
+                raise ValueError('--where argument cannot be empty')
+            field = parts[0]
+
+            # Default operator and value
+            op = None
+            value = None
+
+            # Parse the operator and optional value
+            if len(parts) == 1:
+                # Just field, no operator — treat as "field !="
+                op = '!='
+            else:
+                remainder = parts[1]
+                # Split remainder into operator and optional value
+                op_parts = remainder.split(None, 1)
+                op = op_parts[0]
+                value = op_parts[1] if len(op_parts) > 1 else None
+
+            filters.append((field, op, value))
+            i += 2
+        else:
+            i += 1
+
+    return filters
+
+
+def apply_filters(entities, filters):
+    """Filter entities based on --where conditions.
+
+    Multiple filters AND together. Returns filtered list.
+    """
+    if not filters:
+        return entities
+
+    filtered = []
+    for e in entities:
+        match = True
+        for field, op, value in filters:
+            field_val = e.get(field, '')
+
+            if op == '!=':
+                # field != (non-empty)
+                if value is None:
+                    if not field_val:
+                        match = False
+                        break
+                # field != value
+                else:
+                    if field_val == value:
+                        match = False
+                        break
+            elif op == '=':
+                # field = (empty)
+                if value is None:
+                    if field_val:
+                        match = False
+                        break
+                # field = value
+                else:
+                    if field_val != value:
+                        match = False
+                        break
+
+        if match:
+            filtered.append(e)
+
+    return filtered
+
+
 def main():
     pipeline_dir = os.environ.get('PIPELINE_DIR') or os.path.dirname(os.path.abspath(__file__))
 
     args = sys.argv[1:]
     include_archive = '--archived' in args
     show_next = '--next' in args
+
+    # Parse --where filters
+    try:
+        where_filters = parse_where_filters(args)
+    except ValueError as e:
+        print('Error: ' + str(e), file=sys.stderr)
+        sys.exit(1)
 
     readme_path = os.path.join(pipeline_dir, 'README.md')
     stages = None
@@ -328,6 +417,9 @@ def main():
         archive_dir = os.path.join(pipeline_dir, '_archive')
         if os.path.isdir(archive_dir):
             entities.extend(scan_entities(archive_dir))
+
+    # Apply --where filters
+    entities = apply_filters(entities, where_filters)
 
     if show_next:
         print_next_table(entities, stages)

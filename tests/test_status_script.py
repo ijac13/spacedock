@@ -86,7 +86,7 @@ README_NO_STAGES = textwrap.dedent("""\
     """)
 
 
-def entity(id, title, status, score='', source='', worktree=''):
+def entity(id, title, status, score='', source='', worktree='', pr=''):
     """Generate entity frontmatter."""
     return textwrap.dedent(f"""\
         ---
@@ -99,6 +99,7 @@ def entity(id, title, status, score='', source='', worktree=''):
         verdict:
         score: {score}
         worktree: {worktree}
+        pr: {pr}
         ---
 
         Description.
@@ -424,6 +425,171 @@ class TestFrontmatterParsing(unittest.TestCase):
             result = run_status(tmpdir, '--next', script_path=self.script_path)
             data_lines = result.stdout.strip().split('\n')[2:]
             self.assertEqual(len(data_lines), 1)
+
+
+class TestWhereFilter(unittest.TestCase):
+    """Test --where filtering."""
+
+    def setUp(self):
+        self._script_dir = tempfile.mkdtemp()
+        self.script_path = build_status_script(self._script_dir)
+
+    def tearDown(self):
+        os.unlink(self.script_path)
+        os.rmdir(self._script_dir)
+
+    def test_exact_match(self):
+        """--where 'status = backlog' returns only backlog entities."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'in-backlog.md': entity('001', 'Backlog Task', 'backlog', '0.80'),
+                'in-ideation.md': entity('002', 'Ideation Task', 'ideation', '0.90'),
+                'also-backlog.md': entity('003', 'Also Backlog', 'backlog', '0.70'),
+            })
+            result = run_status(tmpdir, '--where', 'status = backlog', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')[2:]
+            self.assertEqual(len(lines), 2)
+            for line in lines:
+                self.assertIn('backlog', line)
+            # ideation entity must not appear
+            self.assertNotIn('in-ideation', result.stdout)
+
+    def test_not_equal_with_value(self):
+        """--where 'status != done' excludes entities with status done."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'active.md': entity('001', 'Active', 'backlog', '0.80'),
+                'finished.md': entity('002', 'Finished', 'done', '0.90'),
+                'working.md': entity('003', 'Working', 'implementation', '0.70'),
+            })
+            result = run_status(tmpdir, '--where', 'status != done', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')[2:]
+            self.assertEqual(len(lines), 2)
+            for line in lines:
+                self.assertNotIn('done', line.split()[2] if len(line.split()) > 2 else '')
+            self.assertNotIn('finished', result.stdout)
+
+    def test_non_empty_filter(self):
+        """--where 'worktree !=' returns entities with non-empty worktree."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'has-wt.md': entity('001', 'Has Worktree', 'implementation', '0.80', worktree='.worktrees/test'),
+                'no-wt.md': entity('002', 'No Worktree', 'backlog', '0.90'),
+            })
+            result = run_status(tmpdir, '--where', 'worktree !=', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')[2:]
+            self.assertEqual(len(lines), 1)
+            self.assertIn('has-wt', lines[0])
+
+    def test_empty_filter(self):
+        """--where 'worktree =' returns entities with empty worktree."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'has-wt.md': entity('001', 'Has Worktree', 'implementation', '0.80', worktree='.worktrees/test'),
+                'no-wt.md': entity('002', 'No Worktree', 'backlog', '0.90'),
+            })
+            result = run_status(tmpdir, '--where', 'worktree =', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')[2:]
+            self.assertEqual(len(lines), 1)
+            self.assertIn('no-wt', lines[0])
+
+    def test_non_empty_pr_field(self):
+        """--where 'pr !=' returns entities with non-empty pr field."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'has-pr.md': entity('001', 'Has PR', 'validation', '0.80', pr='#19'),
+                'no-pr.md': entity('002', 'No PR', 'backlog', '0.90'),
+            })
+            result = run_status(tmpdir, '--where', 'pr !=', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')[2:]
+            self.assertEqual(len(lines), 1)
+            self.assertIn('has-pr', lines[0])
+
+    def test_multiple_where_and_together(self):
+        """Multiple --where clauses AND together."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'match.md': entity('001', 'Match', 'backlog', '0.80', source='user'),
+                'wrong-status.md': entity('002', 'Wrong Status', 'ideation', '0.90', source='user'),
+                'wrong-source.md': entity('003', 'Wrong Source', 'backlog', '0.70', source='CL'),
+            })
+            result = run_status(tmpdir,
+                '--where', 'status = backlog',
+                '--where', 'source = user',
+                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')[2:]
+            self.assertEqual(len(lines), 1)
+            self.assertIn('match', lines[0])
+
+    def test_where_composes_with_next(self):
+        """--where composes with --next."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'high.md': entity('001', 'High Priority', 'backlog', '0.90', source='user'),
+                'low.md': entity('002', 'Low Priority', 'backlog', '0.50', source='CL'),
+            })
+            result = run_status(tmpdir,
+                '--next', '--where', 'source = user',
+                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')[2:]
+            self.assertEqual(len(lines), 1)
+            self.assertIn('high', lines[0])
+            self.assertNotIn('low', result.stdout.split('\n', 3)[-1])
+
+    def test_where_composes_with_archived(self):
+        """--where composes with --archived."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES,
+                entities={'active.md': entity('001', 'Active', 'backlog', '0.80')},
+                archived={
+                    'old-done.md': entity('002', 'Old Done', 'done', '0.90'),
+                    'old-backlog.md': entity('003', 'Old Backlog', 'backlog', '0.70'),
+                },
+            )
+            result = run_status(tmpdir,
+                '--archived', '--where', 'status = backlog',
+                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')[2:]
+            self.assertEqual(len(lines), 2)
+            for line in lines:
+                self.assertIn('backlog', line)
+
+    def test_no_matching_entities_header_only(self):
+        """--where with no matches returns header only."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--where', 'status = done', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')
+            self.assertEqual(len(lines), 2)  # header + separator only
+
+    def test_where_on_nonexistent_field(self):
+        """--where on a field not in frontmatter treats it as empty."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog', '0.80'),
+            })
+            # Filter for non-empty 'nonexistent' — should match nothing
+            result = run_status(tmpdir, '--where', 'nonexistent !=', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')
+            self.assertEqual(len(lines), 2)  # header + separator only
+
+            # Filter for empty 'nonexistent' — should match everything
+            result2 = run_status(tmpdir, '--where', 'nonexistent =', script_path=self.script_path)
+            self.assertEqual(result2.returncode, 0, result2.stderr)
+            lines2 = result2.stdout.strip().split('\n')[2:]
+            self.assertEqual(len(lines2), 1)
 
 
 if __name__ == '__main__':
