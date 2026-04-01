@@ -93,14 +93,15 @@ def main():
             gate_section_lines.append(line)
     gate_section = "\n".join(gate_section_lines)
 
-    # Extract the "Approve terminal worktree" subsection
+    # Extract the gate approval path — either a bullet or a paragraph mentioning approve + terminal
     approve_lines = []
     in_approve = False
     for line in gate_section.splitlines():
-        if re.search(r"Approve.*terminal.*worktree:", line):
+        if re.search(r"[Aa]pprove.*terminal", line) or re.search(r"[Oo]n approve", line):
             in_approve = True
+            approve_lines.append(line)
             continue
-        if in_approve and re.match(r"^- \*\*", line):
+        if in_approve and (re.match(r"^- \*\*", line) or re.match(r"^\*\*On reject", line)):
             break
         if in_approve:
             approve_lines.append(line)
@@ -108,7 +109,7 @@ def main():
 
     # Check 6: Gate approval path delegates to Merge and Cleanup
     t.check("gate approval path delegates to Merge and Cleanup",
-            "Fall through to" in approve_section and "Merge and Cleanup" in approve_section)
+            bool(re.search(r"(Fall through to|proceed to|Proceed to).*Merge and Cleanup", approve_section)))
 
     # Check 7: Gate approval path does NOT have inline "Run merge hooks"
     t.check("gate approval path has NO inline merge hook instruction",
