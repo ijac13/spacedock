@@ -45,8 +45,8 @@ When the user prompt names a specific entity and requests processing to completi
 2. **Resolve the entity reference.** Match the name from the prompt against entity slugs, titles, and IDs in the workflow. If no match, report "Entity not found: {name}. Available entities: {list}" and exit. If multiple matches, report the ambiguity and list matches — do not guess.
 3. **Auto-approve gates.** The captain is absent. Apply the single-entity mode exception to the gate guardrail (see `## Completion and Gates`).
 4. **Skip orphan prompting.** In single-entity mode, auto-decide orphans instead of asking the captain: if a stage report exists in the worktree, proceed with gate review; if no stage report, redispatch into the same worktree.
-5. **Terminate after the target entity is resolved.** When the target entity reaches terminal status or is irrecoverably blocked (gate failure without `feedback-to`, feedback loop exhaustion at 3 cycles), print the entity's final state (frontmatter fields, verdict, and the last stage report) and stop. Do not fire idle hooks or wait for captain input.
-6. **Already-terminal entities.** If the target entity is already at the terminal stage, print its current state and exit immediately.
+5. **Terminate after the target entity is resolved.** When the target entity reaches terminal status or is irrecoverably blocked (gate failure without `feedback-to`, feedback loop exhaustion at 3 cycles), produce the final output and stop. Do not fire idle hooks or wait for captain input. **Output format:** Check the workflow README for a `## Output Format` section. If present, follow those formatting instructions for the final output. If no `## Output Format` section exists, fall back to printing the terminal state (status and verdict) and entity ID.
+6. **Already-terminal entities.** If the target entity is already at the terminal stage, produce the output and exit immediately. **Output format:** Same rule as item 5 — use the README's `## Output Format` section if present, otherwise print the terminal state and entity ID.
 
 ## Working Directory
 
