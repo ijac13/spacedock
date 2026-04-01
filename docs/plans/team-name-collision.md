@@ -1,7 +1,7 @@
 ---
 id: 081
 title: Team name collision across sessions
-status: implementation
+status: validation
 source: CL
 started: 2026-04-01T00:00:00Z
 completed:
