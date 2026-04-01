@@ -35,3 +35,20 @@ Uses the new filter to simplify first-officer template prose:
 5. `--where` composes with `--next` and `--archived`
 6. Unit tests cover all --where operators and edge cases
 7. E2E test suite passes with modified FO template
+
+## Stage Report: validation
+
+- [x] Unit tests added for all --where operators (=, !=) with and without values
+  10 tests in TestWhereFilter: exact match, not-equal-with-value, non-empty, empty, pr non-empty, multiple AND, compose-next, compose-archived, no-match header-only, nonexistent field
+- [x] Unit tests cover --where composition with --next and --archived
+  test_where_composes_with_next and test_where_composes_with_archived both pass
+- [ ] FAIL: All existing + new unit tests pass
+  31/32 pass. test_non_empty_pr_field FAILS: scan_entities() only extracts hardcoded fields (id, status, title, score, source, worktree) — pr field is never in the entity dict, so --where "pr !=" always returns empty. This is a real implementation bug.
+- [ ] FAIL: E2E checklist test passes on opus/low
+  8/9 checks pass. The "first officer performed checklist review" check failed — FO used "Stage report review: 4 done, 0 skipped, 0 failed" phrasing instead of matching the test regex (checklist review|checklist.*complete|all.*items.*DONE|items reported). This is an LLM output phrasing variance, not a --where bug.
+- [x] Any issues found in the --where implementation documented
+  Bug: scan_entities() hardcodes extracted fields — --where can only filter on slug/id/status/title/score/source/worktree. Acceptance criterion #3 (pr != filter) cannot work without fixing scan_entities to extract all frontmatter fields or at least add pr.
+
+### Summary
+
+Added 10 unit tests covering all --where operators and edge cases. Found one implementation bug: scan_entities() only extracts a fixed set of fields, so --where filtering on arbitrary frontmatter fields like pr does not work. The E2E test had one soft failure due to LLM phrasing variance in the checklist review step. Recommendation: REJECTED — the pr field filtering bug means acceptance criterion #3 is not met.
