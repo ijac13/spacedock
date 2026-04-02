@@ -34,7 +34,7 @@ def main():
 
     create_test_project(t)
     workflow_dir = t.test_project_dir / "v0-test-1"
-    fo_path = t.test_project_dir / ".claude" / "agents" / "first-officer.md"
+    fo_path = t.repo_root / "agents" / "first-officer.md"
 
     # --- Phase 1: Run commission ---
 
@@ -82,40 +82,41 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
     print()
     print("[File Existence]")
     t.check("README.md exists", (workflow_dir / "README.md").is_file())
-    t.check("status script exists", (workflow_dir / "status").is_file())
+    t.check("workflow-local status script is not generated", not (workflow_dir / "status").exists())
     t.check("full-cycle-test.md exists", (workflow_dir / "full-cycle-test.md").is_file())
     t.check("refit-command.md exists", (workflow_dir / "refit-command.md").is_file())
     t.check("multi-pipeline.md exists", (workflow_dir / "multi-pipeline.md").is_file())
-    t.check("first-officer.md exists", fo_path.is_file())
-    t.check("pr-merge mod exists", (workflow_dir / "_mods" / "pr-merge.md").is_file())
+    t.check("plugin first-officer agent exists", fo_path.is_file())
+    t.check("workflow-local pr-merge mod is not generated", not (workflow_dir / "_mods" / "pr-merge.md").exists())
 
     # -- Status script --
     print()
     print("[Status Script]")
-    status_script = workflow_dir / "status"
+    status_script = t.repo_root / "skills" / "commission" / "bin" / "status"
+    status_output = ""
     if status_script.is_file():
-        status_script.chmod(status_script.stat().st_mode | 0o111)
         try:
             status_result = subprocess.run(
-                [str(status_script)], capture_output=True, text=True, cwd=workflow_dir,
+                ["python3", str(status_script), "--workflow-dir", str(workflow_dir)],
+                capture_output=True, text=True, cwd=t.test_project_dir,
             )
             status_output = status_result.stdout + status_result.stderr
         except Exception:
             status_output = ""
 
-        t.check("status script produces output", bool(status_output.strip()))
-        t.check("status output contains header",
+        t.check("plugin-shipped status viewer produces output", bool(status_output.strip()))
+        t.check("plugin status output contains header",
                 bool(re.search(r"STATUS|SCORE", status_output, re.IGNORECASE)))
         row_count = status_output.lower().count("ideation")
         t.check(
-            f"status shows 3 entities in ideation" if row_count >= 3
-            else f"status shows 3 entities in ideation (found {row_count})",
+            f"plugin status shows 3 entities in ideation" if row_count >= 3
+            else f"plugin status shows 3 entities in ideation (found {row_count})",
             row_count >= 3,
         )
     else:
-        t.fail("status script produces output (file missing)")
-        t.fail("status output contains header (file missing)")
-        t.fail("status shows 3 entities in ideation (file missing)")
+        t.fail("plugin-shipped status viewer produces output (file missing)")
+        t.fail("plugin status output contains header (file missing)")
+        t.fail("plugin status shows 3 entities in ideation (file missing)")
 
     # -- Entity frontmatter --
     print()
@@ -169,10 +170,10 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
             "initialPrompt": r"initialPrompt",
         }
         for label, pattern in keyword_checks.items():
-            t.check(f"first-officer contains '{label}'",
+            t.check(f"plugin first-officer contains '{label}'",
                     bool(re.search(pattern, fo_text)))
     else:
-        t.fail("first-officer completeness checks (file missing)")
+        t.fail("plugin first-officer completeness checks (file missing)")
 
     # -- First-officer guardrails --
     print()
@@ -273,24 +274,24 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
                                fo_text, re.IGNORECASE)))
         t.check("first-officer references _archive convention",
                 bool(re.search(r"_archive|archive", fo_text, re.IGNORECASE)))
-        t.check("first-officer discovers mods from _mods/",
-                bool(re.search(r"_mods|mod hook", fo_text, re.IGNORECASE)))
+        t.check("first-officer discovers plugin-shipped mods",
+                bool(re.search(r"mods/\*\.md|plugin-shipped|mod hook", fo_text, re.IGNORECASE)))
 
     # -- PR merge mod --
     print()
     print("[PR Merge Mod]")
-    prm = workflow_dir / "_mods" / "pr-merge.md"
+    prm = t.repo_root / "mods" / "pr-merge.md"
     if prm.is_file():
         prm_text = prm.read_text()
         prm_head10 = "\n".join(prm_text.splitlines()[:10])
-        t.check("pr-merge mod has name in frontmatter",
+        t.check("plugin-shipped pr-merge mod has name in frontmatter",
                 bool(re.search(r"name:.*pr-merge", prm_head10)))
-        t.check("pr-merge mod has startup hook", "## Hook: startup" in prm_text)
-        t.check("pr-merge mod has merge hook", "## Hook: merge" in prm_text)
+        t.check("plugin-shipped pr-merge mod has startup hook", "## Hook: startup" in prm_text)
+        t.check("plugin-shipped pr-merge mod has merge hook", "## Hook: merge" in prm_text)
     else:
-        t.fail("pr-merge mod has name in frontmatter (file missing)")
-        t.fail("pr-merge mod has startup hook (file missing)")
-        t.fail("pr-merge mod has merge hook (file missing)")
+        t.fail("plugin-shipped pr-merge mod has name in frontmatter (file missing)")
+        t.fail("plugin-shipped pr-merge mod has startup hook (file missing)")
+        t.fail("plugin-shipped pr-merge mod has merge hook (file missing)")
 
     # -- No leaked template variables --
     print()
@@ -298,9 +299,6 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
     if workflow_dir.is_dir():
         leaked = []
         for md_file in workflow_dir.rglob("*.md"):
-            # Exclude _mods/ — mod files are copied verbatim and use runtime placeholders
-            if "_mods" in md_file.parts:
-                continue
             text = md_file.read_text()
             for line in text.splitlines():
                 if re.search(r'\{[a-z_]+\}', line) and "${" not in line and "slug" not in line:
@@ -333,14 +331,14 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
             for l in abs_found[:5]:
                 print(f"    Found: {l}")
 
-        # Also check the status script
+        # Also check the plugin-shipped status viewer
         if status_script.is_file():
             status_text = status_script.read_text()
             abs_in_status = [l for l in status_text.splitlines() if abs_pattern.search(l)]
             if not abs_in_status:
-                t.pass_("no absolute paths in status script")
+                t.pass_("no absolute paths in plugin-shipped status viewer")
             else:
-                t.fail("no absolute paths in status script")
+                t.fail("no absolute paths in plugin-shipped status viewer")
                 for l in abs_in_status[:5]:
                     print(f"    Found: {l}")
     else:

@@ -6,7 +6,7 @@ user-invocable: true
 
 # Commission a Plain Text Workflow
 
-You are commissioning a plain text workflow. A plain text workflow is a directory of markdown files with YAML frontmatter, where each file is a work entity that moves through stages. The directory's README is the single source of truth for schema and stages, and a self-describing Python script provides workflow status views.
+You are commissioning a plain text workflow. A plain text workflow is a directory of markdown files with YAML frontmatter, where each file is a work entity that moves through stages. The directory's README is the single source of truth for schema and stages, and the Spacedock plugin provides the plugin-shipped status viewer and plugin-shipped PR merge mod at runtime.
 
 This is a v0 shuttle-mode workflow: an ensign agent handles all stages, with optional mods that inject behavior at lifecycle points (e.g., PR creation at merge time). You will walk {captain} through interactive design, generate all workflow files, then launch a pilot run.
 
@@ -295,7 +295,7 @@ pr:
 View the workflow overview:
 
 ```bash
-{dir}/status
+python3 {spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {dir}
 ```
 
 Output columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
@@ -303,13 +303,13 @@ Output columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
 Include archived {entity_label_plural} with `--archived`:
 
 ```bash
-{dir}/status --archived
+python3 {spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {dir} --archived
 ```
 
 Find dispatchable {entity_label_plural} ready for their next stage:
 
 ```bash
-{dir}/status --next
+python3 {spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {dir} --next
 ```
 
 Find {entity_label_plural} in a specific stage:
@@ -401,6 +401,7 @@ cp "{spacedock_plugin_dir}/mods/pr-merge.md" {dir}/_mods/pr-merge.md
 
 If no stage uses a worktree, skip this step entirely — do not offer pr-merge.
 
+
 ### Generation Checklist
 
 After generating all files, verify before proceeding:
@@ -470,7 +471,7 @@ Process entities following the first-officer event loop. When the workflow reach
 If the pilot run fails (agent errors, YAML gets mangled, dispatch issues):
 
 - Report exactly what happened, including any error messages
-- Show the current state of the workflow (`{dir}/status`)
+- Show the current state of the workflow with `python3 {spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {dir}`
 - Do not retry automatically — let {captain} decide next steps
 
 This is v0. Either it works or we learn why it didn't.

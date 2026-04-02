@@ -105,7 +105,7 @@ def main():
     print("[Rejection Flow Behavior]")
 
     # Check 1: FO dispatched an ensign for the validation stage
-    ensign_calls = [c for c in agent_calls if c["subagent_type"] == "ensign"]
+    ensign_calls = [c for c in agent_calls if c["subagent_type"] == "spacedock:ensign"]
     t.check("FO dispatched an ensign for validation stage", len(ensign_calls) > 0)
 
     # Check 2: The reviewer's stage report contains a REJECTED recommendation

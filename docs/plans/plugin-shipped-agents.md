@@ -1,7 +1,7 @@
 ---
 id: 076
 title: Ship agents with plugin and add eject skill for local pinning
-status: implementation
+status: validation
 source: CL — architectural discussion 2026-03-29
 started: 2026-03-29T21:30:00Z
 completed:

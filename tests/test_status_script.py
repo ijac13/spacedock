@@ -8,7 +8,7 @@ import textwrap
 import unittest
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-TEMPLATE_PATH = os.path.join(SCRIPT_DIR, '..', 'templates', 'status')
+TEMPLATE_PATH = os.path.join(SCRIPT_DIR, '..', 'skills', 'commission', 'bin', 'status')
 
 
 def build_status_script(tmpdir):
@@ -134,6 +134,19 @@ class TestDefaultStatus(unittest.TestCase):
             self.assertIn('TITLE', lines[0])
             self.assertIn('SCORE', lines[0])
             self.assertIn('SOURCE', lines[0])
+
+    def test_plugin_mode_uses_explicit_workflow_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'feature-a.md': entity('001', 'Feature A', 'backlog', '0.80', 'user'),
+            })
+            result = subprocess.run(
+                ['python3', self.script_path, '--workflow-dir', tmpdir],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('feature-a', result.stdout)
 
     def test_sort_order_stage_then_score(self):
         """Entities sorted by stage order ascending, then score descending."""

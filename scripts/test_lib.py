@@ -369,12 +369,12 @@ def run_first_officer(
     extra_args: list[str] | None = None,
     log_name: str = "fo-log.jsonl",
 ) -> int:
-    """Run claude -p --agent first-officer with plugin-dir for reference file access."""
+    """Run claude -p --plugin-dir ... --agent spacedock:first-officer. Returns exit code."""
     log_path = runner.log_dir / log_name
     cmd = [
         "claude", "-p", prompt,
-        "--agent", "first-officer",
         "--plugin-dir", str(runner.repo_root),
+        "--agent", "spacedock:first-officer",
         "--permission-mode", "bypassPermissions",
         "--verbose",
         "--output-format", "stream-json",

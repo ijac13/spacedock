@@ -93,7 +93,7 @@ ls v0-test-1/README.md \
    v0-test-1/full-cycle-test.md \
    v0-test-1/refit-command.md \
    v0-test-1/multi-pipeline.md \
-   .claude/agents/first-officer.md
+   $REPO_ROOT/agents/first-officer.md
 ```
 
 All six files must exist.
@@ -137,7 +137,7 @@ Each stage section must have specific, mission-relevant content in its Inputs, O
 ### First-officer agent completeness
 
 ```bash
-grep -c "^##\|^###" .claude/agents/first-officer.md
+grep -c "^##\|^###" "$REPO_ROOT/agents/first-officer.md"
 ```
 
 Open the file and verify these sections are present:
@@ -153,11 +153,11 @@ Open the file and verify these sections are present:
 ### First-officer guardrails
 
 ```bash
-grep -c "MUST use the Agent tool" .claude/agents/first-officer.md
-grep -c "NEVER use.*subagent_type.*first-officer" .claude/agents/first-officer.md
-grep -c "TeamCreate" .claude/agents/first-officer.md
-grep -c "Report workflow state ONCE\|Report.*ONCE" .claude/agents/first-officer.md
-grep -cE "NEVER self-approve|NOT treat ensign.*messages as approval" .claude/agents/first-officer.md
+grep -c "MUST use the Agent tool" "$REPO_ROOT/agents/first-officer.md"
+grep -c "NEVER use.*subagent_type.*first-officer" "$REPO_ROOT/agents/first-officer.md"
+grep -c "TeamCreate" "$REPO_ROOT/agents/first-officer.md"
+grep -c "Report workflow state ONCE\|Report.*ONCE" "$REPO_ROOT/agents/first-officer.md"
+grep -cE "NEVER self-approve|NOT treat ensign.*messages as approval" "$REPO_ROOT/agents/first-officer.md"
 ```
 
 All five must return at least 1. These guardrails prevent known dispatch bugs:
@@ -290,7 +290,8 @@ git add -A && git commit -m "commission: initial workflow"
 cd "$TEST_DIR/test-project"
 
 claude -p "Process all entities through the workflow." \
-  --agent first-officer \
+  --plugin-dir "$REPO_ROOT" \
+  --agent spacedock:first-officer \
   --permission-mode bypassPermissions \
   --verbose --output-format stream-json \
   --max-budget-usd 2.00 \
@@ -298,7 +299,7 @@ claude -p "Process all entities through the workflow." \
 ```
 
 Flag reference:
-- `--agent first-officer` — loads the generated `.claude/agents/first-officer.md`
+- `--plugin-dir "$REPO_ROOT" --agent spacedock:first-officer` — loads the plugin-shipped `agents/first-officer.md`
 - `--max-budget-usd 2.00` — safety cap to prevent runaway spending
 - `--permission-mode bypassPermissions` — the first officer needs to create files, run bash, and use Agent/TeamCreate without prompts
 

@@ -2,14 +2,14 @@
 
 Spacedock turns directories of markdown files into structured workflows operated by AI agents. Each file is a work item that moves through defined stages. An AI first officer manages the workflow: dispatching subagents, isolating work in git worktrees, and pausing at approval gates for human review.
 
-Install it as a Claude Code plugin. Run `/spacedock:commission` to design a workflow, and `claude --agent first-officer` to run it. Experimental support for other coding agents.
+Install it as a Claude Code plugin. Run `/spacedock:commission` to design a workflow, and `claude --agent spacedock:first-officer` to run it. Experimental support for other coding agents.
 
 ## Why Plain Text Workflows?
 
 - **Agent-native** -- AI agents can read, write, and run markdown workflows without adapters or APIs
 - **Flexible yet enforceable** -- define stages, transitions, and quality criteria declaratively; the first officer enforces them at runtime
 - **Declarative human-in-the-loop** -- approval gates pause the workflow for human review at defined stage boundaries
-- **Self-contained** -- Spacedock is not required for running the provisioned workflow; the generated files and agent are standalone
+- **Plain text workflow data** -- workflow state lives in markdown; the installed Spacedock plugin supplies the runtime agents and status tooling
 - **Composable** -- support multiple interconnected workflows (experimental)
 
 *"I am the master of my fate, I am the captain of my soul."* -- William Ernest Henley, *Invictus*
@@ -24,8 +24,8 @@ You are the **captain**. You define the mission, commission the ship, and make t
 | **Work item** | A markdown file with YAML frontmatter, tracked as an entity in the schema |
 | **Workflow** | A directory of work items with a README defining stages and schema |
 | **Stages** | Ordered statuses a work item moves through, with optional approval gates for human review |
-| **First officer** | A generated AI agent that reads workflow state, dispatches ensigns, and reports to you at gates |
-| **Ensign** | A worker agent dispatched by the first officer to do the actual stage work |
+| **First officer** | The plugin-shipped `spacedock:first-officer` agent that reads workflow state, dispatches ensigns, and reports to you at gates |
+| **Ensign** | The plugin-shipped `spacedock:ensign` worker agent dispatched by the first officer to do the actual stage work |
 
 ## Quick Start
 
@@ -55,7 +55,7 @@ The commission skill helps you design the workflow interactively: defining your 
 To run the workflow:
 
 ```
-claude --agent first-officer
+claude --agent spacedock:first-officer
 ```
 
 ### Local Development
@@ -76,9 +76,9 @@ At approval gates, the first officer pauses and presents the ensign's work for y
 ## What Gets Generated
 
 - **`{dir}/README.md`** -- workflow schema, stage definitions, and entity template
-- **`{dir}/status`** -- bash script showing a one-line-per-work-item overview
 - **`{dir}/*.md`** -- seed work item files
-- **`.claude/agents/first-officer.md`** -- AI agent that orchestrates the workflow
+- **`agents/first-officer.md`** -- plugin-shipped AI agent that orchestrates the workflow
+- **`skills/commission/bin/status`** -- plugin-shipped status viewer used against the workflow directory
 
 The README is the single source of truth. The first officer reads it to know what stages exist, what quality criteria to enforce, and when to pause for your review.
 

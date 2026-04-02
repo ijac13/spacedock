@@ -36,7 +36,7 @@ Based on analysis of Codex CLI v0.110.0 (binary inspection + CLI help).
 | Project instructions | `.claude/CLAUDE.md` | `AGENTS.md` (any directory; scoped to directory tree) |
 | Agent definitions | `.claude/agents/*.md` | No equivalent. Use `AGENTS.md` or pass instructions via prompt. |
 | User config | `.claude/settings.json` | `~/.codex/config.toml` |
-| Invocation with instructions | `claude --agent first-officer` | `codex -C <dir> "prompt..."` or `codex exec "prompt..."` |
+| Invocation with instructions | `claude --agent spacedock:first-officer` | `codex -C <dir> "prompt..."` or `codex exec "prompt..."` |
 | Config overrides | N/A | `-c key=value` flag (TOML values) |
 | Developer instructions | CLAUDE.md | `developer_instructions` in config.toml or `model_instructions_file` |
 
@@ -142,7 +142,7 @@ After processing all ready entities, run `bash {dir}/status` one final time and 
 | Worktree isolation | Each ensign gets its own git worktree | Works on current branch (no worktree needed for sequential work) |
 | Completion signaling | `SendMessage(to="team-lead", ...)` | Direct output to user |
 | Approval gates | First-officer asks captain, relays to ensign | Operator asks user directly |
-| Instruction loading | `.claude/agents/first-officer.md` | Prompt passed via CLI argument or `AGENTS.md` |
+| Instruction loading | `agents/first-officer.md` (plugin) | Prompt passed via CLI argument or `AGENTS.md` |
 
 ## Experimental Multi-Agent Mode
 
