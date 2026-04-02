@@ -12,8 +12,158 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 from datetime import datetime
 from pathlib import Path
+
+
+def _codex_skill_namespace_root(home_dir: Path) -> Path:
+    return home_dir / ".agents" / "skills" / "spacedock"
+
+
+def prepare_codex_skill_home(test_root: Path, repo_root: Path) -> Path:
+    """Create an isolated HOME that exposes the current repo as the spacedock Codex skill namespace."""
+    home_dir = test_root / "codex-home"
+    namespace_root = _codex_skill_namespace_root(home_dir)
+    namespace_root.mkdir(parents=True, exist_ok=True)
+
+    skills_root = repo_root / "skills"
+    for skill_dir in sorted(skills_root.iterdir()):
+        if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").is_file():
+            continue
+        link_path = namespace_root / skill_dir.name
+        if link_path.exists() or link_path.is_symlink():
+            link_path.unlink()
+        link_path.symlink_to(skill_dir, target_is_directory=True)
+
+    for name, target in {
+        "skills": skills_root,
+        "agents": repo_root / "agents",
+        "scripts": repo_root / "scripts",
+        "references": repo_root / "references",
+    }.items():
+        link_path = namespace_root / name
+        if link_path.exists() or link_path.is_symlink():
+            link_path.unlink()
+        link_path.symlink_to(target, target_is_directory=True)
+
+    real_codex_home = Path(os.path.expanduser("~")) / ".codex"
+    codex_home_link = home_dir / ".codex"
+    if codex_home_link.exists() or codex_home_link.is_symlink():
+        codex_home_link.unlink()
+    codex_home_link.symlink_to(real_codex_home, target_is_directory=True)
+
+    return home_dir
+
+
+def resolve_codex_worker(agent_id: str, repo_root: Path | None = None) -> dict[str, object]:
+    """Resolve a logical Codex worker id to a packaged asset and safe worker key."""
+    if repo_root is None:
+        repo_root = Path(__file__).resolve().parent.parent
+
+    if not agent_id:
+        raise ValueError("Codex worker id must not be empty")
+
+    if agent_id.startswith("spacedock:"):
+        agent_name = agent_id.split(":", 1)[1]
+        asset_path = repo_root / "agents" / f"{agent_name}.md"
+        if not asset_path.is_file():
+            raise ValueError(f"Unknown Codex worker id: {agent_id}")
+        return {
+            "dispatch_agent_id": agent_id,
+            "worker_key": re.sub(r"[^A-Za-z0-9._-]", "-", agent_id),
+            "asset_kind": "agent",
+            "asset_path": asset_path,
+        }
+
+    worker_key = re.sub(r"[^A-Za-z0-9._-]", "-", agent_id)
+    return {
+        "dispatch_agent_id": agent_id,
+        "worker_key": worker_key,
+        "asset_kind": "prompt",
+        "asset_name": "generic-worker",
+    }
+
+
+def build_codex_first_officer_invocation_prompt(
+    workflow_dir: str | Path,
+    run_goal: str | None = None,
+) -> str:
+    workflow_dir = Path(workflow_dir)
+    extra_goal = ""
+    if run_goal:
+        extra_goal = f"\n{run_goal.strip()}\n"
+    return textwrap.dedent(
+        f"""
+        Use the `spacedock:first-officer` skill to manage the workflow at `{workflow_dir}`.
+
+        Treat that path as the explicit workflow target. Do not ask to discover alternatives.
+        Stay tightly bounded to the requested goal.
+        Let the skill bootstrap the packaged first-officer agent asset and follow that agent directly.
+        For bounded single-entity dispatches, prefer the helper at `~/.agents/skills/spacedock/scripts/codex_prepare_dispatch.py`
+        instead of manually editing frontmatter, composing worktree names, or building the worker assignment by hand.
+        Any worker you spawn in this run MUST use `fork_context=false` with a fully self-contained prompt.
+        Do not load reference docs unless you hit a real blocker.
+        Do not reread your own skill files, inspect packaged worker agent assets before dispatch requires them, or open the `status` script source unless a blocker requires it.
+        Run the workflow `status` script directly or with `python3` if needed. Never invoke it with `zsh`.
+        Do not narrate setup beyond what is needed to report a blocker or final outcome.
+        Once you have enough context to dispatch the first worker, dispatch immediately.
+        Stop immediately once the requested bounded outcome is satisfied and send one final response.
+        {extra_goal}
+        """
+    ).strip()
+
+
+def build_codex_worker_bootstrap_prompt(
+    resolved_worker: dict[str, object],
+    workflow_dir: Path,
+    entity_path: Path,
+    stage_name: str,
+    stage_definition_text: str,
+    worktree_path: Path | None,
+    checklist: list[str],
+) -> str:
+    if resolved_worker["asset_kind"] == "agent":
+        lines = [
+            f"You are the packaged worker `{resolved_worker['dispatch_agent_id']}`.",
+            "Resolve your role definition before doing anything else.",
+            "For packaged ids of the form `namespace:name`, read `~/.agents/skills/{namespace}/agents/{name}.md` first and follow it for this task.",
+            "After resolving the role, continue with the assignment below.",
+            "",
+            "Assignment:",
+            f"dispatch_agent_id: {resolved_worker['dispatch_agent_id']}",
+            f"worker_key: {resolved_worker['worker_key']}",
+            f"role_asset_kind: {resolved_worker['asset_kind']}",
+            f"role_asset_name: {Path(str(resolved_worker['asset_path'])).stem}",
+            f"workflow_dir: {workflow_dir}",
+            f"entity_path: {entity_path}",
+            f"stage_name: {stage_name}",
+            "stage_definition_text:",
+            stage_definition_text,
+        ]
+    else:
+        lines = [
+            "You are a generic worker handling one entity for one stage.",
+            "Operate directly from the assignment below.",
+            "Do not modify YAML frontmatter in entity files.",
+            "Do not take over first-officer responsibilities.",
+            "",
+            "Assignment:",
+            f"dispatch_agent_id: {resolved_worker['dispatch_agent_id']}",
+            f"worker_key: {resolved_worker['worker_key']}",
+            f"role_asset_kind: {resolved_worker['asset_kind']}",
+            f"role_asset_name: {resolved_worker['asset_name']}",
+            f"workflow_dir: {workflow_dir}",
+            f"entity_path: {entity_path}",
+            f"stage_name: {stage_name}",
+            "stage_definition_text:",
+            stage_definition_text,
+        ]
+    if worktree_path is not None:
+        lines.append(f"worktree_path: {worktree_path}")
+    if checklist:
+        lines.extend(["checklist:"] + [f"- {item}" for item in checklist])
+    return "\n".join(lines)
 
 
 def _clean_env() -> dict[str, str]:
@@ -218,6 +368,64 @@ def run_first_officer(
     return result.returncode
 
 
+def run_codex_first_officer(
+    runner: TestRunner,
+    workflow_dir: str,
+    run_goal: str | None = None,
+    extra_args: list[str] | None = None,
+    log_name: str = "codex-fo-log.txt",
+    timeout_s: int = 120,
+) -> int:
+    """Run the Codex first-officer skill via codex exec. Returns exit code."""
+    log_path = runner.log_dir / log_name
+    workflow_path = (runner.test_project_dir / workflow_dir).resolve()
+    prompt = build_codex_first_officer_invocation_prompt(workflow_path, run_goal=run_goal)
+    (runner.log_dir / "codex-fo-invocation.txt").write_text(prompt + "\n")
+
+    skill_home = prepare_codex_skill_home(runner.test_dir, runner.repo_root)
+    env = os.environ.copy()
+    env["HOME"] = str(skill_home)
+    env["CODEX_HOME"] = str(skill_home / ".codex")
+
+    cmd = [
+        "codex",
+        "exec",
+        "--json",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "--enable",
+        "multi_agent",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "-C",
+        str(runner.test_project_dir),
+    ]
+    if extra_args:
+        cmd.extend(extra_args)
+    cmd.append("-")
+
+    with open(log_path, "w") as log_file:
+        try:
+            result = subprocess.run(
+                cmd,
+                input=prompt,
+                text=True,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                cwd=runner.test_project_dir,
+                timeout=timeout_s,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            print(f"\n  TIMEOUT: codex first officer exceeded {timeout_s}s limit")
+            return 124
+
+    print()
+    if result.returncode != 0:
+        print(f"WARNING: codex first officer exited with code {result.returncode}")
+
+    return result.returncode
+
+
 class LogParser:
     """Parses a stream-json JSONL log file from claude."""
 
@@ -311,6 +519,79 @@ class LogParser:
         """Write the agent prompt to a file."""
         with open(output_path, "w") as f:
             f.write(self.agent_prompt())
+
+
+class CodexLogParser:
+    """Parses a mixed JSONL/plain-text log file from `codex exec --json`."""
+
+    def __init__(self, log_path: Path | str):
+        self.log_path = Path(log_path)
+        self._raw_lines: list[str] | None = None
+        self._json_entries: list[dict] | None = None
+
+    @property
+    def raw_lines(self) -> list[str]:
+        if self._raw_lines is None:
+            self._raw_lines = self.log_path.read_text().splitlines() if self.log_path.exists() else []
+        return self._raw_lines
+
+    @property
+    def json_entries(self) -> list[dict]:
+        if self._json_entries is None:
+            entries: list[dict] = []
+            for line in self.raw_lines:
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+            self._json_entries = entries
+        return self._json_entries
+
+    def full_text(self) -> str:
+        texts = list(self.raw_lines)
+        for entry in self.json_entries:
+            item = entry.get("item", {})
+            if isinstance(item, dict):
+                text = item.get("text")
+                if text:
+                    texts.append(text)
+        return "\n".join(texts)
+
+    def spawn_count(self) -> int:
+        count = 0
+        for entry in self.json_entries:
+            item = entry.get("item", {})
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") != "collab_tool_call":
+                continue
+            if item.get("tool") in {"spawn", "spawn_agent"}:
+                count += 1
+        return count
+
+    def completed_agent_messages(self) -> list[str]:
+        messages: list[str] = []
+        for entry in self.json_entries:
+            item = entry.get("item", {})
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") != "collab_tool_call":
+                continue
+            if item.get("tool") != "wait":
+                continue
+            states = item.get("agents_states", {})
+            if not isinstance(states, dict):
+                continue
+            for state in states.values():
+                if not isinstance(state, dict):
+                    continue
+                if state.get("status") == "completed" and state.get("message"):
+                    messages.append(str(state["message"]))
+        return messages
+
+    def write_text(self, output_path: Path | str):
+        with open(output_path, "w") as f:
+            f.write(self.full_text())
 
 
 def extract_stats(log_path: Path | str, phase_name: str, output_dir: Path | str) -> dict:
