@@ -34,3 +34,11 @@ Proceed? (y/n)
 2. **`skills/refit/SKILL.md` line 218** — Replace with: `Proceed with migration? (y/n)`
 
 The other 7 confirmation prompts in refit are fine — they all name the action explicitly (replace agent?, create agent?, apply migration?, etc.).
+
+## Stage Report: implementation
+
+1. Commission SKILL.md line 141 updated — DONE. Replaced `Modify anything above, or confirm to generate. (y/n/changes)` with `Accept this design, or tell me what to change.`
+2. Refit SKILL.md line 67 updated — DONE. Replaced bare `> Proceed?` with `> Proceed with this upgrade plan? (y/n)`
+3. Refit SKILL.md line 150 updated — DONE. Replaced generic `> Proceed? (y/n)` with `> Proceed with pr-lieutenant migration? (y/n)`
+4. Grep verification passes — DONE. All old strings absent, all new strings present (6/6 assertions passed).
+5. Changes committed on ensign/clarify-confirmation-prompts branch — DONE. Commit 7f969e5.
