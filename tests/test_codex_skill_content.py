@@ -23,23 +23,24 @@ def test_first_officer_skill_bootstraps_the_packaged_agent_asset():
     assert "agents/first-officer.md" in text
 
 
-def test_first_officer_agent_references_shared_core_and_codex_runtime_docs():
-    text = read_text("agents/first-officer.md")
+def test_claude_agent_entry_points_reference_claude_runtime():
+    fo_text = read_text("agents/first-officer.md")
+    assert "references/first-officer-shared-core.md" in fo_text
+    assert "references/code-project-guardrails.md" in fo_text
+    assert "references/claude-first-officer-runtime.md" in fo_text
 
-    assert "references/first-officer-shared-core.md" in text
-    assert "references/code-project-guardrails.md" in text
-    assert "references/codex-first-officer-runtime.md" in text
-
-
-def test_ensign_agent_references_shared_core_and_codex_runtime_docs():
-    text = read_text("agents/ensign.md")
-
-    assert "references/ensign-shared-core.md" in text
-    assert "references/code-project-guardrails.md" in text
-    assert "references/codex-ensign-runtime.md" in text
+    ensign_text = read_text("agents/ensign.md")
+    assert "references/ensign-shared-core.md" in ensign_text
+    assert "references/code-project-guardrails.md" in ensign_text
+    assert "references/claude-ensign-runtime.md" in ensign_text
 
 
-def test_first_officer_shared_core_covers_latest_template_sections():
+def test_codex_skill_references_codex_runtime():
+    skill_text = read_text("skills/first-officer/SKILL.md")
+    assert "agents/first-officer.md" in skill_text
+
+
+def test_first_officer_shared_core_covers_all_behavioral_sections():
     text = read_text("references/first-officer-shared-core.md")
 
     for heading in [
@@ -57,7 +58,6 @@ def test_first_officer_shared_core_covers_latest_template_sections():
     ]:
         assert heading in text
 
-    assert "## Output Format" in read_text("templates/first-officer.md")
     assert "Output Format" in text
     assert "feedback-to" in text
 

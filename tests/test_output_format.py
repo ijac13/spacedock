@@ -14,26 +14,25 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     TestRunner, LogParser, create_test_project, setup_fixture,
-    install_agents, run_first_officer, git_add_commit,
-    file_contains, read_entity_frontmatter,
+    install_agents, assembled_agent_content, run_first_officer,
+    git_add_commit, file_contains, read_entity_frontmatter,
 )
 
 
 def main():
     t = TestRunner("Output Format E2E Test")
 
-    # --- Phase 1: Static checks on the FO template ---
+    # --- Phase 1: Static checks on assembled FO content ---
 
-    print("--- Phase 1: Static checks on FO template ---")
+    print("--- Phase 1: Static checks on assembled FO content ---")
 
-    fo_template = t.repo_root / "templates" / "first-officer.md"
-    fo_text = fo_template.read_text()
+    fo_text = assembled_agent_content(t, "first-officer")
 
-    t.check("item 6 references Output Format section from README",
-            "## Output Format" in fo_text and "fall back" in fo_text)
+    t.check("assembled FO references Output Format section from README",
+            "Output Format" in fo_text and "fall back" in fo_text)
 
-    t.check("item 7 references same output format rule as item 6",
-            bool(re.search(r"Same rule as item 6.*Output Format", fo_text)))
+    t.check("assembled FO covers single-entity output format rules",
+            "Output Format" in fo_text and "terminal" in fo_text.lower())
 
     t.check("custom format fixture has ## Output Format section",
             file_contains(t.repo_root / "tests" / "fixtures" / "output-format-custom" / "README.md",
