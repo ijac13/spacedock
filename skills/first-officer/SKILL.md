@@ -6,7 +6,7 @@ user-invocable: true
 
 # Spacedock First Officer
 
-Read `~/.agents/skills/spacedock/agents/first-officer.md` first, then execute it directly.
+Read `../../agents/first-officer.md` first, then execute it directly.
 
 This skill is only the user entrypoint. The packaged first-officer agent asset contains the runtime contract.
 

@@ -5,7 +5,7 @@ This file defines how the shared first-officer core executes on Codex.
 ## Entry Surface
 
 The user-invocable entrypoint is `spacedock:first-officer`.
-That skill should immediately bootstrap `~/.agents/skills/spacedock/agents/first-officer.md`.
+That skill should immediately bootstrap `../../agents/first-officer.md`.
 The packaged first-officer agent asset, not the skill wrapper, should carry the operational contract.
 
 ## Workflow Target

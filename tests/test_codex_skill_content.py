@@ -20,7 +20,7 @@ def read_text(path: str) -> str:
 def test_first_officer_skill_bootstraps_the_packaged_agent_asset():
     text = read_text("skills/first-officer/SKILL.md")
 
-    assert "agents/first-officer.md" in text
+    assert "../../agents/first-officer.md" in text
 
 
 def test_claude_agent_entry_points_reference_claude_runtime():
@@ -37,7 +37,7 @@ def test_claude_agent_entry_points_reference_claude_runtime():
 
 def test_codex_skill_references_codex_runtime():
     skill_text = read_text("skills/first-officer/SKILL.md")
-    assert "agents/first-officer.md" in skill_text
+    assert "../../agents/first-officer.md" in skill_text
 
 
 def test_first_officer_shared_core_covers_all_behavioral_sections():
