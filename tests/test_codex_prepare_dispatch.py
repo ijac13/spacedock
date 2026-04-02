@@ -49,6 +49,8 @@ def test_prepare_dispatch_creates_validation_worktree_and_payload():
     assert "spacedock-ensign-buggy-add-task-validation" in payload["worktree_path"]
     assert "fork_context=false" not in payload["spawn_message"]
     assert "~/.agents/skills/{namespace}/agents/{name}.md" in payload["spawn_message"]
+    assert "Completion rule:" in payload["spawn_message"]
+    assert "stop immediately" in payload["spawn_message"]
 
     entity_text = (workflow_dir / "buggy-add-task.md").read_text()
     assert "status: validation" in entity_text

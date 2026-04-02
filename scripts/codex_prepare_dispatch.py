@@ -203,6 +203,14 @@ def build_worker_prompt(payload: dict[str, object]) -> str:
             "checklist:",
         ]
     lines.extend(f"- {item}" for item in checklist)
+    lines.extend(
+        [
+            "",
+            "Completion rule:",
+            "After you finish the assignment, write the stage report, commit your work, return one concise final response, and stop immediately.",
+            "Do not continue exploring the repo, do not wait for follow-up instructions, and do not start another task after that final response.",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -213,11 +221,13 @@ def main() -> int:
     parser.add_argument("--repo-root")
     args = parser.parse_args()
 
-    repo_root = Path(args.repo_root) if args.repo_root else Path(git_output(Path.cwd(), "rev-parse", "--show-toplevel"))
+    repo_root = (Path(args.repo_root) if args.repo_root else Path(git_output(Path.cwd(), "rev-parse", "--show-toplevel"))).resolve()
     namespace_root = Path(__file__).resolve().parent.parent
     workflow_dir = Path(args.workflow_dir)
     if not workflow_dir.is_absolute():
         workflow_dir = (repo_root / workflow_dir).resolve()
+    else:
+        workflow_dir = workflow_dir.resolve()
     readme_path = workflow_dir / "README.md"
     entity_path = workflow_dir / f"{args.entity_slug}.md"
     readme_text = read_text(readme_path)
