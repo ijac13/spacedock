@@ -172,19 +172,11 @@ This version will be embedded in each generated scaffolding file.
 
 ### Generate Files
 
-Create the workflow directory and generate four kinds of files. Use the design answers to fill all templates — no placeholder text should remain in generated files.
+Create the workflow directory and generate the workflow files. Use the design answers to fill all templates — no placeholder text should remain in generated files.
 
 ```
 mkdir -p {dir}
 ```
-
-Also ensure the agents directory exists at the project root:
-
-```
-mkdir -p {project_root}/.claude/agents
-```
-
-Where `{project_root}` is the git root (or cwd if not in a git repo). The first-officer lives at the project root so it's discoverable when Claude runs from there.
 
 Also ensure `.worktrees/` is in the project's `.gitignore` (worktrees should never be committed):
 
@@ -390,32 +382,7 @@ pr:
 {Description/thesis from {captain}'s seed input.}
 ```
 
-### 2d. Generate First-Officer Agent
-
-Copy the first-officer agent template to `{project_root}/.claude/agents/first-officer.md`.
-
-**IMPORTANT: Use Bash to write this file, NOT the Write tool.** The Write tool is often blocked for `.claude/` paths.
-
-The template is static — no substitution needed. Copy it verbatim.
-
-```bash
-mkdir -p {project_root}/.claude/agents
-cp "{spacedock_plugin_dir}/templates/first-officer.md" {project_root}/.claude/agents/first-officer.md
-```
-
-### 2e. Generate Ensign Agent
-
-Copy the ensign agent template to `{project_root}/.claude/agents/ensign.md`.
-
-**IMPORTANT: Use Bash to write this file, NOT the Write tool.** The Write tool is often blocked for `.claude/` paths.
-
-The template is static — no substitution needed. Copy it verbatim.
-
-```bash
-cp "{spacedock_plugin_dir}/templates/ensign.md" {project_root}/.claude/agents/ensign.md
-```
-
-### 2f. Install Mods (conditional)
+### 2d. Install Mods (conditional)
 
 Check the README frontmatter for any stages with `worktree: true`. If at least one stage uses a worktree, offer the pr-merge mod:
 
@@ -441,8 +408,6 @@ After generating all files, verify before proceeding:
 - [ ] `{dir}/README.md` exists with mission, schema, all stage definitions, and {entity_label} template
 - [ ] `{dir}/status` exists and is executable
 - [ ] Each seed entity file exists at `{dir}/{slug}.md` with valid YAML frontmatter
-- [ ] `{project_root}/.claude/agents/first-officer.md` exists with all sections
-- [ ] `{project_root}/.claude/agents/ensign.md` exists with all sections
 - [ ] `{dir}/_mods/pr-merge.md` exists (only if a worktree stage exists and pr-merge was accepted)
 - [ ] `.worktrees/` is in `{project_root}/.gitignore`
 
@@ -469,14 +434,16 @@ Tell {captain} what was generated:
 > - `{dir}/README.md` — workflow schema and stage definitions
 > - `{dir}/status` — workflow status viewer
 > - {for each seed entity: "`{dir}/{slug}.md` — {title}"}
-> - `{project_root}/.claude/agents/first-officer.md` — workflow orchestrator
-> - `{project_root}/.claude/agents/ensign.md` — stage worker agent
 > - {if pr-merge mod was installed: "`{dir}/_mods/pr-merge.md` — PR merge mod"}
+>
+> Agents are shipped with the Spacedock plugin — no local agent files needed:
+> - `spacedock:first-officer` — workflow orchestrator
+> - `spacedock:ensign` — stage worker agent
 >
 > To run this workflow in future sessions, start Claude Code with:
 >
 > ```
-> claude --agent first-officer
+> claude --agent spacedock:first-officer
 > ```
 >
 > Starting the initial run now...
@@ -485,8 +452,8 @@ Tell {captain} what was generated:
 
 Do not spawn a subagent. Instead, the commission skill itself takes on the first-officer role for the initial run:
 
-1. Read the generated first-officer agent file at `{project_root}/.claude/agents/first-officer.md`.
-2. Follow its instructions: read the workflow README, run the status script, and dispatch agents for entities ready to advance.
+1. Read the first-officer agent file at `{spacedock_plugin_dir}/agents/first-officer.md`.
+2. Follow its instructions: read the reference files (shared core, guardrails, Claude runtime), then read the workflow README, run the status script, and dispatch agents for entities ready to advance.
 
 Execute the first-officer startup procedure directly. You are now the first officer for the remainder of this session.
 
@@ -515,7 +482,7 @@ After Step 3 or Step 4 (whether the pilot run succeeded or failed), always concl
 > **What's next?** To continue working this workflow in a future session, start Claude Code with:
 >
 > ```
-> claude --agent first-officer
+> claude --agent spacedock:first-officer
 > ```
 >
 > The first officer will read the workflow state, pick up where things left off, and dispatch agents for any entities ready for their next stage.
