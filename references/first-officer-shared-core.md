@@ -1,6 +1,6 @@
 # First Officer Shared Core
 
-This file captures the shared first-officer semantics derived from the current Spacedock template. Keep it aligned with `templates/first-officer.md`.
+This file captures the shared first-officer semantics. Keep it aligned with `agents/first-officer.md` and `references/claude-first-officer-runtime.md`.
 
 ## Startup
 

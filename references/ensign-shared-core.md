@@ -1,6 +1,6 @@
 # Ensign Shared Core
 
-This file captures the shared ensign semantics derived from the current Spacedock template. Keep it aligned with `templates/ensign.md`.
+This file captures the shared ensign semantics. Keep it aligned with `agents/ensign.md` and `references/claude-ensign-runtime.md`.
 
 ## Assignment
 
