@@ -8,6 +8,7 @@ completed:
 verdict:
 score: 0.85
 worktree: .worktrees/ensign-plugin-shipped-agents
+pr: "#26"
 ---
 
 Ship first-officer and ensign as plugin-level agents (`spacedock:first-officer`, `spacedock:ensign`) instead of generating them per-project via commission. Add an eject/pin skill for users who want version stability.
