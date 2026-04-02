@@ -827,6 +827,70 @@ def rejection_follow_up_observed(
     return False
 
 
+def check_merge_outcome(
+    runner: TestRunner,
+    project_dir: Path,
+    workflow_dir: str,
+    entity_slug: str,
+    branch_name: str,
+    hook_expected: bool,
+    archive_required: bool,
+) -> None:
+    """Assert merge-hook/local-merge outcomes for one terminal entity."""
+    workflow_path = project_dir / workflow_dir
+    hook_file = workflow_path / "_merge-hook-fired.txt"
+    archive_file = workflow_path / "_archive" / f"{entity_slug}.md"
+    entity_file = workflow_path / f"{entity_slug}.md"
+    worktree_dir = project_dir / ".spacedock" / "worktrees" / branch_name
+
+    if hook_expected:
+        runner.check("merge hook fired marker exists", hook_file.is_file())
+        if hook_file.is_file():
+            runner.check("merge hook fired marker contains entity slug", entity_slug in hook_file.read_text())
+    else:
+        runner.check("no merge hook marker exists in no-mods run", not hook_file.exists())
+
+    if archive_required:
+        if hook_expected:
+            runner.check("entity archived after merge hook run", archive_file.is_file())
+        else:
+            runner.check("entity archived via no-mods fallback", archive_file.is_file())
+    elif archive_file.is_file():
+        if hook_expected:
+            runner.pass_("entity was archived (merge completed after hook)")
+        else:
+            runner.pass_("entity was archived via local merge (no-mods fallback works)")
+    elif entity_file.is_file():
+        fm = read_entity_frontmatter(entity_file)
+        status_val = fm.get("status", "?")
+        if hook_expected:
+            print(f"  SKIP: entity not archived (status: {status_val}) — FO may not have completed the full cycle within budget")
+        else:
+            print(f"  SKIP: entity not archived (status: {status_val}) — FO may not have completed the full cycle within budget")
+    else:
+        if hook_expected:
+            runner.fail("entity was archived (entity file not found in either location)")
+        else:
+            runner.fail("entity was archived via local merge (entity file not found)")
+
+    if hook_expected:
+        runner.check("worktree cleaned up after merge hook run", not worktree_dir.exists())
+    else:
+        runner.check("worktree cleaned up after no-mods fallback", not worktree_dir.exists())
+
+    branches = subprocess.run(
+        ["git", "branch", "--list", branch_name],
+        capture_output=True,
+        text=True,
+        cwd=project_dir,
+        check=True,
+    ).stdout.strip()
+    if hook_expected:
+        runner.check("temporary branch cleaned up after merge hook run", branches == "")
+    else:
+        runner.check("temporary branch cleaned up after no-mods fallback", branches == "")
+
+
 def file_contains(path: Path | str, pattern: str, case_insensitive: bool = False) -> bool:
     """Check if a file contains a regex pattern."""
     text = Path(path).read_text()

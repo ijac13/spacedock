@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     TestRunner, LogParser, create_test_project, setup_fixture,
-    install_agents, run_first_officer, git_add_commit, read_entity_frontmatter,
+    check_merge_outcome, install_agents, run_first_officer, git_add_commit,
 )
 
 
@@ -68,30 +68,15 @@ def main():
     print()
     print("[Merge Hook Execution]")
 
-    hook_file = with_hook_project / "merge-hook-pipeline" / "_merge-hook-fired.txt"
-    if hook_file.is_file():
-        t.pass_("_merge-hook-fired.txt exists")
-        hook_content = hook_file.read_text()
-        if "merge-hook-entity" in hook_content:
-            t.pass_("_merge-hook-fired.txt contains entity slug")
-        else:
-            t.fail("_merge-hook-fired.txt contains entity slug")
-            print(f"  Contents: {hook_content.strip()}")
-    else:
-        t.fail("_merge-hook-fired.txt exists (hook did not fire)")
-        t.fail("_merge-hook-fired.txt contains entity slug (file missing)")
-
-    # Check: entity was archived (merge completed after hook)
-    archive_file = with_hook_project / "merge-hook-pipeline" / "_archive" / "merge-hook-entity.md"
-    entity_file = with_hook_project / "merge-hook-pipeline" / "merge-hook-entity.md"
-    if archive_file.is_file():
-        t.pass_("entity was archived (merge completed after hook)")
-    elif entity_file.is_file():
-        fm = read_entity_frontmatter(entity_file)
-        status_val = fm.get("status", "?")
-        print(f"  SKIP: entity not archived (status: {status_val}) — FO may not have completed the full cycle within budget")
-    else:
-        t.fail("entity was archived (entity file not found in either location)")
+    check_merge_outcome(
+        t,
+        with_hook_project,
+        "merge-hook-pipeline",
+        "merge-hook-entity",
+        "spacedock-ensign-merge-hook-entity-work",
+        hook_expected=True,
+        archive_required=False,
+    )
 
     print()
 
@@ -155,24 +140,15 @@ def main():
     print()
     print("[No-Mods Fallback]")
 
-    # Check: _merge-hook-fired.txt does NOT exist (no hooks to fire)
-    nomods_hook = nomods_project / "merge-hook-pipeline" / "_merge-hook-fired.txt"
-    if nomods_hook.is_file():
-        t.fail("no _merge-hook-fired.txt in no-mods run (file exists unexpectedly)")
-    else:
-        t.pass_("no _merge-hook-fired.txt in no-mods run")
-
-    # Check: entity was archived via local merge
-    nomods_archive = nomods_project / "merge-hook-pipeline" / "_archive" / "merge-hook-entity.md"
-    nomods_entity = nomods_project / "merge-hook-pipeline" / "merge-hook-entity.md"
-    if nomods_archive.is_file():
-        t.pass_("entity was archived via local merge (no-mods fallback works)")
-    elif nomods_entity.is_file():
-        fm = read_entity_frontmatter(nomods_entity)
-        status_val = fm.get("status", "?")
-        print(f"  SKIP: entity not archived (status: {status_val}) — FO may not have completed the full cycle within budget")
-    else:
-        t.fail("entity was archived via local merge (entity file not found)")
+    check_merge_outcome(
+        t,
+        nomods_project,
+        "merge-hook-pipeline",
+        "merge-hook-entity",
+        "spacedock-ensign-merge-hook-entity-work",
+        hook_expected=False,
+        archive_required=False,
+    )
 
     # --- Results ---
     t.results()

@@ -8,12 +8,11 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from test_lib import TestRunner, create_test_project, git_add_commit, run_codex_first_officer, setup_fixture
+from test_lib import TestRunner, check_merge_outcome, create_test_project, git_add_commit, run_codex_first_officer, setup_fixture
 
 
 def run_with_hook_fixture(t: TestRunner) -> None:
@@ -40,25 +39,15 @@ def run_with_hook_fixture(t: TestRunner) -> None:
     )
     t.check("Codex launcher exited cleanly (with hook)", fo_exit == 0)
 
-    hook_file = workflow_dir / "_merge-hook-fired.txt"
-    t.check("merge hook fired marker exists", hook_file.is_file())
-    if hook_file.is_file():
-        t.check("merge hook fired marker contains entity slug", "merge-hook-entity" in hook_file.read_text())
-
-    archive_file = workflow_dir / "_archive" / "merge-hook-entity.md"
-    t.check("entity archived after merge hook run", archive_file.is_file())
-
-    worktree_dir = t.test_project_dir / ".spacedock" / "worktrees" / "spacedock-ensign-merge-hook-entity-work"
-    t.check("worktree cleaned up after merge hook run", not worktree_dir.exists())
-
-    branches = subprocess.run(
-        ["git", "branch", "--list", "spacedock-ensign-merge-hook-entity-work"],
-        capture_output=True,
-        text=True,
-        cwd=t.test_project_dir,
-        check=True,
-    ).stdout.strip()
-    t.check("temporary branch cleaned up after merge hook run", branches == "")
+    check_merge_outcome(
+        t,
+        t.test_project_dir,
+        "merge-hook-pipeline",
+        "merge-hook-entity",
+        "spacedock-ensign-merge-hook-entity-work",
+        hook_expected=True,
+        archive_required=True,
+    )
 
 
 def run_without_hook_fixture(t: TestRunner) -> None:
@@ -97,23 +86,15 @@ def run_without_hook_fixture(t: TestRunner) -> None:
     )
     t.check("Codex launcher exited cleanly (no hook)", fo_exit == 0)
 
-    hook_file = workflow_dir / "_merge-hook-fired.txt"
-    t.check("no merge hook marker exists in no-mods run", not hook_file.exists())
-
-    archive_file = workflow_dir / "_archive" / "merge-hook-entity.md"
-    t.check("entity archived via no-mods fallback", archive_file.is_file())
-
-    worktree_dir = t.test_project_dir / ".spacedock" / "worktrees" / "spacedock-ensign-merge-hook-entity-work"
-    t.check("worktree cleaned up after no-mods fallback", not worktree_dir.exists())
-
-    branches = subprocess.run(
-        ["git", "branch", "--list", "spacedock-ensign-merge-hook-entity-work"],
-        capture_output=True,
-        text=True,
-        cwd=t.test_project_dir,
-        check=True,
-    ).stdout.strip()
-    t.check("temporary branch cleaned up after no-mods fallback", branches == "")
+    check_merge_outcome(
+        t,
+        t.test_project_dir,
+        "merge-hook-pipeline",
+        "merge-hook-entity",
+        "spacedock-ensign-merge-hook-entity-work",
+        hook_expected=False,
+        archive_required=True,
+    )
 
 
 def main():
