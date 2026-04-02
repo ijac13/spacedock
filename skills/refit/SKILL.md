@@ -64,7 +64,7 @@ Present the classification to the captain:
 > | `README.md` | {readme_version or "no stamp"} | Show diff (manual review) |
 > | `_mods/{name}.md` (for each) | {local_version vs canonical_version / custom mod} | Version diff |
 >
-> Proceed?
+> Proceed with this upgrade plan? (y/n)
 
 For mods, include all files found in `_mods/`.
 
@@ -147,7 +147,7 @@ If `{project_root}/.claude/agents/pr-lieutenant.md` exists and `{dir}/_mods/pr-m
 >
 > The pr-lieutenant agent file at `.claude/agents/pr-lieutenant.md` will be left in place. You can delete it manually if no longer needed.
 >
-> Proceed? (y/n)
+> Proceed with pr-lieutenant migration? (y/n)
 
 If accepted:
 1. Copy `{spacedock_plugin_dir}/mods/pr-merge.md` to `{dir}/_mods/pr-merge.md`

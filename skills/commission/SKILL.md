@@ -138,7 +138,7 @@ Present the full summary with all derived values. Use plain language for stage b
 > - **Location:** `{dir}`
 > - **Address:** {captain}
 >
-> Modify anything above, or confirm to generate. (y/n/changes)
+> Accept this design, or tell me what to change.
 
 Wait for {captain} to confirm before proceeding to Phase 2. If {captain} wants changes, apply them and re-present the summary.
 
