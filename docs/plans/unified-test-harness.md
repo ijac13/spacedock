@@ -25,6 +25,8 @@ The repo already has shared harness utilities in `scripts/test_lib.py`, but the 
 
 The result is a brittle maintenance surface. Any change to stage wording, guardrails, or prompt content has to be mirrored in multiple places, and it is easy for one runtime to drift without the other. The branch already passes Codex E2E tests, so the task is not to invent a new testing architecture. It is to make the harness share the right logic while keeping the runtime-specific launchers explicit.
 
+This task is intentionally narrow. It targets the paired behavior tests and scattered offline content checks. It does not try to unify every runtime-specific test; dispatch preparation, packaged-agent id handling, output-format checks, and other genuinely runtime-specific probes should stay separate unless sharing them removes code rather than adding framework.
+
 ## Proposed approach
 
 1. **Keep runtime boundaries, share the assertions.** Add a thin runtime adapter layer in `scripts/test_lib.py` for the pieces that truly differ: how a test is launched, which log parser is used, and how the runtime bootstraps the first-officer skill. Do not try to fully abstract away `claude -p` vs `codex exec`; the flags, environment, and log formats are different enough that forcing a single launcher would hide useful runtime-specific behavior.
@@ -34,6 +36,8 @@ The result is a brittle maintenance surface. Any change to stage wording, guardr
 3. **Share scenario logic for the behavioral E2Es.** Create common scenario helpers for gate guardrail, rejection flow, and merge hook behavior, then run them against both runtimes with small per-runtime adapters. The scenario helpers should own the fixture setup and verification logic; the wrappers should only supply the launcher, parser, and any runtime-specific setup like agent installation or Codex skill-home preparation.
 
 4. **Add one Codex plugin-discovery smoke path.** Keep a dedicated Codex E2E that proves the real packaged path works with `--plugin-dir` and isolated HOME, using `spacedock:first-officer` rather than local agent copies. This is the one place where the harness should prove it can resolve the repo as a plugin namespace, not just as a directly copied worktree asset.
+
+Implementation rule: prefer the fewest new lines that remove duplicated assertions. If a helper abstraction adds more surface area than the duplication it removes, keep the behavior test split and only share the verification logic that is actually repeated.
 
 ### Design decisions and tradeoffs
 
@@ -47,8 +51,9 @@ The result is a brittle maintenance surface. Any change to stage wording, guardr
 1. A single content-focused test file covers all offline agent-content assertions that are currently split across runtime E2Es and `tests/test_codex_skill_content.py`.
 2. Gate guardrail, rejection flow, and merge-hook behavior are exercised through shared scenario logic instead of separate Claude-only and Codex-only assertion blocks.
 3. At least one Codex E2E verifies the real packaged path with `spacedock:first-officer`, `--plugin-dir`, and isolated HOME.
-4. The shared harness keeps the runtime-specific launchers explicit and still passes through the existing Codex helper tests for packaged worker ids, dispatch preparation, and finalization.
-5. No existing behavioral check is lost: the same gate hold, rejection, merge-hook, and dispatch-name guarantees remain covered, just with less duplication.
+4. The shared harness keeps the runtime-specific launchers explicit and leaves genuinely runtime-specific tests as separate files when merging them would add more code than it removes.
+5. The existing Codex helper tests for packaged worker ids, dispatch preparation, and finalization remain intact.
+6. No existing behavioral check is lost: the same gate hold, rejection, merge-hook, and dispatch-name guarantees remain covered, just with less duplication.
 
 ## Test plan
 
@@ -70,6 +75,7 @@ The result is a brittle maintenance surface. Any change to stage wording, guardr
 
 - Static/unit-only: text contract assertions, helper prompt construction, Codex id resolution, and packaged-agent asset references.
 - E2E only: gate holding, rejection follow-up, merge-hook execution, archive/cleanup behavior, and Codex plugin discovery.
+- Explicitly out of scope unless simplification falls out for free: runtime-specific tests such as output-format behavior and Codex-only dispatch-preparation/finalization probes.
 
 ### Cost and scope
 
