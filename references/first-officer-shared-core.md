@@ -151,9 +151,9 @@ Report workflow state once when you reach idle or a gate. Do not spam status upd
 ## Scaffolding and Issue Filing
 
 Treat these as scaffolding files:
-- `templates/`
 - `skills/`
-- `.claude/agents/`
+- `agents/`
+- `references/`
 - `plugin.json`
 - workflow `README.md` files with `commissioned-by` frontmatter
 

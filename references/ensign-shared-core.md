@@ -22,7 +22,7 @@ Read the assignment context provided by the first officer. It defines:
 ## Rules
 
 - Do NOT modify YAML frontmatter in entity files.
-- Do NOT modify files under `.claude/agents/` directly.
+- Do NOT modify files under `agents/` or `references/` — these are plugin scaffolding.
 - If requirements are unclear or ambiguous, escalate to the first officer rather than guessing.
 
 ## Stage Report Protocol

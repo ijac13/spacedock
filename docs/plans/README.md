@@ -91,7 +91,7 @@ A task moves to ideation when a pilot starts fleshing out the idea: clarify the 
   - For template changes: specific before/after wording, not just "change X"
 - **Good:** Clearly scoped, actionable, addresses a real need, considers edge cases, test plan proportional to risk (static checks for simple wording, E2E for behavioral guarantees)
 - **Bad:** Vague hand-waving, scope creep, solving problems that don't exist yet, no clear definition of done, acceptance criteria without a test plan
-- **Staff review:** When the FO assesses ideation as complex (touches templates/scaffolding, requires E2E tests, or score >= 0.8), it spawns a fresh independent reviewer subagent before presenting at the ideation gate. The reviewer checks design soundness, test plan sufficiency, and gaps. The captain sees both the ideation and the reviewer's assessment.
+- **Staff review:** When the FO assesses ideation as complex (touches scaffolding, requires E2E tests, or score >= 0.8), it spawns a fresh independent reviewer subagent before presenting at the ideation gate. The reviewer checks design soundness, test plan sufficiency, and gaps. The captain sees both the ideation and the reviewer's assessment.
 
 ### `implementation`
 

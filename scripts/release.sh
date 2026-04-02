@@ -71,13 +71,13 @@ with open('$MARKETPLACE_JSON', 'w') as f:
     f.write('\n')
 "
 
-for tmpl in templates/*.md mods/*.md; do
-    if [ -f "$tmpl" ] && grep -q '^version:' "$tmpl"; then
-        sed -i '' "s/^version: .*$/version: $VERSION/" "$tmpl"
+for f in mods/*.md; do
+    if [ -f "$f" ] && grep -q '^version:' "$f"; then
+        sed -i '' "s/^version: .*$/version: $VERSION/" "$f"
     fi
 done
 
-git add "$PLUGIN_JSON" "$MARKETPLACE_JSON" templates/*.md mods/*.md
+git add "$PLUGIN_JSON" "$MARKETPLACE_JSON" mods/*.md
 git commit -m "release: bump version to spacedock@$VERSION"
 
 # --- Step 2: Refit self-hosted workflow ---
@@ -94,7 +94,7 @@ if [ -f "$SELF_HOSTED_WORKFLOW/README.md" ]; then
 
     REFIT_PROMPT="/spacedock:refit $SELF_HOSTED_WORKFLOW
 
-Accept all changes from the upstream template. When showing diffs, approve all regenerations (status, first-officer, ensign, agents, mods). Preserve any local customizations in the README — only update the version stamp. Do not ask for confirmation — proceed automatically."
+Accept all changes. When showing diffs, approve all updates (mods, README version stamp). Do not ask for confirmation — proceed automatically."
 
     CLAUDE_ARGS=(-p "$REFIT_PROMPT" --plugin-dir "$REPO_ROOT" --dangerously-skip-permissions --model opus --effort low)
     if command -v safehouse >/dev/null 2>&1; then

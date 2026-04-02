@@ -19,8 +19,7 @@ This section holds code-project-specific rules that apply across platforms and r
 
 ## Scaffolding
 
-- Do not directly edit `.claude/agents/`.
-- Treat `templates/`, `skills/`, `plugin.json`, and workflow `README.md` scaffolding as protected surfaces.
+- Treat `skills/`, `agents/`, `references/`, `plugin.json`, and workflow `README.md` scaffolding as protected surfaces.
 - Changes to scaffolding should be tied to a tracked task or approved issue.
 
 ## Commits and Evidence
