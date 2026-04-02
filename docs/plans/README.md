@@ -1,5 +1,5 @@
 ---
-commissioned-by: spacedock@0.8.5
+commissioned-by: spacedock@0.9.0
 entity-type: entity
 entity-label: task
 entity-label-plural: tasks
@@ -129,7 +129,7 @@ A task reaches done when validation is complete and CL approves the result. The 
 View the workflow overview:
 
 ```bash
-docs/plans/status
+skills/commission/bin/status docs/plans
 ```
 
 Output columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
@@ -137,13 +137,13 @@ Output columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
 Include archived tasks with `--archived`:
 
 ```bash
-docs/plans/status --archived
+skills/commission/bin/status docs/plans --archived
 ```
 
 Find dispatchable tasks ready for their next stage:
 
 ```bash
-docs/plans/status --next
+skills/commission/bin/status docs/plans --next
 ```
 
 Find tasks in a specific stage:
