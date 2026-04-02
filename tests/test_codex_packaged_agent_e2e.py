@@ -56,6 +56,7 @@ def main():
             "`spawn_agent(agent_type=\"worker\", fork_context=false, message=<fully self-contained prompt>)` "
             "followed by `wait_agent(...)`."
         ),
+        timeout_s=180,
     )
     t.check("Codex launcher exited cleanly", fo_exit == 0)
 
