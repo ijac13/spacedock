@@ -17,8 +17,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     TestRunner, LogParser, create_test_project, setup_fixture,
-    install_agents, run_first_officer, git_add_commit,
-    read_entity_frontmatter, file_contains, extract_stats,
+    install_agents, assembled_agent_content, run_first_officer,
+    git_add_commit, read_entity_frontmatter, file_contains,
+    extract_stats,
 )
 
 
@@ -137,11 +138,11 @@ def main():
     print()
     print("[Fixture Setup — With Hook]")
 
-    fo_path = t.test_project_dir / ".claude" / "agents" / "first-officer.md"
-    t.check("generated first-officer contains merge hook guardrail",
-            file_contains(fo_path, r"MERGE HOOK GUARDRAIL"))
-    if not file_contains(fo_path, r"MERGE HOOK GUARDRAIL"):
-        print("  FATAL: Guardrail text missing from generated agent. Aborting.")
+    fo_text = assembled_agent_content(t, "first-officer")
+    t.check("assembled first-officer contains merge hook guardrail",
+            "merge hook" in fo_text.lower() and "before any merge" in fo_text.lower())
+    if "merge hook" not in fo_text.lower():
+        print("  FATAL: Merge hook guardrail text missing from assembled agent. Aborting.")
         t.results()
         return
 

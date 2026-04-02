@@ -279,17 +279,48 @@ def setup_fixture(runner: TestRunner, fixture_name: str, pipeline_dir: str) -> P
 
 
 def install_agents(runner: TestRunner, include_ensign: bool = False) -> Path:
-    """Copy agent templates into the test project's .claude/agents/ directory."""
+    """Copy thin agent wrappers into the test project's .claude/agents/ directory."""
     agents_dir = runner.test_project_dir / ".claude" / "agents"
     agents_dir.mkdir(parents=True, exist_ok=True)
 
     fo_path = agents_dir / "first-officer.md"
-    shutil.copy2(runner.repo_root / "templates" / "first-officer.md", fo_path)
+    shutil.copy2(runner.repo_root / "agents" / "first-officer.md", fo_path)
 
     if include_ensign:
-        shutil.copy2(runner.repo_root / "templates" / "ensign.md", agents_dir / "ensign.md")
+        shutil.copy2(runner.repo_root / "agents" / "ensign.md", agents_dir / "ensign.md")
 
     return fo_path
+
+
+def assembled_agent_content(runner: TestRunner, agent_name: str) -> str:
+    """Read a thin agent wrapper and all its referenced files, returning combined content.
+
+    This concatenates the agent entry point with the reference files it
+    instructs the agent to read, so tests can check the full behavioral
+    contract without running the agent.
+    """
+    refs_dir = runner.repo_root / "references"
+    if agent_name == "first-officer":
+        ref_files = [
+            "first-officer-shared-core.md",
+            "code-project-guardrails.md",
+            "claude-first-officer-runtime.md",
+        ]
+    elif agent_name == "ensign":
+        ref_files = [
+            "ensign-shared-core.md",
+            "code-project-guardrails.md",
+            "claude-ensign-runtime.md",
+        ]
+    else:
+        ref_files = []
+
+    parts = [(runner.repo_root / "agents" / f"{agent_name}.md").read_text()]
+    for ref_file in ref_files:
+        ref_path = refs_dir / ref_file
+        if ref_path.exists():
+            parts.append(ref_path.read_text())
+    return "\n\n".join(parts)
 
 
 def run_commission(
@@ -336,11 +367,12 @@ def run_first_officer(
     extra_args: list[str] | None = None,
     log_name: str = "fo-log.jsonl",
 ) -> int:
-    """Run claude -p --agent first-officer. Returns exit code."""
+    """Run claude -p --agent first-officer with plugin-dir for reference file access."""
     log_path = runner.log_dir / log_name
     cmd = [
         "claude", "-p", prompt,
         "--agent", "first-officer",
+        "--plugin-dir", str(runner.repo_root),
         "--permission-mode", "bypassPermissions",
         "--verbose",
         "--output-format", "stream-json",

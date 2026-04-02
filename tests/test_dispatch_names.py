@@ -15,8 +15,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     TestRunner, LogParser, create_test_project, setup_fixture,
-    install_agents, run_first_officer, git_add_commit,
-    read_entity_frontmatter, file_contains,
+    install_agents, assembled_agent_content, run_first_officer,
+    git_add_commit, read_entity_frontmatter, file_contains,
 )
 
 
@@ -36,13 +36,13 @@ def main():
     print()
     print("[Fixture Setup]")
 
-    # Verify the generated agent has stage in the dispatch name pattern
-    fo_path = t.test_project_dir / ".claude" / "agents" / "first-officer.md"
-    if file_contains(fo_path, r'name=.*\{.*stage'):
-        t.pass_("generated first-officer has stage in dispatch name")
+    # Verify the assembled agent has stage in the dispatch name pattern
+    fo_text = assembled_agent_content(t, "first-officer")
+    if re.search(r'name=.*\{.*stage', fo_text):
+        t.pass_("assembled first-officer has stage in dispatch name")
     else:
-        t.fail("generated first-officer has stage in dispatch name")
-        print("  FATAL: Dispatch name fix missing from generated agent. Aborting.")
+        t.fail("assembled first-officer has stage in dispatch name")
+        print("  FATAL: Dispatch name fix missing from assembled agent. Aborting.")
         t.results()
         return
 
