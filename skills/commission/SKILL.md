@@ -125,18 +125,21 @@ After collecting answers, derive all remaining values from the mission context:
 
 Present the full summary with all derived values. Use plain language for stage behavior — do not expose implementation vocabulary like `worktree`, `gate`, `fresh`, or `feedback-to`:
 
-> **Workflow Design Summary**
+> I'll call you {captain} — let me know if you prefer something else.
 >
-> - **Mission:** {mission}
-> - **Entity:** {entity_description}
-> - **Item label:** {entity_label} (plural: {entity_label_plural})
-> - **Stages:** {stages joined with " → "}
-> - **Approval gates:** {for each gate: "{stage_name} (you review before {next_stage_name})", or "none"}
-> - **On rejection:** {for each gate: "{gated_stage} bounces back to {target_stage}", or "n/a"}
-> - **Seed entities:** {count} items
->   {for each: "- {title} (score: {score})" or "- {title}" if no score}
-> - **Location:** `{dir}`
-> - **Address:** {captain}
+> For each run, we process {entity_description_as_item_label} going through the following stages:
+>
+> {for each stage: "{letter}. {stage_name} — {stage_description}"}
+>
+> {if any gates: "If you reject at {gated_stage}, it goes back to {target_stage} for revision."}
+>
+> {if domain_specific_fields: "With the following custom fields:"}
+> {for each field: "- {field_name}: {field_description}"}
+>
+> Our pilot run will be with:
+> {for each seed: "- {title}"}
+>
+> All files will be created in `{dir}` for you to review.
 >
 > Accept this design, or tell me what to change.
 
