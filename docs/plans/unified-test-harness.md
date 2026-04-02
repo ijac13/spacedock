@@ -143,7 +143,7 @@ Rerun was warranted: the absolute-workflow-path fix (commits `9e7fecc`, `0d47cdb
 
 Results:
 - **Rejection flow** (`test_rejection_flow.py`): 5/5 PASS. Previously failed; the absolute workflow path fix resolved the issue. FO dispatched 3 ensigns, validation surfaced REJECTED, follow-up fix dispatch observed.
-- **Merge hook** (`test_merge_hook_guardrail.py`): 7/8 pass, 1 fail. The failure is "merge hook fired marker exists" — the FO completed the entity to `status: done` and cleaned up worktree/branch, but did not invoke the merge hook script. This is a known haiku budget limitation (the FO uses default local merge instead of explicitly running the hook script within the $2 budget cap), not a harness regression. Archive was skipped (SKIP, not FAIL).
+- **Merge hook** (`test_merge_hook_guardrail.py`): 7/8 pass, 1 fail. Ran twice (once during rate-limit window, once after clearance). Same result both times: "merge hook fired marker exists" fails. The FO completes the entity to `status: done` and cleans up worktree/branch, but haiku does not invoke the merge hook script within the $2 budget cap. This is a consistent model-behavior limitation with haiku at low effort, not a harness regression or rate-limit artifact. Archive was skipped (SKIP, not FAIL).
 
 ### 10. Test file count — DONE
 
