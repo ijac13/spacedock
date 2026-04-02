@@ -118,9 +118,17 @@ When a worker completes:
 1. Read the entity file.
 2. Verify that `## Stage Report: {stage_name}` covers every checklist item as DONE, SKIP, or FAIL.
 3. Summarize the checklist counts in the form `{N} done, {N} skipped, {N} failed`.
-4. If the stage is gated, present the gate review and stop.
-5. If a validation or review stage returns a concrete verdict, summarize it and stop when the run is bounded to that first outcome.
-6. Review stages review and report; they do not silently take over implementation.
+4. If the next stage is terminal and the run is expected to carry the entity to completion, prefer the helper script:
+   `python3 ~/.agents/skills/spacedock/scripts/codex_finalize_terminal_entity.py --repo-root "{repo_root}" --workflow-dir "{workflow_dir}" --entity-slug "{slug}"`
+5. Treat the finalize helper output as authoritative for:
+   - merge-hook execution result
+   - PR-pending stop state
+   - archive path
+   - final commit
+   - worktree/branch cleanup
+6. If the stage is gated, present the gate review and stop.
+7. If a validation or review stage returns a concrete verdict, summarize it and stop when the run is bounded to that first outcome.
+8. Review stages review and report; they do not silently take over implementation.
 
 When a feedback stage recommends rejection:
 
@@ -136,6 +144,10 @@ Once the requested bounded outcome is satisfied:
 - do not read extra files
 - do not wait for additional agents
 - send one concise final response
+
+For bounded terminal-completion runs, the stop condition is satisfied when the finalize helper reports either:
+- `pr_pending: true`
+- or a successful archive outcome with the final commit id
 
 ## Maintainership
 

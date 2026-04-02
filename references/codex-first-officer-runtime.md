@@ -56,6 +56,11 @@ For each dispatch:
    - first instruct the worker to resolve its role definition from the logical id and read it before doing anything else
    - then pass the assignment fields
 
+For bounded terminal-completion runs, prefer:
+- `python3 ~/.agents/skills/spacedock/scripts/codex_finalize_terminal_entity.py --repo-root "{repo_root}" --workflow-dir "{workflow_dir}" --entity-slug "{slug}"`
+
+Treat that helper output as authoritative for merge-hook execution, PR-pending stop states, archive path, final commit, and worktree cleanup.
+
 Do not rely on inherited thread context. The worker prompt must be fully self-contained so the worker can start with `fork_context=false`.
 Never omit `fork_context=false` on worker dispatches in Codex.
 
@@ -87,6 +92,12 @@ Pass these fields to a worker:
 - checklist items
 
 If a `worktree_path` is present, `entity_path` should point to the entity file inside that worktree, not the main-branch copy.
+
+## Codex Merge And Cleanup
+
+- Merge hooks live under `{workflow_dir}/_mods/*.md`.
+- For a deterministic Codex terminal path, use the finalize helper instead of freehand merge/archive shell sequences.
+- The finalize helper should run merge hooks before local merge, stop on `pr_pending`, and otherwise perform local merge, archive, terminal commit, and worktree cleanup.
 
 ## Codex Completion Shape
 

@@ -29,6 +29,7 @@ def test_first_officer_agent_references_shared_core_and_codex_runtime_docs():
     assert "references/first-officer-shared-core.md" in text
     assert "references/code-project-guardrails.md" in text
     assert "references/codex-first-officer-runtime.md" in text
+    assert "codex_finalize_terminal_entity.py" in text
 
 
 def test_ensign_agent_references_shared_core_and_codex_runtime_docs():
@@ -78,6 +79,14 @@ def test_code_project_guardrails_cover_worktrees_and_scaffolding():
     assert ".claude/agents/" in text
     assert "git worktree" in text
     assert "scaffolding" in text.lower()
+
+
+def test_codex_runtime_docs_cover_merge_hook_finalize_path():
+    text = read_text("references/codex-first-officer-runtime.md")
+
+    assert "codex_finalize_terminal_entity.py" in text
+    assert "merge hooks" in text.lower()
+    assert "archive" in text.lower()
 
 
 if __name__ == "__main__":

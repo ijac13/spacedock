@@ -102,6 +102,8 @@ def build_codex_first_officer_invocation_prompt(
         Let the skill bootstrap the packaged first-officer agent asset and follow that agent directly.
         For bounded single-entity dispatches, prefer the helper at `~/.agents/skills/spacedock/scripts/codex_prepare_dispatch.py`
         instead of manually editing frontmatter, composing worktree names, or building the worker assignment by hand.
+        For bounded terminal-completion runs, prefer the helper at `~/.agents/skills/spacedock/scripts/codex_finalize_terminal_entity.py`
+        instead of freehand merge-hook, merge, archive, or worktree-cleanup steps.
         Any worker you spawn in this run MUST use `fork_context=false` with a fully self-contained prompt.
         Do not load reference docs unless you hit a real blocker.
         Do not reread your own skill files, inspect packaged worker agent assets before dispatch requires them, or open the `status` script source unless a blocker requires it.
