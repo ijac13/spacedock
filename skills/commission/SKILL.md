@@ -121,7 +121,7 @@ After collecting answers, derive all remaining values from the mission context:
 - `{approval_gates}` — default: gate before the terminal stage (e.g., the last stage before terminal).
 - `{rejection_flow}` — for each approval gate, determine which earlier stage gets bounced back to on rejection (default: the stage immediately before the gated stage).
 - `{dir}` — `docs/{mission-slug}/` where `{mission-slug}` is the mission condensed to a short lowercase hyphenated directory name.
-- `{captain}` — "captain".
+- `{captain}` — "Captain".
 
 Present the full summary with all derived values. Use plain language for stage behavior — do not expose implementation vocabulary like `worktree`, `gate`, `fresh`, or `feedback-to`:
 
