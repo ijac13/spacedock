@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     TestRunner, LogParser, create_test_project, setup_fixture,
-    install_agents, run_first_officer, git_add_commit,
+    install_agents, assembled_agent_content, run_first_officer, git_add_commit,
     file_contains,
 )
 
@@ -53,23 +53,25 @@ def main():
     print()
     print("[Fixture Setup]")
 
-    fo_path = t.test_project_dir / ".claude" / "agents" / "first-officer.md"
+    fo_text = assembled_agent_content(t, "first-officer")
 
-    t.check("generated first-officer contains feedback rejection flow",
-            file_contains(fo_path, r"Feedback Rejection Flow"))
-    if not file_contains(fo_path, r"Feedback Rejection Flow"):
-        print("  FATAL: Rejection flow section missing from generated agent. Aborting.")
+    t.check("assembled first-officer contains feedback rejection flow",
+            "Feedback Rejection Flow" in fo_text)
+    if "Feedback Rejection Flow" not in fo_text:
+        print("  FATAL: Rejection flow section missing from assembled agent. Aborting.")
         t.results()
         return
 
-    t.check("generated first-officer has feedback-to dispatch logic",
-            file_contains(fo_path, r"feedback-to"))
+    t.check("assembled first-officer has feedback-to dispatch logic",
+            "feedback-to" in fo_text)
 
+    status_cmd = ["python3", str(t.repo_root / "skills" / "commission" / "bin" / "status"),
+                  "--workflow-dir", "rejection-pipeline"]
     t.check_cmd("status script runs without errors",
-                ["python3", "rejection-pipeline/status"], cwd=t.test_project_dir)
+                status_cmd, cwd=t.test_project_dir)
 
     status_result = subprocess.run(
-        ["python3", "rejection-pipeline/status", "--next"],
+        status_cmd + ["--next"],
         capture_output=True, text=True, cwd=t.test_project_dir,
     )
     t.check("status --next detects dispatchable entity",
