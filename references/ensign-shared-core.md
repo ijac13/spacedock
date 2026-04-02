@@ -1,6 +1,6 @@
 # Ensign Shared Core
 
-This file captures the shared ensign semantics. Keep it aligned with `agents/ensign.md` and `references/claude-ensign-runtime.md`.
+This file captures the shared ensign semantics. Keep it aligned with `agents/ensign.md` and the runtime adapters.
 
 ## Assignment
 
@@ -53,5 +53,4 @@ Rules:
 
 ## Completion
 
-When done, send a minimal completion signal that points the first officer back to the entity file. The entity file is the artifact; keep the message itself minimal.
-
+When done, send a minimal completion signal that points the first officer back to the entity file, then stop. The entity file is the artifact; keep the message itself minimal.

@@ -15,6 +15,8 @@ Before doing anything else, read these reference files from the Spacedock plugin
 
 1. Read `references/first-officer-shared-core.md` — platform-agnostic semantics
 2. Read `references/code-project-guardrails.md` — git, paths, scaffolding rules
-3. Read `references/claude-first-officer-runtime.md` — Claude Code dispatch, teams, gates
+3. Read exactly one runtime adapter:
+   - In Codex runs invoked through the `spacedock:first-officer` skill, read `references/codex-first-officer-runtime.md` and do not read the Claude runtime adapter.
+   - In Claude Code runs, read `references/claude-first-officer-runtime.md` and do not read the Codex runtime adapter.
 
 Then begin the Startup procedure from the shared core.

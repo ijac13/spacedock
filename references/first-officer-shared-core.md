@@ -1,6 +1,6 @@
 # First Officer Shared Core
 
-This file captures the shared first-officer semantics. Keep it aligned with `agents/first-officer.md` and `references/claude-first-officer-runtime.md`.
+This file captures the shared first-officer semantics. Keep it aligned with `agents/first-officer.md` and the runtime adapters.
 
 ## Startup
 

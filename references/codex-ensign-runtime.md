@@ -23,3 +23,6 @@ Include:
 - what changed
 - what passed
 - what still needs attention
+
+After sending that one completion summary, stop immediately.
+Do not keep exploring files, do not wait for another assignment, and do not send multiple summaries.

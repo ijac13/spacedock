@@ -23,15 +23,17 @@ def test_first_officer_skill_bootstraps_the_packaged_agent_asset():
     assert "../../agents/first-officer.md" in text
 
 
-def test_claude_agent_entry_points_reference_claude_runtime():
+def test_packaged_agent_entry_points_select_runtime_adapter():
     fo_text = read_text("agents/first-officer.md")
     assert "references/first-officer-shared-core.md" in fo_text
     assert "references/code-project-guardrails.md" in fo_text
+    assert "references/codex-first-officer-runtime.md" in fo_text
     assert "references/claude-first-officer-runtime.md" in fo_text
 
     ensign_text = read_text("agents/ensign.md")
     assert "references/ensign-shared-core.md" in ensign_text
     assert "references/code-project-guardrails.md" in ensign_text
+    assert "references/codex-ensign-runtime.md" in ensign_text
     assert "references/claude-ensign-runtime.md" in ensign_text
 
 

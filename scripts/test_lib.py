@@ -105,6 +105,8 @@ def build_codex_first_officer_invocation_prompt(
         For bounded terminal-completion runs, prefer the helper at `~/.agents/skills/spacedock/scripts/codex_finalize_terminal_entity.py`
         instead of freehand merge-hook, merge, archive, or worktree-cleanup steps.
         Any worker you spawn in this run MUST use `fork_context=false` with a fully self-contained prompt.
+        For bounded single-entity runs, treat the first completed worker summary as sufficient evidence for your final response unless it is missing the requested verdict or outcome.
+        After `wait_agent(...)` returns the needed verdict or outcome, do not reread entity files, rerun `status`, or continue the loop. Respond once and stop immediately.
         Do not load reference docs unless you hit a real blocker.
         Do not reread your own skill files, inspect packaged worker agent assets before dispatch requires them, or open the `status` script source unless a blocker requires it.
         Run the workflow `status` script directly or with `python3` if needed. Never invoke it with `zsh`.
@@ -165,6 +167,14 @@ def build_codex_worker_bootstrap_prompt(
         lines.append(f"worktree_path: {worktree_path}")
     if checklist:
         lines.extend(["checklist:"] + [f"- {item}" for item in checklist])
+    lines.extend(
+        [
+            "",
+            "Completion rule:",
+            "After you finish the assignment, write the stage report, commit your work, return one concise final response, and stop immediately.",
+            "Do not continue exploring the repo, do not wait for follow-up instructions, and do not start another task after that final response.",
+        ]
+    )
     return "\n".join(lines)
 
 

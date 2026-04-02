@@ -104,6 +104,8 @@ If a `worktree_path` is present, `entity_path` should point to the entity file i
 - Workers report completion by returning a concise final response.
 - The first officer treats the entity file and stage report as the source of truth.
 - The first officer waits for the worker result before continuing.
+- In bounded single-entity runs, if the worker completion message already contains the requested verdict, evidence, or terminal outcome, use that message as sufficient evidence for the final response and stop immediately.
+- Only reread the entity file or rerun `status` after `wait_agent(...)` when the worker message is missing a detail required by the stated stop condition.
 
 ## Bounded Prototype Rule
 
