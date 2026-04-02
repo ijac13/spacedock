@@ -57,3 +57,13 @@ The other 7 confirmation prompts in refit are fine — they all name the action 
 3. New wording matches target — captain intro, natural stage intro, pilot run, file location sentence — DONE. Template opens with `I'll call you {captain}`, describes stages with lettered list, uses "Our pilot run will be with:", and closes with `All files will be created in {dir} for you to review.`
 4. Consistency check — no stale references to old field names elsewhere in SKILL.md — DONE. Searched for "Seed entities", "Item label", "Approval gates:", and "Address:" across the full file — no matches outside the replaced block.
 5. Changes committed on ensign/clarify-confirmation-prompts branch — DONE. Commit 5569381.
+
+## Stage Report: validation (round 2)
+
+1. Round 1 grep assertions (3 old absent, 3 new present) — DONE. `y/n/changes` and `Modify anything above, or confirm to generate` absent from commission SKILL.md. Bare `> Proceed?` and `> Proceed? (y/n)` absent from refit SKILL.md. New strings `Accept this design, or tell me what to change.` (commission:144), `Proceed with this upgrade plan? (y/n)` (refit:67), `Proceed with pr-lieutenant migration? (y/n)` (refit:150) all present.
+2. Round 2 old field names absent from template — DONE. Grep confirms zero matches for `Entity:`, `Item label:`, `Seed entities:`, `Address:`, `Approval gates:` in commission SKILL.md.
+3. Round 2 new conversational template present and correct — DONE. Template at lines 128-144 includes captain intro (`I'll call you {captain}`), stage listing with lettered format, rejection flow conditional, custom fields section, pilot run seed list, file location sentence, and confirmation prompt.
+4. Captain default is uppercase "Captain" — DONE. Line 124: `{captain}` — "Captain".
+5. Refit edits intact — DONE. `git diff 7f969e5..HEAD -- skills/refit/SKILL.md` produces no output; round 1 edits at lines 67 and 150 are unchanged.
+6. No unintended changes — DONE. `git diff --name-only` across all task commits shows only three files: the entity file, commission SKILL.md, and refit SKILL.md.
+7. Recommendation — PASSED. All acceptance criteria for both rounds are met.
