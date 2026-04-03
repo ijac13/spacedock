@@ -1,5 +1,6 @@
 ---
 name: ensign-boot
+description: Load the ensign operating contract from reference files. Invoke this skill before starting any stage work.
 ---
 Read these reference files before doing anything else:
 
