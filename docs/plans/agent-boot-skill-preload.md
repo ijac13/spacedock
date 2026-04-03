@@ -1,7 +1,7 @@
 ---
 id: 085
 title: Agent boot via skill preloading — eliminate runtime path resolution
-status: implementation
+status: validation
 source: CL — 084 validation findings (haiku path resolution failure)
 started: 2026-04-03T03:40:00Z
 completed:
