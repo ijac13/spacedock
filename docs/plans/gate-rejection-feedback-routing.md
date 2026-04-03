@@ -52,6 +52,22 @@ Two changes:
 
 2. **Test prompt** — Change "approve the REJECTED verdict" to something unambiguous like "When the reviewer recommends REJECTED, confirm the rejection so the feedback flow routes fixes back to implementation."
 
+## Stage Report: implementation
+
+1. Shared core updated — explicit captain-rejection gate path added for `feedback-to` stages: **DONE**
+   - Added bullet to `## Completion and Gates` gated-stage handling in `references/first-officer-shared-core.md` line 97
+   - Captain rejection at a gated `feedback-to` stage now explicitly enters the Feedback Rejection Flow, taking priority over generic rejection handling
+2. Test prompt clarified — no longer ambiguous about "approve the REJECTED verdict": **DONE**
+   - Changed from "approve the REJECTED verdict so the rejection flow proceeds" to "confirm the rejection so the feedback flow routes fixes back to implementation"
+3. Static tests pass: **DONE**
+   - 51 passed, 0 failed
+4. Rejection flow E2E passes with opus/low: **DONE**
+   - 5 passed, 0 failed (out of 5 checks)
+   - 3 ensign dispatches observed (implementation, validation, fix after rejection)
+   - Full rejection bounce completed successfully
+5. Changes committed on ensign/gate-rejection-feedback branch: **DONE**
+   - Commit `3fcd207`
+
 ## Evidence
 
 From rejection flow E2E logs:
