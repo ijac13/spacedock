@@ -124,24 +124,25 @@ Codex entry point (`skills/first-officer/SKILL.md`) continues reading references
 
 1. **Boot skills created** — DONE. `skills/first-officer-boot/SKILL.md` and `skills/ensign-boot/SKILL.md` created with `${CLAUDE_SKILL_DIR}/../../references/...` paths.
 
-2. **Agent files updated** — DONE (partial). `skills:` frontmatter added to both `agents/first-officer.md` and `agents/ensign.md`. Body Read instructions retained as fallback — see finding below.
+2. **Agent files updated** — DONE. `skills:` frontmatter added to both agents. Agent body uses skill invocation as fallback (see two-path strategy below).
 
-3. **Static tests pass** — DONE. 50 tests pass (`uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q`). Added `test_claude_agent_entry_points_use_boot_skill_preloading`, `test_claude_agent_body_has_fallback_read_instructions`, and `test_boot_skills_reference_correct_files`.
+3. **Static tests pass** — DONE. 50 tests pass. Added `test_claude_agent_entry_points_use_boot_skill_preloading`, `test_claude_agent_body_has_fallback_skill_invocation`, and `test_boot_skills_reference_correct_files`.
 
-4. **Haiku verification** — DONE. Haiku loads all three reference files and reports correct first headings. Path resolution uses Glob fallback from body instructions (not skill preloading — see finding).
+4. **Haiku verification** — DONE. Haiku invokes `spacedock:first-officer-boot` via Skill tool, `${CLAUDE_SKILL_DIR}` resolves to plugin's skill directory, all three reference files read with correct first headings.
 
-5. **Changes committed** — DONE. Commit `8000d5f` on `ensign/agent-boot-skill-preload`.
+5. **Changes committed** — DONE. Branch `ensign/agent-boot-skill-preload`.
 
-### Finding: plugin agent skill preloading blocked by claude-code #25834
+### Two-path boot strategy
 
-The `skills:` frontmatter in agent definitions **does not inject skill content for plugin agents**. Confirmed with Claude Code 2.1.90:
+The agent loads references via two complementary mechanisms:
 
-- **Local agents** (`.claude/agents/`) with **local skills** (`.claude/skills/`): skill preloading works correctly. `${CLAUDE_SKILL_DIR}` is substituted and the model receives the skill content as a prepended user message.
-- **Plugin agents** (`--plugin-dir`): `skills:` frontmatter is silently ignored. The boot skill appears in `slash_commands` but is never injected into the agent context. This is tracked as [claude-code #25834](https://github.com/anthropics/claude-code/issues/25834).
+1. **`skills:` frontmatter** (primary) — platform preloads skill content before the agent sees any prompt. Works for local agents today; blocked for plugin agents by [claude-code #25834](https://github.com/anthropics/claude-code/issues/25834).
 
-**Mitigation:** Agent body retains the original Read instructions as fallback. Haiku resolves paths via Glob + Read from the body instructions. The `skills:` frontmatter is forward-compatible — when #25834 is fixed, boot skills will provide reliable `${CLAUDE_SKILL_DIR}` path resolution automatically.
+2. **Body skill invocation** (fallback) — agent body says "invoke the `spacedock:first-officer-boot` skill." The Skill tool resolves plugin skills by name and `${CLAUDE_SKILL_DIR}` provides reliable path resolution. Confirmed working with haiku on plugin agents.
 
-**Net change from before:** Agent files gained `skills:` frontmatter (no-op today for plugin agents, ready for when the bug is fixed). Agent `# Heading` lines removed. Boot skills created and ready. Body Read instructions unchanged.
+Both paths lead to the same boot skill, which uses `${CLAUDE_SKILL_DIR}/../../references/...` to read the reference files. This eliminates the original problem (models guessing plugin paths for raw `references/...` file reads).
+
+**Net change from before:** Agent body no longer references raw file paths (`references/first-officer-shared-core.md`). Instead it references the boot skill by name (`spacedock:first-officer-boot`), which the platform can resolve reliably. When #25834 is fixed, the frontmatter path will fire first and the body fallback becomes redundant.
 
 ## Acceptance criteria
 
