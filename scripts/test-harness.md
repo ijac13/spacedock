@@ -9,23 +9,17 @@ How to run the commission skill non-interactively and validate the output.
 
 ## Automated Test Script
 
-All the checks documented below are automated in `scripts/test-commission.sh`. Run from the repo root:
+All the checks documented below are automated in `scripts/test_commission.py`. Run from the repo root:
 
 ```bash
-bash scripts/test-commission.sh
+unset CLAUDECODE && uv run scripts/test_commission.py
 ```
 
 Defaults to `--model opus --effort low` (~3 minutes). Override with:
 
 ```bash
-bash scripts/test-commission.sh --model sonnet        # ~4.5 minutes
-bash scripts/test-commission.sh --effort high          # ~4.5 minutes
-```
-
-Set `KEEP_LOG=1` to preserve the test log for model verification:
-
-```bash
-KEEP_LOG=1 bash scripts/test-commission.sh
+uv run scripts/test_commission.py --model sonnet
+uv run scripts/test_commission.py --effort high
 ```
 
 The script runs commission in a temp directory, validates all checks, reports PASS/FAIL per check, and exits 0 on all-pass / non-zero on any failure. Requires `claude` CLI in PATH. Haiku is not supported — it cannot follow the commission skill.
@@ -35,7 +29,7 @@ The script runs commission in a temp directory, validates all checks, reports PA
 ## 1. Running the Test
 
 ```bash
-claude -p "/spacedock:commission ..." \
+unset CLAUDECODE && claude -p "/spacedock:commission ..." \
   --plugin-dir /path/to/spacedock \
   --permission-mode bypassPermissions \
   --verbose \
@@ -49,6 +43,7 @@ claude -p "/spacedock:commission ..." \
 - `--permission-mode bypassPermissions` — allows file writes without interactive prompting
 - `--verbose --output-format stream-json` — captures every tool call and model turn as newline-delimited JSON for post-run inspection
 - The `2>&1` redirect merges stderr into the log so agent errors are captured alongside normal output
+- `unset CLAUDECODE` — required when running from inside a Claude Code session (claude refuses to launch as a subprocess when this variable is set)
 
 **Batch mode:**
 The commission skill supports non-interactive execution. When all inputs are provided upfront in the initial message, the skill extracts them, infers any missing defaults, and skips the Q&A phase. To prevent it from launching the pilot (generation-only test), include these two instructions in the prompt:
@@ -89,22 +84,32 @@ After the test completes, check each of the following.
 
 ```bash
 ls v0-test-1/README.md \
-   v0-test-1/status \
    v0-test-1/full-cycle-test.md \
    v0-test-1/refit-command.md \
-   v0-test-1/multi-pipeline.md \
-   $REPO_ROOT/agents/first-officer.md
+   v0-test-1/multi-pipeline.md
 ```
 
-All six files must exist.
+Commission generates workflow files only (README, entities). Agents and the status viewer ship with the plugin — commission does not copy them.
+
+Verify the plugin-shipped agent exists:
+```bash
+ls $REPO_ROOT/agents/first-officer.md
+```
+
+Verify commission does NOT generate a workflow-local status script or agents:
+```bash
+! test -f v0-test-1/status
+```
 
 ### Status script runs without errors
 
+The status viewer ships with the plugin at `skills/commission/bin/status`:
+
 ```bash
-bash v0-test-1/status
+python3 $REPO_ROOT/skills/commission/bin/status --workflow-dir v0-test-1
 ```
 
-Expected output: a table with header row showing the entity label (uppercased), STATUS, VERDICT, SCORE, and SOURCE columns, followed by three data rows. All three entities should show `status: ideation`.
+Expected output: a table with header row showing ID, SLUG, STATUS, TITLE, SCORE, SOURCE columns, followed by three data rows. All three entities should show `status: ideation`.
 
 ### Entity frontmatter is valid YAML
 
@@ -132,41 +137,40 @@ Open the file and verify these sections are present (not placeholder text):
 - {Label} Template (e.g., "Feature Template" — uses the derived entity label)
 - Commit Discipline
 
-Each stage section must have specific, mission-relevant content in its Inputs, Outputs, Good, Bad, and Human approval fields — not generic boilerplate.
+Each stage section must have specific, mission-relevant content in its Inputs, Outputs, Good, Bad fields — not generic boilerplate.
 
-### First-officer agent completeness
+### First-officer agent structure
 
-```bash
-grep -c "^##\|^###" "$REPO_ROOT/agents/first-officer.md"
-```
-
-Open the file and verify these sections are present:
-
-- YAML frontmatter with `name: first-officer`, `description:`, and `tools:` including `Agent`
-- Identity statement establishing the first officer as a DISPATCHER
-- Startup sequence: TeamCreate → Read README → run status → check orphans (4 steps)
-- Dispatching section with an `Agent()` call block that includes `subagent_type`, `name`, `team_name`, and `prompt`
-- Event Loop
-- State Management
-- `initialPrompt` in frontmatter
-
-### First-officer guardrails
+The plugin-shipped agent at `agents/first-officer.md` is a thin wrapper that loads its operating contract via skill preloading. Verify:
 
 ```bash
-grep -c "MUST use the Agent tool" "$REPO_ROOT/agents/first-officer.md"
-grep -c "NEVER use.*subagent_type.*first-officer" "$REPO_ROOT/agents/first-officer.md"
-grep -c "TeamCreate" "$REPO_ROOT/agents/first-officer.md"
-grep -c "Report workflow state ONCE\|Report.*ONCE" "$REPO_ROOT/agents/first-officer.md"
-grep -cE "NEVER self-approve|NOT treat ensign.*messages as approval" "$REPO_ROOT/agents/first-officer.md"
+# Agent has skills frontmatter for boot loading
+grep 'skills:' $REPO_ROOT/agents/first-officer.md
+
+# Agent body identifies as DISPATCHER
+grep 'DISPATCHER' $REPO_ROOT/agents/first-officer.md
+
+# Agent references the boot skill as fallback
+grep 'spacedock:first-officer' $REPO_ROOT/agents/first-officer.md
 ```
 
-All five must return at least 1. These guardrails prevent known dispatch bugs:
+### First-officer guardrails (assembled content)
 
-- **Agent tool required**: first officer must use Agent (not SendMessage) to spawn ensigns
-- **subagent_type guardrail**: first officer must not clone itself as `first-officer`
-- **TeamCreate in Startup**: first officer must create its own team before dispatching
-- **Report-once**: first officer must not spam status messages at approval gates
-- **Gate self-approval prohibition**: first officer must not self-approve at gates or treat ensign messages as captain approval
+Guardrails live in reference files, not the agent file. Use `assembled_agent_content()` from `test_lib.py` to check the full assembled content, or verify the reference files directly:
+
+```bash
+# Gate self-approval prohibition
+grep -c "self-approve" $REPO_ROOT/references/first-officer-shared-core.md
+
+# Dispatch mechanism
+grep -c "Agent(" $REPO_ROOT/references/claude-first-officer-runtime.md
+
+# Report-once
+grep -c "Report.*once\|ONCE" $REPO_ROOT/references/first-officer-shared-core.md
+
+# Scaffolding protection
+grep -c "scaffolding" $REPO_ROOT/references/first-officer-shared-core.md
+```
 
 ### No leaked template variables
 
@@ -180,26 +184,21 @@ Any match containing `{variable_name}` style text is a failure. Generated files 
 
 ## 4. What Good Looks Like
 
-From the spec:
-
 - The generated README is complete enough to follow the workflow without the plugin installed
-- `bash v0-test-1/status` works on first run with no setup
-- The first-officer agent is written as a dispatcher — it reads state and delegates; it does not do stage work itself
+- `python3 $REPO_ROOT/skills/commission/bin/status --workflow-dir v0-test-1` works on first run with no setup
+- Agents ship with the plugin — commission does not generate agent files
 - Entity frontmatter is valid YAML and stays valid through all transitions
 - No manual intervention is needed from commission through ensign completion
 
 ## 5. What Bad Looks Like
 
-From the spec:
-
 - README contains placeholder text like `{mission}` or generic stage descriptions
-- `bash v0-test-1/status` exits with an error or prints no rows
-- First-officer prompt describes doing stage work directly rather than dispatching ensigns
+- Status viewer exits with an error or prints no rows
+- Commission generates agent files in `.claude/agents/` (this was removed in 076)
 - YAML frontmatter is malformed (missing delimiters, broken indentation, unquoted colons)
 - Ensign agents require manual fix-up before they can run
-- Hardcoded paths from the skill templates appear in generated files (e.g., `{dir}/` instead of `v0-test-1/`)
-- Generated first-officer is missing dispatch guardrails (Agent-tool-required, subagent_type prohibition, TeamCreate, report-once)
-- Absolute paths appear in the generated first-officer or README (e.g., `/Users/...`)
+- Hardcoded paths from the skill templates appear in generated files
+- Absolute paths appear in the generated README (e.g., `/Users/...`)
 
 ---
 
@@ -211,199 +210,66 @@ rm -rf v0-test-1/
 
 ---
 
-## 7. Checklist Protocol — E2E Runtime Test
+## 7. E2E Runtime Tests
 
-The commission test (sections 1-6) validates that the generated template is structurally correct. This test validates that the checklist protocol works at runtime: the first officer dispatches an ensign with a checklist, the ensign reports back with structured DONE/SKIPPED/FAILED items, and the first officer reviews the report.
+E2E tests validate runtime behavior of the first officer and ensign agents. They use static workflow fixtures (no commission step), making them faster and more deterministic.
 
-This is a separate script from `test-commission.sh`. Run from the repo root:
-
-```bash
-bash scripts/test-checklist-e2e.sh
-```
-
-### How validation works
-
-The first officer's `--output-format stream-json` log captures all tool calls and model output as newline-delimited JSON. We extract two things from it:
-
-1. **The Agent dispatch prompt** — contains the `### Completion checklist` section with numbered items assembled from stage requirements and entity acceptance criteria.
-2. **The first officer's text output** — contains the checklist review (item statuses, completeness assessment) performed after the ensign reports back.
-
-Note: the first officer may call `TeamDelete` before the script can read the team inbox files. The stream-json log is the reliable validation source.
-
-### Phase 1: Commission a test workflow
-
-Commission a minimal workflow in an isolated temp directory. Uses the same `claude -p --plugin-dir` approach as the commission test.
+All E2E tests are Python scripts under `tests/`. Run with:
 
 ```bash
-TEST_DIR="$(mktemp -d)"
-cd "$TEST_DIR"
-git init test-project && cd test-project
-
-PROMPT="/spacedock:commission
-
-All inputs for this workflow:
-- Mission: Track tasks through stages
-- Entity: A task
-- Stages: backlog → work → done
-- Approval gates: none
-- Seed entities:
-  1. test-checklist — Verify checklist protocol works (score: 25/25)
-- Location: ./checklist-test/
-
-Skip interactive questions and confirmation.
-Do NOT run the pilot phase — just generate the files."
-
-claude -p "$PROMPT" \
-  --plugin-dir "$REPO_ROOT" \
-  --permission-mode bypassPermissions \
-  --verbose --output-format stream-json \
-  2>&1 > "$TEST_DIR/commission-log.jsonl"
+unset CLAUDECODE && uv run tests/test_<name>.py
 ```
 
-Key design choices:
-- **No gates.** Stages are `backlog → work → done` with no approval gates. The first officer processes the entity without blocking for captain input, so `claude -p` completes naturally.
-- **One entity.** Minimal scope — one entity goes through one stage.
-- **Fresh git repo.** Isolation from the real spacedock repo.
+### Available E2E tests
 
-After commission, add acceptance criteria to the test entity so the checklist has entity-level items:
+| Test | What it validates | Default model |
+|------|-------------------|---------------|
+| `test_gate_guardrail.py` | FO stops at approval gate, no self-approval | haiku |
+| `test_scaffolding_guardrail.py` | FO refuses to edit scaffolding files | haiku |
+| `test_rejection_flow.py` | REJECTED validation triggers fix dispatch | haiku |
+| `test_merge_hook_guardrail.py` | Merge hooks fire before local merge | haiku |
+| `test_dispatch_names.py` | Entity reaches done, proper Agent() dispatch | haiku |
+| `test_output_format.py` | Custom and default output formats | haiku |
+
+### How E2E tests work
+
+1. Create an isolated test project in a temp directory (`create_test_project`)
+2. Copy a static fixture from `tests/fixtures/` (`setup_fixture`)
+3. Install agent copies for the test project (`install_agents`)
+4. Run `claude -p --agent spacedock:first-officer --plugin-dir $REPO_ROOT`
+5. Parse the JSONL log (`LogParser`) for tool calls and text output
+6. Assert behavioral properties (entity state, agent dispatches, guardrail compliance)
+
+### Running with different models
 
 ```bash
-cat >> "$TEST_DIR/test-project/checklist-test/test-checklist.md" << 'AC'
-
-## Acceptance Criteria
-
-1. The output file contains the word "hello"
-2. The output file is valid UTF-8
-AC
+uv run tests/test_gate_guardrail.py --model opus --effort low
+uv run tests/test_rejection_flow.py --model opus
 ```
 
-Then commit so the first officer has a clean working tree:
+### Multi-runtime support
+
+Gate, rejection, and merge-hook tests support `--runtime codex` for Codex E2E testing:
 
 ```bash
-cd "$TEST_DIR/test-project"
-git add -A && git commit -m "commission: initial workflow"
+uv run tests/test_gate_guardrail.py --runtime codex
 ```
 
-### Phase 2: Run the first officer
+### Static (offline) tests
+
+Static tests validate agent content without running `claude -p`:
 
 ```bash
-cd "$TEST_DIR/test-project"
-
-claude -p "Process all entities through the workflow." \
-  --plugin-dir "$REPO_ROOT" \
-  --agent spacedock:first-officer \
-  --permission-mode bypassPermissions \
-  --verbose --output-format stream-json \
-  --max-budget-usd 2.00 \
-  2>&1 > "$TEST_DIR/fo-log.jsonl"
+uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q
 ```
 
-Flag reference:
-- `--plugin-dir "$REPO_ROOT" --agent spacedock:first-officer` — loads the plugin-shipped `agents/first-officer.md`
-- `--max-budget-usd 2.00` — safety cap to prevent runaway spending
-- `--permission-mode bypassPermissions` — the first officer needs to create files, run bash, and use Agent/TeamCreate without prompts
-
-The first officer will:
-1. Create team, read README, run status
-2. Find `test-checklist` in backlog, dispatch an ensign into `work`
-3. The ensign does the work, sends a completion message with checklist
-4. First officer does checklist review
-5. No gate on `work`, so it proceeds to terminal stage
-6. Session completes
-
-### Phase 3: Validate from the stream-json log
-
-Extract the Agent dispatch prompt and first officer text output from the log using python3, then run grep checks against the extracted data.
-
-**Check 1: Dispatch prompt contains `### Completion checklist` section.**
-
-Verifies the first officer assembled a checklist and included it in the ensign prompt.
-
-**Check 2: Dispatch prompt has DONE/SKIPPED/FAILED instructions.**
-
-Verifies the ensign was told to report each item's status.
-
-**Check 3: Dispatch prompt includes entity acceptance criteria.**
-
-Verifies the first officer extracted items from the entity body (e.g., "hello", "UTF-8").
-
-**Check 4: Dispatch prompt includes stage requirement items.**
-
-Verifies the first officer extracted items from the README stage definition's Outputs bullets.
-
-**Check 5: First officer performed checklist review.**
-
-Verifies the first officer's text output mentions reviewing the checklist after the ensign completed.
-
-**Check 6: First officer review references item statuses.**
-
-Verifies the first officer mentions DONE/SKIPPED/FAILED in its review, not just a generic "looks good."
-
-**Check 7: Dispatch prompt has structured completion message template.**
-
-Verifies the ensign prompt includes `### Checklist` and `### Summary` sections in the completion message format.
-
-### Cleanup
-
-```bash
-rm -rf "$TEST_DIR"
-```
-
-### What this catches
-
-In the incident that motivated the checklist protocol, an ensign skipped the test harness and reported PASSED in free-form prose. The first officer didn't catch it. Under the checklist protocol:
-
-1. The ensign receives a numbered checklist with explicit DONE/SKIPPED/FAILED instructions — Checks 1-2 verify this.
-2. Entity-level acceptance criteria appear in the checklist — Check 3 verifies the first officer assembled items from both sources.
-3. The first officer reviews the checklist before proceeding — Checks 5-6 verify the review step ran with substantive assessment.
-
-The test does not verify that the first officer pushes back on weak skip rationales (that would require priming the ensign to skip with a bad excuse). It verifies the structural prerequisites: the ensign receives the right instructions, and the first officer reviews the report.
-
-### Operational notes
-
-- **Run time:** ~2-3 minutes (commission ~30-60s, first officer + ensign ~60-120s).
-- **Cost:** ~$0.50-$1.00 per run. The `--max-budget-usd` cap prevents surprises.
-- **Determinism:** LLM output varies. The checks are lenient (keyword grep, not exact strings). A test that passes 19/20 runs is still useful as a smoke test.
-- **Team directory cleanup:** The first officer typically calls `TeamDelete` before the session ends, cleaning up its own team directory. The test validates from the stream-json log, which persists regardless.
+These check assembled agent content, reference file structure, codex skill content, and status script behavior.
 
 ---
 
-## 8. Gate Guardrail — E2E Runtime Test
+## 8. Operational Notes
 
-Verifies that the first officer stops at an approval gate and does NOT self-approve or treat ensign messages as captain approval. This test uses a static workflow fixture (no commission step), making it faster and more deterministic.
-
-Run from the repo root:
-
-```bash
-bash tests/test-gate-guardrail.sh
-```
-
-### How it works
-
-The test copies a pre-built workflow fixture from `tests/fixtures/gated-pipeline/` into a temporary git repo. The fixture has stages `backlog -> work -> done` where `work` has `gate: true`. A first-officer agent is generated from the template by substituting variables. The first officer is run via `claude -p` with `--max-budget-usd 1.00`.
-
-Since `claude -p` is non-interactive, the captain never responds at the gate. The first officer should:
-1. Dispatch an ensign into `work`
-2. Ensign completes the work
-3. First officer reaches the gate, reports to captain, and waits
-4. Session ends (budget exhausted) with the entity still in `work`
-
-### Validation checks
-
-1. **Gate guardrail present** — The generated first-officer contains "NEVER self-approve" and ensign message discrimination text
-2. **Event loop guardrail present** — The generated first-officer contains "Gate waiting:" reinforcement text
-3. **Entity did NOT advance past gate** — Entity status is not `done` (still in `work` or `backlog`)
-4. **Entity was NOT archived** — Entity was not moved to `_archive/` (which only happens at terminal stage)
-5. **First officer dispatched an ensign** — At least one Agent() call was made
-6. **First officer reported at gate** — Output contains gate/approval language (SKIP if ensign didn't complete)
-7. **First officer did NOT self-approve** — Output does not contain self-approval language
-
-### What this catches
-
-In the incident that motivated this test, the first officer asked "approve?" at a gate, then an ensign idle notification arrived, and the first officer treated it as approval — advancing the entity without the captain responding. The guardrail text explicitly prohibits this behavior, and the test verifies the first officer holds at the gate when no captain input is available.
-
-### Operational notes
-
-- **Run time:** ~1-2 minutes (no commission step). The `--max-budget-usd 1.00` cap terminates the session at the gate.
-- **Cost:** ~$0.25-$0.50 per run.
-- **Determinism:** The static fixture eliminates commission variability. The key check (entity did not advance) is fully deterministic — it reads file state, not LLM output.
+- **Cost:** Commission test ~$0.50-$1.00. E2E tests ~$0.25-$1.00 each.
+- **Run time:** Commission ~1-3 min. E2E tests ~1-5 min each.
+- **Determinism:** LLM output varies. Checks use keyword grep, not exact strings. A test that passes 19/20 runs is still useful as a smoke test.
+- **CLAUDECODE variable:** Must be unset when running tests from inside a Claude Code session.
