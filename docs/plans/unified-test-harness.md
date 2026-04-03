@@ -9,7 +9,7 @@ verdict: PASSED
 score: 0.75
 worktree: .worktrees/ensign-084-unified-test-harness
 issue:
-pr:
+pr: "#28"
 ---
 
 # Unify test harness across Claude Code and Codex runtimes
