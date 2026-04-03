@@ -176,7 +176,7 @@ Validation pilots should use these when verifying implementation work:
 
 | Resource | Path | Covers |
 |----------|------|--------|
-| Commission test harness | `tests/test-harness.md` | Batch-mode commission invocation, generated file validation, guardrail checks |
+| Commission test harness | `scripts/test-harness.md` | Batch-mode commission invocation, generated file validation, guardrail checks |
 | Rejection flow E2E test | `tests/test-rejection-flow.sh` | Validation rejection detection, validator-to-implementer relay dispatch |
 | Scaffolding guardrail E2E test | `tests/test-scaffolding-guardrail.sh` | Scaffolding change guardrail, issue filing guardrail |
 | Merge hook guardrail E2E test | `tests/test-merge-hook-guardrail.sh` | Merge hook fires before local merge, no-mods fallback |
