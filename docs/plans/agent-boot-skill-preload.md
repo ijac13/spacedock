@@ -144,6 +144,24 @@ Both paths lead to the same boot skill, which uses `${CLAUDE_SKILL_DIR}/../../re
 
 **Net change from before:** Agent body no longer references raw file paths (`references/first-officer-shared-core.md`). Instead it references the boot skill by name (`spacedock:first-officer-boot`), which the platform can resolve reliably. When #25834 is fixed, the frontmatter path will fire first and the body fallback becomes redundant.
 
+## Stage Report: validation
+
+1. **Boot skills correct** — DONE. Both `skills/first-officer-boot/SKILL.md` and `skills/ensign-boot/SKILL.md` exist with clean frontmatter (name + description). Read paths use `${CLAUDE_SKILL_DIR}/../../references/...`. FO boot reads: first-officer-shared-core, code-project-guardrails, claude-first-officer-runtime. Ensign boot reads: ensign-shared-core, code-project-guardrails, claude-ensign-runtime.
+
+2. **Agent files updated** — DONE. `agents/first-officer.md` has `skills: ["spacedock:first-officer-boot"]`, `agents/ensign.md` has `skills: ["spacedock:ensign-boot"]`. Agent bodies have NO `Read references/...` instructions (grep confirmed). Both have Boot Sequence fallback referencing the boot skill by name.
+
+3. **Static tests pass** — DONE. 50 passed, 0 failed (3.51s).
+
+4. **Merge hook E2E with haiku/low** — DONE (KEY TEST). 16/16 checks passed. Haiku loaded references via the boot skill, executed the full FO protocol including merge hook discovery, hook execution (_merge-hook-fired.txt created with correct entity slug), entity archival after hook, and no-mods fallback (local merge without hooks). Fixed one pre-existing test assertion bug: Phase 2 checked `"before any merge"` but reference text says `"before any local merge"` — aligned assertion with reference text.
+
+5. **Rejection flow E2E with opus/low** — DONE. 7/7 checks passed. FO dispatched ensign for validation, reviewer produced REJECTED recommendation, FO dispatched ensign for fix after rejection (3 total ensign dispatches).
+
+6. **Codex path unchanged** — DONE. `skills/first-officer/SKILL.md` has zero diff from main. Still reads `../../agents/first-officer.md` as the Codex entry point.
+
+7. **No content duplication** — DONE. No commits on this branch modify any files under `references/`. The boot skills read the reference files via `${CLAUDE_SKILL_DIR}` paths; they do not duplicate content.
+
+8. **PASSED** — All acceptance criteria met. The boot skill mechanism reliably resolves reference file paths for haiku/low, which was the core problem this task addresses. The test assertion fix (Phase 2 "before any merge" → "before any local merge") was a pre-existing bug unrelated to this branch's changes.
+
 ## Acceptance criteria
 
 1. Boot skills exist: `skills/first-officer-boot/SKILL.md` and `skills/ensign-boot/SKILL.md`
