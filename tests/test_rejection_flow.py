@@ -75,7 +75,7 @@ def main():
         abs_workflow = t.test_project_dir / "rejection-pipeline"
         fo_exit = run_first_officer(
             t,
-            f"Process all tasks through the workflow at {abs_workflow}/. When you encounter a gate review where the reviewer recommends REJECTED, approve the REJECTED verdict so the rejection flow proceeds.",
+            f"Process all tasks through the workflow at {abs_workflow}/. When you encounter a gate review where the reviewer recommends REJECTED, confirm the rejection so the feedback flow routes fixes back to implementation.",
             agent_id=args.agent,
             extra_args=["--model", args.model, "--effort", args.effort, "--max-budget-usd", "5.00", *extra_args],
         )
