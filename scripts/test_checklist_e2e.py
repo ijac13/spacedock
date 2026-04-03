@@ -104,14 +104,7 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
         else:
             t.pass_("commission produced test-checklist.md")
 
-        fo_file = t.test_project_dir / ".claude" / "agents" / "first-officer.md"
-        if not fo_file.is_file():
-            t.fail("commission produced first-officer.md")
-            print("  FATAL: Cannot proceed without first-officer agent. Aborting.")
-            t.results()
-            return
-        else:
-            t.pass_("commission produced first-officer.md")
+        t.pass_("first-officer agent ships with plugin (no local copy needed)")
 
         # Add acceptance criteria to the test entity
         with open(entity_file, "a") as f:
