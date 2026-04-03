@@ -1,5 +1,6 @@
 ---
 name: first-officer-boot
+description: Load the first officer operating contract from reference files. Invoke this skill before starting any workflow operations.
 ---
 Read these reference files before doing anything else:
 
