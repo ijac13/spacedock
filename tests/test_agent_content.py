@@ -37,23 +37,23 @@ def section_text(text: str, heading: str, stop_patterns: tuple[str, ...]) -> str
     return "\n".join(lines)
 
 
-def test_first_officer_skill_bootstraps_the_packaged_agent_asset():
+def test_first_officer_skill_reads_references_directly():
     text = read_text("skills/first-officer/SKILL.md")
-    assert "../../agents/first-officer.md" in text
+    assert "first-officer-shared-core.md" in text
+    assert "code-project-guardrails.md" in text
+    assert "claude-first-officer-runtime.md" in text
+    assert "${CLAUDE_SKILL_DIR}" in text
 
 
-def test_packaged_agent_entry_points_select_runtime_adapter():
+def test_agent_entry_points_use_skill_preloading():
     fo_text = read_text("agents/first-officer.md")
-    assert "references/first-officer-shared-core.md" in fo_text
-    assert "references/code-project-guardrails.md" in fo_text
-    assert "references/codex-first-officer-runtime.md" in fo_text
-    assert "references/claude-first-officer-runtime.md" in fo_text
+    assert 'skills:' in fo_text
+    assert 'spacedock:first-officer' in fo_text
+    assert 'DISPATCHER' in fo_text
 
     ensign_text = read_text("agents/ensign.md")
-    assert "references/ensign-shared-core.md" in ensign_text
-    assert "references/code-project-guardrails.md" in ensign_text
-    assert "references/codex-ensign-runtime.md" in ensign_text
-    assert "references/claude-ensign-runtime.md" in ensign_text
+    assert 'skills:' in ensign_text
+    assert 'spacedock:ensign' in ensign_text
 
 
 def test_first_officer_shared_core_covers_all_behavioral_sections():
