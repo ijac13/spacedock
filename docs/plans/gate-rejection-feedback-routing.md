@@ -1,13 +1,13 @@
 ---
 id: 086
 title: Gate rejection paths don't route to Feedback Rejection Flow
-status: backlog
+status: implementation
 source: github issue #22 (observed in task 080)
-started:
+started: 2026-04-03T05:30:00Z
 completed:
 verdict:
 score: 0.6
-worktree:
+worktree: .worktrees/ensign-gate-rejection-feedback
 issue: "#22"
 pr:
 ---
