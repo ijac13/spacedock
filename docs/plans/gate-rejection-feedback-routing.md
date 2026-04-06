@@ -7,7 +7,7 @@ started: 2026-04-03T05:30:00Z
 completed:
 verdict:
 score: 0.6
-worktree: .worktrees/ensign-gate-rejection-feedback
+worktree: .worktrees/spacedock-ensign-gate-rejection-feedback-routing
 issue: "#22"
 pr:
 ---
