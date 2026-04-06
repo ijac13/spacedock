@@ -1,9 +1,9 @@
 ---
 id: 090
 title: PR merge mod should push main before creating PRs
-status: backlog
+status: ideation
 source: CL — observed PR conflicts from unpushed main state commits
-started:
+started: 2026-04-06T00:00:00Z
 completed:
 verdict:
 score: 0.65
