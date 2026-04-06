@@ -448,18 +448,31 @@ This strengthens the case that task 075 (stage-to-stage reuse + `fresh`) and tas
 5. **Create test fixture** — DONE
    Created `tests/fixtures/reuse-pipeline/` with README.md (5-stage pipeline: backlog → analysis → implementation → validation → done) and entity file. Analysis → implementation are consecutive non-worktree stages without `fresh: true` (reusable). Validation has `fresh: true` + `feedback-to: implementation` (forces fresh dispatch).
 
-6. **Create test script** — DONE
-   Created `tests/test_reuse_dispatch.py` with 13 static tests covering all 7 acceptance criteria: reuse conditions present (AC1), SendMessage format (AC1), fresh:true disqualifier (AC2), worktree mode match (AC3), bare mode guard (AC4), feedback-to keep-alive in fresh path (AC5), gate approval references reuse (AC6), no "Always dispatch fresh" (AC7), neutral dispatch language (AC7), fixture validation (2 tests), runtime SendMessage clarification.
+6. **Create test script** — DONE (revised per validation feedback cycle 1)
+   Created `tests/test_reuse_dispatch.py` as an E2E behavioral test that runs the `reuse-pipeline` fixture through the FO in team mode. The test:
+   - Runs FO via `run_first_officer()` with team mode
+   - Parses FO log for Agent() calls — expects analysis (initial dispatch) and validation (fresh: true), but NOT implementation (should be reused via SendMessage)
+   - Parses FO log for SendMessage reuse — expects at least one SendMessage containing "implementation" or "Advancing to next stage"
+   - Verifies entity reaches terminal stage or archive
+   - Includes 10 supplementary static template checks (AC1-AC7) run inline
 
 7. **Run static tests** — DONE
-   `unset CLAUDECODE && uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q` — 63 passed, 0 failed.
+   `unset CLAUDECODE && uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q` — 51 passed, 0 failed.
 
-8. **Commit all changes** — DONE
-   Committed as `implement: restore ensign reuse across stages (075)` on branch `spacedock-ensign/restore-ensign-reuse`.
+8. **Run E2E test** — DONE
+   `uv run tests/test_reuse_dispatch.py --model haiku --effort low` — 18 passed, 0 failed. Key behavioral results:
+   - FO dispatched Agent() for analysis (initial dispatch) — PASS
+   - FO skipped Agent() for implementation (reused via SendMessage) — PASS
+   - FO dispatched Agent() for validation (fresh: true forces fresh) — PASS
+   - SendMessage reuse detected for analysis -> implementation — PASS
+   - Entity archived (reached terminal stage) — PASS
+
+9. **Commit all changes** — DONE
+   Committed on branch `spacedock-ensign/restore-ensign-reuse`.
 
 ### Summary
 
-Modified `references/first-officer-shared-core.md` and `references/claude-first-officer-runtime.md` to restore ensign reuse across stages. The completion flow now checks three reuse conditions (team mode available, next stage lacks `fresh: true`, same worktree mode) and advances the existing agent via SendMessage when all hold. The feedback-to keep-alive from 068 is preserved in the fresh-dispatch fallback path. Created a test fixture (`tests/fixtures/reuse-pipeline/`) and 13 static tests (`tests/test_reuse_dispatch.py`) covering all acceptance criteria. All 63 tests pass.
+Modified `references/first-officer-shared-core.md` and `references/claude-first-officer-runtime.md` to restore ensign reuse across stages. The completion flow now checks three reuse conditions (team mode available, next stage lacks `fresh: true`, same worktree mode) and advances the existing agent via SendMessage when all hold. The feedback-to keep-alive from 068 is preserved in the fresh-dispatch fallback path. Created a test fixture (`tests/fixtures/reuse-pipeline/`) and an E2E behavioral test (`tests/test_reuse_dispatch.py`) that runs the fixture through the FO and validates Agent() vs SendMessage dispatch patterns. E2E test passes (18/18): FO correctly reuses the agent via SendMessage for analysis->implementation and dispatches fresh for validation (fresh: true). All 51 pytest tests pass.
 
 ## Stage Report: validation
 
