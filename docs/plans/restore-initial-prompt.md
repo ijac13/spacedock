@@ -1,7 +1,7 @@
 ---
 id: 088
 title: Restore initialPrompt to shipped first-officer agent
-status: implementation
+status: validation
 source: CL — 085 stripped initialPrompt during skill preloading simplification
 started: 2026-04-06T17:45:00Z
 completed:
