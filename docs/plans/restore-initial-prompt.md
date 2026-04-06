@@ -90,3 +90,24 @@ initialPrompt: "Report workflow status."
 ```
 
 One line added. No other files changed.
+
+## Stage Report: implementation
+
+1. Add `initialPrompt` to `agents/first-officer.md` frontmatter with the exact value specified — DONE
+   - Added `initialPrompt: "You've totally got this. Take your time. I love you. And tell all subagents and team members you love them too.\n\nEngage!"` to line 5 of the frontmatter.
+
+2. Create E2E test for empty-repo initialPrompt behavior — DONE
+   - Created `tests/test_empty_repo_boot.py` following existing E2E test patterns.
+   - Test creates a fresh git repo with no workflow, installs agents, runs the FO via `run_first_officer()`, and verifies: FO produces output, recognizes no workflow, suggests commissioning, and does not dispatch workers.
+
+3. Run the E2E test at least once — DONE (PASS)
+   - All 6 checks passed. FO handled the empty repo gracefully, recognized no workflow existed, and suggested commissioning. 27s wallclock, 24 assistant messages on haiku. Zero dispatches as expected.
+
+4. Run static test suite — all must pass — DONE (51 passed, 0 failed)
+   - Command: `unset CLAUDECODE && uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q`
+   - Result: 51 passed in 1.58s.
+
+5. Verify the existing `initialPrompt` check in `scripts/test_commission.py` passes — DONE
+   - Line 170 checks `re.search(r"initialPrompt", fo_text)` against the full agent file text. The newly added frontmatter field matches this pattern. Confirmed via grep.
+
+6. Commit all changes on branch — DONE
