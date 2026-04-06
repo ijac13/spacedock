@@ -9,7 +9,7 @@ verdict:
 score: 0.6
 worktree: .worktrees/spacedock-ensign-gate-rejection-feedback-routing
 issue: "#22"
-pr:
+pr: "#34"
 ---
 
 When the captain rejects at a validation gate with `feedback-to`, the FO follows the generic "Reject + redo" path instead of entering the Feedback Rejection Flow. It shuts down both agents and dispatches fresh ones sequentially, instead of keeping the implementer alive and routing findings to it.
