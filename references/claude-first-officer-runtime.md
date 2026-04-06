@@ -36,7 +36,7 @@ Use `worker_key` in worktree paths (`.worktrees/{worker_key}-{slug}`) and branch
 
 ## Dispatch Adapter
 
-Use the Agent tool to spawn each worker. **NEVER use SendMessage to dispatch** — use Agent(). **NEVER use `subagent_type="first-officer"`** — that clones yourself instead of dispatching a worker.
+Use the Agent tool to spawn each worker. **Use Agent() for initial dispatch** — SendMessage is only used in the completion path to advance a reused agent to its next stage. **NEVER use `subagent_type="first-officer"`** — that clones yourself instead of dispatching a worker.
 
 Only fill `{named_variables}` — do not expand bracketed placeholders or add behavioral instructions beyond what the dispatch template specifies. All paths in the dispatch prompt MUST be absolute (rooted at `$project_root`).
 

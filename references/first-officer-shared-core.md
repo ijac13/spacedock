@@ -60,7 +60,7 @@ For each entity reported by `status --next`:
    - set `started:` when the entity first moves beyond the initial stage
 6. Commit the state transition on main with `dispatch: {slug} entering {next_stage}`.
 7. Create the worktree on first dispatch to a worktree stage.
-8. Dispatch a fresh worker using the runtime-specific mechanism. The worker assignment must include:
+8. Dispatch a worker for the stage using the runtime-specific mechanism. The worker assignment must include:
    - entity identity and title
    - target stage name
    - the full stage definition
@@ -84,10 +84,18 @@ When a worker completes:
 The checklist review should produce an explicit count summary in the form:
 - `{N} done, {N} skipped, {N} failed`
 
-If the stage is not gated:
-- advance normally
-- if the next stage is terminal, continue into merge handling
-- if the next stage has `feedback-to` pointing at the current stage, keep the current worker available for potential follow-up
+If the stage is not gated: If terminal, proceed to merge. Otherwise, determine whether to reuse the current agent or dispatch fresh for the next stage.
+
+**Reuse conditions** (all must hold — if any fails, dispatch fresh):
+1. Not in bare mode (teams available)
+2. Next stage does NOT have `fresh: true`
+3. Next stage has the same `worktree` mode as the completed stage
+
+**If reuse:** Keep the agent alive. Update frontmatter on main (set `status` to next stage, commit: `advance: {slug} entering {next_stage}`). Send the agent its next assignment:
+
+SendMessage(to="{agent}-{slug}-{completed_stage}", message="Advancing to next stage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim]\n\n### Completion checklist\n\n[CHECKLIST — assemble from step 2]\n\nContinue working on {entity title}. The entity file is at {entity_file_path}. Do the work described in the stage definition. Update the entity file body with your findings or outputs. Commit before sending your completion message.")
+
+**If fresh dispatch:** Check whether the next stage has `feedback-to` pointing at the completed stage. If yes, keep the completed agent alive (the feedback reviewer will need to message it). Otherwise, shut down the agent. Run `status --next` and dispatch the next stage.
 
 If the stage is gated:
 - never self-approve
@@ -95,6 +103,7 @@ If the stage is gated:
 - keep the worker alive while waiting at the gate
 - if the stage is a feedback gate that recommends `REJECTED`, auto-bounce directly into the feedback rejection flow instead of waiting on manual review
 - if the captain rejects at a gated stage that has `feedback-to`, enter the Feedback Rejection Flow and route findings to the `feedback-to` target stage. This takes priority over generic rejection handling.
+- if the captain approves and the next stage is not terminal: apply the reuse conditions from the "If the stage is not gated" path. If reuse: keep the agent, send the next stage via SendMessage. If fresh dispatch: shut down the agent. In either case, if a kept-alive agent from a prior stage is still running (the `feedback-to` target) and the next stage does not need it, shut it down.
 
 ## Feedback Rejection Flow
 
