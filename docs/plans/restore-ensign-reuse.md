@@ -181,105 +181,252 @@ Gate stages already have their own completion flow (the gate approval path in "C
 - "Reject + redo": unchanged — the same agent retries.
 - "Reject + discard": unchanged — agent shuts down.
 
+## Dependency
+
+This task (075) modifies the completion/gate paths in `references/first-officer-shared-core.md`. Task 086 (gate-rejection-feedback-routing) also modifies these paths. Implementation of 075 should follow 086 landing to avoid merge conflicts and ensure the feedback routing clarity from 086 is in place before adding the reuse logic.
+
 ## Acceptance Criteria
 
 ### AC1: Reuse when consecutive non-worktree stages share context
 When an entity completes a non-gate, non-terminal stage and the next stage has `fresh: false` (or unset), `worktree: false` (same as current), and the FO is in team mode: the FO sends the next stage instructions to the existing agent via SendMessage instead of dispatching a new one.
 
-**Test plan:** Static template inspection — verify the "If no gate" path has the three reuse conditions and the SendMessage format. No E2E test needed for the reuse path itself (would require multi-stage team-mode run), but the template text can be grep-checked.
+**Test plan:**
+- **Static check:** Verify the "If no gate" path in `references/first-officer-shared-core.md` contains the three reuse conditions and the SendMessage format.
+- **E2E behavioral test (reuse-pipeline fixture):** Dispatch an entity through a multi-stage pipeline where consecutive stages share the same worktree mode (both `worktree: false`) and `fresh` is unset. Parse the FO log and verify: (a) the FO issues a `SendMessage` to the worker for the second stage, (b) only one `Agent()` call is made for the first non-initial stage (no second `Agent()` dispatch). See "E2E Test Design" section below.
 
 ### AC2: Fresh dispatch when `fresh: true`
 When the next stage has `fresh: true`, the FO always dispatches a new agent regardless of worktree mode match.
 
-**Test plan:** Static template inspection — verify the reuse conditions include `fresh: true` as a disqualifier. The existing rejection-flow fixture (`tests/fixtures/rejection-flow/README.md`) has `fresh: true` on the validation stage — if an E2E test is added for that fixture, it would validate this path.
+**Test plan:**
+- **Static check:** Verify the reuse conditions in `references/first-officer-shared-core.md` include `fresh: true` as a disqualifier.
+- **E2E behavioral test (reuse-pipeline fixture, fresh variant):** The test fixture includes a `fresh: true` stage after the reusable stages. Parse the FO log and verify: a separate `Agent()` call is made for the `fresh: true` stage instead of a `SendMessage`. See "E2E Test Design" section below.
 
 ### AC3: Fresh dispatch on worktree boundary change
 When the completed stage and next stage have different `worktree` modes, the FO dispatches fresh.
 
-**Test plan:** Static template inspection — verify condition 3 (same worktree mode). The rejection-flow fixture has `backlog` (worktree: false) -> `implementation` (worktree: true), which is a boundary change that should force fresh dispatch.
+**Test plan:**
+- **Static check:** Verify condition 3 (same worktree mode) in `references/first-officer-shared-core.md`.
+- **E2E behavioral coverage:** The existing `rejection-flow` fixture has `backlog` (worktree: false) -> `implementation` (worktree: true), which is a worktree boundary change. The existing `test_rejection_flow.py` E2E test already validates fresh dispatch across this boundary (every stage gets an `Agent()` call). After 075 lands, this test serves as regression coverage for AC3.
 
 ### AC4: Bare mode always dispatches fresh
 When the FO is in bare mode (no teams), reuse is impossible and the FO always dispatches fresh. The `fresh` field is effectively a no-op in bare mode.
 
-**Test plan:** Static template inspection — verify the reuse conditions include "not in bare mode" as the first check. Document in the template that bare mode cannot reuse (subagents are blocking).
+**Test plan:**
+- **Static check:** Verify the reuse conditions in `references/first-officer-shared-core.md` include "not in bare mode" / "teams available" as the first check.
+- **E2E behavioral coverage:** The Codex runtime tests (e.g., `test_codex_packaged_agent_e2e.py`) run in single-entity mode which uses bare-mode dispatch. After 075 lands, these tests continue to pass unchanged (reuse never activates in bare mode), providing regression coverage.
 
 ### AC5: feedback-to keep-alive preserved
 When the next stage has `feedback-to` pointing at the completed stage but reuse conditions are NOT met (e.g., `fresh: true`), the completed agent is kept alive (not shut down) so the feedback reviewer can reach it.
 
-**Test plan:** Static template inspection — verify the "If fresh dispatch" path retains the 068 keep-alive check. The existing `test_rejection_flow.py` fixture exercises the feedback-to path and can serve as a regression check.
+**Test plan:**
+- **Static check:** Verify the "If fresh dispatch" path in `references/first-officer-shared-core.md` retains the 068 keep-alive check for `feedback-to`.
+- **E2E behavioral coverage:** The existing `test_rejection_flow.py` exercises the feedback-to path with `fresh: true` on the validation stage. After 075 lands, this test confirms the keep-alive still works (the implementer agent stays alive for the feedback loop even though `fresh: true` prevents reuse).
 
 ### AC6: Gate approval path uses reuse logic
 After gate approval when the next stage is not terminal, the FO applies the same reuse-vs-fresh logic as the "If no gate" path.
 
-**Test plan:** Static template inspection — verify the "Approve + next stage is NOT terminal" path references the reuse conditions. Before/after wording specified below.
+**Test plan:**
+- **Static check:** Verify that the gate approval path in `references/first-officer-shared-core.md` feeds into the same completion flow that contains the reuse conditions (the shared-core's gate path already re-enters normal completion after approval).
+- **E2E behavioral coverage:** Adding a gated variant of the reuse-pipeline would be ideal but is deferred as stretch — the existing `gated-pipeline` fixture can be extended post-implementation if needed. The core reuse logic is the same code path regardless of whether it's entered from a gate approval or a non-gated completion, so the non-gated E2E test provides strong coverage.
 
-### AC7: Dispatch step 7 no longer says "Always dispatch fresh"
-The dispatch step 7 wording changes from "Always dispatch fresh" to neutral language, since reuse now happens in the completion flow.
+### AC7: Dispatch step 8 no longer says "Always dispatch fresh"
+The dispatch step 8 wording changes to neutral language reflecting that initial dispatch is always fresh but completion-path reuse is possible.
 
-**Test plan:** Grep for "Always dispatch fresh" in `templates/first-officer.md` — should not be found.
+**Test plan:**
+- **Static check:** Grep for "Always dispatch fresh" in `references/first-officer-shared-core.md` and `references/claude-first-officer-runtime.md` — should not be found.
+- **Behavioral coverage:** The assembled agent content check (`test_agent_content.py`) can add an assertion that "Always dispatch fresh" does not appear in the assembled first-officer text.
 
 ## Before/After Template Wording
 
-### Dispatch step 7 (line 64)
+Changes target `references/first-officer-shared-core.md` (behavioral semantics) and `references/claude-first-officer-runtime.md` (Claude-specific dispatch adapter).
 
-**Before:**
-```
-7. **Dispatch agent** — Always dispatch fresh. **You MUST use the Agent tool** ...
-```
+### Dispatch step 8 in `references/claude-first-officer-runtime.md`
 
-**After:**
+**Before (Dispatch Adapter section):**
 ```
-7. **Dispatch agent** — Dispatch a new agent for the stage. **You MUST use the Agent tool** ...
-```
-
-### "If no gate" path (line 94)
-
-**Before:**
-```
-**If no gate:** If terminal, proceed to merge. Otherwise, check whether the next stage has `feedback-to` pointing at this stage. If yes, keep the agent alive — do not shut it down. Run `status --next` and dispatch the next stage.
+8. Dispatch a fresh worker using the runtime-specific mechanism.
 ```
 
 **After:**
 ```
-**If no gate:** If terminal, proceed to merge. Otherwise, determine whether to reuse the current agent or dispatch fresh for the next stage.
+8. Dispatch a fresh worker using the runtime-specific mechanism.
+```
+
+(No change to initial dispatch — initial dispatch from the event loop is always fresh. Reuse only applies in the completion path.)
+
+### "If the stage is not gated" in `references/first-officer-shared-core.md` (Completion and Gates section)
+
+**Before:**
+```
+If the stage is not gated:
+- advance normally
+- if the next stage is terminal, continue into merge handling
+- if the next stage has `feedback-to` pointing at the current stage, keep the current worker available for potential follow-up
+```
+
+**After:**
+```
+If the stage is not gated:
+- if the next stage is terminal, continue into merge handling
+- otherwise, determine whether to reuse the current worker or dispatch fresh for the next stage
 
 **Reuse conditions** (all must hold — if any fails, dispatch fresh):
-1. Not in bare mode (teams available)
+1. Not in bare mode (teams available — subagents can't be kept alive otherwise)
 2. Next stage does NOT have `fresh: true`
 3. Next stage has the same `worktree` mode as the completed stage
 
-**If reuse:** Keep the agent alive. Update frontmatter on main (set `status` to next stage, commit: `advance: {slug} entering {next_stage}`). Send the agent its next assignment:
+**If reuse:** Keep the worker alive. Update frontmatter on main (set `status` to next stage, commit: `advance: {slug} entering {next_stage}`). Send the worker its next assignment via SendMessage with the stage definition, checklist, and continuation instructions.
 
-SendMessage(to="{agent}-{slug}-{completed_stage}", message="Advancing to next stage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim]\n\n### Completion checklist\n\n[CHECKLIST — assemble from step 2]\n\nContinue working on {entity title}. The entity file is at {entity_file_path}. Do the work described in the stage definition. Update the entity file body with your findings or outputs. Commit before sending your completion message.")
-
-**If fresh dispatch:** Check whether the next stage has `feedback-to` pointing at the completed stage. If yes, keep the completed agent alive (the feedback reviewer will need to message it). Otherwise, shut down the agent. Run `status --next` and dispatch the next stage.
+**If fresh dispatch:** Check whether the next stage has `feedback-to` pointing at the completed stage. If yes, keep the completed worker alive (the feedback reviewer will need to message it). Otherwise, shut down the worker. Dispatch the next stage fresh.
 ```
 
-### Gate approval — "Approve + next stage is NOT terminal" (line 128)
+### Gate approval path in `references/first-officer-shared-core.md` (Completion and Gates section)
+
+The shared-core currently does not have explicit "Approve + next stage is NOT terminal" wording (the gate path says "never self-approve" and "present the stage report"). After gate approval, the FO re-enters the normal completion flow, which now includes the reuse conditions above. No separate wording change is needed here — the gate approval path feeds into the same reuse-vs-fresh decision.
+
+### Dispatch Adapter caveat in `references/claude-first-officer-runtime.md`
 
 **Before:**
 ```
-- **Approve + next stage is NOT terminal:** Shut down the agent. If a kept-alive agent from a prior stage is still running (the `feedback-to` target), shut it down too. Dispatch a fresh agent for the next stage.
+Use the Agent tool to spawn each worker. **NEVER use SendMessage to dispatch** — use Agent().
 ```
 
 **After:**
 ```
-- **Approve + next stage is NOT terminal:** Apply the reuse conditions from the "If no gate" path. If reuse: keep the agent, send the next stage via SendMessage. If fresh dispatch: shut down the agent. In either case, if a kept-alive agent from a prior stage is still running (the `feedback-to` target) and the next stage does not need it, shut it down. Dispatch a fresh agent for the next stage if not reusing.
+Use the Agent tool to spawn each worker for initial dispatch. **NEVER use SendMessage for initial dispatch** — use Agent(). SendMessage is used only in the completion path to advance a reused worker to its next stage (see "Reuse conditions" in the shared core).
 ```
+
+## E2E Test Design
+
+### Test fixture: `tests/fixtures/reuse-pipeline/`
+
+A minimal multi-stage pipeline designed to exercise both the reuse and fresh-dispatch paths in a single run.
+
+**`README.md` stages:**
+```yaml
+stages:
+  defaults:
+    worktree: false
+    concurrency: 2
+  states:
+    - name: backlog
+      initial: true
+    - name: draft
+    - name: refine
+    - name: verify
+      fresh: true
+    - name: done
+      terminal: true
+```
+
+- `backlog` -> `draft`: Initial dispatch (always fresh — event loop entry)
+- `draft` -> `refine`: **Reuse path** — both `worktree: false`, no `fresh: true` => FO should SendMessage to the existing worker
+- `refine` -> `verify`: **Fresh path** — `verify` has `fresh: true` => FO must dispatch a new Agent()
+- `verify` -> `done`: Terminal => merge handling
+
+**Entity file (`reuse-test-entity.md`):**
+```yaml
+---
+id: "001"
+title: Reuse dispatch test
+status: backlog
+score: 0.50
+source: test
+started:
+completed:
+verdict:
+worktree:
+---
+
+Write a one-line summary: "Reuse test complete."
+```
+
+### Test script: `tests/test_reuse_dispatch.py`
+
+Uses the existing `test_lib.py` infrastructure (TestRunner, LogParser, create_test_project, setup_fixture, run_first_officer).
+
+**Phase 1 — Setup:** Create test project, copy fixture, install agents, commit.
+
+**Phase 2 — Run FO:** `run_first_officer(t, "Process all tasks through the pipeline to completion.", ...)` with team mode (the default for `claude --agent`).
+
+**Phase 3 — Validate reuse behavior by parsing the FO log:**
+
+1. **Count Agent() dispatches.** Extract all `Agent()` tool calls from the log via `LogParser.agent_calls()`. Expected: exactly 2 Agent() calls — one for `draft` (initial dispatch), one for `verify` (fresh dispatch due to `fresh: true`). The `refine` stage should NOT have its own Agent() call.
+
+2. **Check for SendMessage reuse.** Extract all `SendMessage` tool calls from the log via `LogParser.tool_calls()` filtered to `name == "SendMessage"`. Expected: at least one SendMessage whose `message` input contains "refine" or "Advancing to next stage" — this is the reuse dispatch for the `refine` stage.
+
+3. **Verify `fresh: true` forces fresh dispatch.** The Agent() call list should include one whose `name` input contains "verify" — confirming `fresh: true` on verify triggered a new Agent() rather than SendMessage.
+
+4. **Entity reaches done.** Read the entity frontmatter and verify `status: done` (or entity is archived).
+
+**Contrasting validation (fresh-only baseline):** Before implementing 075, the same fixture should produce 3 Agent() calls (draft, refine, verify) and 0 reuse SendMessages. This baseline can be checked by running the test against the pre-075 codebase to confirm the test correctly detects the absence of reuse.
+
+### Test cost estimate
+
+The reuse-pipeline fixture has trivial stage work ("write a one-line summary"), so each worker dispatch is cheap (~1-2 haiku turns). Total run: ~$0.50-1.00 with haiku, ~60-120s wall clock. Comparable to the existing `test_dispatch_names.py` which runs a similar 4-stage no-gate pipeline.
+
+### Regression coverage from existing tests
+
+| Test | What it covers for 075 |
+|------|----------------------|
+| `test_rejection_flow.py` | AC3 (worktree boundary), AC5 (feedback-to keep-alive with `fresh: true`) |
+| `test_dispatch_names.py` | Baseline multi-stage dispatch — can detect if reuse accidentally activates where it shouldn't |
+| `test_codex_packaged_agent_e2e.py` | AC4 (bare mode — Codex single-entity always dispatches fresh) |
+| `test_agent_content.py` | AC7 (static check that "Always dispatch fresh" is removed from assembled agent text) |
 
 ## Stage Report: ideation
 
 - [x] Problem statement clarifying the fresh-field regression and its impact on ensign context continuity
   See "Problem Statement" section — documents the regression from 0.3.0, the three impacts (misleading field, lost context, extra overhead), and why it matters
 - [x] Proposed approach for restoring fresh field support in the FO template completion/dispatch flow
-  Four changes: "If no gate" reuse path, gate approval reuse, SendMessage format, dispatch step 7 wording fix — with exact before/after template text
+  Four changes: "If no gate" reuse path, gate approval reuse, SendMessage format, dispatch step wording fix — with exact before/after template text targeting `references/first-officer-shared-core.md` and `references/claude-first-officer-runtime.md`
 - [x] Investigation of bare-mode (no teams) reuse — does Agent() with the same name reconnect, or is each call always fresh?
   Finding: bare-mode reuse is impossible. Agent() subagents are blocking — once they return, the process is gone. name parameter is for identification, not reconnection. Reuse requires team mode with live agents and SendMessage.
 - [x] Acceptance criteria with test plan (including specific before/after template wording for the FO changes)
-  7 acceptance criteria (AC1-AC7), each with test plan. Before/after wording for all three template sections that change.
+  7 acceptance criteria (AC1-AC7), each with both static checks and E2E behavioral test coverage. Before/after wording for `references/first-officer-shared-core.md` and `references/claude-first-officer-runtime.md`.
 - [x] Edge case analysis: interaction with feedback-to keep-alive (068), worktree boundary transitions, gate stages
   Three subsections analyzing: feedback-to + fresh interaction (complementary, not conflicting), worktree boundary forces fresh (correct — path context mismatch), gate stages (reuse applies only at "approve + not terminal" decision point)
+- [x] Revised test plan with E2E behavioral tests instead of static-only inspection (gate feedback revision)
+  Designed `reuse-pipeline` fixture with 4 non-initial stages: draft->refine (reuse path), refine->verify (fresh path via `fresh: true`). E2E test parses FO log for Agent() vs SendMessage dispatch patterns. Contrasting fresh-only baseline validates test detects absence of reuse pre-implementation.
+- [x] E2E test fixture design for verifying SendMessage reuse vs fresh Agent() dispatch
+  `tests/fixtures/reuse-pipeline/` with stages: backlog, draft, refine, verify (fresh: true), done. Test validates 2 Agent() calls (draft + verify) and 1+ SendMessage for refine.
+- [x] Contrasting test case for `fresh: true` forcing fresh dispatch
+  Same fixture — verify stage has `fresh: true`, test asserts Agent() call with "verify" in the name and no SendMessage for that stage.
+- [x] Updated file references to correct architecture (`references/first-officer-shared-core.md`, `references/claude-first-officer-runtime.md`)
+  All before/after wording now targets the correct files. Removed stale `templates/first-officer.md` references.
+- [x] Added dependency note: 075 implementation should follow 086
+  See "Dependency" section — both tasks modify completion/gate paths in `references/first-officer-shared-core.md`.
+- [x] Kept existing design approach intact — only test plan and file references revised
+  The four proposed changes (reuse conditions, gate approval, SendMessage format, dispatch wording) are unchanged. Only the verification strategy and file references were updated.
 
 ### Summary
 
-Investigated the `fresh` field regression introduced in the 0.8.2 FO simplification. The field exists in README frontmatter but the FO template ignores it, always dispatching fresh. Proposed a three-condition reuse check (team mode, no `fresh: true`, same worktree mode) applied at both the "no gate" and "gate approval" completion paths. Confirmed that bare-mode reuse is physically impossible (blocking subagents), so the feature is team-mode only. The existing feedback-to keep-alive (068) is preserved as a separate concern — it keeps agents alive for the feedback loop even when reuse conditions aren't met.
+Revised the ideation test plan per gate feedback. Replaced static-only template inspection with behavioral E2E tests using a new `reuse-pipeline` fixture that exercises both the reuse path (SendMessage for consecutive same-mode stages) and the fresh-dispatch path (`fresh: true` forces new Agent()). The E2E test parses FO logs using the existing `LogParser` infrastructure to verify dispatch mechanism (Agent() vs SendMessage) per stage transition. Added regression coverage mapping showing how existing tests (`test_rejection_flow.py`, `test_dispatch_names.py`, `test_codex_packaged_agent_e2e.py`) cover AC3-AC5. Updated all file references from the stale `templates/first-officer.md` to the current `references/first-officer-shared-core.md` and `references/claude-first-officer-runtime.md`. Added dependency note that 075 should land after 086.
+
+## Additional Findings (2026-04-04 git traversal)
+
+### Release history confirmation
+
+- `v0.6.0`, `v0.7.0`, `v0.7.1`, and `v0.8.0` FO templates all explicitly say: "Always dispatch fresh."
+- All of these versions also include "If no gate ... dispatch the next stage fresh."
+- `scripts/test-commission.sh` in `v0.6.0` / `v0.7.0` / `v0.7.1` includes a check that passes only when FO text matches fresh-dispatch wording (`dispatch fresh|always.*fresh|fresh.*dispatch`).
+
+This confirms that fresh-dispatch behavior was not accidental in those releases; tests reinforced it.
+
+### Rejection-flow keep-alive semantics
+
+- Historical FO templates (`v0.7.x`, `v0.8.0`) contained explicit rejection-flow wording:
+  - "Ensure implementer/target-stage agent is alive"
+  - "Ensure validator/reviewer is alive"
+  - Use `SendMessage` when the prior-stage worker is still running.
+- Current shared-core/runtime wording still supports feedback routing and keeping reviewer alive at gates, but is less explicit about reusing the existing prior-stage worker on captain-confirmed rejection paths.
+
+This strengthens the case that task 075 (stage-to-stage reuse + `fresh`) and task 086 (gate rejection routing clarity) are linked and should be validated together.
+
+### Related active tracking
+
+- Task `086` (`docs/plans/gate-rejection-feedback-routing.md`) already tracks a related regression: captain rejection at feedback gates not reliably entering Feedback Rejection Flow with clear worker-liveness routing.
+- Proposed implementation sequencing (updated per dependency analysis):
+  1. land explicit captain-rejection routing/liveness behavior from 086 first (it modifies the same completion/gate paths)
+  2. land explicit reuse/fresh behavior from 075 on top of the 086 changes
+  3. add/adjust tests so both reuse and rejection-flow liveness are asserted together.
