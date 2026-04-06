@@ -1,13 +1,13 @@
 ---
 id: 086
 title: Gate rejection paths don't route to Feedback Rejection Flow
-status: validation
+status: done
 source: github issue #22 (observed in task 080)
 started: 2026-04-03T05:30:00Z
-completed:
-verdict:
+completed: 2026-04-06T17:05:46Z
+verdict: PASSED
 score: 0.6
-worktree: .worktrees/spacedock-ensign-gate-rejection-feedback-routing
+worktree:
 issue: "#22"
 pr: "#34"
 ---
