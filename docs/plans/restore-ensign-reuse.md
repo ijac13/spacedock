@@ -1,7 +1,7 @@
 ---
 id: 075
 title: Restore ensign reuse across stages (fresh field support)
-status: implementation
+status: validation
 source: user report during 0.3.0 → 0.8.2 upgrade
 started: 2026-03-29T00:00:00Z
 completed:
