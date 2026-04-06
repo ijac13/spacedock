@@ -8,6 +8,7 @@ completed:
 verdict:
 score: 0.75
 worktree: .worktrees/spacedock-ensign-restore-ensign-reuse
+pr: "#35"
 ---
 
 The `fresh` field in stage definitions is effectively dead in the 0.8.2 FO template. The template always dispatches a new agent per stage (`name="{agent}-{slug}-{stage}"`). The old FO (0.3.0) had explicit reuse logic: advance ensigns via SendMessage by default, `fresh: true` opted into a new agent.

@@ -9,7 +9,7 @@ verdict:
 score:
 worktree: .worktrees/spacedock-ensign-restore-initial-prompt
 issue:
-pr:
+pr: "#36"
 ---
 
 # Restore initialPrompt to shipped first-officer agent

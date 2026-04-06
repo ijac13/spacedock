@@ -94,6 +94,7 @@ If the stage is gated:
 - present the stage report to the human operator
 - keep the worker alive while waiting at the gate
 - if the stage is a feedback gate that recommends `REJECTED`, auto-bounce directly into the feedback rejection flow instead of waiting on manual review
+- if the captain rejects at a gated stage that has `feedback-to`, enter the Feedback Rejection Flow and route findings to the `feedback-to` target stage. This takes priority over generic rejection handling.
 
 ## Feedback Rejection Flow
 
