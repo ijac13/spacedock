@@ -7,7 +7,7 @@ started: 2026-04-02T16:35:40Z
 completed: 2026-04-03T03:30:00Z
 verdict: PASSED
 score: 0.75
-worktree: .worktrees/ensign-084-unified-test-harness
+worktree:
 issue:
 pr: "#28"
 ---

@@ -1,13 +1,13 @@
 ---
 id: 085
 title: Agent boot via skill preloading — eliminate runtime path resolution
-status: validation
+status: done
 source: CL — 084 validation findings (haiku path resolution failure)
 started: 2026-04-03T03:40:00Z
-completed:
-verdict:
+completed: 2026-04-06T00:00:00Z
+verdict: PASSED
 score: 0.7
-worktree: .worktrees/ensign-agent-boot-skill-preload
+worktree:
 issue:
 pr: "#29"
 ---
