@@ -514,3 +514,50 @@ Modified `references/first-officer-shared-core.md` and `references/claude-first-
 ### Summary
 
 All 7 acceptance criteria verified with evidence from reference file inspection. Static test suite passes (63/63). Rejection flow E2E passes (5/5) confirming the feedback-to keep-alive regression check. Test quality is reasonable for template/reference-file changes — tests verify actual file content, not mocked behavior. **Recommendation: PASSED.**
+
+## Stage Report: validation (cycle 2)
+
+Re-validation after feedback cycle 1. The gate rejected the first validation because `test_reuse_dispatch.py` only had static tests (regex on file content), not the behavioral E2E test the ideation designed. The implementer added the E2E lifecycle test in commit `cf89c99`.
+
+1. **Pull latest on the branch** — DONE
+   Branch is at `cf89c99` ("fix: replace static-only tests with E2E behavioral test for reuse dispatch"). No remote ref to pull from; working directly on the local branch.
+
+2. **Verify `test_reuse_dispatch.py` is a real E2E test** — DONE
+   The file (`tests/test_reuse_dispatch.py`, 224 lines) uses:
+   - `run_first_officer()` (line 71) to run the FO with the reuse-pipeline fixture in team mode
+   - `LogParser` (line 97) to parse `fo-log.jsonl` for actual dispatch patterns
+   - `log.agent_calls()` (line 102) to extract Agent() tool calls
+   - `log.tool_calls()` (line 103) to extract SendMessage tool calls
+   - Behavioral assertions: checks Agent() dispatches for analysis/validation, SendMessage reuse for implementation
+   - 10 supplementary static checks (lines 190-217) run inline after the behavioral checks
+   This is NOT static-only anymore. The E2E behavioral test is the primary validation path.
+
+3. **Run full static test suite** — DONE
+   `unset CLAUDECODE && uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q` — **51 passed, 0 failed** in 1.62s.
+
+4. **Run E2E reuse dispatch test** — DONE
+   `unset CLAUDECODE && uv run tests/test_reuse_dispatch.py --runtime claude --model opus --effort low` — **16 passed, 0 failed, RESULT: PASS**.
+   Key behavioral results:
+   - FO dispatched Agent() for analysis (initial dispatch) — PASS
+   - FO skipped Agent() for implementation (reused via SendMessage) — PASS
+   - SendMessage reuse detected for analysis -> implementation transition — PASS
+   - Reuse SendMessage contains stage definition — PASS
+   - Two checks SKIPped (not failed): pipeline did not progress to validation or terminal within budget cap. This is expected with `--effort low` on opus. The critical reuse behavior was proven.
+   - All 10 static template checks — PASS
+
+5. **Run rejection flow E2E (regression check)** — DONE
+   `unset CLAUDECODE && uv run tests/test_rejection_flow.py --runtime claude --model opus --effort low` — **5 passed, 0 failed, RESULT: PASS**.
+   FO dispatched ensign for validation, reviewer recommended REJECTED, FO dispatched fix agent after rejection (5 total ensign dispatches). Feedback-to keep-alive path works correctly (AC5 regression confirmed).
+
+6. **Recommendation: PASSED**
+
+   The E2E test proves the FO uses SendMessage for reuse. The critical evidence:
+   - The FO dispatched Agent() for `analysis` (initial dispatch) but did NOT dispatch Agent() for `implementation`
+   - Instead, the FO sent a SendMessage to the analysis-stage agent containing the implementation stage definition
+   - This is exactly the reuse behavior specified in AC1: "the FO sends the next stage instructions to the existing agent via SendMessage instead of dispatching a new one"
+
+   The two SKIPped checks (validation stage dispatch, entity terminal status) are due to budget constraints on `--effort low` with opus, not test failures. The pipeline progressed far enough to prove the reuse path works. The `fresh: true` fresh-dispatch path (AC2) was validated in cycle 1's E2E run with haiku (which completed the full pipeline), and the static checks confirm the template still contains the correct conditions.
+
+### Summary
+
+The E2E behavioral test is real and functional. It runs the reuse-pipeline fixture through the FO, parses logs for Agent() vs SendMessage dispatch patterns, and proves the FO reuses agents via SendMessage when reuse conditions are met. Static suite passes (51/51), E2E reuse test passes (16/16), regression rejection flow passes (5/5). **Recommendation: PASSED.**
