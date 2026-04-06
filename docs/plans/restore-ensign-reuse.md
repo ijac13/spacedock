@@ -460,3 +460,44 @@ This strengthens the case that task 075 (stage-to-stage reuse + `fresh`) and tas
 ### Summary
 
 Modified `references/first-officer-shared-core.md` and `references/claude-first-officer-runtime.md` to restore ensign reuse across stages. The completion flow now checks three reuse conditions (team mode available, next stage lacks `fresh: true`, same worktree mode) and advances the existing agent via SendMessage when all hold. The feedback-to keep-alive from 068 is preserved in the fresh-dispatch fallback path. Created a test fixture (`tests/fixtures/reuse-pipeline/`) and 13 static tests (`tests/test_reuse_dispatch.py`) covering all acceptance criteria. All 63 tests pass.
+
+## Stage Report: validation
+
+1. **Merge main into validation branch** — DONE
+   Merged main; resolved one conflict in `docs/plans/restore-ensign-reuse.md` where the branch's implementation report collided with main's revised ideation summary. Both sections preserved.
+
+2. **AC1 verification: Reuse conditions and SendMessage format in shared-core** — DONE
+   `references/first-officer-shared-core.md` lines 87-98: the "If the stage is not gated" section contains all three reuse conditions (bare mode, `fresh: true`, worktree mode) and the SendMessage format with `to="{agent}-{slug}-{completed_stage}"`, stage definition, checklist, and entity_file_path.
+
+3. **AC2 verification: `fresh: true` as disqualifier** — DONE
+   Condition 2 reads: "Next stage does NOT have `fresh: true`". The reuse-pipeline fixture has `fresh: true` on validation (line 17). The rejection-flow fixture also has `fresh: true` on validation (line 19).
+
+4. **AC3 verification: Same worktree mode required** — DONE
+   Condition 3 reads: "Next stage has the same `worktree` mode as the completed stage". The rejection-flow fixture has backlog (worktree: false via defaults) -> implementation (worktree: true), which is a boundary transition.
+
+5. **AC4 verification: Bare mode guard** — DONE
+   Condition 1 reads: "Not in bare mode (teams available)". This is the first reuse condition checked.
+
+6. **AC5 verification: feedback-to keep-alive preserved** — DONE
+   The "If fresh dispatch" path (line 98) explicitly states: "Check whether the next stage has `feedback-to` pointing at the completed stage. If yes, keep the completed agent alive (the feedback reviewer will need to message it)." The rejection-flow fixture has `feedback-to: implementation` on validation. E2E regression test confirmed (see item 10).
+
+7. **AC6 verification: Gate approval path references reuse** — DONE
+   Line 106: "if the captain approves and the next stage is not terminal: apply the reuse conditions from the 'If the stage is not gated' path." Reuse and fresh dispatch paths both covered.
+
+8. **AC7 verification: No "Always dispatch fresh" in reference files** — DONE
+   Grep for "Always dispatch fresh" in `references/` returned no matches. Dispatch step 8 (line 63) uses neutral language: "Dispatch a worker for the stage using the runtime-specific mechanism."
+
+9. **Run ALL static tests** — DONE
+   `unset CLAUDECODE && uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q` — **63 passed, 0 failed** in 1.57s.
+
+10. **Run rejection flow E2E** — DONE
+    `unset CLAUDECODE && uv run tests/test_rejection_flow.py --runtime claude --model opus --effort low` — **5 passed, 0 failed, RESULT: PASS**. FO dispatched ensign for validation, reviewer recommended REJECTED, FO dispatched fix agent (3 total dispatches). This confirms feedback-to keep-alive path still works (AC5 regression check).
+
+11. **Review test_reuse_dispatch.py quality** — DONE
+    13 tests reviewed. All test actual reference file content (not mocked behavior). Tests use regex patterns with DOTALL ordering to verify concepts appear in correct relative positions. Two fixture validation tests confirm the test fixture has the expected stage structure. One test (`test_no_always_dispatch_fresh`) uses `assembled_agent_content()` to check the full assembled FO output. **Weakness noted:** some tests (e.g., `test_reuse_conditions_present`) use broad string-presence checks that could theoretically pass if the strings appeared in a non-operative section. This is a minor risk given the reference files are concise and the strings are specific. No tests test mocked behavior.
+
+12. **PASSED recommendation** — The implementation meets all 7 acceptance criteria. Static tests (63/63) and E2E regression test (5/5) both pass. The reuse conditions are correctly structured (bare mode guard, fresh:true disqualifier, worktree mode match), the SendMessage format matches the ideation spec, the feedback-to keep-alive from 068 is preserved, the gate approval path references the reuse conditions, and the dispatch step uses neutral language.
+
+### Summary
+
+All 7 acceptance criteria verified with evidence from reference file inspection. Static test suite passes (63/63). Rejection flow E2E passes (5/5) confirming the feedback-to keep-alive regression check. Test quality is reasonable for template/reference-file changes — tests verify actual file content, not mocked behavior. **Recommendation: PASSED.**
