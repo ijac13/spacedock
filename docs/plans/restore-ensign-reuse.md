@@ -430,3 +430,33 @@ This strengthens the case that task 075 (stage-to-stage reuse + `fresh`) and tas
   1. land explicit captain-rejection routing/liveness behavior from 086 first (it modifies the same completion/gate paths)
   2. land explicit reuse/fresh behavior from 075 on top of the 086 changes
   3. add/adjust tests so both reuse and rejection-flow liveness are asserted together.
+
+## Stage Report: implementation
+
+1. **Change 1: Modify "If the stage is not gated" section in shared-core** — DONE
+   Replaced the bullet-list "If the stage is not gated" section in `references/first-officer-shared-core.md` with: reuse conditions (bare mode guard, `fresh: true` check, worktree mode match), "If reuse" path with SendMessage format, and "If fresh dispatch" path preserving the feedback-to keep-alive from 068.
+
+2. **Change 2: Gate approval path** — DONE
+   The existing gated section didn't have explicit "Approve + next stage is NOT terminal" sub-bullets. Added a new bullet: "if the captain approves and the next stage is not terminal: apply the reuse conditions from the 'If the stage is not gated' path." This makes gate approval explicitly reference the reuse logic.
+
+3. **Change 3: Update Dispatch Adapter caveat in claude-first-officer-runtime.md** — DONE
+   Changed "NEVER use SendMessage to dispatch" to "Use Agent() for initial dispatch — SendMessage is only used in the completion path to advance a reused agent to its next stage."
+
+4. **Change 4: Neutral dispatch step language** — DONE
+   Changed dispatch step 8 from "Dispatch a fresh worker" to "Dispatch a worker for the stage" in shared-core. No "Always dispatch fresh" text existed in reference files (that was from an older template version).
+
+5. **Create test fixture** — DONE
+   Created `tests/fixtures/reuse-pipeline/` with README.md (5-stage pipeline: backlog → analysis → implementation → validation → done) and entity file. Analysis → implementation are consecutive non-worktree stages without `fresh: true` (reusable). Validation has `fresh: true` + `feedback-to: implementation` (forces fresh dispatch).
+
+6. **Create test script** — DONE
+   Created `tests/test_reuse_dispatch.py` with 13 static tests covering all 7 acceptance criteria: reuse conditions present (AC1), SendMessage format (AC1), fresh:true disqualifier (AC2), worktree mode match (AC3), bare mode guard (AC4), feedback-to keep-alive in fresh path (AC5), gate approval references reuse (AC6), no "Always dispatch fresh" (AC7), neutral dispatch language (AC7), fixture validation (2 tests), runtime SendMessage clarification.
+
+7. **Run static tests** — DONE
+   `unset CLAUDECODE && uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q` — 63 passed, 0 failed.
+
+8. **Commit all changes** — DONE
+   Committed as `implement: restore ensign reuse across stages (075)` on branch `spacedock-ensign/restore-ensign-reuse`.
+
+### Summary
+
+Modified `references/first-officer-shared-core.md` and `references/claude-first-officer-runtime.md` to restore ensign reuse across stages. The completion flow now checks three reuse conditions (team mode available, next stage lacks `fresh: true`, same worktree mode) and advances the existing agent via SendMessage when all hold. The feedback-to keep-alive from 068 is preserved in the fresh-dispatch fallback path. Created a test fixture (`tests/fixtures/reuse-pipeline/`) and 13 static tests (`tests/test_reuse_dispatch.py`) covering all acceptance criteria. All 63 tests pass.
