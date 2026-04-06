@@ -1,13 +1,13 @@
 ---
 id: 075
 title: Restore ensign reuse across stages (fresh field support)
-status: validation
+status: done
 source: user report during 0.3.0 → 0.8.2 upgrade
 started: 2026-03-29T00:00:00Z
-completed:
-verdict:
+completed: 2026-04-06T00:00:00Z
+verdict: PASSED
 score: 0.75
-worktree: .worktrees/spacedock-ensign-restore-ensign-reuse
+worktree:
 pr: "#35"
 ---
 
