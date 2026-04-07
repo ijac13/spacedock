@@ -26,7 +26,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(description="Team health check E2E test")
     parser.add_argument("--runtime", choices=["claude"], default="claude")
     parser.add_argument("--agent", default="spacedock:first-officer")
-    parser.add_argument("--model", default="haiku", help="Model to use (default: haiku)")
+    parser.add_argument("--model", default="sonnet", help="Model to use (default: sonnet)")
     parser.add_argument("--effort", default="low", help="Effort level (default: low)")
     return parser.parse_known_args()
 
