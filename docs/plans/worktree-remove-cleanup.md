@@ -1,7 +1,7 @@
 ---
 id: 096
 title: Document git worktree remove in cleanup references
-status: implementation
+status: validation
 source: CL — FO used rm -rf instead of git worktree remove, leaving stale tracking entries
 started: 2026-04-07T21:37:58Z
 completed:
