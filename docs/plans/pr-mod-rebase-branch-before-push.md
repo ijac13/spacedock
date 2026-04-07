@@ -29,3 +29,128 @@ Add a rebase step to the merge hook's "On approval" block, between pushing main 
 3. `git push origin {branch}` (already there)
 
 The rebase is a no-op when the branch is already up to date with main.
+
+## Stage Report
+
+### 1. Problem Statement — DONE
+
+When multiple PRs are processed in a single session, earlier PRs may merge on GitHub while later PRs are still being prepared. The FO pulls those merge commits into local main (via the startup/idle hook merge detection), but worktree branches for later entities were forked from the pre-merge main. Task 090 added `git push origin main` before the branch push, which ensures origin/main is current. However, the branch itself is still based on stale main — so GitHub sees divergent histories and marks the PR as conflicting, even though the content is clean.
+
+Concrete example from PR #38 (091): PR #37 (090) merged on GitHub mid-session. Local main was updated to include it, but the 091 branch was still based on pre-merge main. After pushing both, GitHub showed PR #38 as conflicting with main.
+
+### 2. Current "On approval" Flow Analysis — DONE
+
+The current `## Hook: merge` "On approval" block in `mods/pr-merge.md` (line 38):
+
+> **On approval:** First, push main to ensure the remote is up to date with local state commits: `git push origin main`. Then push the worktree branch: `git push origin {branch}`. If either push fails (no remote, auth error), report to the captain and fall back to local merge.
+
+The flow is:
+1. `git push origin main` — ensures origin/main has state commits
+2. `git push origin {branch}` — pushes the worktree branch
+3. `gh pr create ...` — creates the PR
+
+The gap: between steps 1 and 2, the branch may be based on an older main. The rebase belongs between these two steps.
+
+### 3. Proposed Approach — DONE
+
+**Before (current wording, line 38):**
+
+> **On approval:** First, push main to ensure the remote is up to date with local state commits: `git push origin main`. Then push the worktree branch: `git push origin {branch}`. If either push fails (no remote, auth error), report to the captain and fall back to local merge.
+
+**After (proposed wording):**
+
+> **On approval:** First, push main to ensure the remote is up to date with local state commits: `git push origin main`. Then rebase the worktree branch onto main: `git rebase main` (from the worktree directory). Then push the worktree branch: `git push origin {branch}`. If any step fails (no remote, auth error, rebase conflict), report to the captain and fall back to local merge.
+
+Changes:
+- Insert one sentence after the `git push origin main` sentence: "Then rebase the worktree branch onto main: `git rebase main` (from the worktree directory)."
+- Expand the failure clause from "either push" to "any step" and add "rebase conflict" to the failure examples.
+
+Both the canonical copy (`mods/pr-merge.md`) and the installed copy (`docs/plans/_mods/pr-merge.md`) need the same update.
+
+### 4. Acceptance Criteria with Test Plans — DONE
+
+**AC1: Mod wording updated** — The "On approval" block contains the rebase step between push-main and push-branch.
+- Test: Static assertion — grep the mod file for "rebase main" appearing in the "On approval" block.
+
+**AC2: Installed copy matches canonical** — `docs/plans/_mods/pr-merge.md` has the same content as `mods/pr-merge.md`.
+- Test: Static assertion — diff the two files; expect no difference.
+
+**AC3: Branch is rebased before push in E2E** — When main has commits the branch doesn't have, the branch is rebased onto main before being pushed, resulting in a linear history on the remote.
+- Test: E2E test (see section 6 below).
+
+**AC4: No-op rebase doesn't break the flow** — When the branch is already up to date with main, the rebase is a no-op and the push proceeds normally.
+- Test: The existing `test_push_main_before_pr.py` E2E test covers this case (branch is forked from current main, so rebase is a no-op). It should continue to pass after the mod change.
+
+### 5. Edge Case Analysis — DONE
+
+**Rebase conflicts:** If the branch has changes that conflict with commits merged into main, `git rebase main` will fail. The mod already says to "report to the captain and fall back to local merge" on failure. The updated wording extends this to cover rebase failures. The FO should run `git rebase --abort` to clean up before falling back.
+
+**No-op rebase:** When the branch is already based on the current main tip, `git rebase main` exits 0 and does nothing. This is the common case when no other PRs merged during the session. No special handling needed.
+
+**Worktree rebase mechanics:** The branch lives in a git worktree (`.worktrees/{worker_key}-{slug}`). `git rebase main` works correctly inside worktrees — git tracks the rebase state per-worktree. The FO must run the rebase from the worktree directory (or use `git -C {worktree_path} rebase main`), not from the main working tree. The mod wording says "from the worktree directory" to make this explicit.
+
+**Force push after rebase:** After rebasing, `git push origin {branch}` may need `--force-with-lease` if the branch was previously pushed. However, in the pr-merge flow, the branch is pushed for the first time during the "On approval" block — it hasn't been pushed before. So a regular push works. If for some reason the branch was already on the remote (e.g., a retry), the FO would need to force-push, but this is an edge case the current mod doesn't handle either. Not in scope for this task.
+
+**Main branch state during rebase:** The rebase targets `main` which is the local main branch. Since step 1 already pushed local main to origin, local main and origin/main are in sync at this point. The rebase brings the branch up to date with both.
+
+### 6. E2E Test Design — DONE
+
+**Test file:** `tests/test_rebase_branch_before_push.py`
+
+**Scenario:** Simulate the case where main has advanced past the branch's fork point (because another PR merged), then run the FO and verify the branch is rebased before push.
+
+**Setup (extends the pattern from `test_push_main_before_pr.py`):**
+
+1. Create test project with bare remote, push initial commit to origin.
+2. Copy the `push-main-pipeline` fixture, install agents, commit and push to origin.
+3. Create a "simulated merge commit" on main — add a file (e.g., `merged-pr-marker.txt`) and commit it to main. Push this commit to origin. This simulates what happens when another PR merges on GitHub and the FO pulls it into local main.
+4. Create the worktree branch manually, forked from an *earlier* main commit (before the merge commit). Add a non-conflicting change on this branch. This simulates a worktree branch that was created before the other PR merged.
+   - Alternative: let the FO create the worktree naturally, but pre-advance main with the extra commit before the merge hook fires. This is harder to control timing-wise.
+   - Preferred approach: manually set up the branch state so the test is deterministic.
+5. Update the entity frontmatter to point to the worktree and set status to the terminal-ready stage, so the FO goes straight to the merge hook.
+
+**Actually, simpler approach — stay closer to the existing test pattern:**
+
+1. Set up project + bare remote + fixture (same as existing test).
+2. After initial setup but before running the FO, simulate a "merged PR" by adding a commit to main that the branch won't have:
+   - Commit a file like `other-pr-merged.txt` to main.
+   - Push this to origin so origin/main has it.
+3. Run the FO normally — it processes the entity through the workflow, creates a worktree branch (forked from current main), does the work, and hits the merge hook.
+4. But wait — if the FO creates the branch from *current* main (which has the extra commit), the rebase is a no-op. We need the branch to be behind main.
+
+**Revised approach — two-phase main advancement:**
+
+1. Set up project + bare remote + fixture, commit, push to origin.
+2. Run the FO to process the entity. The FO creates the worktree branch from current main, does the work, and reaches the merge hook.
+3. Before the FO pushes (during the approval prompt), we can't easily inject a commit.
+
+**Best approach — manual branch setup:**
+
+1. Create test project, bare remote, push initial commit.
+2. Copy fixture, install agents, commit, push to origin.
+3. Create a worktree branch manually from current main:
+   - `git checkout -b spacedock-ensign/push-main-entity`
+   - Add the entity's work output (e.g., append "Push main test complete." to entity body).
+   - Commit on the branch.
+   - `git checkout main`
+4. Now advance main with a "merged PR" commit:
+   - Add `other-pr-merged.txt`, commit to main.
+   - Push main to origin (so origin/main has this commit).
+5. Update entity frontmatter on main: set `status: done`, `worktree: .worktrees/spacedock-ensign-push-main-entity`, point to the branch.
+   - Actually, don't use a real worktree — the FO just needs to push the branch. The branch exists as a regular branch, and the mod instructions say to rebase it.
+6. Set up git wrapper (log pushes) and gh stub.
+7. Run the FO with a prompt that tells it the entity is ready for the merge hook.
+
+**Validation:**
+
+1. **Push log ordering:** main pushed before branch (same as existing test).
+2. **Branch is rebased:** After the FO finishes, check that the branch's history is linear on top of main. Specifically:
+   - `git log --oneline main..{branch}` should show only the branch's own commits.
+   - `git merge-base main {branch}` should equal `git rev-parse main` — the branch's base is now main HEAD, not an older commit.
+   - On the bare remote: `git -C remote.git merge-base main {branch}` should equal main HEAD.
+3. **Remote branch contains both main's commit and branch's commit:** The remote branch should have `other-pr-merged.txt` (from main, via rebase) and the branch's own work.
+4. **PR created successfully** (gh stub log).
+
+**Estimated cost/complexity:** Medium. The test setup is more involved than the existing test because we need to manually create the diverged state. But the validation is straightforward — checking merge-base equality. The FO run itself is similar cost to the existing test (~$1-2 with haiku).
+
+**Whether the existing test needs modification:** No. The existing `test_push_main_before_pr.py` covers the no-op rebase case (branch already on current main). It should continue to pass after the mod change.
