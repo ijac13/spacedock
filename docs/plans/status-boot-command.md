@@ -9,7 +9,7 @@ verdict:
 score: 0.8
 worktree: .worktrees/spacedock-ensign-status-boot-command
 issue:
-pr:
+pr: "#42"
 ---
 
 # Status script --boot flag for FO startup

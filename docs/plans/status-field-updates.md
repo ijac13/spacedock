@@ -9,7 +9,7 @@ verdict:
 score: 0.7
 worktree: .worktrees/spacedock-ensign-status-field-updates
 issue:
-pr:
+pr: "#43"
 ---
 
 # Status script entity field updates
