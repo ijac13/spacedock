@@ -9,7 +9,7 @@ verdict:
 score: 0.75
 worktree: .worktrees/spacedock-ensign-team-health-check
 issue:
-pr:
+pr: "#41"
 ---
 
 # Team health check before dispatch
