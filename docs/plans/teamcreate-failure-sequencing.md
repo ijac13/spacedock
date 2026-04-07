@@ -222,3 +222,25 @@ t.check("blocks agent dispatch during uncertain team state",
 4. Acceptance criteria with test plans — DONE (5 criteria, mix of static and E2E)
 5. Edge case analysis — DONE (5 edge cases analyzed)
 6. E2E test design — DONE (log-analysis approach with sequencing invariant check)
+
+## Stage Report
+
+1. `references/claude-first-officer-runtime.md` Team Creation section updated with failure recovery protocol — DONE
+2. `references/claude-first-officer-runtime.md` Dispatch Adapter section updated with sequencing rule — DONE
+3. E2E test created at `tests/test_team_dispatch_sequencing.py` — DONE
+4. Static content assertions for AC1-AC4 (in `tests/test_agent_content.py`) — DONE
+5. All changes committed on the worktree branch — DONE
+
+### Deliverables
+
+- **`references/claude-first-officer-runtime.md`** — Two additions:
+  - Team Creation section (line 25): "TeamCreate failure recovery" paragraph with "Already leading team" recovery path (TeamDelete alone → wait → TeamCreate alone), bare-mode fallback for other errors, and "Block all Agent dispatch" until team state resolves.
+  - Dispatch Adapter section (line 47): "Sequencing rule" paragraph — team lifecycle calls and Agent dispatch must never share a tool-call message.
+
+- **`tests/test_agent_content.py`** — New `test_assembled_claude_first_officer_has_teamcreate_failure_recovery` function with static assertions for AC1-AC4. All 10 tests pass.
+
+- **`tests/test_team_dispatch_sequencing.py`** — E2E test (AC5) using gated-pipeline fixture. Runs the FO, parses the JSONL log, and checks that no assistant message contains both team lifecycle tool calls (TeamCreate/TeamDelete) and Agent dispatch calls. Also includes AC1-AC4 static checks as supplementary validation.
+
+### Summary
+
+Applied minimal edits to the Claude FO runtime reference to add TeamCreate failure recovery and dispatch sequencing guardrails. Static tests confirm the text is present in the assembled agent content. E2E test validates the sequencing invariant at runtime.
