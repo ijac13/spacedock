@@ -14,6 +14,7 @@ stages:
     - name: backlog
       initial: true
     - name: work
+      worktree: true
     - name: done
       terminal: true
 ---
