@@ -265,3 +265,13 @@ No existing tests regressed.
 ### Recommendation
 
 **PASSED**
+
+## Stage Report — validation (round 2: reference updates)
+
+1. Update `references/first-officer-shared-core.md` Dispatch section to use `--set` — **DONE**
+2. Update `references/first-officer-shared-core.md` Completion/Gates section to use `--set` — **DONE**
+3. Update `references/first-officer-shared-core.md` Merge/Cleanup section to use `--set` — **DONE**
+4. Update Status Viewer section to document `--set` — **DONE**
+5. Check and update `references/claude-first-officer-runtime.md` if needed — **SKIPPED** (no frontmatter update instructions in that file; it only contains the worker dispatch template which correctly tells workers not to modify frontmatter)
+6. All existing tests still pass — **DONE** (45 tests pass)
+7. Commit changes — **DONE**
