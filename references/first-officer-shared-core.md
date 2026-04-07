@@ -30,6 +30,11 @@ python3 {spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {work
 
 Use `--boot` at startup to gather mods, next ID, orphans, PR state, dispatchable entities, and latest debrief in a single call. Use `--next`, `--where "pr !="`, etc. for targeted queries during the event loop. `--boot` is incompatible with `--next`, `--archived`, and `--where`.
 
+The `--set` flag updates entity frontmatter fields:
+- `--set {slug} field=value` sets a field
+- `--set {slug} field=` clears a field
+- `--set {slug} started` or `completed` auto-fills a UTC ISO 8601 timestamp (skips if already set)
+
 ## Single-Entity Mode
 
 When the user names a specific entity and asks to process it through the workflow, switch into single-entity mode.
@@ -57,10 +62,11 @@ For each entity reported by `status --next`:
 2. Build a numbered checklist from stage outputs and entity acceptance criteria.
 3. Check for obvious conflicts if multiple worktree stages would touch overlapping files.
 4. Determine `dispatch_agent_id` from the stage `agent:` property. Default to `ensign` when absent.
-5. Update main-branch frontmatter for dispatch:
-   - set `status: {next_stage}`
-   - set `worktree: .worktrees/{worker_key}-{slug}` for worktree stages
-   - set `started:` when the entity first moves beyond the initial stage
+5. Update main-branch frontmatter for dispatch using the status script:
+   ```
+   status --workflow-dir {workflow_dir} --set {slug} status={next_stage} worktree=.worktrees/{worker_key}-{slug} started
+   ```
+   Omit `worktree=...` for non-worktree stages. Bare `started` auto-fills a UTC ISO 8601 timestamp and skips if already set (preserving the original start time).
 6. Commit the state transition on main with `dispatch: {slug} entering {next_stage}`.
 7. Create the worktree on first dispatch to a worktree stage.
 8. Dispatch a worker for the stage using the runtime-specific mechanism. The worker assignment must include:
@@ -94,7 +100,7 @@ If the stage is not gated: If terminal, proceed to merge. Otherwise, determine w
 2. Next stage does NOT have `fresh: true`
 3. Next stage has the same `worktree` mode as the completed stage
 
-**If reuse:** Keep the agent alive. Update frontmatter on main (set `status` to next stage, commit: `advance: {slug} entering {next_stage}`). Send the agent its next assignment:
+**If reuse:** Keep the agent alive. Update frontmatter on main (`status --workflow-dir {workflow_dir} --set {slug} status={next_stage}`, commit: `advance: {slug} entering {next_stage}`). Send the agent its next assignment:
 
 SendMessage(to="{agent}-{slug}-{completed_stage}", message="Advancing to next stage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim]\n\n### Completion checklist\n\n[CHECKLIST — assemble from step 2]\n\nContinue working on {entity title}. The entity file is at {entity_file_path}. Do the work described in the stage definition. Update the entity file body with your findings or outputs. Commit before sending your completion message.")
 
@@ -128,13 +134,13 @@ When an entity reaches its terminal stage:
 1. Run registered merge hooks before any local merge, archival, or status advancement.
 2. If a merge hook created or set a `pr` field, report the PR-pending state and do not local-merge.
 3. If no merge hook handled the merge, perform the default local merge from the stage worktree branch.
-4. Set `completed:` and `verdict:` in frontmatter and clear `worktree:`.
+4. Update frontmatter: `status --workflow-dir {workflow_dir} --set {slug} completed verdict={verdict} worktree=`
 5. Archive the entity into `{workflow_dir}/_archive/`.
 6. Remove the worktree and delete the temporary branch after successful merge or deliberate discard.
 
 ## State Management
 
-- The first officer owns YAML frontmatter on the main branch.
+- The first officer owns YAML frontmatter on the main branch, using `status --set` for all field updates.
 - Workers do not edit frontmatter.
 - Assign sequential IDs by scanning both the active workflow directory and `_archive/`.
 - Commit state changes at dispatch and merge boundaries.

@@ -40,6 +40,7 @@ import glob
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 
 
 def parse_frontmatter(filepath):
@@ -504,6 +505,101 @@ def parse_workflow_dir(args):
     return workflow_dir, remaining
 
 
+TIMESTAMP_FIELDS = {'started', 'completed'}
+
+
+def parse_set_args(args):
+    """Parse --set arguments, returning (slug, field_updates) or None.
+
+    field_updates is a list of (field, value) tuples where value is:
+    - a string for explicit field=value
+    - '' for field= (clear)
+    - None for bare timestamp fields (auto-fill with now())
+    """
+    i = 0
+    while i < len(args):
+        if args[i] == '--set':
+            if i + 1 >= len(args):
+                raise ValueError('--set requires a slug argument')
+            slug = args[i + 1]
+            updates = []
+            j = i + 2
+            while j < len(args) and not args[j].startswith('--'):
+                arg = args[j]
+                if '=' in arg:
+                    field, _, value = arg.partition('=')
+                    updates.append((field, value))
+                elif arg in TIMESTAMP_FIELDS:
+                    updates.append((arg, None))
+                else:
+                    raise ValueError(
+                        f"bare field '{arg}' requires a value (use {arg}=value); "
+                        f"only {', '.join(sorted(TIMESTAMP_FIELDS))} support auto-fill"
+                    )
+                j += 1
+            if not updates:
+                raise ValueError('--set requires at least one field=value argument')
+            return slug, updates
+        i += 1
+    return None
+
+
+def update_frontmatter(filepath, updates):
+    """Rewrite frontmatter fields in a file. Returns dict of updated fields."""
+    with open(filepath, 'r') as f:
+        content = f.read()
+
+    lines = content.split('\n')
+    in_fm = False
+    fm_start = None
+    fm_end = None
+    for i, line in enumerate(lines):
+        if line.rstrip() == '---':
+            if not in_fm:
+                in_fm = True
+                fm_start = i
+            else:
+                fm_end = i
+                break
+
+    if fm_start is None or fm_end is None:
+        raise ValueError(f'No frontmatter found in {filepath}')
+
+    # Read current values to support skip-if-set for timestamp fields
+    current_values = {}
+    for i in range(fm_start + 1, fm_end):
+        line = lines[i]
+        if ':' in line and not line[0].isspace():
+            key, _, val = line.partition(':')
+            current_values[key.strip()] = val.strip()
+
+    # Resolve auto-fill timestamps
+    resolved = {}
+    now_str = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    for field, value in updates:
+        if value is None:
+            # Bare timestamp field — skip if already has a value
+            if current_values.get(field, ''):
+                continue
+            resolved[field] = now_str
+        else:
+            resolved[field] = value
+
+    # Rewrite matching lines in frontmatter
+    for i in range(fm_start + 1, fm_end):
+        line = lines[i]
+        if ':' in line and not line[0].isspace():
+            key, _, _ = line.partition(':')
+            key_stripped = key.strip()
+            if key_stripped in resolved:
+                lines[i] = f'{key_stripped}: {resolved[key_stripped]}'
+
+    with open(filepath, 'w') as f:
+        f.write('\n'.join(lines))
+
+    return resolved
+
+
 def apply_filters(entities, filters):
     """Filter entities based on --where conditions."""
     if not filters:
@@ -557,6 +653,14 @@ def main():
         sys.exit(1)
 
     pipeline_dir = workflow_dir or os.environ.get('PIPELINE_DIR') or os.path.dirname(os.path.abspath(__file__))
+
+    # Parse --set before other flags
+    try:
+        set_result = parse_set_args(args)
+    except ValueError as e:
+        print('Error: ' + str(e), file=sys.stderr)
+        sys.exit(1)
+
     include_archive = '--archived' in args
     show_next = '--next' in args
     show_boot = '--boot' in args
@@ -579,6 +683,38 @@ def main():
     if show_boot and where_filters:
         print('Error: --boot is incompatible with --where', file=sys.stderr)
         sys.exit(1)
+
+    if set_result is not None:
+        # Check for incompatible flags
+        incompatible = []
+        if show_next:
+            incompatible.append('--next')
+        if include_archive:
+            incompatible.append('--archived')
+        if show_boot:
+            incompatible.append('--boot')
+        if where_filters:
+            incompatible.append('--where')
+        if incompatible:
+            print(f'Error: --set cannot be combined with {", ".join(incompatible)}',
+                  file=sys.stderr)
+            sys.exit(1)
+
+        slug, updates = set_result
+        entity_path = os.path.join(pipeline_dir, slug + '.md')
+        if not os.path.exists(entity_path):
+            print(f'Error: entity not found: {slug}.md', file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            resolved = update_frontmatter(entity_path, updates)
+        except ValueError as e:
+            print('Error: ' + str(e), file=sys.stderr)
+            sys.exit(1)
+
+        for field, value in resolved.items():
+            print(f'{field}: {value}')
+        sys.exit(0)
 
     readme_path = os.path.join(pipeline_dir, 'README.md')
     stages = None

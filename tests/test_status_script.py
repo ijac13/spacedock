@@ -619,6 +619,7 @@ class TestBootOption(unittest.TestCase):
         os.unlink(self.script_path)
         os.rmdir(self._script_dir)
 
+
     def _make_fake_git(self, tmpdir, worktree_output=''):
         """Create a fake git script that returns canned worktree list output."""
         fake_bin = os.path.join(tmpdir, '_fake_bin')
@@ -995,6 +996,236 @@ class TestBootOption(unittest.TestCase):
             bad_line = [l for l in lines if '#99' in l][0]
             self.assertIn('MERGED', good_line)
             self.assertIn('ERROR', bad_line)
+
+
+class TestSetOption(unittest.TestCase):
+    """Test --set field update functionality."""
+
+    def setUp(self):
+        self._script_dir = tempfile.mkdtemp()
+        self.script_path = build_status_script(self._script_dir)
+
+    def tearDown(self):
+        os.unlink(self.script_path)
+        os.rmdir(self._script_dir)
+
+    def _read_frontmatter(self, filepath):
+        """Read frontmatter from a file, returning dict of fields."""
+        fields = {}
+        in_fm = False
+        with open(filepath, 'r') as f:
+            for line in f:
+                line = line.rstrip('\n')
+                if line == '---':
+                    if in_fm:
+                        break
+                    in_fm = True
+                    continue
+                if in_fm and ':' in line:
+                    key, _, val = line.partition(':')
+                    fields[key.strip()] = val.strip()
+        return fields
+
+    def _read_body(self, filepath):
+        """Read file content after frontmatter."""
+        lines = []
+        in_fm = False
+        past_fm = False
+        with open(filepath, 'r') as f:
+            for line in f:
+                if past_fm:
+                    lines.append(line)
+                    continue
+                if line.rstrip('\n') == '---':
+                    if in_fm:
+                        past_fm = True
+                    else:
+                        in_fm = True
+        return ''.join(lines)
+
+    def test_set_single_field(self):
+        """AC1: --set {slug} {field}={value} updates the specified field."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'status=ideation',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['status'], 'ideation')
+
+    def test_set_multiple_fields(self):
+        """AC2: Multiple field=value pairs in one call update all fields."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a',
+                                'status=ideation', 'worktree=.worktrees/ensign-foo',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['status'], 'ideation')
+            self.assertEqual(fields['worktree'], '.worktrees/ensign-foo')
+
+    def test_set_clear_field(self):
+        """AC3: field= (empty value) clears the field."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'implementation', '0.80',
+                                    worktree='.worktrees/ensign-foo'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'worktree=',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['worktree'], '')
+
+    def test_set_timestamp_auto_fill(self):
+        """AC4: Bare timestamp field auto-fills with current UTC ISO 8601 time."""
+        import re
+        from datetime import datetime, timezone
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'backlog', '0.80'),
+            })
+            before = datetime.now(timezone.utc)
+            result = run_status(tmpdir, '--set', 'task-a', 'started',
+                                script_path=self.script_path)
+            after = datetime.now(timezone.utc)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            ts = fields['started']
+            # Verify ISO 8601 format
+            self.assertRegex(ts, r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
+            # Verify time is within tolerance
+            parsed = datetime.strptime(ts, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+            self.assertGreaterEqual(parsed, before.replace(microsecond=0))
+            self.assertLessEqual(parsed, after.replace(microsecond=0) + __import__('datetime').timedelta(seconds=1))
+
+    def test_set_bare_non_timestamp_error(self):
+        """AC5: Bare non-timestamp field name is rejected with an error."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'status',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('status', result.stderr.lower())
+
+    def test_set_nonexistent_entity_error(self):
+        """AC6: Non-zero exit and error if entity file does not exist."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES)
+            result = run_status(tmpdir, '--set', 'nonexistent', 'status=done',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('nonexistent', result.stderr.lower())
+
+    def test_set_preserves_unmodified_fields(self):
+        """AC7: Fields not specified in the command are preserved unchanged."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'backlog', '0.80', source='user'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'status=done',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['title'], 'Task A')
+            self.assertEqual(fields['score'], '0.80')
+            self.assertEqual(fields['source'], 'user')
+            self.assertEqual(fields['id'], '001')
+
+    def test_set_preserves_body(self):
+        """AC8: File body content below frontmatter is preserved unchanged."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'backlog', '0.80'),
+            })
+            body_before = self._read_body(os.path.join(tmpdir, 'task-a.md'))
+            result = run_status(tmpdir, '--set', 'task-a', 'status=done',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            body_after = self._read_body(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(body_before, body_after)
+
+    def test_set_prints_updated_fields(self):
+        """AC9: Updated fields are printed to stdout after write."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'status=done',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('status: done', result.stdout)
+
+    def test_set_incompatible_flags(self):
+        """AC10: --set is incompatible with --next, --archived, --boot, --where."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'backlog', '0.80'),
+            })
+            for flag in ['--next', '--archived', '--boot', '--where']:
+                args = ['--set', 'task-a', 'status=done']
+                if flag == '--where':
+                    args.extend([flag, 'status = backlog'])
+                elif flag == '--boot':
+                    args.extend([flag, 'task-a'])
+                else:
+                    args.append(flag)
+                result = run_status(tmpdir, *args, script_path=self.script_path)
+                self.assertNotEqual(result.returncode, 0,
+                    f'Expected non-zero exit for --set with {flag}')
+                self.assertTrue(
+                    'incompatible' in result.stderr.lower() or 'cannot' in result.stderr.lower(),
+                    f'Expected incompatibility error for --set with {flag}, got: {result.stderr}')
+
+    def test_set_timestamp_skip_if_already_set(self):
+        """AC11: Bare timestamp auto-fill skips if field already has a value."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            content = textwrap.dedent("""\
+                ---
+                id: 001
+                title: Task A
+                status: implementation
+                source:
+                started: 2026-01-01T00:00:00Z
+                completed:
+                verdict:
+                score: 0.80
+                worktree:
+                pr:
+                ---
+
+                Description.
+                """)
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': content,
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'started',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['started'], '2026-01-01T00:00:00Z')
+
+    def test_set_uses_workflow_dir(self):
+        """AC12: --set uses --workflow-dir to locate entity files."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'backlog', '0.80'),
+            })
+            result = subprocess.run(
+                ['python3', self.script_path, '--workflow-dir', tmpdir,
+                 '--set', 'task-a', 'status=done'],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['status'], 'done')
 
 
 if __name__ == '__main__':

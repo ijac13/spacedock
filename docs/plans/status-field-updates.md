@@ -9,7 +9,7 @@ verdict:
 score: 0.7
 worktree: .worktrees/spacedock-ensign-status-field-updates
 issue:
-pr:
+pr: "#43"
 ---
 
 # Status script entity field updates
@@ -197,3 +197,81 @@ This preserves field ordering, comments, and any non-frontmatter content in the 
 **Cost/complexity:** Low-medium. Simpler than `--boot` because there are no subprocess calls to mock. The frontmatter rewriting is the only non-trivial part, and it follows the same line-by-line approach already used by `parse_frontmatter()`.
 
 **Dependency on task 089:** None at the implementation level. `--set` and `--boot` are independent flags with separate code paths. The incompatibility check (AC10) references `--boot` but that is a one-line check in `main()`. If 089 lands first, the test for boot+set incompatibility can reference the real flag; if not, the test still works as long as the incompatibility check is present in the `--set` code path.
+
+## Stage Report — implementation
+
+1. Add `--set {slug} {field}={value}` flag to `skills/commission/bin/status` — **DONE**
+2. Implement field=value setting for any frontmatter field — **DONE**
+3. Implement field= (empty value) to clear fields — **DONE**
+4. Implement bare timestamp auto-fill (started, completed) with skip-if-set behavior — **DONE**
+5. Implement bare non-timestamp field rejection — **DONE**
+6. Implement entity existence check — **DONE**
+7. Implement stdout output of updated fields — **DONE**
+8. Flag incompatibility with --next, --archived, --boot, --where — **DONE**
+9. Write unit tests in tests/test_status_script.py covering AC1-AC12 — **DONE** (12 test methods in TestSetOption class)
+10. All existing tests still pass — **DONE** (33 existing tests pass)
+11. All new tests pass — **DONE** (12 new tests pass, 45 total)
+
+**Files modified:**
+- `skills/commission/bin/status` — added `parse_set_args()`, `update_frontmatter()`, `TIMESTAMP_FIELDS`, and `--set` handling in `main()` (~90 lines of implementation)
+- `tests/test_status_script.py` — added `TestSetOption` class with 12 test methods (~230 lines of test code)
+
+## Stage Report — validation
+
+### Test run
+
+All 45 tests pass (33 existing + 12 new `TestSetOption` tests):
+
+```
+tests/test_status_script.py::TestSetOption::test_set_single_field PASSED
+tests/test_status_script.py::TestSetOption::test_set_multiple_fields PASSED
+tests/test_status_script.py::TestSetOption::test_set_clear_field PASSED
+tests/test_status_script.py::TestSetOption::test_set_timestamp_auto_fill PASSED
+tests/test_status_script.py::TestSetOption::test_set_bare_non_timestamp_error PASSED
+tests/test_status_script.py::TestSetOption::test_set_nonexistent_entity_error PASSED
+tests/test_status_script.py::TestSetOption::test_set_preserves_unmodified_fields PASSED
+tests/test_status_script.py::TestSetOption::test_set_preserves_body PASSED
+tests/test_status_script.py::TestSetOption::test_set_prints_updated_fields PASSED
+tests/test_status_script.py::TestSetOption::test_set_incompatible_flags PASSED
+tests/test_status_script.py::TestSetOption::test_set_timestamp_skip_if_already_set PASSED
+tests/test_status_script.py::TestSetOption::test_set_uses_workflow_dir PASSED
+```
+
+No existing tests regressed.
+
+### Acceptance criteria
+
+1. **AC1 — --set updates specified field**: DONE. `test_set_single_field` sets `status=ideation` and verifies the frontmatter value changed. Manual verification also confirms correct rewrite.
+2. **AC2 — multiple fields updated atomically**: DONE. `test_set_multiple_fields` sets `status=ideation` and `worktree=.worktrees/ensign-foo` in one call, verifies both changed.
+3. **AC3 — field= clears to empty**: DONE. `test_set_clear_field` sets `worktree=` on an entity with a non-empty worktree, verifies the field is empty afterward.
+4. **AC4 — bare timestamp auto-fills with UTC ISO 8601**: DONE. `test_set_timestamp_auto_fill` calls `--set task-a started`, verifies the result matches `YYYY-MM-DDTHH:MM:SSZ` format and is within tolerance of test execution time. Manual verification confirmed real wallclock time is captured.
+5. **AC5 — bare non-timestamp field rejected**: DONE. `test_set_bare_non_timestamp_error` calls `--set task-a status` (no `=`), verifies non-zero exit and error message referencing the field name.
+6. **AC6 — nonexistent entity returns error**: DONE. `test_set_nonexistent_entity_error` calls `--set nonexistent status=done`, verifies non-zero exit and error message containing the slug.
+7. **AC7 — unspecified fields preserved**: DONE. `test_set_preserves_unmodified_fields` sets only `status=done`, then verifies `title`, `score`, `source`, and `id` are unchanged.
+8. **AC8 — file body preserved**: DONE. `test_set_preserves_body` reads the body before and after `--set`, verifies they are identical.
+9. **AC9 — updated fields printed to stdout**: DONE. `test_set_prints_updated_fields` verifies stdout contains `status: done` after setting that field. Manual verification also shows bare timestamp auto-fill prints the resolved timestamp.
+10. **AC10 — incompatible with --next, --archived, --boot, --where**: DONE. `test_set_incompatible_flags` tests all four flags, verifies non-zero exit and error message containing "cannot" for each.
+11. **AC11 — timestamp auto-fill skips if already set**: DONE. `test_set_timestamp_skip_if_already_set` creates an entity with `started: 2026-01-01T00:00:00Z`, runs `--set task-a started`, verifies the original value is preserved. Manual verification also confirmed that stdout is empty (no fields resolved) and the file is unchanged.
+12. **AC12 — --set uses workflow-dir to locate entities**: DONE. `test_set_uses_workflow_dir` uses `--workflow-dir` explicitly (no `PIPELINE_DIR` env var) and verifies the entity is found and updated.
+
+### Implementation review notes
+
+- `parse_set_args()` correctly separates slug from field arguments and handles the three forms: `field=value`, `field=` (clear), and bare timestamp field names.
+- `update_frontmatter()` uses line-by-line rewriting that preserves field ordering and body content. It reads current values first to implement skip-if-set for timestamp fields.
+- The `TIMESTAMP_FIELDS` set is defined at module level as `{'started', 'completed'}`, matching the design spec.
+- Incompatibility checking in `main()` correctly detects all four flags (`--next`, `--archived`, `--boot`, `--where`).
+- No regressions in existing functionality.
+
+### Recommendation
+
+**PASSED**
+
+## Stage Report — validation (round 2: reference updates)
+
+1. Update `references/first-officer-shared-core.md` Dispatch section to use `--set` — **DONE**
+2. Update `references/first-officer-shared-core.md` Completion/Gates section to use `--set` — **DONE**
+3. Update `references/first-officer-shared-core.md` Merge/Cleanup section to use `--set` — **DONE**
+4. Update Status Viewer section to document `--set` — **DONE**
+5. Check and update `references/claude-first-officer-runtime.md` if needed — **SKIPPED** (no frontmatter update instructions in that file; it only contains the worker dispatch template which correctly tells workers not to modify frontmatter)
+6. All existing tests still pass — **DONE** (45 tests pass)
+7. Commit changes — **DONE**
