@@ -1,7 +1,7 @@
 ---
 id: 094
 title: Status script entity field updates
-status: implementation
+status: validation
 source: CL — observed FO using T00:00:00Z placeholder timestamps instead of real wallclock times
 started: 2026-04-07T19:30:37Z
 completed:
