@@ -1,9 +1,9 @@
 ---
 id: 094
 title: Status script entity field updates
-status: backlog
+status: ideation
 source: CL — observed FO using T00:00:00Z placeholder timestamps instead of real wallclock times
-started:
+started: 2026-04-07T19:30:37Z
 completed:
 verdict:
 score: 0.7
