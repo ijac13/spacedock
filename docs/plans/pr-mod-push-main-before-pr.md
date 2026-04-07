@@ -9,7 +9,7 @@ verdict:
 score: 0.65
 worktree: .worktrees/spacedock-ensign-pr-mod-push-main-before-pr
 issue:
-pr:
+pr: "#37"
 ---
 
 # PR merge mod should push main before creating PRs
