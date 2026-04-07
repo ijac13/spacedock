@@ -1,13 +1,13 @@
 ---
 id: 089
 title: Status script --boot flag for FO startup
-status: ideation
+status: implementation
 source: CL — FO startup operator errors (missed mod registration via glob, manual PR checks)
 started: 2026-04-07T00:00:00Z
 completed:
 verdict:
 score: 0.8
-worktree:
+worktree: .worktrees/spacedock-ensign-status-boot-command
 issue:
 pr:
 ---
