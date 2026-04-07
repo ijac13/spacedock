@@ -237,3 +237,24 @@ Ideation for task 093 is complete. The proposed fix adds a single paragraph to t
 - AC6 (sequencing invariant) is covered by existing `test_team_dispatch_sequencing.py` — no new test needed.
 - All 11 tests in `test_agent_content.py` pass (no regressions).
 - Commit `9bf894c` on branch `spacedock-ensign/team-health-check`.
+
+## Stage Report: validation
+
+### Fixes applied during validation
+
+1. **E2E test fixture bug**: The E2E test (`test_team_health_check.py`) used the `gated-pipeline` fixture, whose entity is already at the gate with work completed. The FO correctly presented the gate review without dispatching agents, so the health check was never triggered. Fixed by switching to `multi-stage-pipeline` fixture, which has an entity in backlog that requires Agent dispatch. Committed as `f8f7fae`.
+
+### Test results
+
+1. **AC1-AC4 (static tests)**: `test_agent_content.py` — 11/11 PASS. The new `test_assembled_claude_first_officer_has_team_health_check` test validates all four static acceptance criteria against the assembled FO content.
+2. **AC5 (E2E health check)**: `test_team_health_check.py` — FAIL. The FO (haiku, low effort) dispatched agents successfully but did not run the `test -f` health check before dispatch. The instruction text is present in the assembled content (static checks pass), but the model did not follow it. This is a behavioral compliance issue with haiku at low effort, not an instruction defect. The FO ran TeamCreate, edited the entity, and went straight to Agent dispatch without the intermediate health check step.
+3. **AC6 (sequencing invariant)**: `test_team_dispatch_sequencing.py` — 6/6 PASS. No regressions.
+4. **Runtime doc diff**: Purely additive — 7 lines added, 0 lines removed. One paragraph inserted between the "Sequencing rule" and "Only fill" paragraphs. Content matches the "AFTER" section exactly.
+
+### Checklist
+
+1. AC1-AC4: Static tests pass — DONE
+2. AC5: E2E health check test passes — FAILED (haiku at low effort does not reliably perform the `test -f` check before dispatch; instruction is correct but model compliance is inconsistent)
+3. AC6: Sequencing invariant test still passes — DONE
+4. Runtime doc diff is minimal (only expected addition) — DONE
+5. Recommendation: CONDITIONAL PASS — the runtime doc change and static tests are correct. The E2E test has a legitimate design: it verifies the FO actually runs `test -f` before dispatch. However, haiku at low effort does not reliably follow this instruction. Options: (a) accept that this is a best-effort instruction that stronger models/higher effort will follow more reliably, (b) increase the test model/effort level to improve compliance, or (c) investigate whether the instruction wording can be strengthened to improve haiku compliance.
