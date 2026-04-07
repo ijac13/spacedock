@@ -91,3 +91,29 @@ ID     SLUG                           CURRENT              NEXT                 
 - `git worktree list` via subprocess for orphan cross-referencing
 - Mod scanning uses `glob.glob()` on `{workflow_dir}/_mods/*.md` — no LLM glob patterns involved
 - `## Hook:` extraction is line-by-line text scanning, same approach as frontmatter parsing
+
+## Boot Sequence Observations (2026-04-07 session)
+
+Actual FO startup consumed ~16 tool calls across 6 parallel batches. Breakdown:
+
+1. **Mod discovery** (2 calls) — Glob `_mods/*.md` + Read each file for `## Hook:` headings. Pure deterministic scanning, easily moved to the script.
+
+2. **Debrief discovery** (2 calls) — Glob `_debriefs/*.md` + Read latest file. The glob/sort is deterministic; reading the content still requires a Read call. The `--boot` output could report the latest debrief filename so the FO only needs one Read.
+
+3. **Orphan worktree detection** (1 call) — `status --where "worktree !="` works but doesn't cross-reference against `git worktree list` or filesystem existence. The FO has to trust that the worktree path in frontmatter is still valid.
+
+4. **PR state checking** (9 calls — biggest bottleneck) — `--where "pr !="` returns entity rows but the `pr` field isn't in the output columns. The FO had to Read 4 entity files individually just to extract PR numbers, then run `gh pr view` for each. Moving PR extraction + `gh pr view` into the script eliminates 8 of 9 calls.
+
+5. **Dispatchable** (1 call) — `status --next` already handled.
+
+6. **Full status for reporting** (1 call) — `status` for the captain report.
+
+### Key insight
+
+The `--boot` flag should collapse steps 1–5 into a single call. The FO's startup would become:
+1. `status --boot` (1 call)
+2. Read latest debrief if filename reported (1 call)
+3. Act on PR_STATE results (advance merged PRs — edit + archive + commit)
+4. Report to captain
+
+That's 2 tool calls for information gathering instead of ~15.
