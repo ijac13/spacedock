@@ -222,3 +222,53 @@ t.check("blocks agent dispatch during uncertain team state",
 4. Acceptance criteria with test plans — DONE (5 criteria, mix of static and E2E)
 5. Edge case analysis — DONE (5 edge cases analyzed)
 6. E2E test design — DONE (log-analysis approach with sequencing invariant check)
+
+## Stage Report
+
+1. `references/claude-first-officer-runtime.md` Team Creation section updated with failure recovery protocol — DONE
+2. `references/claude-first-officer-runtime.md` Dispatch Adapter section updated with sequencing rule — DONE
+3. E2E test created at `tests/test_team_dispatch_sequencing.py` — DONE
+4. Static content assertions for AC1-AC4 (in `tests/test_agent_content.py`) — DONE
+5. All changes committed on the worktree branch — DONE
+
+### Deliverables
+
+- **`references/claude-first-officer-runtime.md`** — Two additions:
+  - Team Creation section (line 25): "TeamCreate failure recovery" paragraph with "Already leading team" recovery path (TeamDelete alone → wait → TeamCreate alone), bare-mode fallback for other errors, and "Block all Agent dispatch" until team state resolves.
+  - Dispatch Adapter section (line 47): "Sequencing rule" paragraph — team lifecycle calls and Agent dispatch must never share a tool-call message.
+
+- **`tests/test_agent_content.py`** — New `test_assembled_claude_first_officer_has_teamcreate_failure_recovery` function with static assertions for AC1-AC4. All 10 tests pass.
+
+- **`tests/test_team_dispatch_sequencing.py`** — E2E test (AC5) using gated-pipeline fixture. Runs the FO, parses the JSONL log, and checks that no assistant message contains both team lifecycle tool calls (TeamCreate/TeamDelete) and Agent dispatch calls. Also includes AC1-AC4 static checks as supplementary validation.
+
+### Summary
+
+Applied minimal edits to the Claude FO runtime reference to add TeamCreate failure recovery and dispatch sequencing guardrails. Static tests confirm the text is present in the assembled agent content. E2E test validates the sequencing invariant at runtime.
+
+## Stage Report: validation
+
+All items validated as-is. No fixes needed during validation.
+
+### Test Results
+
+**Static tests** (`unset CLAUDECODE && uv run --with pytest tests/test_agent_content.py`): 10/10 passed, including `test_assembled_claude_first_officer_has_teamcreate_failure_recovery` which covers AC1-AC4.
+
+**E2E test** (`unset CLAUDECODE && uv run tests/test_team_dispatch_sequencing.py --model haiku --effort low`): 6/6 checks passed. FO completed in 22s (27 assistant messages, haiku). Sequencing invariant held — no assistant message mixed team lifecycle and Agent dispatch calls.
+
+### Acceptance Criteria Checklist
+
+1. AC1: "Already leading team" recovery documented — DONE. Runtime doc line 27 contains "Already leading team" error path with TeamDelete-alone-then-TeamCreate-alone recovery. Static test asserts `"Already leading team" in assembled` and `TeamDelete.*its own message` and `TeamCreate.*subsequent message`.
+
+2. AC2: Bare mode fallback for other errors documented — DONE. Runtime doc line 28 contains "Other errors (quota, internal): Fall back to bare mode". Static test asserts `Other errors.*bare mode` regex match.
+
+3. AC3: Agent dispatch blocked during uncertain team state — DONE. Runtime doc line 29 contains "Block all Agent dispatch until team setup resolves... Never dispatch agents while team state is uncertain." Static test asserts both phrases.
+
+4. AC4: Sequencing rule in Dispatch Adapter — DONE. Runtime doc line 47 contains "Sequencing rule: Team lifecycle calls (TeamCreate, TeamDelete) and Agent dispatch calls must NEVER appear in the same tool-call message." Static test asserts `Sequencing rule.*Team lifecycle.*Agent.*NEVER.*same tool-call message`.
+
+5. AC5: E2E test — FO never puts TeamCreate/TeamDelete and Agent in same message — DONE. E2E test parses JSONL log, iterates all assistant messages, checks for intersection of `{TeamCreate, TeamDelete}` and `{Agent}` tool call names. Zero violations found.
+
+6. Static tests pass (test_agent_content.py) — DONE. 10/10 passed.
+
+7. Runtime doc diff is minimal — DONE. Only 2 insertions in `references/claude-first-officer-runtime.md`: failure recovery paragraph (5 lines) in Team Creation section and sequencing rule paragraph (2 lines) in Dispatch Adapter section. No other files modified besides entity file and test files.
+
+8. **Recommendation: PASSED**
