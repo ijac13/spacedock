@@ -1,9 +1,9 @@
 ---
 id: 093
 title: Team health check before dispatch
-status: backlog
+status: ideation
 source: "CL — observed in session 2026-04-07, team config.json missing while team still active in memory"
-started:
+started: 2026-04-07T00:00:00Z
 completed:
 verdict:
 score: 0.75
