@@ -215,3 +215,53 @@ This preserves field ordering, comments, and any non-frontmatter content in the 
 **Files modified:**
 - `skills/commission/bin/status` — added `parse_set_args()`, `update_frontmatter()`, `TIMESTAMP_FIELDS`, and `--set` handling in `main()` (~90 lines of implementation)
 - `tests/test_status_script.py` — added `TestSetOption` class with 12 test methods (~230 lines of test code)
+
+## Stage Report — validation
+
+### Test run
+
+All 45 tests pass (33 existing + 12 new `TestSetOption` tests):
+
+```
+tests/test_status_script.py::TestSetOption::test_set_single_field PASSED
+tests/test_status_script.py::TestSetOption::test_set_multiple_fields PASSED
+tests/test_status_script.py::TestSetOption::test_set_clear_field PASSED
+tests/test_status_script.py::TestSetOption::test_set_timestamp_auto_fill PASSED
+tests/test_status_script.py::TestSetOption::test_set_bare_non_timestamp_error PASSED
+tests/test_status_script.py::TestSetOption::test_set_nonexistent_entity_error PASSED
+tests/test_status_script.py::TestSetOption::test_set_preserves_unmodified_fields PASSED
+tests/test_status_script.py::TestSetOption::test_set_preserves_body PASSED
+tests/test_status_script.py::TestSetOption::test_set_prints_updated_fields PASSED
+tests/test_status_script.py::TestSetOption::test_set_incompatible_flags PASSED
+tests/test_status_script.py::TestSetOption::test_set_timestamp_skip_if_already_set PASSED
+tests/test_status_script.py::TestSetOption::test_set_uses_workflow_dir PASSED
+```
+
+No existing tests regressed.
+
+### Acceptance criteria
+
+1. **AC1 — --set updates specified field**: DONE. `test_set_single_field` sets `status=ideation` and verifies the frontmatter value changed. Manual verification also confirms correct rewrite.
+2. **AC2 — multiple fields updated atomically**: DONE. `test_set_multiple_fields` sets `status=ideation` and `worktree=.worktrees/ensign-foo` in one call, verifies both changed.
+3. **AC3 — field= clears to empty**: DONE. `test_set_clear_field` sets `worktree=` on an entity with a non-empty worktree, verifies the field is empty afterward.
+4. **AC4 — bare timestamp auto-fills with UTC ISO 8601**: DONE. `test_set_timestamp_auto_fill` calls `--set task-a started`, verifies the result matches `YYYY-MM-DDTHH:MM:SSZ` format and is within tolerance of test execution time. Manual verification confirmed real wallclock time is captured.
+5. **AC5 — bare non-timestamp field rejected**: DONE. `test_set_bare_non_timestamp_error` calls `--set task-a status` (no `=`), verifies non-zero exit and error message referencing the field name.
+6. **AC6 — nonexistent entity returns error**: DONE. `test_set_nonexistent_entity_error` calls `--set nonexistent status=done`, verifies non-zero exit and error message containing the slug.
+7. **AC7 — unspecified fields preserved**: DONE. `test_set_preserves_unmodified_fields` sets only `status=done`, then verifies `title`, `score`, `source`, and `id` are unchanged.
+8. **AC8 — file body preserved**: DONE. `test_set_preserves_body` reads the body before and after `--set`, verifies they are identical.
+9. **AC9 — updated fields printed to stdout**: DONE. `test_set_prints_updated_fields` verifies stdout contains `status: done` after setting that field. Manual verification also shows bare timestamp auto-fill prints the resolved timestamp.
+10. **AC10 — incompatible with --next, --archived, --boot, --where**: DONE. `test_set_incompatible_flags` tests all four flags, verifies non-zero exit and error message containing "cannot" for each.
+11. **AC11 — timestamp auto-fill skips if already set**: DONE. `test_set_timestamp_skip_if_already_set` creates an entity with `started: 2026-01-01T00:00:00Z`, runs `--set task-a started`, verifies the original value is preserved. Manual verification also confirmed that stdout is empty (no fields resolved) and the file is unchanged.
+12. **AC12 — --set uses workflow-dir to locate entities**: DONE. `test_set_uses_workflow_dir` uses `--workflow-dir` explicitly (no `PIPELINE_DIR` env var) and verifies the entity is found and updated.
+
+### Implementation review notes
+
+- `parse_set_args()` correctly separates slug from field arguments and handles the three forms: `field=value`, `field=` (clear), and bare timestamp field names.
+- `update_frontmatter()` uses line-by-line rewriting that preserves field ordering and body content. It reads current values first to implement skip-if-set for timestamp fields.
+- The `TIMESTAMP_FIELDS` set is defined at module level as `{'started', 'completed'}`, matching the design spec.
+- Incompatibility checking in `main()` correctly detects all four flags (`--next`, `--archived`, `--boot`, `--where`).
+- No regressions in existing functionality.
+
+### Recommendation
+
+**PASSED**
