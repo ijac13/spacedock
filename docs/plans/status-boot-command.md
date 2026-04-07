@@ -271,3 +271,18 @@ The 14 acceptance criteria are testable. A few concerns:
 5. **No `--boot` output to stderr.** The design specifies all output on stdout. Progress indicators for slow operations (like multiple `gh pr view` calls) might be useful on stderr but are not required. Just noting this as a known tradeoff.
 
 6. **LATEST_DEBRIEF sorting.** The design says "most recent debrief file (by sorted filename)." The existing debrief files follow a `YYYY-MM-DD-NN.md` naming convention that sorts lexicographically. This is fine as long as the convention holds, but the design should note this assumption explicitly.
+
+## Stage Report
+
+### Checklist
+
+1. Add `--boot` flag to `skills/commission/bin/status` with all 6 output sections — **DONE**. Added `print_boot()` orchestrator plus `scan_mods()`, `compute_next_id()`, `scan_orphans()`, `check_pr_states()`, `find_latest_debrief()` functions. All output sections: MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE, LATEST_DEBRIEF.
+2. Implement mod discovery scanning `_mods/*.md` for `## Hook:` headings — **DONE**. `scan_mods()` uses `glob.glob()` on `{workflow_dir}/_mods/*.md`, reads line-by-line for `## Hook:` prefixes, groups by lifecycle point with mod names in alphabetical order. Comma-separated for multiple mods on the same hook point (reviewer refinement #1, #6).
+3. Implement NEXT_ID calculation across active + archive entities — **DONE**. `compute_next_id()` scans active entities and `_archive/` directory unconditionally, finds highest numeric ID (skipping non-numeric), returns zero-padded next ID.
+4. Implement ORPHANS with cross-referencing against `git worktree list` and filesystem checks — **DONE**. `scan_orphans()` runs `git worktree list --porcelain`, extracts branch names, checks `os.path.isdir()` for DIR_EXISTS. Section name kept as ORPHANS per reviewer refinement #2.
+5. Implement PR_STATE with `gh pr view` subprocess calls and graceful fallbacks — **DONE**. `check_pr_states()` checks PATH for `gh` availability, runs `gh pr view` per PR, returns per-PR ERROR state on failure (reviewer refinement #3).
+6. Implement LATEST_DEBRIEF section — **DONE**. `find_latest_debrief()` scans `_debriefs/*.md`, returns last filename by lexicographic sort.
+7. Flag incompatibility with `--next`, `--archived`, `--where` — **DONE**. Three separate checks in `main()`, each produces an error message with "incompatible" and exits non-zero.
+8. Write unit tests in `tests/test_status_script.py` covering AC1-AC14 (including reviewer's additions) — **DONE**. Added `TestBootOption` class with 19 test methods: AC1-AC14 (with AC13 split into 3 separate tests per reviewer refinement #4) plus mod with no hooks (#5), multiple mods same hook (#6), and per-PR error handling (#3). Uses PATH prepend with fake shell scripts for subprocess mocking per reviewer refinement #7.
+9. All existing tests still pass — **DONE**. All 33 pre-existing tests pass unchanged.
+10. All new tests pass — **DONE**. All 19 new tests pass. Total: 52 tests, 0 failures.
