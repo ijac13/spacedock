@@ -1,9 +1,9 @@
 ---
 id: 091
 title: TeamCreate failure causes duplicate agent dispatch
-status: backlog
+status: ideation
 source: CL — observed in recce-gtm session, 3x duplicate agents per entity
-started:
+started: 2026-04-06T00:00:00Z
 completed:
 verdict:
 score: 0.8
