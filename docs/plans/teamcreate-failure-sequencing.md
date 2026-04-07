@@ -9,7 +9,7 @@ verdict:
 score: 0.8
 worktree: .worktrees/spacedock-ensign-teamcreate-failure-sequencing
 issue:
-pr:
+pr: "#38"
 ---
 
 # TeamCreate failure causes duplicate agent dispatch
