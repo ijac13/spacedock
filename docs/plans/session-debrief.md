@@ -1,7 +1,7 @@
 ---
 id: 054
 title: Session debrief command
-status: implementation
+status: validation
 source: CL
 started: 2026-03-27T07:25:00Z
 completed:
