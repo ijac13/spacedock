@@ -1,9 +1,9 @@
 ---
 id: 089
 title: Status script --boot flag for FO startup
-status: backlog
+status: ideation
 source: CL — FO startup operator errors (missed mod registration via glob, manual PR checks)
-started:
+started: 2026-04-07T00:00:00Z
 completed:
 verdict:
 score: 0.8
