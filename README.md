@@ -82,7 +82,9 @@ At approval gates, the first officer pauses and presents the ensign's work for y
 
 The README is the single source of truth. The first officer reads it to know what stages exist, what quality criteria to enforce, and when to pause for your review.
 
-When a new Spacedock release is available, use `/spacedock refit` to upgrade your workflow scaffolding while keeping local modifications.
+When a new Spacedock release is available, use `/spacedock:refit` to upgrade your workflow scaffolding while keeping local modifications.
+
+At the end of a session, use `/spacedock:debrief` to capture what happened -- tasks completed, decisions made, issues found. The debrief is written to `{dir}/_debriefs/` and automatically read by the first officer at next startup for session continuity.
 
 ## Use Cases
 

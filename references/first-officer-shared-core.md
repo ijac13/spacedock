@@ -15,6 +15,7 @@ This file captures the shared first-officer semantics. Keep it aligned with `age
 5. Run startup hooks before normal dispatch.
 6. Detect orphaned worktree entities by checking `status --where "worktree !="` and report anomalies rather than auto-redispatching.
 7. Run `status --next` to identify dispatchable entities.
+8. Read the latest debrief — check for `{workflow_dir}/_debriefs/*.md`. If the directory exists and contains files, read the most recent one (last in lexicographic sort). Summarize the key points to the captain: what was shipped last session, any unresolved issues, and what was queued as "next." This provides session continuity. If no debriefs exist, skip this step silently.
 
 ## Status Viewer
 
