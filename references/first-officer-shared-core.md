@@ -11,11 +11,13 @@ This file captures the shared first-officer semantics. Keep it aligned with `age
    - entity labels
    - stage ordering and defaults from `stages.defaults` / `stages.states`
    - stage properties such as `initial`, `terminal`, `gate`, `worktree`, `concurrency`, `feedback-to`, and `agent`
-4. Discover mod hooks by scanning `{workflow_dir}/_mods/*.md` for `## Hook:` sections. Register `startup`, `idle`, and `merge` hooks in alphabetical order by mod filename.
-5. Run startup hooks before normal dispatch.
-6. Detect orphaned worktree entities by checking `status --where "worktree !="` and report anomalies rather than auto-redispatching.
-7. Run `status --next` to identify dispatchable entities.
-8. Read the latest debrief — check for `{workflow_dir}/_debriefs/*.md`. If the directory exists and contains files, read the most recent one (last in lexicographic sort). Summarize the key points to the captain: what was shipped last session, any unresolved issues, and what was queued as "next." This provides session continuity. If no debriefs exist, skip this step silently.
+4. Run `status --boot` to gather all startup information in one call. Parse the output sections:
+   - **MODS** — registered mod hooks grouped by lifecycle point (startup, idle, merge). Run startup hooks before normal dispatch.
+   - **NEXT_ID** — next available sequential entity ID.
+   - **ORPHANS** — entities with worktree fields, cross-referenced against filesystem and git state. Report anomalies rather than auto-redispatching.
+   - **PR_STATE** — PR-pending entities with current merge state. Advance merged PRs.
+   - **DISPATCHABLE** — entities ready for dispatch (same as `--next`).
+   - **LATEST_DEBRIEF** — filename of the most recent debrief. If present, read it and summarize key points to the captain: what was shipped last session, any unresolved issues, and what was queued as "next." This provides session continuity. If `none`, skip silently.
 
 ## Status Viewer
 
@@ -23,10 +25,10 @@ The status viewer ships with the plugin at `skills/commission/bin/status`. Resol
 
 Invoke it as:
 ```
-python3 {spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {workflow_dir} [--next|--archived|--where ...]
+python3 {spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {workflow_dir} [--next|--archived|--where ...|--boot]
 ```
 
-Use this for all `status` calls: `--next`, `--where "pr !="`, `--where "worktree !="`, etc.
+Use `--boot` at startup to gather mods, next ID, orphans, PR state, dispatchable entities, and latest debrief in a single call. Use `--next`, `--where "pr !="`, etc. for targeted queries during the event loop. `--boot` is incompatible with `--next`, `--archived`, and `--where`.
 
 ## Single-Entity Mode
 
