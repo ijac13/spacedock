@@ -197,3 +197,21 @@ This preserves field ordering, comments, and any non-frontmatter content in the 
 **Cost/complexity:** Low-medium. Simpler than `--boot` because there are no subprocess calls to mock. The frontmatter rewriting is the only non-trivial part, and it follows the same line-by-line approach already used by `parse_frontmatter()`.
 
 **Dependency on task 089:** None at the implementation level. `--set` and `--boot` are independent flags with separate code paths. The incompatibility check (AC10) references `--boot` but that is a one-line check in `main()`. If 089 lands first, the test for boot+set incompatibility can reference the real flag; if not, the test still works as long as the incompatibility check is present in the `--set` code path.
+
+## Stage Report — implementation
+
+1. Add `--set {slug} {field}={value}` flag to `skills/commission/bin/status` — **DONE**
+2. Implement field=value setting for any frontmatter field — **DONE**
+3. Implement field= (empty value) to clear fields — **DONE**
+4. Implement bare timestamp auto-fill (started, completed) with skip-if-set behavior — **DONE**
+5. Implement bare non-timestamp field rejection — **DONE**
+6. Implement entity existence check — **DONE**
+7. Implement stdout output of updated fields — **DONE**
+8. Flag incompatibility with --next, --archived, --boot, --where — **DONE**
+9. Write unit tests in tests/test_status_script.py covering AC1-AC12 — **DONE** (12 test methods in TestSetOption class)
+10. All existing tests still pass — **DONE** (33 existing tests pass)
+11. All new tests pass — **DONE** (12 new tests pass, 45 total)
+
+**Files modified:**
+- `skills/commission/bin/status` — added `parse_set_args()`, `update_frontmatter()`, `TIMESTAMP_FIELDS`, and `--set` handling in `main()` (~90 lines of implementation)
+- `tests/test_status_script.py` — added `TestSetOption` class with 12 test methods (~230 lines of test code)
