@@ -184,3 +184,22 @@ Fixture files:
 3. E2E test fixture created at `tests/fixtures/push-main-pipeline/` — DONE (README.md workflow, push-main-entity.md, _mods/pr-merge.md, status script)
 4. E2E test created at `tests/test_push_main_before_pr.py` — DONE (verifies push ordering via git wrapper and bare repo remote; validates remote state, PR creation via gh stub, and entity state)
 5. All changes committed on the worktree branch — DONE (commit 536fd3d on `spacedock-ensign/pr-mod-push-main-before-pr`)
+
+## Stage Report: validation
+
+1. AC1: Canonical mod has push-main-before-branch wording — DONE. Line 38 of `mods/pr-merge.md` reads: `**On approval:** First, push main to ensure the remote is up to date with local state commits: \`git push origin main\`. Then push the worktree branch: \`git push origin {branch}\`.` — `git push origin main` appears before `git push origin {branch}` in the same sentence.
+
+2. AC2: Installed mod matches canonical mod — DONE. `diff mods/pr-merge.md docs/plans/_mods/pr-merge.md` produces no output; files are identical. The test fixture mod (`tests/fixtures/push-main-pipeline/_mods/pr-merge.md`) also matches.
+
+3. AC3: Version bumped to 0.9.1 — DONE. Line 4 of canonical mod: `version: 0.9.1`. Git diff confirms `0.9.0` -> `0.9.1`.
+
+4. AC4: No other behavioral changes — DONE. `git diff main -- mods/pr-merge.md` shows exactly two hunks: (a) version `0.9.0` -> `0.9.1` in frontmatter, (b) the "On approval" paragraph reworded to add `git push origin main` before branch push and change "the push" to "either push". No other lines changed. Same diff applies to `docs/plans/_mods/pr-merge.md`.
+
+5. E2E test passes — DONE. `unset CLAUDECODE && uv run tests/test_push_main_before_pr.py` ran successfully: 10 passed, 0 failed. Key results:
+   - Push log shows `git push origin main` (timestamp 1775522232) before `git push origin spacedock-ensign/push-main-entity` (timestamp 1775522234)
+   - Remote main has the state commit (verified via bare repo log)
+   - Worktree branch `spacedock-ensign/push-main-entity` pushed to remote
+   - `gh pr create --base main --head spacedock-ensign/push-main-entity` was called
+   - Entity `pr` field set to `"#99"`
+
+6. Recommendation: **PASSED**
