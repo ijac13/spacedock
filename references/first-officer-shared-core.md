@@ -136,7 +136,7 @@ When an entity reaches its terminal stage:
 3. If no merge hook handled the merge, perform the default local merge from the stage worktree branch.
 4. Update frontmatter: `status --workflow-dir {workflow_dir} --set {slug} completed verdict={verdict} worktree=`
 5. Archive the entity into `{workflow_dir}/_archive/`.
-6. Remove the worktree and delete the temporary branch after successful merge or deliberate discard.
+6. Remove the worktree with `git worktree remove {path}` and delete the temporary branch with `git branch -d {branch}` after successful merge or deliberate discard.
 
 ## State Management
 
