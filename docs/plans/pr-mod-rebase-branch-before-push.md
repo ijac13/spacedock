@@ -154,3 +154,35 @@ Both the canonical copy (`mods/pr-merge.md`) and the installed copy (`docs/plans
 **Estimated cost/complexity:** Medium. The test setup is more involved than the existing test because we need to manually create the diverged state. But the validation is straightforward — checking merge-base equality. The FO run itself is similar cost to the existing test (~$1-2 with haiku).
 
 **Whether the existing test needs modification:** No. The existing `test_push_main_before_pr.py` covers the no-op rebase case (branch already on current main). It should continue to pass after the mod change.
+
+## Stage Report: implementation
+
+### 1. Canonical mod (`mods/pr-merge.md`) updated with rebase step — DONE
+
+Updated the "On approval" block on line 38. Inserted one sentence: "Then rebase the worktree branch onto main: `git rebase main` (from the worktree directory)." between the push-main and push-branch sentences. Expanded failure clause from "either push" to "any step" and added "rebase conflict" to the examples.
+
+### 2. Installed mod (`docs/plans/_mods/pr-merge.md`) matches canonical mod — DONE
+
+Applied the same edit. Verified with `diff` — the two files are identical.
+
+### 3. E2E test created at `tests/test_rebase_branch_before_push.py` — DONE
+
+Follows the same infrastructure pattern as `test_push_main_before_pr.py` (bare repo remote, git wrapper for push logging, gh stub). Key additions for the divergence scenario:
+
+- Creates the worktree branch from a fork point on main.
+- Advances main with a "merged PR" commit after the branch is created.
+- Validates merge-base equality (branch base == main HEAD) both locally and on the remote.
+- Validates the remote branch contains files from main (inherited via rebase).
+- Also validates push ordering (main before branch) and PR creation.
+
+### 4. Existing test `tests/test_push_main_before_pr.py` still passes — DONE
+
+Verified by inspection: the existing test creates a branch from current main, so `git rebase main` is a no-op (exits 0, no changes). The mod wording change does not affect the no-op case. The fixture mod copy was also updated so the FO sees the rebase instruction.
+
+### 5. All changes committed on the worktree branch — DONE
+
+Commit `3d88e8f` on branch `spacedock-ensign/pr-mod-rebase-branch-before-push`. Files changed:
+- `mods/pr-merge.md` — rebase step added
+- `docs/plans/_mods/pr-merge.md` — same change
+- `tests/fixtures/push-main-pipeline/_mods/pr-merge.md` — same change
+- `tests/test_rebase_branch_before_push.py` — new E2E test
