@@ -9,7 +9,7 @@ verdict:
 score: 0.65
 worktree: .worktrees/spacedock-ensign-pr-mod-rebase-branch-before-push
 issue:
-pr:
+pr: "#40"
 ---
 
 # PR merge mod should rebase branch on main before pushing
