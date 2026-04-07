@@ -384,3 +384,47 @@ All 14 acceptance criteria are verified with passing tests and manual inspection
 3. Check and update `references/claude-first-officer-runtime.md` if needed — **SKIPPED**. The runtime adapter defines team creation, dispatch mechanics, and event loop — all runtime-specific concerns. It does not reference the startup scanning steps (mod discovery, orphan detection, etc.) that were replaced by `--boot`. The event loop's use of `status --next` and `status --where "pr !="` is correct for ongoing iteration and not part of the boot path.
 4. All existing tests still pass — **DONE**. 52 tests pass (33 pre-existing + 19 boot tests), 0 failures.
 5. Commit changes — **DONE**. Committed as `089: update FO startup reference to use status --boot`.
+
+## Validation Stage Report (Round 2)
+
+Re-validation after reference file updates were added (commits `d45b173` and `f94a311`).
+
+### 1. Run all tests — DONE
+
+```
+$ uvx pytest tests/test_status_script.py -v
+52 passed in 2.13s
+```
+
+All 52 tests pass: 33 pre-existing + 19 `TestBootOption` tests. No failures, no warnings.
+
+### 2. AC1-AC14 still hold — DONE
+
+All 14 original acceptance criteria remain satisfied. Round 1 verified each in detail with specific test evidence. No implementation code has changed since round 1 — only reference documentation was added. Tests continue to pass identically.
+
+### 3. Reference update: Startup section uses `status --boot` — DONE
+
+**Evidence:** `references/first-officer-shared-core.md` lines 14-20. The old steps 4-8 (manual mod scanning via `_mods/*.md` glob, manual startup hook firing, orphan detection via `status --where "worktree !="`, `status --next`, and manual debrief scanning via `_debriefs/*.md` glob) have been replaced with a single step 4: "Run `status --boot` to gather all startup information in one call." The step documents all six output sections (MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE, LATEST_DEBRIEF) with brief descriptions of what each provides.
+
+### 4. Reference update: Status Viewer documents `--boot` — DONE
+
+**Evidence:** `references/first-officer-shared-core.md` lines 28-31. The invocation example now includes `--boot` as an option. The usage guidance explicitly says "Use `--boot` at startup" and "Use `--next`, `--where "pr !="`, etc. for targeted queries during the event loop." Incompatibility with `--next`, `--archived`, and `--where` is documented.
+
+### 5. Old multi-step startup procedures removed — DONE
+
+**Evidence:** The diff at commit `d45b173` shows the removal of:
+- Step 4: "Discover mod hooks by scanning `{workflow_dir}/_mods/*.md` for `## Hook:` sections"
+- Step 5: "Run startup hooks before normal dispatch"
+- Step 6: "Detect orphaned worktree entities by checking `status --where \"worktree !=\"`"
+- Step 7: "Run `status --next` to identify dispatchable entities"
+- Step 8: "Read the latest debrief — check for `{workflow_dir}/_debriefs/*.md`"
+
+None of these manual procedures remain as the described startup procedure. They are all subsumed by the single `status --boot` call.
+
+### 6. `references/claude-first-officer-runtime.md` does NOT need changes — DONE
+
+**Evidence:** Searched the runtime file for references to mod scanning, debrief discovery, orphan detection, and boot. The file references "startup" only in the context of team creation ("At startup (after reading the README, before dispatch)") and "idle hooks" in the event loop (step 3: "Fire `idle` hooks (from registered mods)"). Both are runtime-specific dispatch concerns, not the startup data-gathering steps that `--boot` replaced. The event loop correctly continues to use `status --next` and `status --where "pr !="` for ongoing iteration.
+
+### 7. Recommendation: PASSED
+
+All original ACs remain satisfied (tests pass, no implementation changes). The reference updates correctly replace the old 5-step manual startup procedure with a single `status --boot` call, document `--boot` in the Status Viewer section, and leave the runtime adapter unchanged (correctly — it handles dispatch mechanics, not startup scanning).
