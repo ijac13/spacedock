@@ -395,19 +395,8 @@ def check_pr_states(entities, stages):
     return 'ok', results
 
 
-def find_latest_debrief(workflow_dir):
-    """Find the most recent debrief file by sorted filename."""
-    debriefs_dir = os.path.join(workflow_dir, '_debriefs')
-    if not os.path.isdir(debriefs_dir):
-        return None
-    files = sorted(glob.glob(os.path.join(debriefs_dir, '*.md')))
-    if not files:
-        return None
-    return os.path.basename(files[-1])
-
-
 def print_boot(entities, stages, workflow_dir, git_root):
-    """Print all boot sections: MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE, LATEST_DEBRIEF."""
+    """Print all boot sections: MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE."""
     # MODS
     hooks = scan_mods(workflow_dir)
     if not hooks:
@@ -450,13 +439,6 @@ def print_boot(entities, stages, workflow_dir, git_root):
     # DISPATCHABLE
     print('DISPATCHABLE')
     print_next_table(entities, stages)
-
-    # LATEST_DEBRIEF
-    latest = find_latest_debrief(workflow_dir)
-    if latest:
-        print('LATEST_DEBRIEF: %s' % latest)
-    else:
-        print('LATEST_DEBRIEF: none')
 
 
 def parse_where_filters(args):
