@@ -8,6 +8,7 @@ completed:
 verdict:
 score:
 worktree: .worktrees/spacedock-ensign-session-debrief
+pr: "#39"
 ---
 
 A command or skill that captures what happened during a session — tasks processed, decisions made, lessons learned — and produces a structured record that feeds forward into the next session.
