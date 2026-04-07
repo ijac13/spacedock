@@ -1,7 +1,7 @@
 ---
 id: 095
 title: Remove LATEST_DEBRIEF from status --boot output
-status: implementation
+status: validation
 source: CL — debrief info at boot is redundant with other --boot sections
 started: 2026-04-07T21:37:57Z
 completed:
