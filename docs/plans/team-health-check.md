@@ -1,13 +1,13 @@
 ---
 id: 093
 title: Team health check before dispatch
-status: ideation
+status: implementation
 source: "CL — observed in session 2026-04-07, team config.json missing while team still active in memory"
 started: 2026-04-07T00:00:00Z
 completed:
 verdict:
 score: 0.75
-worktree:
+worktree: .worktrees/spacedock-ensign-team-health-check
 issue:
 pr:
 ---
