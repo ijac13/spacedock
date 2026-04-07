@@ -40,13 +40,13 @@ def main():
     print("--- Phase 1: Set up test project from fixture ---")
 
     create_test_project(t)
-    setup_fixture(t, "gated-pipeline", "gated-pipeline")
+    setup_fixture(t, "multi-stage-pipeline", "multi-stage-pipeline")
     install_agents(t, include_ensign=True)
 
     git_add_commit(t.test_project_dir, "setup: team health check test")
 
     t.check_cmd("status script runs without errors",
-                ["bash", "gated-pipeline/status"], cwd=t.test_project_dir)
+                ["bash", "multi-stage-pipeline/status"], cwd=t.test_project_dir)
 
     print()
 
@@ -54,13 +54,12 @@ def main():
 
     print(f"--- Phase 2: Run first officer ({args.runtime}, this takes ~60-120s) ---")
 
-    abs_workflow = t.test_project_dir / "gated-pipeline"
+    abs_workflow = t.test_project_dir / "multi-stage-pipeline"
     fo_exit = run_first_officer(
         t,
         (
             f"Process all tasks through the workflow at {abs_workflow}/. "
-            "Drive them from backlog through work to the gate. "
-            "When you reach the gate, present the gate review and wait."
+            "Drive them from backlog through all stages to done."
         ),
         agent_id=args.agent,
         extra_args=[
