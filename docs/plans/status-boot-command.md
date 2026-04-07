@@ -271,3 +271,160 @@ The 14 acceptance criteria are testable. A few concerns:
 5. **No `--boot` output to stderr.** The design specifies all output on stdout. Progress indicators for slow operations (like multiple `gh pr view` calls) might be useful on stderr but are not required. Just noting this as a known tradeoff.
 
 6. **LATEST_DEBRIEF sorting.** The design says "most recent debrief file (by sorted filename)." The existing debrief files follow a `YYYY-MM-DD-NN.md` naming convention that sorts lexicographically. This is fine as long as the convention holds, but the design should note this assumption explicitly.
+
+## Stage Report
+
+### Checklist
+
+1. Add `--boot` flag to `skills/commission/bin/status` with all 6 output sections — **DONE**. Added `print_boot()` orchestrator plus `scan_mods()`, `compute_next_id()`, `scan_orphans()`, `check_pr_states()`, `find_latest_debrief()` functions. All output sections: MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE, LATEST_DEBRIEF.
+2. Implement mod discovery scanning `_mods/*.md` for `## Hook:` headings — **DONE**. `scan_mods()` uses `glob.glob()` on `{workflow_dir}/_mods/*.md`, reads line-by-line for `## Hook:` prefixes, groups by lifecycle point with mod names in alphabetical order. Comma-separated for multiple mods on the same hook point (reviewer refinement #1, #6).
+3. Implement NEXT_ID calculation across active + archive entities — **DONE**. `compute_next_id()` scans active entities and `_archive/` directory unconditionally, finds highest numeric ID (skipping non-numeric), returns zero-padded next ID.
+4. Implement ORPHANS with cross-referencing against `git worktree list` and filesystem checks — **DONE**. `scan_orphans()` runs `git worktree list --porcelain`, extracts branch names, checks `os.path.isdir()` for DIR_EXISTS. Section name kept as ORPHANS per reviewer refinement #2.
+5. Implement PR_STATE with `gh pr view` subprocess calls and graceful fallbacks — **DONE**. `check_pr_states()` checks PATH for `gh` availability, runs `gh pr view` per PR, returns per-PR ERROR state on failure (reviewer refinement #3).
+6. Implement LATEST_DEBRIEF section — **DONE**. `find_latest_debrief()` scans `_debriefs/*.md`, returns last filename by lexicographic sort.
+7. Flag incompatibility with `--next`, `--archived`, `--where` — **DONE**. Three separate checks in `main()`, each produces an error message with "incompatible" and exits non-zero.
+8. Write unit tests in `tests/test_status_script.py` covering AC1-AC14 (including reviewer's additions) — **DONE**. Added `TestBootOption` class with 19 test methods: AC1-AC14 (with AC13 split into 3 separate tests per reviewer refinement #4) plus mod with no hooks (#5), multiple mods same hook (#6), and per-PR error handling (#3). Uses PATH prepend with fake shell scripts for subprocess mocking per reviewer refinement #7.
+9. All existing tests still pass — **DONE**. All 33 pre-existing tests pass unchanged.
+10. All new tests pass — **DONE**. All 19 new tests pass. Total: 52 tests, 0 failures.
+
+## Validation Stage Report
+
+### 1. Run all tests — DONE
+
+```
+$ uvx pytest tests/test_status_script.py -v
+52 passed in 1.62s
+```
+
+All 52 tests pass: 33 pre-existing + 19 new `TestBootOption` tests. No failures, no warnings.
+
+### 2. AC1: MODS section lists hooks grouped by lifecycle point — DONE
+
+**Evidence:** `test_mods_with_hooks` creates a mod file with `## Hook: startup` and `## Hook: idle`, verifies output contains `MODS` header line and `startup: pr-merge` and `idle: pr-merge` lines. Manual spot-check confirmed output format:
+```
+MODS
+idle: pr-merge
+merge: pr-merge
+startup: pr-merge
+```
+Hook points are sorted alphabetically. Mod names within a hook point are also sorted alphabetically.
+
+### 3. AC2: MODS shows "MODS: none" when no mods exist — DONE
+
+**Evidence:** `test_mods_none` creates a pipeline with no `_mods/` directory and asserts `MODS: none` in output. Additional coverage: `test_mods_file_without_hooks` verifies that a mod file with no `## Hook:` headings also produces `MODS: none`.
+
+### 4. AC3: NEXT_ID computes correctly across active + archive — DONE
+
+**Evidence:** `test_next_id_across_active_and_archive` creates active entities with IDs 001, 003 and archived entity with ID 002, then asserts `NEXT_ID: 004`. Implementation (`compute_next_id()` at line 293) unconditionally scans both active entities and `_archive/` directory. Non-numeric IDs are skipped via `try/except ValueError`.
+
+### 5. AC4: ORPHANS cross-references with DIR_EXISTS and BRANCH_EXISTS — DONE
+
+**Evidence:** `test_orphans_with_existence_checks` creates two entities with worktree fields, creates the directory for one but not the other, and provides a fake `git worktree list --porcelain` output that includes only one branch. Test verifies:
+- ORPHANS header row contains `DIR_EXISTS` and `BRANCH_EXISTS` columns
+- task-a: `yes` for both (directory exists, branch in worktree list)
+- task-b: `no` for both (no directory, no branch)
+
+Implementation uses `os.path.isdir()` for DIR_EXISTS and parses `git worktree list --porcelain` for BRANCH_EXISTS (line 311-343).
+
+### 6. AC5: ORPHANS shows "ORPHANS: none" when no entities have worktree fields — DONE
+
+**Evidence:** `test_orphans_none` creates entity with empty worktree field, asserts `ORPHANS: none`.
+
+### 7. AC6: PR_STATE shows PR number and state — DONE
+
+**Evidence:** `test_pr_state_with_pr` creates entity with `pr: #19` in `validation` status (non-terminal), uses fake `gh` script returning `MERGED`, verifies output contains `PR_STATE` header, and a line with `#19`, `MERGED`, and `001`.
+
+### 8. AC7: PR_STATE handles missing gh gracefully — DONE
+
+**Evidence:** `test_pr_state_gh_unavailable` creates entity with PR, uses `_path_without_gh()` to remove `gh` from PATH, asserts `PR_STATE: gh not available`. Implementation checks PATH for executable `gh` binary (line 365-369) before attempting subprocess calls.
+
+### 9. AC8: PR_STATE skips terminal-status entities — DONE
+
+**Evidence:** `test_pr_state_skips_terminal` creates entity with `pr: #19` and `status: done` (terminal). Asserts `PR_STATE: none` — the entity is not queried at all. Implementation filters on `stage.get('terminal', False)` at line 357.
+
+### 10. AC9: DISPATCHABLE section matches --next output — DONE
+
+**Evidence:** `test_dispatchable_matches_next` runs both `--next` and `--boot` on the same data, extracts the DISPATCHABLE section from boot output, and compares line-by-line against `--next` output. Implementation calls `print_next_table()` directly from `print_boot()` (line 451), guaranteeing identical logic.
+
+### 11. AC10: LATEST_DEBRIEF reports most recent filename — DONE
+
+**Evidence:** `test_latest_debrief` creates three debrief files (`2026-03-29-01.md`, `2026-04-07-01.md`, `2026-03-29-02.md`), asserts output contains `LATEST_DEBRIEF: 2026-04-07-01.md`. Implementation sorts by filename lexicographically (line 402) which works correctly with the `YYYY-MM-DD-NN.md` naming convention.
+
+### 12. AC11: LATEST_DEBRIEF shows "none" when no debriefs — DONE
+
+**Evidence:** `test_latest_debrief_none` creates pipeline with no `_debriefs/` directory, asserts `LATEST_DEBRIEF: none`.
+
+### 13. AC12: --boot errors without stages block — DONE
+
+**Evidence:** `test_boot_requires_stages` uses `README_NO_STAGES` fixture, asserts non-zero exit code and "stages" in stderr. Implementation check at line 592-593.
+
+### 14. AC13: --boot incompatible with --next, --archived, --where — DONE (3 separate checks)
+
+**Evidence:**
+- `test_boot_incompatible_with_next`: `--boot --next` produces non-zero exit and "incompatible" in stderr
+- `test_boot_incompatible_with_archived`: `--boot --archived` produces non-zero exit and "incompatible" in stderr
+- `test_boot_incompatible_with_where`: `--boot --where 'status = backlog'` produces non-zero exit and "incompatible" in stderr
+
+Implementation has three separate checks in `main()` at lines 566-581.
+
+### 15. AC14: Sections appear in deterministic order — DONE
+
+**Evidence:** `test_section_order` runs `--boot` and verifies string positions satisfy: `MODS < NEXT_ID < ORPHANS < PR_STATE < DISPATCHABLE < LATEST_DEBRIEF`. Manual spot-check confirmed the output follows this exact order. Implementation in `print_boot()` (line 408-458) prints sections in this fixed sequence.
+
+### 16. Recommendation: PASSED
+
+All 14 acceptance criteria are verified with passing tests and manual inspection of the implementation. The code is clean, follows existing patterns in the status script, and handles edge cases (missing `gh`, per-PR errors, empty mods, non-numeric IDs). The 19 new tests provide thorough coverage including the reviewer-suggested additions (mod without hooks, multiple mods same hook, per-PR error handling).
+
+## Reference Update Stage Report
+
+### Checklist
+
+1. Update `references/first-officer-shared-core.md` Startup section to use `status --boot` — **DONE**. Replaced steps 4-8 (mod discovery, startup hooks, orphan detection, `status --next`, debrief scanning) with a single step 4 that calls `status --boot` and parses its output sections (MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE, LATEST_DEBRIEF). Steps 1-3 (project root, workflow dir, README parsing) are unchanged.
+2. Update `references/first-officer-shared-core.md` Status Viewer section to document `--boot` — **DONE**. Added `--boot` to the invocation example and replaced the generic usage note with specific guidance: use `--boot` at startup, use `--next`/`--where` for event-loop queries. Documented incompatibility with `--next`, `--archived`, and `--where`.
+3. Check and update `references/claude-first-officer-runtime.md` if needed — **SKIPPED**. The runtime adapter defines team creation, dispatch mechanics, and event loop — all runtime-specific concerns. It does not reference the startup scanning steps (mod discovery, orphan detection, etc.) that were replaced by `--boot`. The event loop's use of `status --next` and `status --where "pr !="` is correct for ongoing iteration and not part of the boot path.
+4. All existing tests still pass — **DONE**. 52 tests pass (33 pre-existing + 19 boot tests), 0 failures.
+5. Commit changes — **DONE**. Committed as `089: update FO startup reference to use status --boot`.
+
+## Validation Stage Report (Round 2)
+
+Re-validation after reference file updates were added (commits `d45b173` and `f94a311`).
+
+### 1. Run all tests — DONE
+
+```
+$ uvx pytest tests/test_status_script.py -v
+52 passed in 2.13s
+```
+
+All 52 tests pass: 33 pre-existing + 19 `TestBootOption` tests. No failures, no warnings.
+
+### 2. AC1-AC14 still hold — DONE
+
+All 14 original acceptance criteria remain satisfied. Round 1 verified each in detail with specific test evidence. No implementation code has changed since round 1 — only reference documentation was added. Tests continue to pass identically.
+
+### 3. Reference update: Startup section uses `status --boot` — DONE
+
+**Evidence:** `references/first-officer-shared-core.md` lines 14-20. The old steps 4-8 (manual mod scanning via `_mods/*.md` glob, manual startup hook firing, orphan detection via `status --where "worktree !="`, `status --next`, and manual debrief scanning via `_debriefs/*.md` glob) have been replaced with a single step 4: "Run `status --boot` to gather all startup information in one call." The step documents all six output sections (MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE, LATEST_DEBRIEF) with brief descriptions of what each provides.
+
+### 4. Reference update: Status Viewer documents `--boot` — DONE
+
+**Evidence:** `references/first-officer-shared-core.md` lines 28-31. The invocation example now includes `--boot` as an option. The usage guidance explicitly says "Use `--boot` at startup" and "Use `--next`, `--where "pr !="`, etc. for targeted queries during the event loop." Incompatibility with `--next`, `--archived`, and `--where` is documented.
+
+### 5. Old multi-step startup procedures removed — DONE
+
+**Evidence:** The diff at commit `d45b173` shows the removal of:
+- Step 4: "Discover mod hooks by scanning `{workflow_dir}/_mods/*.md` for `## Hook:` sections"
+- Step 5: "Run startup hooks before normal dispatch"
+- Step 6: "Detect orphaned worktree entities by checking `status --where \"worktree !=\"`"
+- Step 7: "Run `status --next` to identify dispatchable entities"
+- Step 8: "Read the latest debrief — check for `{workflow_dir}/_debriefs/*.md`"
+
+None of these manual procedures remain as the described startup procedure. They are all subsumed by the single `status --boot` call.
+
+### 6. `references/claude-first-officer-runtime.md` does NOT need changes — DONE
+
+**Evidence:** Searched the runtime file for references to mod scanning, debrief discovery, orphan detection, and boot. The file references "startup" only in the context of team creation ("At startup (after reading the README, before dispatch)") and "idle hooks" in the event loop (step 3: "Fire `idle` hooks (from registered mods)"). Both are runtime-specific dispatch concerns, not the startup data-gathering steps that `--boot` replaced. The event loop correctly continues to use `status --next` and `status --where "pr !="` for ongoing iteration.
+
+### 7. Recommendation: PASSED
+
+All original ACs remain satisfied (tests pass, no implementation changes). The reference updates correctly replace the old 5-step manual startup procedure with a single `status --boot` call, document `--boot` in the Status Viewer section, and leave the runtime adapter unchanged (correctly — it handles dispatch mechanics, not startup scanning).

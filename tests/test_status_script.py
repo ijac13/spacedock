@@ -25,12 +25,15 @@ def build_status_script(tmpdir):
     return script_path
 
 
-def run_status(pipeline_dir, *args, script_path=None):
+def run_status(pipeline_dir, *args, script_path=None, extra_env=None):
     """Run the status script against a pipeline directory."""
+    env = {**os.environ, 'PIPELINE_DIR': pipeline_dir}
+    if extra_env:
+        env.update(extra_env)
     result = subprocess.run(
         ['python3', script_path] + list(args),
         capture_output=True, text=True,
-        env={**os.environ, 'PIPELINE_DIR': pipeline_dir}
+        env=env,
     )
     return result
 
@@ -603,6 +606,395 @@ class TestWhereFilter(unittest.TestCase):
             self.assertEqual(result2.returncode, 0, result2.stderr)
             lines2 = result2.stdout.strip().split('\n')[2:]
             self.assertEqual(len(lines2), 1)
+
+
+class TestBootOption(unittest.TestCase):
+    """Test --boot startup data output."""
+
+    def setUp(self):
+        self._script_dir = tempfile.mkdtemp()
+        self.script_path = build_status_script(self._script_dir)
+
+    def tearDown(self):
+        os.unlink(self.script_path)
+        os.rmdir(self._script_dir)
+
+    def _make_fake_git(self, tmpdir, worktree_output=''):
+        """Create a fake git script that returns canned worktree list output."""
+        fake_bin = os.path.join(tmpdir, '_fake_bin')
+        os.makedirs(fake_bin, exist_ok=True)
+        git_script = os.path.join(fake_bin, 'git')
+        with open(git_script, 'w') as f:
+            f.write('#!/bin/sh\n')
+            f.write('if [ "$1" = "worktree" ] && [ "$2" = "list" ]; then\n')
+            f.write('  cat <<\'GITEOF\'\n')
+            f.write(worktree_output)
+            f.write('GITEOF\n')
+            f.write('  exit 0\n')
+            f.write('fi\n')
+            f.write('exit 1\n')
+        os.chmod(git_script, 0o755)
+        return fake_bin
+
+    def _make_fake_gh(self, tmpdir, pr_states=None):
+        """Create a fake gh script that returns canned PR states.
+
+        pr_states: dict mapping PR number (str) to state (e.g., {'19': 'MERGED'})
+        """
+        fake_bin = os.path.join(tmpdir, '_fake_bin')
+        os.makedirs(fake_bin, exist_ok=True)
+        gh_script = os.path.join(fake_bin, 'gh')
+        # Build case branches
+        cases = ''
+        for pr_num, state in (pr_states or {}).items():
+            cases += '  %s) echo "%s"; exit 0;;\n' % (pr_num, state)
+        with open(gh_script, 'w') as f:
+            f.write('#!/bin/sh\n')
+            f.write('# Fake gh for testing PR state checks\n')
+            f.write('if [ "$1" = "pr" ] && [ "$2" = "view" ]; then\n')
+            f.write('  PR_NUM="$3"\n')
+            f.write('  case "$PR_NUM" in\n')
+            f.write(cases)
+            f.write('  *) echo "not found" >&2; exit 1;;\n')
+            f.write('  esac\n')
+            f.write('fi\n')
+            f.write('exit 1\n')
+        os.chmod(gh_script, 0o755)
+        return fake_bin
+
+    def _path_without_gh(self):
+        """Return a PATH string that excludes directories containing a real gh binary."""
+        dirs = os.environ.get('PATH', '').split(os.pathsep)
+        filtered = [d for d in dirs if not os.path.isfile(os.path.join(d, 'gh'))]
+        return os.pathsep.join(filtered)
+
+    # AC1: MODS section with hooks
+    def test_mods_with_hooks(self):
+        """MODS section lists hooks grouped by lifecycle point."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog', '0.80'),
+            })
+            mods_dir = os.path.join(tmpdir, '_mods')
+            os.makedirs(mods_dir)
+            with open(os.path.join(mods_dir, 'pr-merge.md'), 'w') as f:
+                f.write('---\nname: pr-merge\n---\n\n## Hook: startup\n\nDo stuff.\n\n## Hook: idle\n\nMore stuff.\n')
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': self._path_without_gh()})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.split('\n')
+            self.assertIn('MODS', lines)
+            # Check hook points are listed
+            self.assertTrue(any('startup: pr-merge' in line for line in lines), lines)
+            self.assertTrue(any('idle: pr-merge' in line for line in lines), lines)
+
+    # AC2: MODS: none when no mods exist
+    def test_mods_none(self):
+        """MODS shows 'MODS: none' when no mods directory exists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': self._path_without_gh()})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('MODS: none', result.stdout)
+
+    # AC3: NEXT_ID across active + archive
+    def test_next_id_across_active_and_archive(self):
+        """NEXT_ID is computed from highest ID across active and archived entities."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES,
+                entities={
+                    'task-a.md': entity('001', 'Task A', 'backlog'),
+                    'task-c.md': entity('003', 'Task C', 'backlog'),
+                },
+                archived={
+                    'task-b.md': entity('002', 'Task B', 'done'),
+                },
+            )
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': self._path_without_gh()})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('NEXT_ID: 004', result.stdout)
+
+    # AC4: ORPHANS with DIR_EXISTS and BRANCH_EXISTS
+    def test_orphans_with_existence_checks(self):
+        """ORPHANS section shows entities with worktree field and existence columns."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wt_path = os.path.join(tmpdir, '.worktrees', 'ensign-task-a')
+            os.makedirs(wt_path)
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'implementation', worktree='.worktrees/ensign-task-a'),
+                'task-b.md': entity('002', 'Task B', 'implementation', worktree='.worktrees/ensign-task-b'),
+            })
+            # Create fake git that reports ensign-task-a as a branch
+            worktree_output = (
+                'worktree /main\n'
+                'HEAD abc123\n'
+                'branch refs/heads/main\n'
+                '\n'
+                'worktree %s\n'
+                'HEAD def456\n'
+                'branch refs/heads/ensign-task-a\n'
+                '\n'
+            ) % wt_path
+            fake_bin = self._make_fake_git(tmpdir, worktree_output)
+            # Put fake git first, but exclude real gh
+            path = fake_bin + os.pathsep + self._path_without_gh()
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': path})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.split('\n')
+            # Find ORPHANS section
+            orphan_idx = lines.index('ORPHANS')
+            self.assertGreater(orphan_idx, -1)
+            # Header row
+            self.assertIn('DIR_EXISTS', lines[orphan_idx + 1])
+            self.assertIn('BRANCH_EXISTS', lines[orphan_idx + 1])
+            # task-a: dir exists, branch exists
+            task_a_line = [l for l in lines if 'task-a' in l and '001' in l][0]
+            self.assertIn('yes', task_a_line.split('ensign-task-a')[1][:30])
+            # task-b: dir does not exist, branch does not exist
+            task_b_line = [l for l in lines if 'task-b' in l and '002' in l][0]
+            parts = task_b_line.split()
+            # Last two columns should be 'no' 'no'
+            self.assertEqual(parts[-2], 'no')
+            self.assertEqual(parts[-1], 'no')
+
+    # AC5: ORPHANS: none
+    def test_orphans_none(self):
+        """ORPHANS shows 'ORPHANS: none' when no entities have worktree fields."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': self._path_without_gh()})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('ORPHANS: none', result.stdout)
+
+    # AC6: PR_STATE with PR number and state
+    def test_pr_state_with_pr(self):
+        """PR_STATE shows PR number and state for PR-pending entities."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'validation', pr='#19'),
+            })
+            fake_bin = self._make_fake_gh(tmpdir, {'19': 'MERGED'})
+            path = fake_bin + os.pathsep + os.environ.get('PATH', '')
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': path})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.split('\n')
+            self.assertIn('PR_STATE', lines)
+            pr_line = [l for l in lines if '#19' in l][0]
+            self.assertIn('MERGED', pr_line)
+            self.assertIn('001', pr_line)
+
+    # AC7: PR_STATE when gh unavailable
+    def test_pr_state_gh_unavailable(self):
+        """PR_STATE shows 'gh not available' when gh is not on PATH."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'validation', pr='#19'),
+            })
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': self._path_without_gh()})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('PR_STATE: gh not available', result.stdout)
+
+    # AC8: PR_STATE skips terminal entities
+    def test_pr_state_skips_terminal(self):
+        """PR_STATE skips entities in terminal status."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'done-task.md': entity('001', 'Done Task', 'done', pr='#19'),
+            })
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': self._path_without_gh()})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('PR_STATE: none', result.stdout)
+
+    # AC9: DISPATCHABLE section matches --next
+    def test_dispatchable_matches_next(self):
+        """DISPATCHABLE section contains the same data as --next output."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'ready.md': entity('001', 'Ready Task', 'backlog', '0.80'),
+            })
+            # Get --next output for comparison
+            next_result = run_status(tmpdir, '--next', script_path=self.script_path)
+            # Get --boot output
+            boot_result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                                    extra_env={'PATH': self._path_without_gh()})
+            self.assertEqual(boot_result.returncode, 0, boot_result.stderr)
+            lines = boot_result.stdout.split('\n')
+            disp_idx = lines.index('DISPATCHABLE')
+            # The next table content should follow
+            next_lines = next_result.stdout.strip().split('\n')
+            boot_disp_lines = lines[disp_idx + 1:]
+            # Compare header and data (strip trailing empty lines)
+            boot_disp_lines = [l for l in boot_disp_lines if l and not l.startswith('LATEST_DEBRIEF')]
+            for i, expected in enumerate(next_lines):
+                self.assertEqual(boot_disp_lines[i].rstrip(), expected.rstrip())
+
+    # AC10: LATEST_DEBRIEF with most recent file
+    def test_latest_debrief(self):
+        """LATEST_DEBRIEF reports the most recent debrief filename."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog'),
+            })
+            debriefs = os.path.join(tmpdir, '_debriefs')
+            os.makedirs(debriefs)
+            for name in ['2026-03-29-01.md', '2026-04-07-01.md', '2026-03-29-02.md']:
+                with open(os.path.join(debriefs, name), 'w') as f:
+                    f.write('---\ndate: test\n---\n')
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': self._path_without_gh()})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('LATEST_DEBRIEF: 2026-04-07-01.md', result.stdout)
+
+    # AC11: LATEST_DEBRIEF: none
+    def test_latest_debrief_none(self):
+        """LATEST_DEBRIEF shows 'none' when no debriefs directory exists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog'),
+            })
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': self._path_without_gh()})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('LATEST_DEBRIEF: none', result.stdout)
+
+    # AC12: --boot errors without stages block
+    def test_boot_requires_stages(self):
+        """--boot prints error and exits non-zero if README lacks stages block."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_NO_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog'),
+            })
+            result = run_status(tmpdir, '--boot', script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('stages', result.stderr.lower())
+
+    # AC13: --boot incompatible with --next
+    def test_boot_incompatible_with_next(self):
+        """--boot combined with --next produces an error."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog'),
+            })
+            result = run_status(tmpdir, '--boot', '--next', script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('incompatible', result.stderr.lower())
+
+    # AC13: --boot incompatible with --archived
+    def test_boot_incompatible_with_archived(self):
+        """--boot combined with --archived produces an error."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog'),
+            })
+            result = run_status(tmpdir, '--boot', '--archived', script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('incompatible', result.stderr.lower())
+
+    # AC13: --boot incompatible with --where
+    def test_boot_incompatible_with_where(self):
+        """--boot combined with --where produces an error."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog'),
+            })
+            result = run_status(tmpdir, '--boot', '--where', 'status = backlog',
+                               script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('incompatible', result.stderr.lower())
+
+    # AC14: section order
+    def test_section_order(self):
+        """All sections appear in deterministic order: MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE, LATEST_DEBRIEF."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': self._path_without_gh()})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            output = result.stdout
+            # Find positions of section markers
+            mods_pos = output.index('MODS')
+            next_id_pos = output.index('NEXT_ID')
+            orphans_pos = output.index('ORPHANS')
+            pr_state_pos = output.index('PR_STATE')
+            disp_pos = output.index('DISPATCHABLE')
+            debrief_pos = output.index('LATEST_DEBRIEF')
+            self.assertLess(mods_pos, next_id_pos)
+            self.assertLess(next_id_pos, orphans_pos)
+            self.assertLess(orphans_pos, pr_state_pos)
+            self.assertLess(pr_state_pos, disp_pos)
+            self.assertLess(disp_pos, debrief_pos)
+
+    # Reviewer addition: mod file with no ## Hook: headings
+    def test_mods_file_without_hooks(self):
+        """Mod file with no ## Hook: headings is silently skipped."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog'),
+            })
+            mods_dir = os.path.join(tmpdir, '_mods')
+            os.makedirs(mods_dir)
+            with open(os.path.join(mods_dir, 'empty-mod.md'), 'w') as f:
+                f.write('---\nname: empty-mod\n---\n\n# No hooks here\n\nJust text.\n')
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': self._path_without_gh()})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('MODS: none', result.stdout)
+
+    # Reviewer addition: multiple mods registering for the same hook point
+    def test_multiple_mods_same_hook(self):
+        """Multiple mods registering for the same hook point are listed comma-separated."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog'),
+            })
+            mods_dir = os.path.join(tmpdir, '_mods')
+            os.makedirs(mods_dir)
+            with open(os.path.join(mods_dir, 'auto-label.md'), 'w') as f:
+                f.write('---\nname: auto-label\n---\n\n## Hook: startup\n\nLabel stuff.\n')
+            with open(os.path.join(mods_dir, 'pr-merge.md'), 'w') as f:
+                f.write('---\nname: pr-merge\n---\n\n## Hook: startup\n\nMerge stuff.\n')
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': self._path_without_gh()})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.split('\n')
+            startup_line = [l for l in lines if l.startswith('startup:')][0]
+            self.assertIn('auto-label', startup_line)
+            self.assertIn('pr-merge', startup_line)
+            # Alphabetical order
+            self.assertIn('startup: auto-label, pr-merge', startup_line)
+
+    # Reviewer addition: PR_STATE ERROR for specific PR failure
+    def test_pr_state_per_pr_error(self):
+        """PR_STATE shows ERROR when gh pr view fails for a specific PR."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'good-pr.md': entity('001', 'Good PR', 'validation', pr='#19'),
+                'bad-pr.md': entity('002', 'Bad PR', 'validation', pr='#99'),
+            })
+            # Only PR 19 returns a state; PR 99 will get an error
+            fake_bin = self._make_fake_gh(tmpdir, {'19': 'MERGED'})
+            path = fake_bin + os.pathsep + self._path_without_gh()
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': path})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.split('\n')
+            good_line = [l for l in lines if '#19' in l][0]
+            bad_line = [l for l in lines if '#99' in l][0]
+            self.assertIn('MERGED', good_line)
+            self.assertIn('ERROR', bad_line)
 
 
 if __name__ == '__main__':
