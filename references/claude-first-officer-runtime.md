@@ -22,6 +22,12 @@ At startup (after reading the README, before dispatch):
    All workflow functionality is preserved. Dispatch and gate behavior are unchanged.
    ```
 
+**TeamCreate failure recovery:** If TeamCreate fails mid-session:
+
+- **"Already leading team" error:** Call TeamDelete in its own message (no other tool calls). Wait for the result. Then call TeamCreate in a subsequent message. Do NOT combine TeamDelete, TeamCreate, or Agent dispatch in the same message — Claude Code executes all tool calls in a message in parallel, so the dependent calls will race.
+- **Other errors (quota, internal):** Fall back to bare mode for the remainder of the session. Report the failure and mode change to the captain.
+- **Block all Agent dispatch** until team setup resolves (either TeamCreate succeeds or bare mode is entered). Never dispatch agents while team state is uncertain.
+
 In single-entity mode, skip team creation entirely. Use bare-mode dispatch for all agent spawning — the Agent tool without `team_name` blocks until the subagent completes, which prevents premature session termination in `-p` mode.
 
 ## Worker Resolution
@@ -37,6 +43,8 @@ Use `worker_key` in worktree paths (`.worktrees/{worker_key}-{slug}`) and branch
 ## Dispatch Adapter
 
 Use the Agent tool to spawn each worker. **Use Agent() for initial dispatch** — SendMessage is only used in the completion path to advance a reused agent to its next stage. **NEVER use `subagent_type="first-officer"`** — that clones yourself instead of dispatching a worker.
+
+**Sequencing rule:** Team lifecycle calls (TeamCreate, TeamDelete) and Agent dispatch calls must NEVER appear in the same tool-call message. Claude Code executes all tool calls within a message in parallel — if TeamCreate fails, Agent calls in the same message still execute, spawning orphan workers. Always resolve team state in one message, then dispatch agents in a subsequent message.
 
 Only fill `{named_variables}` — do not expand bracketed placeholders or add behavioral instructions beyond what the dispatch template specifies. All paths in the dispatch prompt MUST be absolute (rooted at `$project_root`).
 

@@ -137,5 +137,28 @@ def test_assembled_claude_first_officer_has_merge_hook_guardrails():
     assert re.search(r"no merge hook.*default local merge|If no merge", text, re.IGNORECASE)
 
 
+def test_assembled_claude_first_officer_has_teamcreate_failure_recovery():
+    t = TestRunner("agent content", keep_test_dir=False)
+    assembled = assembled_agent_content(t, "first-officer")
+
+    # AC1: "Already leading team" recovery path
+    assert "Already leading team" in assembled
+    assert re.search(r"TeamDelete.*its own message", assembled)
+    assert re.search(r"TeamCreate.*subsequent message", assembled)
+
+    # AC2: Bare mode fallback for non-"Already leading" errors
+    assert re.search(r"Other errors.*bare mode", assembled, re.IGNORECASE | re.DOTALL)
+
+    # AC3: Block agent dispatch while team state is uncertain
+    assert re.search(r"Block all Agent dispatch", assembled)
+    assert re.search(r"never dispatch.*while team", assembled, re.IGNORECASE)
+
+    # AC4: Sequencing rule in Dispatch Adapter
+    assert re.search(
+        r"Sequencing rule.*Team lifecycle.*Agent.*NEVER.*same tool-call message",
+        assembled, re.IGNORECASE | re.DOTALL,
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__]))
