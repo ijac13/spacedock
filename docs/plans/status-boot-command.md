@@ -374,3 +374,13 @@ Implementation has three separate checks in `main()` at lines 566-581.
 ### 16. Recommendation: PASSED
 
 All 14 acceptance criteria are verified with passing tests and manual inspection of the implementation. The code is clean, follows existing patterns in the status script, and handles edge cases (missing `gh`, per-PR errors, empty mods, non-numeric IDs). The 19 new tests provide thorough coverage including the reviewer-suggested additions (mod without hooks, multiple mods same hook, per-PR error handling).
+
+## Reference Update Stage Report
+
+### Checklist
+
+1. Update `references/first-officer-shared-core.md` Startup section to use `status --boot` — **DONE**. Replaced steps 4-8 (mod discovery, startup hooks, orphan detection, `status --next`, debrief scanning) with a single step 4 that calls `status --boot` and parses its output sections (MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE, LATEST_DEBRIEF). Steps 1-3 (project root, workflow dir, README parsing) are unchanged.
+2. Update `references/first-officer-shared-core.md` Status Viewer section to document `--boot` — **DONE**. Added `--boot` to the invocation example and replaced the generic usage note with specific guidance: use `--boot` at startup, use `--next`/`--where` for event-loop queries. Documented incompatibility with `--next`, `--archived`, and `--where`.
+3. Check and update `references/claude-first-officer-runtime.md` if needed — **SKIPPED**. The runtime adapter defines team creation, dispatch mechanics, and event loop — all runtime-specific concerns. It does not reference the startup scanning steps (mod discovery, orphan detection, etc.) that were replaced by `--boot`. The event loop's use of `status --next` and `status --where "pr !="` is correct for ongoing iteration and not part of the boot path.
+4. All existing tests still pass — **DONE**. 52 tests pass (33 pre-existing + 19 boot tests), 0 failures.
+5. Commit changes — **DONE**. Committed as `089: update FO startup reference to use status --boot`.
