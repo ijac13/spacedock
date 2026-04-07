@@ -1,13 +1,13 @@
 ---
 id: 094
 title: Status script entity field updates
-status: validation
+status: done
 source: CL — observed FO using T00:00:00Z placeholder timestamps instead of real wallclock times
 started: 2026-04-07T19:30:37Z
-completed:
-verdict:
+completed: 2026-04-07T21:34:02Z
+verdict: PASSED
 score: 0.7
-worktree: .worktrees/spacedock-ensign-status-field-updates
+worktree: 
 issue:
 pr: "#43"
 ---
