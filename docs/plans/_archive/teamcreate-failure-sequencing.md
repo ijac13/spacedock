@@ -1,13 +1,13 @@
 ---
 id: 091
 title: TeamCreate failure causes duplicate agent dispatch
-status: validation
+status: done
 source: CL — observed in recce-gtm session, 3x duplicate agents per entity
 started: 2026-04-06T00:00:00Z
-completed:
-verdict:
+completed: 2026-04-07T00:00:00Z
+verdict: PASSED
 score: 0.8
-worktree: .worktrees/spacedock-ensign-teamcreate-failure-sequencing
+worktree:
 issue:
 pr: "#38"
 ---
