@@ -267,12 +267,10 @@ def main():
 
     print("--- Phase 6: Validate branch was rebased onto main ---")
 
-    # After the FO runs, check that the branch is now based on main HEAD
-    # (i.e., merge-base of main and branch should equal main HEAD)
-    main_head_after = subprocess.run(
-        ["git", "rev-parse", "main"],
-        capture_output=True, text=True, check=True, cwd=t.test_project_dir,
-    ).stdout.strip()
+    # The "other PR" commit (main_head from Phase 2) must be an ancestor of the branch
+    # after rebase. We use --is-ancestor rather than merge-base == main HEAD because
+    # the FO may make additional commits on main after pushing the branch (e.g., setting
+    # the pr field), which would advance main past the branch's base.
 
     # Check if branch still exists locally
     branch_exists = subprocess.run(
@@ -281,18 +279,28 @@ def main():
     )
 
     if branch_exists.returncode == 0:
+        # Check that the "other PR" commit is an ancestor of the branch
+        is_ancestor = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", main_head, branch_name],
+            capture_output=True, text=True, cwd=t.test_project_dir,
+        )
+        # Also check the merge-base is past the original fork point
         merge_base_after = subprocess.run(
             ["git", "merge-base", "main", branch_name],
             capture_output=True, text=True, check=True, cwd=t.test_project_dir,
         ).stdout.strip()
 
-        print(f"  Main HEAD after:       {main_head_after}")
+        print(f"  Other-PR commit:       {main_head}")
         print(f"  Merge base after:      {merge_base_after}")
         print(f"  Fork point (original): {fork_point}")
 
         t.check(
-            "branch merge-base equals main HEAD (branch was rebased)",
-            merge_base_after == main_head_after,
+            "other-PR commit is ancestor of branch (branch was rebased)",
+            is_ancestor.returncode == 0,
+        )
+        t.check(
+            "merge-base moved past original fork point",
+            merge_base_after != fork_point,
         )
     else:
         print("  Branch not found locally — checking remote")
@@ -304,22 +312,22 @@ def main():
     )
 
     if remote_branch_exists.returncode == 0:
-        remote_main_head = subprocess.run(
-            ["git", "-C", str(bare_repo), "rev-parse", "main"],
-            capture_output=True, text=True, check=True,
-        ).stdout.strip()
+        # Check that the "other PR" commit is an ancestor of the remote branch
+        remote_is_ancestor = subprocess.run(
+            ["git", "-C", str(bare_repo), "merge-base", "--is-ancestor", main_head, branch_name],
+            capture_output=True, text=True,
+        )
 
         remote_merge_base = subprocess.run(
             ["git", "-C", str(bare_repo), "merge-base", "main", branch_name],
             capture_output=True, text=True, check=True,
         ).stdout.strip()
 
-        print(f"  Remote main HEAD:      {remote_main_head}")
         print(f"  Remote merge base:     {remote_merge_base}")
 
         t.check(
-            "remote branch merge-base equals remote main HEAD (rebased before push)",
-            remote_merge_base == remote_main_head,
+            "remote: other-PR commit is ancestor of branch (rebased before push)",
+            remote_is_ancestor.returncode == 0,
         )
 
         # Verify the remote branch has the "other PR" file (inherited via rebase)
@@ -333,7 +341,7 @@ def main():
         )
         print(f"  Remote branch files in push-main-pipeline/:\n{remote_branch_files.strip()}")
     else:
-        t.fail("remote branch merge-base equals remote main HEAD (rebased before push)")
+        t.fail("remote: other-PR commit is ancestor of branch (rebased before push)")
         t.fail("remote branch contains other-pr-merged.txt (from main via rebase)")
         print("  Branch not found on remote")
 
