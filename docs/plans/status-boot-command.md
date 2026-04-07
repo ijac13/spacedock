@@ -286,3 +286,91 @@ The 14 acceptance criteria are testable. A few concerns:
 8. Write unit tests in `tests/test_status_script.py` covering AC1-AC14 (including reviewer's additions) — **DONE**. Added `TestBootOption` class with 19 test methods: AC1-AC14 (with AC13 split into 3 separate tests per reviewer refinement #4) plus mod with no hooks (#5), multiple mods same hook (#6), and per-PR error handling (#3). Uses PATH prepend with fake shell scripts for subprocess mocking per reviewer refinement #7.
 9. All existing tests still pass — **DONE**. All 33 pre-existing tests pass unchanged.
 10. All new tests pass — **DONE**. All 19 new tests pass. Total: 52 tests, 0 failures.
+
+## Validation Stage Report
+
+### 1. Run all tests — DONE
+
+```
+$ uvx pytest tests/test_status_script.py -v
+52 passed in 1.62s
+```
+
+All 52 tests pass: 33 pre-existing + 19 new `TestBootOption` tests. No failures, no warnings.
+
+### 2. AC1: MODS section lists hooks grouped by lifecycle point — DONE
+
+**Evidence:** `test_mods_with_hooks` creates a mod file with `## Hook: startup` and `## Hook: idle`, verifies output contains `MODS` header line and `startup: pr-merge` and `idle: pr-merge` lines. Manual spot-check confirmed output format:
+```
+MODS
+idle: pr-merge
+merge: pr-merge
+startup: pr-merge
+```
+Hook points are sorted alphabetically. Mod names within a hook point are also sorted alphabetically.
+
+### 3. AC2: MODS shows "MODS: none" when no mods exist — DONE
+
+**Evidence:** `test_mods_none` creates a pipeline with no `_mods/` directory and asserts `MODS: none` in output. Additional coverage: `test_mods_file_without_hooks` verifies that a mod file with no `## Hook:` headings also produces `MODS: none`.
+
+### 4. AC3: NEXT_ID computes correctly across active + archive — DONE
+
+**Evidence:** `test_next_id_across_active_and_archive` creates active entities with IDs 001, 003 and archived entity with ID 002, then asserts `NEXT_ID: 004`. Implementation (`compute_next_id()` at line 293) unconditionally scans both active entities and `_archive/` directory. Non-numeric IDs are skipped via `try/except ValueError`.
+
+### 5. AC4: ORPHANS cross-references with DIR_EXISTS and BRANCH_EXISTS — DONE
+
+**Evidence:** `test_orphans_with_existence_checks` creates two entities with worktree fields, creates the directory for one but not the other, and provides a fake `git worktree list --porcelain` output that includes only one branch. Test verifies:
+- ORPHANS header row contains `DIR_EXISTS` and `BRANCH_EXISTS` columns
+- task-a: `yes` for both (directory exists, branch in worktree list)
+- task-b: `no` for both (no directory, no branch)
+
+Implementation uses `os.path.isdir()` for DIR_EXISTS and parses `git worktree list --porcelain` for BRANCH_EXISTS (line 311-343).
+
+### 6. AC5: ORPHANS shows "ORPHANS: none" when no entities have worktree fields — DONE
+
+**Evidence:** `test_orphans_none` creates entity with empty worktree field, asserts `ORPHANS: none`.
+
+### 7. AC6: PR_STATE shows PR number and state — DONE
+
+**Evidence:** `test_pr_state_with_pr` creates entity with `pr: #19` in `validation` status (non-terminal), uses fake `gh` script returning `MERGED`, verifies output contains `PR_STATE` header, and a line with `#19`, `MERGED`, and `001`.
+
+### 8. AC7: PR_STATE handles missing gh gracefully — DONE
+
+**Evidence:** `test_pr_state_gh_unavailable` creates entity with PR, uses `_path_without_gh()` to remove `gh` from PATH, asserts `PR_STATE: gh not available`. Implementation checks PATH for executable `gh` binary (line 365-369) before attempting subprocess calls.
+
+### 9. AC8: PR_STATE skips terminal-status entities — DONE
+
+**Evidence:** `test_pr_state_skips_terminal` creates entity with `pr: #19` and `status: done` (terminal). Asserts `PR_STATE: none` — the entity is not queried at all. Implementation filters on `stage.get('terminal', False)` at line 357.
+
+### 10. AC9: DISPATCHABLE section matches --next output — DONE
+
+**Evidence:** `test_dispatchable_matches_next` runs both `--next` and `--boot` on the same data, extracts the DISPATCHABLE section from boot output, and compares line-by-line against `--next` output. Implementation calls `print_next_table()` directly from `print_boot()` (line 451), guaranteeing identical logic.
+
+### 11. AC10: LATEST_DEBRIEF reports most recent filename — DONE
+
+**Evidence:** `test_latest_debrief` creates three debrief files (`2026-03-29-01.md`, `2026-04-07-01.md`, `2026-03-29-02.md`), asserts output contains `LATEST_DEBRIEF: 2026-04-07-01.md`. Implementation sorts by filename lexicographically (line 402) which works correctly with the `YYYY-MM-DD-NN.md` naming convention.
+
+### 12. AC11: LATEST_DEBRIEF shows "none" when no debriefs — DONE
+
+**Evidence:** `test_latest_debrief_none` creates pipeline with no `_debriefs/` directory, asserts `LATEST_DEBRIEF: none`.
+
+### 13. AC12: --boot errors without stages block — DONE
+
+**Evidence:** `test_boot_requires_stages` uses `README_NO_STAGES` fixture, asserts non-zero exit code and "stages" in stderr. Implementation check at line 592-593.
+
+### 14. AC13: --boot incompatible with --next, --archived, --where — DONE (3 separate checks)
+
+**Evidence:**
+- `test_boot_incompatible_with_next`: `--boot --next` produces non-zero exit and "incompatible" in stderr
+- `test_boot_incompatible_with_archived`: `--boot --archived` produces non-zero exit and "incompatible" in stderr
+- `test_boot_incompatible_with_where`: `--boot --where 'status = backlog'` produces non-zero exit and "incompatible" in stderr
+
+Implementation has three separate checks in `main()` at lines 566-581.
+
+### 15. AC14: Sections appear in deterministic order — DONE
+
+**Evidence:** `test_section_order` runs `--boot` and verifies string positions satisfy: `MODS < NEXT_ID < ORPHANS < PR_STATE < DISPATCHABLE < LATEST_DEBRIEF`. Manual spot-check confirmed the output follows this exact order. Implementation in `print_boot()` (line 408-458) prints sections in this fixed sequence.
+
+### 16. Recommendation: PASSED
+
+All 14 acceptance criteria are verified with passing tests and manual inspection of the implementation. The code is clean, follows existing patterns in the status script, and handles edge cases (missing `gh`, per-PR errors, empty mods, non-numeric IDs). The 19 new tests provide thorough coverage including the reviewer-suggested additions (mod without hooks, multiple mods same hook, per-PR error handling).
