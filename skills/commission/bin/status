@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # commissioned-by: spacedock@{spacedock_version}
 # ABOUTME: Workflow status viewer — shows entity overview from YAML frontmatter.
-# ABOUTME: Supports default table, --archived, and --next (dispatchable entity detection).
+# ABOUTME: Supports default table, --archived, --next, and --boot (FO startup data).
 #
 # goal: Show one-line-per-{entity_label} workflow overview from YAML frontmatter.
 #
@@ -38,6 +38,7 @@
 
 import glob
 import os
+import subprocess
 import sys
 
 
@@ -271,6 +272,192 @@ def print_next_table(entities, stages):
         print(fmt % (e['id'], e['slug'], e['status'], e['next'], e['next_worktree']))
 
 
+def scan_mods(workflow_dir):
+    """Scan _mods/*.md for ## Hook: headings, return {hook_point: [mod_names]} mapping."""
+    mods_dir = os.path.join(workflow_dir, '_mods')
+    if not os.path.isdir(mods_dir):
+        return {}
+    hooks = {}
+    for filepath in sorted(glob.glob(os.path.join(mods_dir, '*.md'))):
+        mod_name = os.path.splitext(os.path.basename(filepath))[0]
+        with open(filepath, 'r') as f:
+            for line in f:
+                line = line.rstrip('\n')
+                if line.startswith('## Hook:'):
+                    point = line[len('## Hook:'):].strip()
+                    if point:
+                        hooks.setdefault(point, []).append(mod_name)
+    return hooks
+
+
+def compute_next_id(active_entities, archive_dir):
+    """Find the highest numeric ID across active + archived entities, return next ID string."""
+    max_id = 0
+    all_entities = list(active_entities)
+    if os.path.isdir(archive_dir):
+        all_entities.extend(scan_entities(archive_dir))
+    for e in all_entities:
+        id_str = e.get('id', '')
+        if id_str:
+            try:
+                id_num = int(id_str)
+                if id_num > max_id:
+                    max_id = id_num
+            except ValueError:
+                pass
+    return '%03d' % (max_id + 1)
+
+
+def scan_orphans(entities, git_root):
+    """Return entities with non-empty worktree field, with dir/branch existence info."""
+    worktree_branches = set()
+    try:
+        result = subprocess.run(
+            ['git', 'worktree', 'list', '--porcelain'],
+            capture_output=True, text=True, cwd=git_root
+        )
+        if result.returncode == 0:
+            for line in result.stdout.split('\n'):
+                if line.startswith('branch '):
+                    branch = line[len('branch '):].strip()
+                    short = branch.replace('refs/heads/', '')
+                    worktree_branches.add(short)
+    except FileNotFoundError:
+        pass
+
+    orphans = []
+    for e in entities:
+        wt = e.get('worktree', '')
+        if not wt:
+            continue
+        dir_path = os.path.join(git_root, wt)
+        dir_exists = 'yes' if os.path.isdir(dir_path) else 'no'
+        branch_name = os.path.basename(wt) if '/' in wt else wt
+        branch_exists = 'yes' if branch_name in worktree_branches else 'no'
+        orphans.append({
+            'id': e.get('id', ''),
+            'slug': e.get('slug', ''),
+            'worktree': wt,
+            'dir_exists': dir_exists,
+            'branch_exists': branch_exists,
+        })
+    return orphans
+
+
+def check_pr_states(entities, stages):
+    """Check PR state for entities with non-empty pr and non-terminal status."""
+    stage_by_name = {s['name']: s for s in stages}
+    pr_entities = []
+    for e in entities:
+        pr = e.get('pr', '')
+        if not pr:
+            continue
+        status = e.get('status', '')
+        stage = stage_by_name.get(status)
+        if stage and stage.get('terminal', False):
+            continue
+        pr_entities.append(e)
+
+    if not pr_entities:
+        return 'none', []
+
+    # Check if gh is available
+    gh_path = None
+    for d in os.environ.get('PATH', '').split(os.pathsep):
+        candidate = os.path.join(d, 'gh')
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            gh_path = candidate
+            break
+    if gh_path is None:
+        return 'gh not available', []
+
+    results = []
+    for e in pr_entities:
+        pr = e.get('pr', '').lstrip('#')
+        try:
+            result = subprocess.run(
+                ['gh', 'pr', 'view', pr, '--json', 'state', '--jq', '.state'],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                state = result.stdout.strip().upper()
+            else:
+                state = 'ERROR'
+        except FileNotFoundError:
+            state = 'ERROR'
+        results.append({
+            'id': e.get('id', ''),
+            'slug': e.get('slug', ''),
+            'pr': e.get('pr', ''),
+            'state': state,
+        })
+    return 'ok', results
+
+
+def find_latest_debrief(workflow_dir):
+    """Find the most recent debrief file by sorted filename."""
+    debriefs_dir = os.path.join(workflow_dir, '_debriefs')
+    if not os.path.isdir(debriefs_dir):
+        return None
+    files = sorted(glob.glob(os.path.join(debriefs_dir, '*.md')))
+    if not files:
+        return None
+    return os.path.basename(files[-1])
+
+
+def print_boot(entities, stages, workflow_dir, git_root):
+    """Print all boot sections: MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE, LATEST_DEBRIEF."""
+    # MODS
+    hooks = scan_mods(workflow_dir)
+    if not hooks:
+        print('MODS: none')
+    else:
+        print('MODS')
+        for point in sorted(hooks.keys()):
+            mods = ', '.join(sorted(hooks[point]))
+            print('%s: %s' % (point, mods))
+
+    # NEXT_ID
+    archive_dir = os.path.join(workflow_dir, '_archive')
+    next_id = compute_next_id(entities, archive_dir)
+    print('NEXT_ID: %s' % next_id)
+
+    # ORPHANS
+    orphans = scan_orphans(entities, git_root)
+    if not orphans:
+        print('ORPHANS: none')
+    else:
+        print('ORPHANS')
+        fmt = '%-6s %-30s %-43s %-11s %s'
+        print(fmt % ('ID', 'SLUG', 'WORKTREE', 'DIR_EXISTS', 'BRANCH_EXISTS'))
+        for o in orphans:
+            print(fmt % (o['id'], o['slug'], o['worktree'], o['dir_exists'], o['branch_exists']))
+
+    # PR_STATE
+    pr_status, pr_results = check_pr_states(entities, stages)
+    if pr_status == 'none':
+        print('PR_STATE: none')
+    elif pr_status == 'gh not available':
+        print('PR_STATE: gh not available')
+    else:
+        print('PR_STATE')
+        fmt = '%-6s %-30s %-8s %s'
+        print(fmt % ('ID', 'SLUG', 'PR', 'STATE'))
+        for r in pr_results:
+            print(fmt % (r['id'], r['slug'], r['pr'], r['state']))
+
+    # DISPATCHABLE
+    print('DISPATCHABLE')
+    print_next_table(entities, stages)
+
+    # LATEST_DEBRIEF
+    latest = find_latest_debrief(workflow_dir)
+    if latest:
+        print('LATEST_DEBRIEF: %s' % latest)
+    else:
+        print('LATEST_DEBRIEF: none')
+
+
 def parse_where_filters(args):
     """Parse --where arguments from sys.argv."""
     filters = []
@@ -349,6 +536,18 @@ def apply_filters(entities, filters):
     return filtered
 
 
+def find_git_root(start_dir):
+    """Walk up from start_dir to find the .git directory, return its parent."""
+    d = os.path.abspath(start_dir)
+    while True:
+        if os.path.isdir(os.path.join(d, '.git')) or os.path.isfile(os.path.join(d, '.git')):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            return start_dir
+        d = parent
+
+
 def main():
     args = sys.argv[1:]
     try:
@@ -360,11 +559,25 @@ def main():
     pipeline_dir = workflow_dir or os.environ.get('PIPELINE_DIR') or os.path.dirname(os.path.abspath(__file__))
     include_archive = '--archived' in args
     show_next = '--next' in args
+    show_boot = '--boot' in args
+
+    # --boot is incompatible with --next, --archived, --where
+    if show_boot:
+        if show_next:
+            print('Error: --boot is incompatible with --next', file=sys.stderr)
+            sys.exit(1)
+        if include_archive:
+            print('Error: --boot is incompatible with --archived', file=sys.stderr)
+            sys.exit(1)
 
     try:
         where_filters = parse_where_filters(args)
     except ValueError as e:
         print('Error: ' + str(e), file=sys.stderr)
+        sys.exit(1)
+
+    if show_boot and where_filters:
+        print('Error: --boot is incompatible with --where', file=sys.stderr)
         sys.exit(1)
 
     readme_path = os.path.join(pipeline_dir, 'README.md')
@@ -376,6 +589,10 @@ def main():
         print('Error: README.md has no stages block. --next requires stage metadata.', file=sys.stderr)
         sys.exit(1)
 
+    if show_boot and stages is None:
+        print('Error: README.md has no stages block. --boot requires stage metadata.', file=sys.stderr)
+        sys.exit(1)
+
     entities = scan_entities(pipeline_dir)
     if include_archive:
         archive_dir = os.path.join(pipeline_dir, '_archive')
@@ -384,7 +601,10 @@ def main():
 
     entities = apply_filters(entities, where_filters)
 
-    if show_next:
+    if show_boot:
+        git_root = find_git_root(pipeline_dir)
+        print_boot(entities, stages, pipeline_dir, git_root)
+    elif show_next:
         print_next_table(entities, stages)
     else:
         print_status_table(entities, stages)
