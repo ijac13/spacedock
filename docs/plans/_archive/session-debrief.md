@@ -1,13 +1,13 @@
 ---
 id: 054
 title: Session debrief command
-status: validation
+status: done
 source: CL
 started: 2026-03-27T07:25:00Z
-completed:
-verdict:
+completed: 2026-04-07T00:00:00Z
+verdict: PASSED
 score:
-worktree: .worktrees/spacedock-ensign-session-debrief
+worktree:
 pr: "#39"
 ---
 

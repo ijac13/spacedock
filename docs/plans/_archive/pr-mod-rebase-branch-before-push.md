@@ -1,13 +1,13 @@
 ---
 id: 092
 title: PR merge mod should rebase branch on main before pushing
-status: validation
+status: done
 source: "CL — observed in PR #38 (091), follow-up to PR #37 (090)"
 started: 2026-04-07T00:00:00Z
-completed:
-verdict:
+completed: 2026-04-07T00:00:00Z
+verdict: PASSED
 score: 0.65
-worktree: .worktrees/spacedock-ensign-pr-mod-rebase-branch-before-push
+worktree:
 issue:
 pr: "#40"
 ---
