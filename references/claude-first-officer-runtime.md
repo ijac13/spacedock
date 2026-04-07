@@ -46,6 +46,15 @@ Use the Agent tool to spawn each worker. **Use Agent() for initial dispatch** �
 
 **Sequencing rule:** Team lifecycle calls (TeamCreate, TeamDelete) and Agent dispatch calls must NEVER appear in the same tool-call message. Claude Code executes all tool calls within a message in parallel — if TeamCreate fails, Agent calls in the same message still execute, spawning orphan workers. Always resolve team state in one message, then dispatch agents in a subsequent message.
 
+**REQUIRED — Team health check (not in bare mode or single-entity mode):**
+
+**STOP. Do NOT call Agent() until you have verified the team is healthy.** Run `test -f ~/.claude/teams/{team_name}/config.json` via the Bash tool. You MUST do this before every Agent dispatch batch. If the command succeeds, proceed to dispatch. If the file is missing, the team's on-disk state has been corrupted — STOP and recover:
+
+1. Call TeamDelete in its own message (no other tool calls). This clears the in-memory "Already leading team" state.
+2. Wait for the result. Then call TeamCreate in its own message (no other tool calls).
+3. If TeamCreate succeeds, store the returned `team_name` (it may differ from the original) and proceed with dispatch in a subsequent message.
+4. If TeamCreate fails, fall back to bare mode for the remainder of the session. Report the failure and mode change to the captain.
+
 Only fill `{named_variables}` — do not expand bracketed placeholders or add behavioral instructions beyond what the dispatch template specifies. All paths in the dispatch prompt MUST be absolute (rooted at `$project_root`).
 
 ```
