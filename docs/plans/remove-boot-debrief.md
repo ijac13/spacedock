@@ -24,3 +24,10 @@ In practice, everything useful for dispatch decisions (PR state, orphans, dispat
 2. `references/first-officer-shared-core.md` startup step no longer mentions reading/summarizing debriefs
 3. Existing tests updated to reflect removed debrief output
 4. All existing tests pass after changes
+
+## Stage Report
+
+1. Remove LATEST_DEBRIEF output from `skills/commission/bin/status` --boot code path — DONE. Removed `find_latest_debrief` function and its invocation in `print_boot`.
+2. Remove the LATEST_DEBRIEF bullet from `references/first-officer-shared-core.md` Startup section (step 4 boot output parsing) — DONE. Also updated the `--boot` summary sentence in the Status Viewer section.
+3. Update any tests in `tests/test_status_script.py` that assert on --boot output containing debrief info — DONE. Removed `test_latest_debrief` and `test_latest_debrief_none` tests. Updated `test_section_order` and `test_dispatchable_matches_next` to remove LATEST_DEBRIEF references.
+4. Run all existing tests and confirm they pass — DONE. 62 tests pass, 0 failures.
