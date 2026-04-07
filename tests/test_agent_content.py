@@ -160,5 +160,26 @@ def test_assembled_claude_first_officer_has_teamcreate_failure_recovery():
     )
 
 
+def test_assembled_claude_first_officer_has_team_health_check():
+    t = TestRunner("agent content", keep_test_dir=False)
+    assembled = assembled_agent_content(t, "first-officer")
+
+    # AC1: Health check paragraph with test -f verification
+    assert "Team health check" in assembled
+    assert "test -f ~/.claude/teams/" in assembled
+
+    # AC2: Recovery sequence — TeamDelete alone, then TeamCreate alone, then dispatch
+    assert re.search(
+        r"TeamDelete.*its own message.*TeamCreate.*its own message",
+        assembled, re.DOTALL,
+    )
+
+    # AC3: Bare mode fallback if TeamCreate fails during recovery
+    assert "fall back to bare mode" in assembled
+
+    # AC4: Health check skipped in bare mode and single-entity mode
+    assert re.search(r"not in bare mode or single-entity mode", assembled)
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__]))
