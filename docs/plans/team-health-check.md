@@ -1,7 +1,7 @@
 ---
 id: 093
 title: Team health check before dispatch
-status: implementation
+status: validation
 source: "CL — observed in session 2026-04-07, team config.json missing while team still active in memory"
 started: 2026-04-07T00:00:00Z
 completed:
@@ -221,3 +221,19 @@ The wording places the health check paragraph after the sequencing rule paragrap
 ### Summary
 
 Ideation for task 093 is complete. The proposed fix adds a single paragraph to the Dispatch Adapter section of `claude-first-officer-runtime.md` that instructs the FO to run `test -f` on the team's `config.json` before each Agent dispatch batch. If the file is missing, the FO recovers using the same TeamDelete-then-TeamCreate protocol from 091, then dispatches in a subsequent message. The design satisfies the captain's constraint of detecting broken state before dispatch, never batching recovery with dispatch, and falling back to bare mode if recovery fails.
+
+## Stage Report: implementation
+
+1. `references/claude-first-officer-runtime.md` Dispatch Adapter section updated with team health check paragraph — DONE
+2. E2E test created at `tests/test_team_health_check.py` — DONE
+3. Static assertions added to `tests/test_agent_content.py` for AC1-AC4 — DONE
+4. All changes committed on the worktree branch — DONE
+
+### Details
+
+- Added one paragraph ("Team health check") to the Dispatch Adapter section, after the sequencing rule and before the "Only fill" paragraph. No existing text was modified.
+- Added `test_assembled_claude_first_officer_has_team_health_check` to `tests/test_agent_content.py` covering AC1 (health check paragraph + `test -f`), AC2 (recovery sequence), AC3 (bare mode fallback), AC4 (skipped in bare/single-entity mode).
+- Created `tests/test_team_health_check.py` E2E test for AC5 (log-analysis verifying `test -f` Bash call precedes first Agent dispatch), plus static checks as supplementary validation.
+- AC6 (sequencing invariant) is covered by existing `test_team_dispatch_sequencing.py` — no new test needed.
+- All 11 tests in `test_agent_content.py` pass (no regressions).
+- Commit `9bf894c` on branch `spacedock-ensign/team-health-check`.
