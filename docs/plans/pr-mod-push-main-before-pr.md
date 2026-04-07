@@ -1,7 +1,7 @@
 ---
 id: 090
 title: PR merge mod should push main before creating PRs
-status: implementation
+status: validation
 source: CL — observed PR conflicts from unpushed main state commits
 started: 2026-04-06T00:00:00Z
 completed:
@@ -168,7 +168,7 @@ Fixture files:
 
 **Estimated cost:** ~$0.50-1.00 per run (haiku, low effort, simple 3-stage workflow with trivial work).
 
-## Stage Report
+## Stage Report: ideation
 
 1. Problem statement clarifying why unpushed main causes PR conflicts — DONE
 2. Analysis of the current pr-merge mod merge hook flow — DONE
@@ -176,3 +176,11 @@ Fixture files:
 4. Acceptance criteria with test plans (how to verify the fix works) — DONE
 5. Edge case analysis — DONE (push failure, force-push safety, no remote, no-op push, concurrent sessions)
 6. Test plan: whether existing E2E tests cover this or new ones are needed — DONE (E2E test designed: `tests/test_push_main_before_pr.py` using bare repo remote, git push wrapper for ordering verification, and gh stub for PR creation. Follows existing test patterns from `test_merge_hook_guardrail.py`. New fixture at `tests/fixtures/push-main-pipeline/`.)
+
+## Stage Report: implementation
+
+1. Canonical mod (`mods/pr-merge.md`) updated with `git push origin main` before branch push, version bumped to 0.9.1 — DONE
+2. Installed mod (`docs/plans/_mods/pr-merge.md`) matches canonical mod — DONE (verified via `diff`; files are identical)
+3. E2E test fixture created at `tests/fixtures/push-main-pipeline/` — DONE (README.md workflow, push-main-entity.md, _mods/pr-merge.md, status script)
+4. E2E test created at `tests/test_push_main_before_pr.py` — DONE (verifies push ordering via git wrapper and bare repo remote; validates remote state, PR creation via gh stub, and entity state)
+5. All changes committed on the worktree branch — DONE (commit 536fd3d on `spacedock-ensign/pr-mod-push-main-before-pr`)
