@@ -1,15 +1,15 @@
 ---
 id: 087
 title: Codex direct skill dispatch - remove packaged agent wrapper dependency
-status: validation
+status: done
 source: CL - 085 gap review
 started: 2026-04-03T16:54:38Z
-completed:
-verdict:
+completed: 2026-04-08T20:48:20Z
+verdict: PASSED
 score: 0.72
-worktree: .worktrees/ensign-codex-direct-skill-dispatch
+worktree: 
 issue:
-pr:
+pr: #53
 ---
 
 The Claude-side boot problem is now solved by 085: thin agents preload skills, and skills load references through `${CLAUDE_SKILL_DIR}`. But the Codex runtime still treats logical ids like `spacedock:first-officer` and `spacedock:ensign` as packaged agent assets that resolve through `agents/{name}.md`.
