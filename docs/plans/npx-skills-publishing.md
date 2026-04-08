@@ -502,6 +502,104 @@ interface:
 
 **Note:** Adding `agents/openai.yaml` is orthogonal to the main 057 work (symlinks/asset packaging). It could be added as a separate, low-risk step.
 
+## Research: skills registry, publishing, and versioning
+
+*Added 2026-04-08. How skills are discovered, installed, updated, and published.*
+
+### How the registry works
+
+**There is no central registry you publish to.** The skills ecosystem is purely git-based for installation:
+
+1. `npx skills add clkao/spacedock` parses `clkao/spacedock` as GitHub shorthand → `https://github.com/clkao/spacedock.git`
+2. The CLI does a **shallow clone** (`--depth 1`, 60-second timeout) of the repo into a temp directory
+3. It scans for SKILL.md files in well-known directories (`skills/`, `.claude/skills/`, `.agents/skills/`, etc.) and reads `.claude-plugin/marketplace.json`/`plugin.json` for declared skill paths
+4. Each discovered skill directory is copied to `.agents/skills/<name>/` (canonical location) with symlinks to agent-specific paths (e.g., `.claude/skills/<name>/`)
+5. A `skills-lock.json` is written with a content hash per skill
+
+**The `skills.sh` directory** is a discovery/leaderboard site, NOT a package registry. It tracks install telemetry — skills appear on the leaderboard automatically when people install them via `npx skills add`. There is no submission process, no publish command, no approval workflow. The listing is driven by usage data.
+
+**The `npx skills find` command** queries the `skills.sh/api/search` API to search the leaderboard. This is purely for discovery — installation still goes directly to the git source.
+
+### Source types supported
+
+The CLI resolves these source formats (from `source-parser.ts`):
+- GitHub shorthand: `owner/repo` → `https://github.com/owner/repo.git`
+- GitHub URL: `https://github.com/owner/repo`
+- GitLab: `gitlab:owner/repo` or full URL
+- Ref pinning: `owner/repo#branch-or-tag`
+- Skill filter: `owner/repo@skill-name`
+- Subpath: `owner/repo/path/to/skill`
+- Local path: `/absolute/or/relative/path`
+- Any git URL: `https://example.com/repo.git`
+
+### Versioning and updates
+
+**Skills have no formal versioning system.** The update mechanism works purely on content hashing:
+
+1. On install, the CLI records a `skillFolderHash` — the GitHub tree SHA for the skill's directory (via `https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1`)
+2. `npx skills check` compares stored hashes against current GitHub state
+3. `npx skills update` re-clones and re-installs skills whose hashes have changed
+4. The lock file (`skills-lock.json`) tracks: `source`, `sourceType`, `computedHash`
+
+**There is no semver, no release channels, no version pinning.** Users always get the latest commit on the default branch (unless they pin a ref with `#branch-or-tag`). The SKILL.md frontmatter has an optional `metadata` field that the best-practices guide suggests as "a good place for your semver," but no tooling consumes it.
+
+**Neither OpenAI nor Anthropic skills repos have releases or tags.** The `vercel-labs/skills` repo has version tags (v1.4.9 as of April 2026), but those version the CLI tool itself, not the skills content.
+
+### No publish command exists
+
+The CLI has these commands: `add`, `remove`, `list`, `find`, `check`, `update`, `init`, `experimental_install`, `experimental_sync`. **There is no `publish`, `release`, or `submit` command.**
+
+To make a skill available: push it to a git repo and share the `npx skills add owner/repo` command. That's it.
+
+### How CI-triggered publishing would work for spacedock
+
+Since the ecosystem is purely git-based, "publishing" means ensuring the repo's skill directories are self-contained at the point users install from. Two approaches:
+
+**Option 1: Build-on-tag (CI copies shared assets into skill dirs)**
+1. Maintain shared assets at repo root (`references/`, `mods/`, `agents/`) as source of truth
+2. CI triggers on git tag (e.g., `v0.9.3`)
+3. Build script copies shared assets into each skill directory (`skills/commission/references/`, etc.)
+4. CI commits the result to a `release` branch (or directly to the tag)
+5. Users install from `npx skills add clkao/spacedock` (default branch) or `npx skills add clkao/spacedock#v0.9.3` (pinned)
+
+**Option 2: Always self-contained (symlinks in repo, CI verifies)**
+1. Use symlinks in the repo (`skills/commission/references` -> `../../references`)
+2. The skills CLI's `dereference: true` resolves symlinks during copy
+3. CI verifies that symlinks are valid and point to real files
+4. No build step needed — the repo is always in a publishable state
+5. Caveat: depends on symlink dereferencing working correctly in the installer (Q1 from open questions — now confirmed to work from source code analysis)
+
+**Option 3: Always self-contained (actual copies, CI checks sync)**
+1. Maintain actual copies of shared assets in each skill directory
+2. CI checks that copies match source-of-truth files (`diff references/ skills/commission/references/`)
+3. No build step, no symlink concerns
+4. Downside: duplication in the repo, potential for drift
+
+**Recommended: Option 2 (symlinks).** This is cleanest because:
+- No build step, no release branch, no committed artifacts
+- The repo is always installable from any commit
+- Symlink dereferencing is confirmed from the installer source code (`cp` with `dereference: true`)
+- `readdir` with `withFileTypes` follows symlinks for `isDirectory()` — confirmed from Node.js docs
+- Broken symlink handling: the installer skips broken symlinks with a warning (ENOENT catch), so broken symlinks won't crash installation
+
+However, note the dot-file exclusion: files/dirs starting with `.` are excluded by the installer. So `.claude-plugin/plugin.json` cannot be symlinked into skill directories — the `agents/` prefix would be fine but `.claude-plugin/` would be filtered. This means version detection needs an alternative approach (e.g., a `VERSION` file or frontmatter field).
+
+### Verified: current spacedock install test
+
+Ran `npx skills add clkao/spacedock --skill commission --agent claude-code --yes` against the current repo. Results:
+
+**What got installed:**
+- `.claude/skills/commission/SKILL.md` — the skill file
+- `.claude/skills/commission/bin/status` — the status viewer (lives inside `skills/commission/bin/`)
+
+**What did NOT get installed (outside skill directory):**
+- `references/` (8 reference files)
+- `mods/pr-merge.md`
+- `agents/first-officer.md`, `agents/ensign.md`
+- `.claude-plugin/plugin.json`
+
+This confirms the gap: the commission skill installs but would be non-functional because it can't reach `{spacedock_plugin_dir}/mods/`, `{spacedock_plugin_dir}/agents/`, or `references/`. The status viewer works because it already lives at `skills/commission/bin/status`.
+
 ## Stage Report: ideation (revisit — 2026-04-08)
 
 ### What changed since the original ideation
