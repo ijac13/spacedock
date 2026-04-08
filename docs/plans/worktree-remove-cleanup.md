@@ -9,7 +9,7 @@ verdict:
 score:
 worktree: .worktrees/spacedock-ensign-worktree-remove-cleanup
 issue: "#45"
-pr:
+pr: #46
 ---
 
 # Document git worktree remove in cleanup references

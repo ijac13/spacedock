@@ -9,7 +9,7 @@ verdict:
 score:
 worktree: .worktrees/spacedock-ensign-remove-boot-debrief
 issue: "#44"
-pr:
+pr: #47
 ---
 
 # Remove LATEST_DEBRIEF from status --boot output
