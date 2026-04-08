@@ -9,7 +9,7 @@ verdict:
 score:
 worktree: .worktrees/spacedock-ensign-fo-repo-edit-guardrail
 issue: "#30"
-pr:
+pr: #50
 ---
 
 The first officer should not edit code, tests, or shared assets outside of a proper worktree dispatch cycle. Changes to repo content must happen in a checked-out worktree owned by a dispatched worker, after the captain approves moving the entity into implementation.
