@@ -1,9 +1,9 @@
 ---
 id: 098
 title: "pr-merge mod: include Closes #X when entity has linked issue"
-status: backlog
+status: ideation
 source: "#48"
-started:
+started: 2026-04-08T15:43:15Z
 completed:
 verdict:
 score:

@@ -1,9 +1,9 @@
 ---
 id: 097
 title: FO guardrail on repo edits before implementation dispatch
-status: backlog
+status: ideation
 source: "#30"
-started:
+started: 2026-04-08T15:43:14Z
 completed:
 verdict:
 score:
