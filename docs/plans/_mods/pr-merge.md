@@ -1,7 +1,7 @@
 ---
 name: pr-merge
 description: Push branches and create/track GitHub PRs for workflow entities
-version: 0.9.1
+version: 0.9.2
 ---
 
 # PR Merge
@@ -37,7 +37,7 @@ Wait for the captain's explicit approval before pushing. Do NOT infer approval f
 
 **On approval:** First, push main to ensure the remote is up to date with local state commits: `git push origin main`. Then rebase the worktree branch onto main: `git rebase main` (from the worktree directory). Then push the worktree branch: `git push origin {branch}`. If any step fails (no remote, auth error, rebase conflict), report to the captain and fall back to local merge.
 
-Create a PR: `gh pr create --base main --head {branch} --title "{entity title}" --body "Workflow entity: {entity title}"`. If `gh` is not available, warn the captain and fall back to local merge.
+Create a PR. Build the PR body: start with `Workflow entity: {entity title}`. If the entity has a non-empty `issue` field, append a blank line and `Closes {issue}` (using the value exactly as it appears in frontmatter, e.g., `#48` or `owner/repo#48`). Then run: `gh pr create --base main --head {branch} --title "{entity title}" --body "{constructed body}"`. If `gh` is not available, warn the captain and fall back to local merge.
 
 Set the entity's `pr` field to the PR number (e.g., `#57`). Report the PR to the captain.
 
