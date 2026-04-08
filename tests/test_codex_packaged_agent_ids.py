@@ -19,14 +19,14 @@ from test_lib import (
 )
 
 
-def test_packaged_agent_id_resolves_to_agent_asset_with_safe_worker_key():
+def test_packaged_agent_id_resolves_to_skill_asset_with_safe_worker_key():
     resolved = resolve_codex_worker("spacedock:ensign")
 
     assert resolved["dispatch_agent_id"] == "spacedock:ensign"
     assert resolved["worker_key"] == "spacedock-ensign"
-    assert resolved["asset_kind"] == "agent"
-    assert resolved["asset_path"].name == "ensign.md"
-    assert resolved["asset_path"].parent.name == "agents"
+    assert resolved["asset_kind"] == "skill"
+    assert resolved["asset_path"].name == "SKILL.md"
+    assert resolved["asset_path"].parent.name == "ensign"
 
 
 def test_unknown_packaged_agent_id_is_rejected():
@@ -61,7 +61,7 @@ def test_exec_harness_can_target_a_custom_logical_agent_id():
     assert "spacedock:first-officer" not in prompt
 
 
-def test_packaged_worker_bootstrap_tells_worker_to_read_agent_first():
+def test_packaged_worker_bootstrap_tells_worker_to_load_skill_contract():
     resolved = resolve_codex_worker("spacedock:ensign")
 
     prompt = build_codex_worker_bootstrap_prompt(
@@ -74,10 +74,11 @@ def test_packaged_worker_bootstrap_tells_worker_to_read_agent_first():
         checklist=["Write the stage report", "Commit code changes"],
     )
 
-    assert "Resolve your role definition" in prompt
-    assert "~/.agents/skills/{namespace}/agents/{name}.md" in prompt
+    assert "packaged worker `spacedock:ensign`" in prompt
+    assert "invoke the `spacedock:ensign` skill" in prompt
+    assert "~/.agents/skills/{namespace}/agents/{name}.md" not in prompt
+    assert "role_asset_kind: skill" in prompt
     assert "role_asset_name: ensign" in prompt
-    assert "first" in prompt.lower()
     assert "spacedock:ensign" in prompt
     assert "worker_key: spacedock-ensign" in prompt
 

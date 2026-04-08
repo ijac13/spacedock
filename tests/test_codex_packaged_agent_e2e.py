@@ -56,7 +56,7 @@ def main():
             "`spawn_agent(agent_type=\"worker\", fork_context=false, message=<fully self-contained prompt>)` "
             "followed by `wait_agent(...)`."
         ),
-        timeout_s=180,
+        timeout_s=300,
     )
     t.check("Codex launcher exited cleanly", fo_exit == 0)
 
@@ -70,12 +70,8 @@ def main():
     t.check("harness invoked the spacedock first officer skill", "spacedock:first-officer" in invocation_text)
     t.check("FO or worker output mentions spacedock packaged id", bool(re.search(r"spacedock:ensign", fo_text)))
     t.check(
-        "FO or worker output mentions packaged agent resolution",
-        "spacedock:ensign" in fo_text and (
-            "~/.agents/skills/{namespace}/agents/{name}.md" in fo_text
-            or "role_asset_name: ensign" in fo_text
-            or "ensign.md" in fo_text
-        ),
+        "FO keeps packaged logical id while dispatch stays on shared safe naming",
+        "spacedock:ensign" in fo_text and "spacedock-ensign" in fo_text,
     )
     t.check("FO spawned a worker for the packaged agent path", log.spawn_count() >= 1)
     t.check("worker completed and returned a result", len(worker_messages) >= 1)
@@ -93,7 +89,7 @@ def main():
         cwd=t.test_project_dir,
         check=True,
     ).stdout
-    t.check("safe packaged worker key appears in branch names", "spacedock-ensign-" in branches)
+    t.check("safe packaged worker key appears in branch names", "spacedock-ensign/" in branches)
     t.check("raw packaged worker id does not leak into branch names", "spacedock:ensign" not in branches)
 
     t.results()

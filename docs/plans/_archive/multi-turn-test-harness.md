@@ -1,15 +1,15 @@
 ---
 id: 102
 title: "Spike: multi-turn team test harness"
-status: implementation
+status: done
 source: "099 testing gap — no infra for interactive team behavior tests"
 started: 2026-04-08T18:49:36Z
-completed:
-verdict:
+completed: 2026-04-08T20:04:11Z
+verdict: PASSED
 score: 0.8
-worktree: .worktrees/spacedock-ensign-multi-turn-test-harness
+worktree: 
 issue:
-pr:
+pr: #52
 ---
 
 We can't test team interaction behavior (idle handling, captain-to-ensign communication, agent routing) because all tests use `claude -p` (single prompt, single response). This spike investigates what's feasible and builds a minimum viable multi-turn test harness.

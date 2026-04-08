@@ -81,3 +81,17 @@ Make Codex dispatch packaged logical ids directly through skills and references,
   - `uv run tests/test_merge_hook_guardrail.py --runtime codex`
   - `uv run tests/test_codex_packaged_agent_e2e.py`
 - Spot-check that Claude-facing agent/skill files still match 085 expectations.
+
+## Stage Report
+
+1. DONE: Codex packaged dispatch no longer instructs workers to read `~/.agents/skills/{namespace}/agents/{name}.md`. The validated payload and bootstrap prompt point at the packaged skill contract instead.
+2. DONE: Codex packaged logical ids resolve through skills/references instead of `agents/{name}.md`. `spacedock:ensign` resolves to `skills/ensign/SKILL.md` with `role_asset_kind: skill`.
+3. DONE: `scripts/codex_prepare_dispatch.py` and `scripts/test_lib.py` use the skill-oriented payload/bootstrap contract consistently, including `role_asset_kind: skill`, `role_asset_name: ensign`, and the skill preload instruction.
+4. DONE: Helper and unit tests assert the new Codex bootstrap contract and gated-entity behavior.
+5. DONE: Validation passed for `uv run --with pytest python tests/test_codex_prepare_dispatch.py`, `uv run --with pytest python tests/test_codex_packaged_agent_ids.py`, `uv run --with pytest python tests/test_gate_guardrail.py --runtime codex`, `uv run --with pytest python tests/test_rejection_flow.py --runtime codex`, `uv run --with pytest python tests/test_merge_hook_guardrail.py --runtime codex`, `uv run --with pytest python tests/test_codex_packaged_agent_e2e.py`, `uv run --with pytest python tests/test_agent_content.py -q`, and `uv run --with pytest python tests/test_codex_finalize_terminal_entity.py -q`.
+6. DONE: Claude-side behavior and the 085 skill-preload design remain intact. `agents/first-officer.md`, `agents/ensign.md`, and `tests/test_agent_content.py` still assert skill preload and reference loading.
+7. DONE: The gated-entity bug is fixed. The Codex gate test held the entity at `status: work` and did not advance it to `done` before approval.
+
+Recommendation: PASSED
+
+Counts: 7 DONE, 0 SKIPPED, 0 FAILED

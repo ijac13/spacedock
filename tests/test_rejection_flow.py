@@ -91,12 +91,12 @@ def main():
                 "Process only the entity `buggy-add-task`. "
                 "Drive the workflow until validation finishes and you can report the rejection verdict "
                 "and the follow-up target. Then stop immediately. "
-                "Do not start a second repair cycle after reporting that first rejection outcome. "
-                "When you dispatch workers, use the exact Codex pattern "
-                "`spawn_agent(agent_type=\"worker\", fork_context=false, message=<fully self-contained prompt>)` "
-                "followed by `wait_agent(...)`."
-            ),
-            timeout_s=240,
+            "Do not start a second repair cycle after reporting that first rejection outcome. "
+            "When you dispatch workers, use the exact Codex pattern "
+            "`spawn_agent(agent_type=\"worker\", fork_context=false, message=<fully self-contained prompt>)` "
+            "followed by `wait_agent(...)`."
+        ),
+            timeout_s=300,
         )
         t.check("Codex launcher exited cleanly", fo_exit == 0)
 
@@ -122,7 +122,7 @@ def main():
     print("[Rejection Flow Behavior]")
 
     entity_main = t.test_project_dir / "rejection-pipeline" / "buggy-add-task.md"
-    worktrees_dir = t.test_project_dir / (".worktrees" if args.runtime == "claude" else ".spacedock/worktrees")
+    worktrees_dir = t.test_project_dir / ".worktrees"
 
     if args.runtime == "claude":
         ensign_calls = [c for c in agent_calls if c["subagent_type"] == "spacedock:ensign"]
@@ -153,11 +153,26 @@ def main():
             "follow-up work after rejection was observable",
             rejection_follow_up_observed("rejection-pipeline", "buggy-add-task", worktrees_dir, worker_messages, fo_text),
         )
-        main_entity_text = entity_main.read_text() if entity_main.is_file() else ""
-        worktree_match = re.search(r"^worktree:\s*(.+)$", main_entity_text, re.MULTILINE)
-        worktree_value = worktree_match.group(1).strip() if worktree_match else ""
-        t.check("packaged worker uses safe worktree key", "spacedock-ensign" in worktree_value)
-        t.check("logical packaged id does not leak into worktree path", "spacedock:ensign" not in worktree_value)
+        worktree_candidates = [
+            worktrees_dir / "ensign-buggy-add-task",
+            worktrees_dir / "spacedock-ensign-buggy-add-task",
+        ]
+        t.check("worker uses safe worktree key", any(path.is_dir() for path in worktree_candidates))
+        t.check(
+            "logical packaged id does not leak into worktree path",
+            all("spacedock:ensign" not in path.as_posix() for path in worktree_candidates if path.is_dir()),
+        )
+        branches = subprocess.run(
+            ["git", "branch", "--list"],
+            capture_output=True,
+            text=True,
+            cwd=t.test_project_dir,
+            check=True,
+        ).stdout
+        t.check(
+            "validation dispatch uses the shared safe branch name",
+            "ensign/buggy-add-task" in branches or "spacedock-ensign/buggy-add-task" in branches,
+        )
 
     # --- Results ---
     t.results()

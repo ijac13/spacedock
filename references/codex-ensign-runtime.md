@@ -4,9 +4,9 @@ This file defines how the shared ensign core executes on Codex.
 
 ## Agent Surface
 
-The packaged worker role asset is `spacedock:ensign`.
-When the worker resolves that logical id itself, it should use the convention:
-`~/.agents/skills/{namespace}/agents/{name}.md`.
+The packaged worker role asset is the `spacedock:ensign` skill.
+When the worker resolves that logical id itself, it should use the skill convention:
+`~/.agents/skills/{namespace}/ensign/SKILL.md`.
 
 ## Codex-Specific Rules
 

@@ -38,7 +38,6 @@ def prepare_codex_skill_home(test_root: Path, repo_root: Path) -> Path:
 
     for name, target in {
         "skills": skills_root,
-        "agents": repo_root / "agents",
         "scripts": repo_root / "scripts",
         "references": repo_root / "references",
     }.items():
@@ -65,15 +64,16 @@ def resolve_codex_worker(agent_id: str, repo_root: Path | None = None) -> dict[s
         raise ValueError("Codex worker id must not be empty")
 
     if agent_id.startswith("spacedock:"):
-        agent_name = agent_id.split(":", 1)[1]
-        asset_path = repo_root / "agents" / f"{agent_name}.md"
+        skill_name = agent_id.split(":", 1)[1]
+        asset_path = repo_root / "skills" / skill_name / "SKILL.md"
         if not asset_path.is_file():
             raise ValueError(f"Unknown Codex worker id: {agent_id}")
         return {
             "dispatch_agent_id": agent_id,
             "worker_key": re.sub(r"[^A-Za-z0-9._-]", "-", agent_id),
-            "asset_kind": "agent",
+            "asset_kind": "skill",
             "asset_path": asset_path,
+            "asset_name": skill_name,
         }
 
     worker_key = re.sub(r"[^A-Za-z0-9._-]", "-", agent_id)
@@ -100,16 +100,13 @@ def build_codex_first_officer_invocation_prompt(
 
         Treat that path as the explicit workflow target. Do not ask to discover alternatives.
         Stay tightly bounded to the requested goal.
-        Let the skill bootstrap the packaged workflow agent asset and follow that agent directly.
-        For bounded single-entity dispatches, prefer the helper at `~/.agents/skills/spacedock/scripts/codex_prepare_dispatch.py`
-        instead of manually editing frontmatter, composing worktree names, or building the worker assignment by hand.
-        For bounded terminal-completion runs, prefer the helper at `~/.agents/skills/spacedock/scripts/codex_finalize_terminal_entity.py`
-        instead of freehand merge-hook, merge, archive, or worktree-cleanup steps.
+        Let the skill bootstrap the packaged workflow contract and follow it directly.
+        Use the shared first-officer runtime directly for bounded dispatch and completion steps.
         Any worker you spawn in this run MUST use `fork_context=false` with a fully self-contained prompt.
         For bounded single-entity runs, treat the first completed worker summary as sufficient evidence for your final response unless it is missing the requested verdict or outcome.
         After `wait_agent(...)` returns the needed verdict or outcome, do not reread entity files, rerun `status`, or continue the loop. Respond once and stop immediately.
         Do not load reference docs unless you hit a real blocker.
-        Do not reread your own skill files, inspect packaged worker agent assets before dispatch requires them, or open the `status` script source unless a blocker requires it.
+        Do not reread your own skill files, inspect packaged worker skill assets before dispatch requires them, or open the `status` script source unless a blocker requires it.
         Run the workflow `status` script directly or with `python3` if needed. Never invoke it with `zsh`.
         Do not narrate setup beyond what is needed to report a blocker or final outcome.
         Once you have enough context to dispatch the first worker, dispatch immediately.
@@ -128,18 +125,18 @@ def build_codex_worker_bootstrap_prompt(
     worktree_path: Path | None,
     checklist: list[str],
 ) -> str:
-    if resolved_worker["asset_kind"] == "agent":
+    if resolved_worker["asset_kind"] == "skill":
         lines = [
             f"You are the packaged worker `{resolved_worker['dispatch_agent_id']}`.",
             "Resolve your role definition before doing anything else.",
-            "For packaged ids of the form `namespace:name`, read `~/.agents/skills/{namespace}/agents/{name}.md` first and follow it for this task.",
-            "After resolving the role, continue with the assignment below.",
+            f"If your operating contract was not already loaded via skill preloading, invoke the `{resolved_worker['dispatch_agent_id']}` skill now to load it.",
+            "After the skill is loaded, continue with the assignment below.",
             "",
             "Assignment:",
             f"dispatch_agent_id: {resolved_worker['dispatch_agent_id']}",
             f"worker_key: {resolved_worker['worker_key']}",
             f"role_asset_kind: {resolved_worker['asset_kind']}",
-            f"role_asset_name: {Path(str(resolved_worker['asset_path'])).stem}",
+            f"role_asset_name: {resolved_worker['asset_name']}",
             f"workflow_dir: {workflow_dir}",
             f"entity_path: {entity_path}",
             f"stage_name: {stage_name}",
