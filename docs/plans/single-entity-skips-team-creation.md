@@ -9,7 +9,7 @@ verdict:
 score:
 worktree: .worktrees/spacedock-ensign-single-entity-skips-team-creation
 issue:
-pr:
+pr: #51
 ---
 
 When the FO is invoked in single-entity mode (`claude -p` with a named entity), it should skip team creation entirely and use bare-mode dispatch (Agent without `team_name`). Instead, it still calls TeamCreate.
