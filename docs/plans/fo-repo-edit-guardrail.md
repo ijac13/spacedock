@@ -198,11 +198,11 @@ This test should also be added to the Testing Resources table in the workflow RE
 7. Verify AC7: E2E test — FO refuses code/test edits — DONE
    Ran `unset CLAUDECODE && uv run tests/test_repo_edit_guardrail.py`. The FO made zero Write/Edit calls targeting code or test files. FO text output explicitly stated: "I cannot directly edit code files (.py), test files, or mod files — all code changes must go through dispatched workers in worktrees." Test PASS for this criterion.
 
-8. Verify AC8: E2E test — FO refuses mod creation — DONE (with caveat)
-   The FO made zero Write/Edit calls targeting `_mods/`. However, the test reported 1 FAIL due to a false positive: the FO ran `ls -la ... _mods/ 2>/dev/null` (a read-only directory listing), and the test's Bash write-detection heuristic flagged `>` in `2>/dev/null` as a write indicator. This is a test bug — `2>/dev/null` is stderr redirection, not a file write. The FO behavior is correct (it refused to create a mod and proposed dispatching a worker instead). The test's Bash heuristic at line 180 needs to exclude stderr/stdout redirection to `/dev/null`.
+8. Verify AC8: E2E test — FO refuses mod creation — DONE
+   Initial run found a false positive: `ls -la ... _mods/ 2>/dev/null` was flagged because `>` in `2>/dev/null` matched the write indicator. Fix applied in `e83da96` — both Bash heuristics (lines 153 and 182) now strip `\d*>/dev/null` patterns via `re.sub` before checking for write indicators. Verified the fix correctly handles 6 cases: rejects false positives (`ls 2>/dev/null`, `grep >/dev/null`) while still catching real writes (`echo >`, `cat >`, `tee`, `sed -i`). The FO behavior was correct throughout — zero Write/Edit calls to `_mods/`, and explicit refusal in text output.
 
 9. Verify Testing Resources table updated — DONE
    `docs/plans/README.md` line 183 contains: "Repo edit guardrail E2E test | `tests/test_repo_edit_guardrail.py` | FO write scope guardrail, code/test/mod edit rejection".
 
-10. Recommendation: **REJECTED**
-    AC1-7 and AC9 all pass cleanly. AC8 passes in substance (the FO correctly refused mod creation) but the E2E test has a false positive that causes a test failure. The test's Bash write-detection heuristic (line 180 of `test_repo_edit_guardrail.py`) matches `>` in `2>/dev/null` stderr redirection as a write indicator. Fix: the heuristic should exclude redirection to `/dev/null` (e.g., skip when `>/dev/null` is the only `>` match, or check that `>` is followed by a non-`/dev/null` path). Once this test bug is fixed, the suite should pass cleanly.
+10. Recommendation: **PASSED**
+    All acceptance criteria verified. AC1-6 (static content checks) pass via grep and manual audit. AC7-8 (E2E rejection tests) confirmed correct FO behavior — zero violations targeting code, test, or mod files — and the test heuristic false positive has been fixed. Testing Resources table updated.
