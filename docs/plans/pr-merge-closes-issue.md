@@ -74,3 +74,25 @@ This keeps the existing body content and conditionally appends the closing refer
 | `issue: "https://github.com/owner/repo/issues/42"` (full URL) | Appends `Closes https://...` — GitHub accepts URLs in closing keywords |
 | `issue: "not-a-number"` (malformed) | Passes through verbatim — GitHub will ignore it. Not our problem to validate. |
 | `issue: "#42, #43"` (multiple issues) | Passes through verbatim as `Closes #42, #43`. GitHub does NOT support multiple issues in one `Closes` keyword this way — only the first would close. However, this format doesn't appear in any existing entity. If needed in the future, the schema could be extended to a list. Not in scope now (YAGNI). |
+
+## Stage Report — implementation
+
+### 1. Update `mods/pr-merge.md` line 40 — DONE
+
+Applied the before/after wording from ideation. Changed `mods/pr-merge.md` line 40 from a static `--body "Workflow entity: {entity title}"` to a conditional construction that appends `Closes {issue}` when the entity has a non-empty `issue` field. Commit: `14b2f2b`.
+
+### 2. Verify AC1: entity with `issue` field set — DONE
+
+The template now reads: "If the entity has a non-empty `issue` field, append a blank line and `Closes {issue}`". An entity with `issue: "#48"` will produce a PR body containing `Closes #48`.
+
+### 3. Verify AC2: entity with empty `issue` field — DONE
+
+The conditional only fires for "non-empty `issue` field". An entity with `issue:` (empty) will produce a PR body of just `Workflow entity: {entity title}` with no `Closes` line.
+
+### 4. Verify AC3: issue field formats passed through verbatim — DONE
+
+The template says "using the value exactly as it appears in frontmatter, e.g., `#48` or `owner/repo#48`". No parsing or reformatting is performed on the `issue` value.
+
+### 5. Commit the change on the worktree branch — DONE
+
+Committed as `14b2f2b` on branch `spacedock-ensign/pr-merge-closes-issue`.
