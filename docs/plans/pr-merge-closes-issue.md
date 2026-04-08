@@ -9,7 +9,7 @@ verdict:
 score:
 worktree: .worktrees/spacedock-ensign-pr-merge-closes-issue
 issue: "#48"
-pr:
+pr: #49
 ---
 
 The pr-merge mod's merge hook creates PRs with a static body. When an entity has a non-empty `issue` field in frontmatter, the PR body should include `Closes {issue}` so GitHub auto-closes the linked issue on merge.
