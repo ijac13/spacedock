@@ -289,7 +289,7 @@ Key findings for 036:
 - **OpenCode is the closest to Claude Code** — it rebuilt the agent-team system with event-driven peer-to-peer messaging. A `team-messaging` target could cover both with minimal adaptation.
 - **Windsurf's Wave 13 parallel sessions lack inter-agent communication**, so it falls into the `portable` category for now.
 
-## Stage Report: ideation
+## Stage Report: ideation (original)
 
 - [x] Relationship between 057 (distribution via npx-skills) and 036 (compile targets) clarified
   057 owns distribution (install path), 036 owns cross-agent execution (compile targets). No blocking dependency — 057 can ship first.
@@ -313,3 +313,323 @@ Key findings for construct-level compatibility:
 - **Task tracking:** Only Claude Code and OpenCode have shared mutable task boards. Others use orchestrator monitoring or no equivalent.
 
 Proposed that 036 target *communication patterns* rather than individual agents — this would reduce the target matrix from 7+ agents to 3 patterns (team-messaging, orchestrator-collects, portable).
+
+## Research: skills ecosystem packaging patterns
+
+*Added 2026-04-08. How do other npx-skills-installable packages ship skill assets?*
+
+### Convention: self-contained skill directories
+
+The skills ecosystem has a clear convention: each skill is a self-contained directory. The SKILL.md file is the entry point, and optional subdirectories hold auxiliary assets. The standard layout (documented by both OpenAI and Vercel Labs, codified in mgechev/skills-best-practices):
+
+```
+skill-name/
+├── SKILL.md              # Required: metadata + instructions (<500 lines)
+├── scripts/              # Optional: executable code (Python/Bash)
+├── references/           # Optional: supplementary context docs
+├── assets/               # Optional: templates, images, static files
+└── agents/               # Optional: per-agent config (e.g., agents/openai.yaml)
+```
+
+Key rules:
+- **Flat subdirectories only.** Keep files exactly one level deep (e.g., `references/schema.md`, not `references/db/v1/schema.md`). This is an explicit convention in the best-practices guide.
+- **Relative paths from skill directory.** Skills reference their assets with bare relative paths: `templates/viewer.html`, `themes/`, `reference/mcp_best_practices.md`, `scripts/deploy.sh`. No platform-specific path variables needed.
+- **Progressive disclosure.** Agents see metadata (name + description) first. The SKILL.md body loads only when the skill is activated. Bundled resources load only when the skill explicitly tells the agent to read them.
+- **No symlinks in published skills.** Neither the Anthropic nor OpenAI skills repos contain any symlinks (verified by `find -type l`). All assets are actual files within the skill directory.
+
+### Real examples from the ecosystem
+
+**Anthropic skills repo** (`anthropics/skills`): Many skills with auxiliary files:
+
+| Skill | Auxiliary structure | How assets are referenced |
+|-------|--------------------|--------------------------|
+| `algorithmic-art` | `templates/viewer.html`, `templates/generator_template.js` | `Read templates/viewer.html using the Read tool` |
+| `theme-factory` | `themes/*.md` (10 theme files), `theme-showcase.pdf` | `Read the corresponding theme file from the themes/ directory` |
+| `mcp-builder` | `reference/*.md` (4 files), `scripts/*.py` (6 files) | Markdown links: `[📋 View Best Practices](./reference/mcp_best_practices.md)` |
+| `canvas-design` | `canvas-fonts/*.ttf` (40+ font files) | Referenced in SKILL.md instructions |
+| `claude-api` | Deep nesting: `python/claude-api/*.md`, `typescript/claude-api/*.md`, `shared/*.md` | Language-specific reference loading |
+| `skill-creator` | `agents/*.md`, `assets/`, `eval-viewer/`, `references/`, `scripts/` (8 scripts) | Multiple directories, complex skill |
+| `xlsx` | `scripts/office/` with XML schemas, pack.py, recalc.py | Script invocation from SKILL.md |
+| `docx` | `scripts/` (accept_changes.py, comment.py), `scripts/templates/*.xml` | Script invocation with XML templates |
+| `pdf` | `scripts/` (8 Python scripts), `reference.md`, `forms.md` | Script paths and reference links |
+| `web-artifacts-builder` | `scripts/` (init-artifact.sh, bundle-artifact.sh, shadcn-components.tar.gz) | Shell script invocation |
+
+**OpenAI skills repo** (`openai/skills`): Similar patterns:
+
+| Skill | Auxiliary structure |
+|-------|--------------------|
+| `skill-creator` | `references/openai_yaml.md`, `scripts/` (init_skill.py, quick_validate.py, generate_openai_yaml.py), `agents/openai.yaml` |
+| `skill-installer` | `scripts/` (github_utils.py, list-skills.py, install-skill-from-github.py), `assets/` (icons), `agents/openai.yaml` |
+| `screenshot` | `scripts/` (take_screenshot.py, macos_permissions.swift, etc.), `agents/openai.yaml`, `assets/` |
+| `sora` | `references/` (8 md files), `scripts/sora.py`, `agents/openai.yaml`, `assets/` |
+| `jupyter-notebook` | `scripts/new_notebook.py`, `assets/` (templates), `agents/openai.yaml` |
+| `vercel-deploy` | `scripts/deploy.sh`, `agents/openai.yaml`, `assets/` |
+
+### Path resolution patterns
+
+Three patterns observed for how skills locate their own assets at runtime:
+
+1. **Bare relative paths (most common).** Skills simply say "Read `templates/viewer.html`" or "Run `scripts/deploy.sh`". The agent resolves paths relative to the SKILL.md location. This is the Anthropic convention — none of their skills use `${CLAUDE_SKILL_DIR}`.
+
+2. **Hardcoded install paths (Codex pattern).** The jupyter-notebook skill uses `$CODEX_HOME/skills/jupyter-notebook/scripts/new_notebook.py` with a `$CODEX_HOME` fallback to `~/.codex`. This is brittle (assumes a specific install location) but works for Codex's fixed skill directory layout.
+
+3. **`${CLAUDE_SKILL_DIR}` (spacedock-specific).** Spacedock's ensign and first-officer skills use this Claude Code platform variable to build absolute paths. This is a Claude Code feature, not a skills-ecosystem convention. No other published skill uses it.
+
+### Installer behavior (verified from source)
+
+The skills CLI `installer.ts` `copyDirectory()` function:
+- Uses `readdir(src, { withFileTypes: true })` to iterate entries
+- Filters out files starting with `.` (dotfiles), `metadata.json`, `.git`, `__pycache__`, `__pypackages__`
+- Recursively copies directories
+- Uses `cp(srcPath, destPath, { dereference: true, recursive: true })` for files
+- **Broken symlinks are skipped** with a warning (ENOENT catch), not treated as errors
+
+**Critical detail for spacedock:** The `.` prefix filter means `agents/openai.yaml` is NOT excluded (it's inside an `agents/` directory, not a dotfile). However, `.claude-plugin/` would never be copied as an asset since skills are discovered at the skill-directory level, not the repo root.
+
+### Implications for spacedock
+
+1. **Follow the convention: self-contained skill directories with actual files.** No symlinks in published skills. Either use a build step to copy shared assets into each skill directory, or restructure so each skill contains its own copy of needed assets.
+
+2. **Use bare relative paths, not `${CLAUDE_SKILL_DIR}`.** The ecosystem convention is for skills to reference `references/foo.md`, not `${CLAUDE_SKILL_DIR}/references/foo.md`. This is more portable across agents and matches what every other published skill does.
+
+3. **The `references/` directory naming matches the convention.** Spacedock already has `references/*.md` — this maps directly to the skills-ecosystem `references/` subdirectory pattern.
+
+4. **`mods/` is spacedock-specific but fine.** The convention allows arbitrary subdirectory names. The `themes/` and `canvas-fonts/` directories in Anthropic's skills prove this.
+
+5. **Consider `agents/openai.yaml` for Codex integration.** Every OpenAI skill ships this file. Spacedock could benefit from shipping `agents/openai.yaml` in each skill directory for Codex UI integration (display name, description, icons).
+
+## Research: OpenAI agents/openai.yaml
+
+*Added 2026-04-08. What is agents/openai.yaml and how does it relate to skills and Codex?*
+
+### What it is
+
+`agents/openai.yaml` is an optional per-skill metadata file that configures how a skill appears and behaves in the Codex app. It is explicitly described as "product-specific config intended for the machine/harness to read, not the agent." It sits alongside SKILL.md in the skill directory.
+
+Other agents can also have config files in the `agents/` directory (e.g., a hypothetical `agents/claude.yaml`), but only `openai.yaml` is currently documented.
+
+### Schema
+
+```yaml
+interface:
+  display_name: "User-facing name"           # Human-facing title in UI
+  short_description: "25-64 char blurb"       # Short description for quick scanning
+  icon_small: "./assets/small-400px.png"      # Path to small icon (relative to skill dir)
+  icon_large: "./assets/large-logo.svg"       # Path to large icon
+  brand_color: "#3B82F6"                      # Hex color for UI accents
+  default_prompt: "Use $skill-name to..."     # Default prompt when invoking
+
+policy:
+  allow_implicit_invocation: true             # Default: true. If false, skill requires explicit $name invocation
+
+dependencies:
+  tools:
+    - type: "mcp"                             # Only "mcp" supported currently
+      value: "github"                         # Tool/server identifier
+      description: "GitHub MCP server"        # Human-readable description
+      transport: "streamable_http"            # Connection type
+      url: "https://api.githubcopilot.com/mcp/"  # MCP server URL
+```
+
+### How Codex discovers skills
+
+Codex scans these locations in priority order:
+1. `$CWD/.agents/skills` (current working directory)
+2. `$REPO_ROOT/.agents/skills` (repository root)
+3. `$HOME/.agents/skills` (user personal / `$CODEX_HOME/skills`)
+4. `/etc/codex/skills` (system admin)
+5. Built-in system skills
+
+Symlinked folders are followed. Duplicate skill names don't merge; both appear in selectors.
+
+### How it relates to AGENTS.md
+
+`AGENTS.md` and `agents/openai.yaml` serve different purposes:
+- **AGENTS.md** is project-level custom instructions (like Claude Code's `CLAUDE.md`). Codex reads it at startup and concatenates files from git root to cwd.
+- **agents/openai.yaml** is per-skill UI/policy metadata. It configures how a skill appears in Codex's skill selector, not project-level behavior.
+
+### How it relates to SKILL.md
+
+`SKILL.md` contains the skill's name, description (in frontmatter), and instructions (in body). `agents/openai.yaml` provides additional Codex-specific metadata: UI display name, icons, brand color, default prompt, invocation policy, and MCP tool dependencies. The SKILL.md `name` and `description` fields are the primary metadata; `agents/openai.yaml` extends them for Codex's UI.
+
+### How it relates to config.toml
+
+Codex's main configuration is TOML-based (`~/.codex/config.toml` or `.codex/config.toml`). This configures agent spawning constraints (`agents.max_threads`, `agents.max_depth`), model selection, sandbox settings, and project-doc fallback filenames. It does NOT configure individual skills — that's what `agents/openai.yaml` is for.
+
+### Prevalence in the ecosystem
+
+Every skill in the OpenAI skills repo ships an `agents/openai.yaml`. It appears to be standard practice for Codex-compatible skills. The Anthropic skills repo does NOT use `agents/openai.yaml` (Anthropic's skills target Claude Code, which doesn't read this file).
+
+### Should spacedock ship agents/openai.yaml?
+
+**Yes, for Codex visibility.** The file is low-cost (3-8 lines of YAML) and provides:
+- Better display in Codex's skill selector (display_name, short_description)
+- Default prompts for skill invocation
+- Future: MCP dependency declarations if spacedock ever needs external tools
+
+For spacedock, the files would be minimal:
+
+```yaml
+# skills/commission/agents/openai.yaml
+interface:
+  display_name: "Commission Workflow"
+  short_description: "Design and generate a plain text workflow"
+  default_prompt: "Use $commission to design a new workflow."
+
+# skills/refit/agents/openai.yaml
+interface:
+  display_name: "Refit Workflow"
+  short_description: "Upgrade workflow scaffolding to latest version"
+  default_prompt: "Use $refit to upgrade this workflow."
+
+# skills/first-officer/agents/openai.yaml
+interface:
+  display_name: "First Officer"
+  short_description: "Orchestrate a workflow run"
+  default_prompt: "Use $first-officer to run the workflow."
+
+# skills/ensign/agents/openai.yaml
+interface:
+  display_name: "Ensign"
+  short_description: "Execute workflow stage work"
+
+# skills/debrief/agents/openai.yaml
+interface:
+  display_name: "Debrief"
+  short_description: "Record session activity for next session"
+  default_prompt: "Use $debrief to capture what happened this session."
+```
+
+**Note:** Adding `agents/openai.yaml` is orthogonal to the main 057 work (symlinks/asset packaging). It could be added as a separate, low-risk step.
+
+## Stage Report: ideation (revisit — 2026-04-08)
+
+### What changed since the original ideation
+
+The original ideation was built around symlinking `templates/` into skill directories. Since then, substantial cleanup has landed that fundamentally changes the architecture:
+
+1. **`templates/` no longer exists.** Commits `d1fbc5e` (remove monolithic agent templates) and `37ac56b` (ship status viewer with plugin) eliminated the entire `templates/` directory. The monolithic `templates/first-officer.md`, `templates/ensign.md`, and `templates/status` are gone.
+
+2. **Layered reference architecture replaced templates.** Agent content is now split across:
+   - `agents/` — thin entry-point stubs (`first-officer.md`, `ensign.md`) with skill preloading via `skills: ["spacedock:first-officer"]`
+   - `references/` — shared behavioral contracts (8 files: shared cores, platform runtimes, guardrails, codex tools)
+   - `skills/` — skill SKILL.md files that load references via `${CLAUDE_SKILL_DIR}/../../references/...` paths
+
+3. **Status viewer moved to `skills/commission/bin/status`.** No longer materialized per-workflow. The commission and refit skills, plus the FO shared core, all reference it via `{spacedock_plugin_dir}/skills/commission/bin/status`.
+
+4. **Codex cleanup landed.** Commits `0f00f39` and `43d37a4` removed codex helper entrypoints and packaged agent wrapper dependency. Codex runtime references are now in `references/codex-*-runtime.md`.
+
+5. **New skills added.** `skills/debrief/` and new entry-point skills `skills/ensign/` and `skills/first-officer/` exist alongside `skills/commission/` and `skills/refit/`.
+
+### Current asset map (what must travel with skills)
+
+| Asset | Path | Referenced by | Reference mechanism |
+|-------|------|---------------|---------------------|
+| Reference files (8) | `references/*.md` | `skills/ensign/SKILL.md`, `skills/first-officer/SKILL.md` | `${CLAUDE_SKILL_DIR}/../../references/...` |
+| Status viewer | `skills/commission/bin/status` | `skills/commission/SKILL.md`, `skills/refit/SKILL.md`, `references/first-officer-shared-core.md` | `{spacedock_plugin_dir}/skills/commission/bin/status` |
+| Mods | `mods/pr-merge.md` | `skills/commission/SKILL.md`, `skills/refit/SKILL.md` | `{spacedock_plugin_dir}/mods/...` |
+| Agent stubs | `agents/*.md` | `skills/commission/SKILL.md` (Phase 3 pilot run) | `{spacedock_plugin_dir}/agents/first-officer.md` |
+| Plugin manifest | `.claude-plugin/plugin.json` | `skills/commission/SKILL.md`, `skills/refit/SKILL.md` | Plugin context resolution |
+
+### Reassessment: symlinks + relative paths — still correct?
+
+**No. The original symlink proposal is obsolete.** It was designed to solve one problem (templates traveling with skills) that no longer exists. The current codebase has a different, more complex dependency graph:
+
+**Problem 1 — `${CLAUDE_SKILL_DIR}` path breakage.** The ensign and first-officer skills use `${CLAUDE_SKILL_DIR}/../../references/...` to reach reference files two levels up from `skills/{name}/`. When the skills CLI copies `skills/first-officer/` to `.agents/skills/first-officer/`, the `../../references/` path would resolve to `.agents/references/` — which doesn't exist. This is the critical breakage.
+
+**Problem 2 — `{spacedock_plugin_dir}` path breakage.** Commission and refit skills use `{spacedock_plugin_dir}` to reference `mods/`, `agents/`, `skills/commission/bin/status`, and `.claude-plugin/plugin.json`. When installed via skills CLI, `{spacedock_plugin_dir}` is not available — there is no plugin system.
+
+**Revised approach: symlinks within skill directories pointing to sibling repo assets.** The principle is the same as the original ideation, but the assets to symlink have changed:
+
+1. **For ensign and first-officer skills** — add `references/` symlink inside each skill directory:
+   - `skills/ensign/references` -> `../../references`
+   - `skills/first-officer/references` -> `../../references`
+   - Update SKILL.md paths from `${CLAUDE_SKILL_DIR}/../../references/...` to `${CLAUDE_SKILL_DIR}/references/...`
+
+2. **For commission and refit skills** — add symlinks for all referenced assets:
+   - `skills/commission/mods` -> `../../mods`
+   - `skills/commission/agents` -> `../../agents`
+   - `skills/commission/plugin.json` -> `../../.claude-plugin/plugin.json`
+   - `skills/refit/mods` -> `../../mods`
+   - `skills/refit/plugin.json` -> `../../.claude-plugin/plugin.json`
+   - (Status viewer already lives at `skills/commission/bin/status` — no symlink needed)
+
+3. **Update `{spacedock_plugin_dir}` references** in commission and refit SKILL.md to use paths relative to the skill directory via `${CLAUDE_SKILL_DIR}`.
+
+4. **For debrief skill** — check if it has external dependencies (it does not reference templates, mods, or agents — it's self-contained).
+
+### Updated open questions
+
+**Q1 (symlink deref): RESOLVED — yes, it works.** The skills CLI `copyDirectory()` uses `dereference: true` on `cp` calls. Node.js `fs.cp` with `dereference: true` follows symlinks and copies the target content. For directory symlinks, `readdir` with `withFileTypes` returns entries where `isDirectory()` returns true for symlinked directories (Node.js resolves through symlinks by default for `withFileTypes`). Verified: this is standard Node.js behavior — `readdirSync(path, {withFileTypes: true})` follows symlinks when checking types.
+
+**Q2 (self-location): RESOLVED — `${CLAUDE_SKILL_DIR}` solves it.** The original question asked how a skill knows its own directory. Claude Code's plugin system substitutes `${CLAUDE_SKILL_DIR}` with the skill's absolute directory path before the model sees it. When installed via skills CLI, skills land in `.agents/skills/{name}/` — and `${CLAUDE_SKILL_DIR}` resolves to that path. References, mods, and other assets are copied into the skill directory (via dereferenced symlinks), so `${CLAUDE_SKILL_DIR}/references/...` works in both install modes.
+
+For `{spacedock_plugin_dir}` references: these must be rewritten to use `${CLAUDE_SKILL_DIR}` instead. Commission's `{spacedock_plugin_dir}/mods/pr-merge.md` becomes `${CLAUDE_SKILL_DIR}/mods/pr-merge.md`. Commission's `{spacedock_plugin_dir}/skills/commission/bin/status` becomes `${CLAUDE_SKILL_DIR}/bin/status` (the status binary is already inside the commission skill directory).
+
+**Q3 (mods): RESOLVED — same symlink approach.** `mods/` symlink in commission and refit skill directories.
+
+**Q4 (new — agents/ reference in commission):** Commission Phase 3 reads `{spacedock_plugin_dir}/agents/first-officer.md` for the pilot run. An `agents/` symlink in the commission skill directory resolves this.
+
+**Q5 (new — plugin.json for version detection):** Both commission and refit read `.claude-plugin/plugin.json` for the spacedock version. Options: (a) symlink `plugin.json` into each skill directory, (b) add a `version` field to SKILL.md frontmatter, (c) add a `VERSION` file. Option (b) is cleanest — the skills CLI preserves frontmatter, and it avoids a separate file. However, this means updating version in SKILL.md frontmatter during release in addition to `plugin.json`. Option (a) with a symlink is more DRY.
+
+**Q6 (new — first-officer-shared-core.md references `{spacedock_plugin_dir}`):** The shared core file at `references/first-officer-shared-core.md` line 27 uses `{spacedock_plugin_dir}/skills/commission/bin/status`. When the FO skill loads this reference file, the placeholder needs to resolve. In plugin mode, `{spacedock_plugin_dir}` is resolved by Claude Code. In skills-CLI mode, this placeholder won't resolve. The FO skill would need to set this variable after loading references, or the shared core would need to use a different resolution strategy. This is a significant open question — it affects runtime behavior, not just install-time layout.
+
+### Updated acceptance criteria
+
+1. `npx skills add clkao/spacedock --list` shows commission, refit, debrief, ensign, and first-officer skills
+   - **Test:** Run `npx skills add clkao/spacedock --list` and verify output contains all 5 skill names
+2. `npx skills add clkao/spacedock -a claude-code` installs all skills to `.agents/skills/` with symlinks to `.claude/skills/`
+   - **Test:** Run install, verify `.agents/skills/{name}/SKILL.md` exists for each skill
+3. After skills-CLI install, reference files exist in ensign and first-officer skill directories (e.g., `.agents/skills/first-officer/references/first-officer-shared-core.md`)
+   - **Test:** Verify file existence after install
+4. After skills-CLI install, `/commission` generates a working workflow (status viewer, mods, and agents are accessible)
+   - **Test:** E2E test: install via skills CLI, run commission in batch mode, verify workflow files generated
+5. After skills-CLI install, `/refit` can detect and upgrade workflow scaffolding (mods are accessible)
+   - **Test:** E2E test: install via skills CLI, run refit on a test workflow, verify mod comparison works
+6. `claude plugin marketplace add clkao/spacedock` continues to work (no regression)
+   - **Test:** Existing test suite passes; verify `${CLAUDE_SKILL_DIR}` paths still resolve correctly in plugin mode
+7. Mod files exist in installed commission and refit skill directories (e.g., `.agents/skills/commission/mods/pr-merge.md`)
+   - **Test:** Verify file existence after install
+8. The spacedock version is accessible to commission and refit regardless of install method
+   - **Test:** Verify `plugin.json` (or equivalent) is readable from skill directory after install
+
+### Updated test plan
+
+**Static tests (low cost, run in CI):**
+- Verify symlinks exist and point to valid targets (`skills/*/references` -> `../../references`, etc.)
+- Verify SKILL.md files use `${CLAUDE_SKILL_DIR}/references/...` (not `${CLAUDE_SKILL_DIR}/../../references/...`) for reference paths
+- Verify commission and refit SKILL.md files use `${CLAUDE_SKILL_DIR}/...` (not `{spacedock_plugin_dir}/...`) for asset references
+- Verify all symlink targets exist (no broken symlinks)
+
+**Simulation test (medium cost):**
+- Simulate skills-CLI install: copy each skill directory (with symlink dereferencing) to a temp location, verify all referenced files are present
+- This doesn't require the actual `npx skills` CLI — just `cp -rL` to dereference symlinks
+
+**E2E tests (high cost, may need interactive harness):**
+- AC4: Commission batch mode after simulated skills-CLI install
+- AC5: Refit after simulated skills-CLI install
+- AC6: Existing plugin-mode tests continue to pass (regression check)
+
+**Not needed:**
+- No E2E test for the actual `npx skills add` command (depends on external CLI, network). The simulation test covers the critical path (symlink dereferencing produces self-contained directories).
+
+### Checklist
+
+1. [x] Review current codebase structure (skills/, templates/, mods/, .claude-plugin/) and how skills reference assets today — DONE. `templates/` no longer exists. Architecture is now: `agents/` (thin stubs) + `references/` (8 shared core files) + `skills/` (5 skills, using `${CLAUDE_SKILL_DIR}` and `{spacedock_plugin_dir}` for path resolution) + `mods/` (1 mod) + `.claude-plugin/` (manifests).
+2. [x] Check recent git history for cleanup changes that affect this task's design — DONE. Key commits: `d1fbc5e` (remove monolithic templates), `c320032` (ship agents from plugin), `37ac56b` (ship status with plugin), `0f00f39`/`43d37a4` (codex cleanup). All landed between Apr 1-8 2026.
+3. [x] Reassess whether the proposed approach (symlinks + relative paths) is still the right call — DONE. The principle is correct but the implementation must change. The assets to symlink are `references/`, `mods/`, `agents/`, and `plugin.json` — not `templates/` (which no longer exists). The `${CLAUDE_SKILL_DIR}` variable (resolved by Claude Code's platform) replaces `{spacedock_plugin_dir}` as the path anchor.
+4. [x] Resolve or update open questions (Q1: symlink deref, Q2: self-location, Q3: mods) — DONE. Q1: resolved (Node.js dereferences). Q2: resolved (`${CLAUDE_SKILL_DIR}`). Q3: resolved (symlink approach). New questions: Q4 (agents/ ref in commission), Q5 (version detection), Q6 (shared-core `{spacedock_plugin_dir}` at runtime — significant open question).
+5. [x] Update problem statement and proposed approach if needed — DONE. Problem statement still valid in spirit (skills need bundled assets) but the specific assets have changed entirely. Approach updated with new symlink targets and `${CLAUDE_SKILL_DIR}` rewrite.
+6. [x] Update acceptance criteria with testable verification for each — DONE. 8 criteria, each with explicit test method.
+7. [x] Update test plan: what tests, cost/complexity, E2E needs — DONE. Three tiers: static (CI), simulation (`cp -rL`), E2E (commission/refit after simulated install). No external CLI dependency in tests.
+
+### Key risk: Q6 (`{spacedock_plugin_dir}` in shared core at runtime)
+
+The `references/first-officer-shared-core.md` file uses `{spacedock_plugin_dir}` to reference the status viewer. This file is read at runtime by the FO agent. In plugin mode, `{spacedock_plugin_dir}` is resolved by Claude Code's plugin system. In skills-CLI mode, this placeholder has no resolution mechanism.
+
+Options to resolve:
+- **(a)** Replace `{spacedock_plugin_dir}` in shared core with a different anchor. The FO skill that loads the shared core could set a variable (but markdown skill files don't have variable-setting mechanics).
+- **(b)** The FO skill could include a preamble that tells the model "the status viewer is at `${CLAUDE_SKILL_DIR}/../../skills/commission/bin/status`" — but this re-introduces the `../../` path fragility that we're trying to eliminate.
+- **(c)** Move the status invocation instructions out of the shared core and into the platform-specific runtime adapters. The Claude runtime adapter would use `{spacedock_plugin_dir}`, and a future skills-CLI runtime adapter would use `${CLAUDE_SKILL_DIR}`.
+
+This question needs CL's input before proceeding to implementation.
