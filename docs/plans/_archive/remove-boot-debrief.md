@@ -1,13 +1,13 @@
 ---
 id: 095
 title: Remove LATEST_DEBRIEF from status --boot output
-status: validation
+status: done
 source: CL — debrief info at boot is redundant with other --boot sections
 started: 2026-04-07T21:37:57Z
-completed:
-verdict:
+completed: 2026-04-08T00:35:40Z
+verdict: PASSED
 score:
-worktree: .worktrees/spacedock-ensign-remove-boot-debrief
+worktree: 
 issue: "#44"
 pr: #47
 ---

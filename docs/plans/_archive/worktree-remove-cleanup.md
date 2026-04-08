@@ -1,13 +1,13 @@
 ---
 id: 096
 title: Document git worktree remove in cleanup references
-status: validation
+status: done
 source: CL — FO used rm -rf instead of git worktree remove, leaving stale tracking entries
 started: 2026-04-07T21:37:58Z
-completed:
-verdict:
+completed: 2026-04-08T00:35:38Z
+verdict: PASSED
 score:
-worktree: .worktrees/spacedock-ensign-worktree-remove-cleanup
+worktree: 
 issue: "#45"
 pr: #46
 ---
