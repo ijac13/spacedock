@@ -1,13 +1,13 @@
 ---
 id: 098
 title: "pr-merge mod: include Closes #X when entity has linked issue"
-status: validation
+status: done
 source: "#48"
 started: 2026-04-08T15:43:15Z
-completed:
-verdict:
+completed: 2026-04-08T18:40:07Z
+verdict: PASSED
 score:
-worktree: .worktrees/spacedock-ensign-pr-merge-closes-issue
+worktree: 
 issue: "#48"
 pr: #49
 ---
