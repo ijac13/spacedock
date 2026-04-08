@@ -348,12 +348,19 @@ These are not tautological — they exercise real subagent log analysis and woul
 - Completion evidence should include `result` entries with `subtype: success` from Agent calls
 - The test should be re-run and verified to pass after fixes
 
-## Stage Report: validation (feedback cycle 1 — AC7 fix)
+## Stage Report: validation (feedback cycle 1 — AC7 fix re-validation)
 
-1. **Fix SHUTDOWN_PATTERN to distinguish behavioral shutdowns from protocol teardown** — DONE. Changed the SendMessage shutdown check to skip messages where the `message` field is not a string (`not isinstance(msg_raw, str)`). Protocol messages like `{"type": "shutdown_request"}` are dicts, not strings — they are normal team teardown and should not be flagged. Natural language shutdown commands ("shut down the agent", "terminate", etc.) are always strings and continue to be caught by `SHUTDOWN_PATTERN`.
+**Fix reviewed (commit ef3f659):** Two changes to `tests/test_agent_captain_interaction.py`:
+1. Protocol shutdown_request (dict messages) excluded — `if not isinstance(msg_raw, str): continue` skips dict protocol messages, only string messages checked against SHUTDOWN_PATTERN. Correct: protocol `{"type": "shutdown_request"}` is normal team teardown, not the behavioral "FO thinks agent is stuck" shutdown that Problem 1 describes.
+2. `result` entries with `subtype: success` added to completion evidence tracking. Correct: Agent call completions appear as `result` entries in the stream-json log, and these were previously missed.
 
-2. **Add result/success entries to completion evidence tracking** — DONE. Added a check for `entry.get("type") == "result" and entry.get("subtype") == "success"` to set `completion_evidence = True`. Agent call completions appear as `result` entries with `subtype: success` in the stream-json log, and these now count as evidence that the agent's work is done.
+**E2E test re-run:** 9 passed, 0 failed.
+- AC7: FO sent 2 SendMessage calls — one `shutdown_request` protocol dict (correctly skipped by isinstance check) and one string message (post-completion, not flagged). No premature shutdowns detected.
+- AC6: 2 subagents found. Both produced 3 direct text blocks each. SendMessage only to team-lead. No suspicious content relay.
+- FO dispatched 1 agent, no termination-related dispatches.
 
-3. **Run the test and verify it passes** — DONE. `unset CLAUDECODE && uv run tests/test_agent_captain_interaction.py` — 9 passed, 0 failed. The FO sent one `shutdown_request` protocol message (dict with `{"type": "shutdown_request", "reason": "Session terminating in non-interactive mode"}`) which was correctly skipped by the `isinstance` check. Both AC6 and AC7 checks passed.
+**Static tests re-run:** 13 passed, 0 failed. No regressions.
 
-4. **Commit on worktree branch** — DONE.
+**Assessment of fix quality:** The fix is minimal and correct. The `isinstance` check cleanly separates protocol messages (dicts) from behavioral messages (strings). The `result`/`success` completion evidence fills the gap that caused the false negative in the original test. Both fixes address the exact issues identified in the rejection report.
+
+Recommendation: **PASSED**
