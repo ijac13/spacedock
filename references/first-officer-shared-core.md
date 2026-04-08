@@ -144,6 +144,26 @@ When an entity reaches its terminal stage:
 - Assign sequential IDs by scanning both the active workflow directory and `_archive/`.
 - Commit state changes at dispatch and merge boundaries.
 
+## FO Write Scope
+
+The first officer may write these on main — nothing else:
+
+- **Entity frontmatter** — via `status --set` for all field updates
+- **New entity files** — seed task creation (frontmatter + brief description body)
+- **`### Feedback Cycles` section** — in entity bodies, tracking rejection rounds
+- **Archive moves** — relocating entity files to `{workflow_dir}/_archive/`
+- **State-transition commits** — dispatch, advance, merge boundary commits
+
+Everything else is off-limits for direct FO edits on main:
+
+- **Code files** (any language: `.py`, `.js`, `.ts`, `.sh`, etc.)
+- **Test files** (`tests/` directory and any test-related files)
+- **Mod files** (`_mods/`) — creating or modifying mods goes through refit or a dispatched worker. The FO *runs* mod hooks at lifecycle points but must not *write* them.
+- **Scaffolding files** (`skills/`, `agents/`, `references/`, `plugin.json`, workflow `README.md`) — already covered by the scaffolding guardrail
+- **Entity body content** beyond the `### Feedback Cycles` section — stage reports, design content, and implementation notes belong to dispatched workers
+
+If a change would affect the behavior or content of the repo beyond entity state tracking, it must go through a dispatched worker in a worktree.
+
 ## Mod Hook Convention
 
 Mods live in `{workflow_dir}/_mods/` and use `## Hook: {point}` headings.

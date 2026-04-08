@@ -17,6 +17,7 @@ This section holds code-project-specific rules that apply across platforms and r
 - Workers must stay inside the assigned worktree when one is provided.
 - Entity frontmatter belongs to the first officer on main.
 - Entity body edits and stage reports belong to the worker.
+- The first officer's full write scope on main is defined in `first-officer-shared-core.md` under **FO Write Scope**. Anything outside that allow-list must go through a dispatched worker.
 
 ## Scaffolding
 
