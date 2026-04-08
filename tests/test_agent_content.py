@@ -182,5 +182,43 @@ def test_assembled_claude_first_officer_has_team_health_check():
     assert re.search(r"not in bare mode or single-entity mode", assembled)
 
 
+def test_assembled_claude_first_officer_has_dispatch_idle_guardrail():
+    t = TestRunner("agent content", keep_test_dir=False)
+    text = assembled_agent_content(t, "first-officer")
+
+    # The guardrail heading must be present
+    assert "DISPATCH IDLE GUARDRAIL" in text
+
+    # Idle is normal between-turn state
+    assert "idle" in text.lower() and "between-turn state" in text.lower()
+
+    # Three explicit shutdown conditions
+    assert "completion message" in text.lower()
+    assert "captain explicitly requests shutdown" in text.lower()
+    assert "transitioning the entity to a new stage" in text.lower()
+
+    # Never interpret idle as stuck
+    assert re.search(r"never interpret idle.*stuck.*unresponsive", text, re.IGNORECASE)
+
+
+def test_assembled_claude_ensign_has_captain_communication():
+    t = TestRunner("agent content", keep_test_dir=False)
+    text = assembled_agent_content(t, "ensign")
+
+    # Captain Communication section exists
+    assert "## Captain Communication" in text
+
+    # Direct text output for captain interaction
+    assert "direct text output" in text.lower()
+
+    # SendMessage scoped to agent-to-agent use
+    assert re.search(
+        r"SendMessage.*only.*agent-to-agent", text, re.IGNORECASE | re.DOTALL
+    )
+
+    # Captain switches to ensign via Shift+Up/Down
+    assert "Shift+Up/Down" in text
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__]))

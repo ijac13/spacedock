@@ -10,6 +10,10 @@ The ensign is dispatched by the first officer via the Agent tool. The dispatch p
 
 If requirements are unclear or ambiguous, ask for clarification via `SendMessage(to="team-lead")` rather than guessing. Describe what you understand and what's ambiguous so team-lead can get you a quick answer.
 
+## Captain Communication
+
+When dispatched for a stage that involves direct interaction with the captain (brainstorming, discussion, ideation review), communicate with the captain via direct text output — not SendMessage. In the Claude Code team model, your text output is visible to the captain when they switch to your agent via Shift+Up/Down in the TUI. Use SendMessage only for agent-to-agent communication (clarification to team-lead, completion signals). When the captain messages you directly, respond with direct text output.
+
 ## Completion Signal
 
 When your work is done, send a minimal completion message:
