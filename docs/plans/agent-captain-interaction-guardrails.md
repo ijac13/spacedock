@@ -44,22 +44,39 @@ Tests should verify:
 - Existing tests mix two patterns: (a) static checks against assembled template content (fast, deterministic), (b) E2E runs via `claude -p` with log analysis (expensive, non-deterministic)
 - `test_team_dispatch_sequencing.py` and `test_team_health_check.py` demonstrate the pattern for team-related E2E tests
 
-**What's NOT possible with current infrastructure:**
-- `claude -p` is single-prompt, single-response. There is no way to simulate multi-turn captain-to-ensign conversation
-- `--input-format stream-json` exists for streaming input but it's still within a single session — no mechanism to inject a second user turn after the agent goes idle
-- Testing "FO sees idle notification and does NOT kill agent" requires observing the FO's response to an ongoing team interaction — this is inherently interactive and cannot be driven by `claude -p`
-- Testing "captain talks directly to an ensign" requires the captain to send a user message to a specific agent in the team — no test harness for this exists
-- We cannot simulate or inject "idle notifications" from the team runtime into the FO's context
+**New from spike 102 — InteractiveSession harness:**
+- `scripts/test_lib_interactive.py` provides `InteractiveSession` — a PTY-driven multi-turn test harness
+- Drives claude interactively via `pty.fork()`: start session, send messages, wait for patterns, stop
+- Per-agent JSONL logs are stored at `~/.claude/projects/<slug>/<session-id>/subagents/agent-<id>.jsonl`
+- Each ensign gets its own JSONL log — direct text blocks (type `text`) vs `SendMessage` tool calls are fully distinguishable
+- `get_subagent_logs(project_dir)` finds per-agent logs from a session
+- POC test (`test_interactive_poc.py`) passes: two sequential multi-turn exchanges work
 
-**What CAN be tested:**
+**Captain-to-ensign addressing — NOT possible:**
+- Spike 102 (Question 4) investigated thoroughly: there is no Shift+Up/Down, no @mention, no slash command, and no protocol mechanism for the captain to address a specific team member directly
+- User input always goes to the main agent (FO); the FO routes to agents via `SendMessage`
+- Direct text output from any agent is visible to the captain but cannot be replied to directly
+- To test captain-to-ensign interaction, the test must send messages to the FO and rely on the FO to route them
+
+**What CAN be tested (revised with InteractiveSession):**
+
 1. **Static template checks** (fast, deterministic, zero API cost):
    - FO assembled content contains the dispatch idle guardrail wording
    - FO assembled content contains the agent back-off section
    - Ensign assembled content contains captain communication instructions
    - Ensign completion signal uses `SendMessage(to="team-lead")` (existing)
-   - Ensign does NOT have instructions to relay all output through SendMessage to FO
-2. **Log-based E2E checks** (expensive, partial coverage):
-   - In a standard dispatch run, verify the FO does not call `SendMessage` to shut down agents that completed normally — but this doesn't test the idle-notification scenario specifically
+
+2. **E2E via InteractiveSession + subagent log analysis** (expensive, behavioral):
+   - Start an interactive FO session with a workflow that has a dispatchable entity
+   - Wait for the FO to dispatch an ensign (detect via `wait_for` on dispatch-related output)
+   - After the ensign completes, stop the session and inspect subagent JSONL logs
+   - Verify that ensign subagent logs show direct text blocks for captain-visible output and `SendMessage(to="team-lead")` only for completion/clarification
+   - Verify that the FO main log does NOT contain premature agent shutdown commands
+
+3. **E2E idle guardrail verification** (harder, partial coverage):
+   - The idle notification scenario is difficult to force deterministically — idle notifications come from the Claude Code runtime when an agent has no pending messages, which requires timing control the harness doesn't provide
+   - Partial approach: run a team session with a simple workflow, verify the FO does not shut down agents between dispatch and their completion message
+   - Full approach: would require injecting synthetic idle events, which is not supported
 
 ### Root cause analysis
 
@@ -124,27 +141,35 @@ When the FO dispatches an ensign for a stage that the captain is expected to int
 
 ### Testing approach
 
-**Achievable tests (static template checks):**
+**Tier 1: Static template checks** (fast, deterministic, zero API cost)
 
-1. `test_agent_content.py` — add new test functions:
-   - `test_assembled_claude_first_officer_has_dispatch_idle_guardrail`: Check that the assembled FO content contains "DISPATCH IDLE GUARDRAIL" and the key phrases "idle notifications", "between-turn state", "never interpret idle"
-   - `test_assembled_claude_ensign_has_captain_communication`: Check that the assembled ensign content contains "captain" communication instructions and "direct text output"
+Add to `test_agent_content.py`:
+- `test_assembled_claude_first_officer_has_dispatch_idle_guardrail`: Check assembled FO content contains "DISPATCH IDLE GUARDRAIL" and key phrases: "idle notifications", "between-turn state", three shutdown conditions, "never interpret"
+- `test_assembled_claude_ensign_has_captain_communication`: Check assembled ensign content contains "captain" communication instructions, "direct text output", and that SendMessage is scoped to agent-to-agent use
 
-2. These are the same pattern used by `test_assembled_claude_first_officer_has_gate_guardrails`, `test_assembled_claude_first_officer_has_team_health_check`, etc.
+**Tier 2: E2E subagent log analysis** (expensive, behavioral)
 
-**Not achievable with current infrastructure:**
+New test file `test_ensign_communication.py` using `InteractiveSession` from spike 102:
+1. Create a test project with a simple workflow (single entity, single non-worktree stage)
+2. Start an interactive FO session via `InteractiveSession`
+3. Send a prompt to process the entity through the workflow
+4. Wait for the FO to dispatch an ensign and for the ensign to complete (detect via `wait_for` on completion-related output)
+5. Stop the session
+6. Inspect subagent JSONL logs via `get_subagent_logs()`:
+   - Parse each subagent log with `LogParser`
+   - Verify `fo_texts()` returns direct text blocks (captain-visible output)
+   - Verify `tool_calls()` contains `SendMessage` only with `to="team-lead"` for completion/clarification
+   - Verify no `SendMessage` calls relay content that should be direct text output
 
-- E2E test that the FO actually ignores idle notifications (requires multi-turn interactive session with team)
-- E2E test that an ensign outputs direct text instead of SendMessage during a brainstorming stage (requires captain-to-ensign multi-turn interaction)
-- E2E test that the captain can talk to an ensign and the FO doesn't kill it (requires three-party interaction: captain, FO, ensign)
+This test depends on spike 102 (`test_lib_interactive.py`) being merged first.
 
-These would require a test harness that can:
-1. Start an interactive `claude` session (not `-p`)
-2. Inject user messages at specific points during the session
-3. Observe team events (idle notifications, SendMessage calls) in real time
-4. Run for an extended duration with multiple turns
+**Tier 3: Idle guardrail behavioral test** (deferred — partial coverage only)
 
-This infrastructure does not exist and building it is a separate project.
+The idle notification scenario cannot be forced deterministically. The FO receives idle notifications from the Claude Code runtime when an agent has no pending work — this timing is not controllable from the test harness.
+
+Partial approach (if needed later): Run a team session, introduce a deliberate delay between dispatch and completion, verify the FO log does not contain agent shutdown commands during that window. This is flaky by nature and not recommended for CI.
+
+The static template check (Tier 1) is the reliable guardrail for the idle problem. The behavioral guarantee comes from the template wording being present in the FO's operating contract.
 
 ### Acceptance criteria
 
@@ -152,7 +177,7 @@ This infrastructure does not exist and building it is a separate project.
    - Test: static check in `test_agent_content.py` via `assembled_agent_content("first-officer")`
    - Verifiable: YES
 
-2. **AC2:** Ensign assembled content contains captain communication instructions (direct text output for captain, SendMessage for agent-to-agent)
+2. **AC2:** Ensign assembled content contains captain communication instructions (direct text output for captain, SendMessage scoped to agent-to-agent)
    - Test: static check in `test_agent_content.py` via `assembled_agent_content("ensign")`
    - Verifiable: YES
 
@@ -168,6 +193,16 @@ This infrastructure does not exist and building it is a separate project.
    - Test: run `test_agent_content.py`
    - Verifiable: YES
 
+6. **AC6:** E2E test verifies ensign uses direct text for captain-visible output and SendMessage only for completion/clarification (subagent log analysis)
+   - Test: `test_ensign_communication.py` using `InteractiveSession` + `LogParser` on subagent logs
+   - Depends on: spike 102 merged
+   - Verifiable: YES (once dependency is met)
+
+7. **AC7:** E2E test verifies FO does not issue premature agent shutdown between dispatch and completion
+   - Test: `test_ensign_communication.py` — inspect FO main session log for absence of shutdown-related SendMessage to agents before their completion signal
+   - Depends on: spike 102 merged
+   - Verifiable: YES (once dependency is met)
+
 ### Edge cases
 
 1. **Bare mode agents:** In bare mode, the Agent tool blocks until completion — there are no idle notifications and no team. The dispatch idle guardrail is irrelevant in bare mode. No special handling needed.
@@ -180,11 +215,13 @@ This infrastructure does not exist and building it is a separate project.
 
 5. **Ensign dispatched for non-interactive stage:** The captain communication section says "when dispatched for a stage that involves direct interaction with the captain." For non-interactive stages, the ensign continues using SendMessage for clarification and completion as before. No behavioral change.
 
+6. **Captain-to-ensign direct addressing:** Not currently possible in Claude Code (spike 102, Question 4). All captain messages go to the FO, which routes them. The ensign's "captain communication" instructions apply to text output visible to the captain, not to receiving captain messages directly. If Claude Code adds direct agent addressing in the future, the ensign instructions already cover the response pattern (direct text output).
+
 ### Checklist summary
 
-- [x] 1. Investigate test infrastructure — DONE. Static template checks are achievable. Interactive multi-agent E2E tests are NOT possible with current infrastructure (requires multi-turn harness that doesn't exist).
+- [x] 1. Investigate test infrastructure — DONE. Static template checks are achievable. InteractiveSession harness (spike 102) enables E2E behavioral tests via PTY driving + subagent log analysis. Captain cannot address ensigns directly (spike 102, Q4).
 - [x] 2. Research root causes — DONE. Problem 1: FO has no idle guardrail for dispatched agents (only gate-waiting). Problem 2: Ensign has no captain communication instructions (defaults to SendMessage for everything).
 - [x] 3. Propose approach — DONE. Two reference doc changes with specific before/after wording above.
-- [x] 4. Propose testing — DONE. Static template checks in `test_agent_content.py`. E2E idle/interaction tests are not achievable without new test infrastructure.
-- [x] 5. Define acceptance criteria — DONE. Five ACs, all verifiable via static checks or existing test runs.
-- [x] 6. Consider edge cases — DONE. Five edge cases analyzed (bare mode, single-entity, feedback stages, simultaneous signals, non-interactive stages).
+- [x] 4. Propose testing — DONE. Three tiers: static template checks (Tier 1), E2E subagent log analysis via InteractiveSession (Tier 2, depends on spike 102), idle guardrail behavioral test deferred (Tier 3, partial coverage only).
+- [x] 5. Define acceptance criteria — DONE. Seven ACs: five verifiable now via static checks, two verifiable after spike 102 merges.
+- [x] 6. Consider edge cases — DONE. Six edge cases analyzed (bare mode, single-entity, feedback stages, simultaneous signals, non-interactive stages, captain direct addressing).
