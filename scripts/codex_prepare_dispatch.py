@@ -162,12 +162,12 @@ def git_run(repo_root: Path, *args: str) -> None:
 
 def build_worker_prompt(payload: dict[str, object]) -> str:
     checklist = payload["checklist"]
-    if payload["role_asset_kind"] == "agent":
+    if payload["role_asset_kind"] == "skill":
         lines = [
             f"You are the packaged worker `{payload['dispatch_agent_id']}`.",
             "Resolve your role definition before doing anything else.",
-            "For packaged ids of the form `namespace:name`, read `~/.agents/skills/{namespace}/agents/{name}.md` first and follow it for this task.",
-            "After resolving the role, continue with the assignment below.",
+            f"If your operating contract was not already loaded via skill preloading, invoke the `{payload['dispatch_agent_id']}` skill now to load it.",
+            "After the skill is loaded, continue with the assignment below.",
             "",
             "Assignment:",
             f"dispatch_agent_id: {payload['dispatch_agent_id']}",
@@ -249,16 +249,22 @@ def main() -> int:
     dispatch_agent_id = str(next_stage.props.get("agent") or "spacedock:ensign")
     worker_key = re.sub(r"[^A-Za-z0-9._-]", "-", dispatch_agent_id)
     if dispatch_agent_id.startswith("spacedock:"):
-        role_asset_kind = "agent"
+        role_asset_kind = "skill"
         role_asset_name = dispatch_agent_id.split(":", 1)[1]
-        expected_asset = namespace_root / "agents" / f"{role_asset_name}.md"
+        expected_asset = namespace_root / "skills" / role_asset_name / "SKILL.md"
         if not expected_asset.is_file():
-            raise ValueError(f"Missing packaged agent asset for {dispatch_agent_id}: {expected_asset}")
+            raise ValueError(f"Missing packaged skill asset for {dispatch_agent_id}: {expected_asset}")
     else:
         role_asset_kind = "prompt"
         role_asset_name = ""
 
     stage_name = next_stage.name
+    current_stage_def = stages[current_index]
+    if current_stage_def.props.get("gate") and next_stage.props.get("terminal"):
+        raise ValueError(
+            f"Refusing to auto-advance gated entity {args.entity_slug} from {current_stage} to terminal stage {stage_name} before approval"
+        )
+
     branch_name = f"{worker_key}-{args.entity_slug}-{stage_name}"
     worktree_path = repo_root / ".spacedock" / "worktrees" / branch_name
     workflow_rel = workflow_dir.relative_to(repo_root)

@@ -23,8 +23,8 @@ When the workflow path is explicit, do not spend time rediscovering alternatives
 ## Packaged Worker Resolution
 
 - Treat names like `spacedock:ensign` as logical ids, not native Codex agent types.
-- For Spacedock-packaged ids, the worker resolves its role definition by convention:
-  `~/.agents/skills/{namespace}/agents/{name}.md`
+- For Spacedock-packaged ids, the worker resolves its role definition through skill preloading:
+  `~/.agents/skills/{namespace}/{name}/SKILL.md`
 
 Split worker identity into:
 - `dispatch_agent_id`
@@ -43,7 +43,7 @@ Speed and boundedness matter on the Codex path. Do not spend time on exploratory
 
 Avoid these wasteful actions unless a real blocker forces them:
 - rereading your own skill files after activation
-- opening the packaged worker agent asset just to inspect it
+- opening the packaged worker skill asset just to inspect it
 - reading the source code of `{workflow_dir}/status` instead of running it
 - scanning unrelated entities when the run is scoped to one entity
 - reading large files past the specific stage/entity sections you need

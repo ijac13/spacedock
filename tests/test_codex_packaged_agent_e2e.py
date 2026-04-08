@@ -70,11 +70,11 @@ def main():
     t.check("harness invoked the spacedock first officer skill", "spacedock:first-officer" in invocation_text)
     t.check("FO or worker output mentions spacedock packaged id", bool(re.search(r"spacedock:ensign", fo_text)))
     t.check(
-        "FO or worker output mentions packaged agent resolution",
+        "FO or worker output mentions packaged skill resolution",
         "spacedock:ensign" in fo_text and (
-            "~/.agents/skills/{namespace}/agents/{name}.md" in fo_text
+            "invoke the `spacedock:ensign` skill" in fo_text
+            or "role_asset_kind: skill" in fo_text
             or "role_asset_name: ensign" in fo_text
-            or "ensign.md" in fo_text
         ),
     )
     t.check("FO spawned a worker for the packaged agent path", log.spawn_count() >= 1)

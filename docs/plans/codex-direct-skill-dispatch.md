@@ -81,3 +81,13 @@ Make Codex dispatch packaged logical ids directly through skills and references,
   - `uv run tests/test_merge_hook_guardrail.py --runtime codex`
   - `uv run tests/test_codex_packaged_agent_e2e.py`
 - Spot-check that Claude-facing agent/skill files still match 085 expectations.
+
+## Stage Report
+
+1. DONE: Codex packaged dispatch no longer instructs workers to read `~/.agents/skills/{namespace}/agents/{name}.md`. The Codex helper prompt now points workers at the packaged skill contract instead.
+2. DONE: Codex packaged logical ids resolve through skills/references instead of `agents/{name}.md`. `spacedock:ensign` now resolves to `skills/ensign/SKILL.md` with `role_asset_kind: skill`.
+3. DONE: `scripts/codex_prepare_dispatch.py` and `scripts/test_lib.py` use the new skill-oriented payload shape consistently, and the gated-entity bug now fails fast instead of advancing to `done` before approval.
+4. DONE: Helper and unit tests were updated to assert the new Codex bootstrap contract and gated-entity behavior.
+5. DONE: Verification passed for `tests/test_gate_guardrail.py --runtime codex`, `tests/test_rejection_flow.py --runtime codex`, `tests/test_merge_hook_guardrail.py --runtime codex`, and `tests/test_codex_packaged_agent_e2e.py`. Additional focused checks passed for `tests/test_codex_prepare_dispatch.py` and `tests/test_codex_packaged_agent_ids.py`.
+6. DONE: Claude-side behavior and the 085 skill-preload design were checked with `tests/test_agent_content.py -q`, and the shared terminal helper stayed green with `tests/test_codex_finalize_terminal_entity.py -q`.
+7. DONE: The implementation work is ready for commit and has been committed on the assigned branch.
