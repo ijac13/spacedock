@@ -17,7 +17,6 @@ This file captures the shared first-officer semantics. Keep it aligned with `age
    - **ORPHANS** — entities with worktree fields, cross-referenced against filesystem and git state. Report anomalies rather than auto-redispatching.
    - **PR_STATE** — PR-pending entities with current merge state. Advance merged PRs.
    - **DISPATCHABLE** — entities ready for dispatch (same as `--next`).
-   - **LATEST_DEBRIEF** — filename of the most recent debrief. If present, read it and summarize key points to the captain: what was shipped last session, any unresolved issues, and what was queued as "next." This provides session continuity. If `none`, skip silently.
 
 ## Status Viewer
 
@@ -28,7 +27,7 @@ Invoke it as:
 python3 {spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {workflow_dir} [--next|--archived|--where ...|--boot]
 ```
 
-Use `--boot` at startup to gather mods, next ID, orphans, PR state, dispatchable entities, and latest debrief in a single call. Use `--next`, `--where "pr !="`, etc. for targeted queries during the event loop. `--boot` is incompatible with `--next`, `--archived`, and `--where`.
+Use `--boot` at startup to gather mods, next ID, orphans, PR state, and dispatchable entities in a single call. Use `--next`, `--where "pr !="`, etc. for targeted queries during the event loop. `--boot` is incompatible with `--next`, `--archived`, and `--where`.
 
 The `--set` flag updates entity frontmatter fields:
 - `--set {slug} field=value` sets a field

@@ -836,38 +836,9 @@ class TestBootOption(unittest.TestCase):
             next_lines = next_result.stdout.strip().split('\n')
             boot_disp_lines = lines[disp_idx + 1:]
             # Compare header and data (strip trailing empty lines)
-            boot_disp_lines = [l for l in boot_disp_lines if l and not l.startswith('LATEST_DEBRIEF')]
+            boot_disp_lines = [l for l in boot_disp_lines if l]
             for i, expected in enumerate(next_lines):
                 self.assertEqual(boot_disp_lines[i].rstrip(), expected.rstrip())
-
-    # AC10: LATEST_DEBRIEF with most recent file
-    def test_latest_debrief(self):
-        """LATEST_DEBRIEF reports the most recent debrief filename."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            make_pipeline(tmpdir, README_WITH_STAGES, {
-                'task.md': entity('001', 'Task', 'backlog'),
-            })
-            debriefs = os.path.join(tmpdir, '_debriefs')
-            os.makedirs(debriefs)
-            for name in ['2026-03-29-01.md', '2026-04-07-01.md', '2026-03-29-02.md']:
-                with open(os.path.join(debriefs, name), 'w') as f:
-                    f.write('---\ndate: test\n---\n')
-            result = run_status(tmpdir, '--boot', script_path=self.script_path,
-                               extra_env={'PATH': self._path_without_gh()})
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn('LATEST_DEBRIEF: 2026-04-07-01.md', result.stdout)
-
-    # AC11: LATEST_DEBRIEF: none
-    def test_latest_debrief_none(self):
-        """LATEST_DEBRIEF shows 'none' when no debriefs directory exists."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            make_pipeline(tmpdir, README_WITH_STAGES, {
-                'task.md': entity('001', 'Task', 'backlog'),
-            })
-            result = run_status(tmpdir, '--boot', script_path=self.script_path,
-                               extra_env={'PATH': self._path_without_gh()})
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn('LATEST_DEBRIEF: none', result.stdout)
 
     # AC12: --boot errors without stages block
     def test_boot_requires_stages(self):
@@ -916,7 +887,7 @@ class TestBootOption(unittest.TestCase):
 
     # AC14: section order
     def test_section_order(self):
-        """All sections appear in deterministic order: MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE, LATEST_DEBRIEF."""
+        """All sections appear in deterministic order: MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE."""
         with tempfile.TemporaryDirectory() as tmpdir:
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'task.md': entity('001', 'Task', 'backlog', '0.80'),
@@ -931,12 +902,10 @@ class TestBootOption(unittest.TestCase):
             orphans_pos = output.index('ORPHANS')
             pr_state_pos = output.index('PR_STATE')
             disp_pos = output.index('DISPATCHABLE')
-            debrief_pos = output.index('LATEST_DEBRIEF')
             self.assertLess(mods_pos, next_id_pos)
             self.assertLess(next_id_pos, orphans_pos)
             self.assertLess(orphans_pos, pr_state_pos)
             self.assertLess(pr_state_pos, disp_pos)
-            self.assertLess(disp_pos, debrief_pos)
 
     # Reviewer addition: mod file with no ## Hook: headings
     def test_mods_file_without_hooks(self):
