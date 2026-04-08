@@ -1,7 +1,7 @@
 ---
 id: 099
 title: "Agent-captain interaction guardrails: idle handling and direct communication"
-status: implementation
+status: validation
 source: "#8, CL observation"
 started: 2026-04-08T18:30:29Z
 completed:
@@ -9,7 +9,7 @@ verdict:
 score:
 worktree: .worktrees/spacedock-ensign-agent-captain-interaction-guardrails
 issue: "#8"
-pr:
+pr: #54
 ---
 
 Two related problems with how agents communicate with the captain:
