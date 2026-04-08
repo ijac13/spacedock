@@ -96,3 +96,29 @@ The template says "using the value exactly as it appears in frontmatter, e.g., `
 ### 5. Commit the change on the worktree branch — DONE
 
 Committed as `14b2f2b` on branch `spacedock-ensign/pr-merge-closes-issue`.
+
+## Stage Report — validation
+
+### 1. Verify AC1: entity with `issue` field set produces `Closes {issue}` — DONE
+
+The template (line 40 of `mods/pr-merge.md`) explicitly instructs: "If the entity has a non-empty `issue` field, append a blank line and `Closes {issue}`". An entity with `issue: "#48"` will produce a PR body containing `Closes #48`. **PASSED.**
+
+### 2. Verify AC2: entity with empty `issue` field produces NO `Closes` line — DONE
+
+The conditional is gated on "non-empty `issue` field". When `issue:` is empty or absent, no `Closes` line is appended — the body remains `Workflow entity: {entity title}`. **PASSED.**
+
+### 3. Verify AC3: issue value used verbatim from frontmatter — DONE
+
+The template says: "using the value exactly as it appears in frontmatter, e.g., `#48` or `owner/repo#48`". No parsing, stripping, or reformatting is performed on the `issue` value. **PASSED.**
+
+### 4. Verify AC4: change is in the canonical template — DONE
+
+The diff shows only `mods/pr-merge.md` (the canonical mod source) was modified. The workflow copies at `docs/plans/_mods/pr-merge.md` and `tests/fixtures/push-main-pipeline/_mods/pr-merge.md` are unchanged. Propagation to workflow copies is handled by the existing refit mechanism. **PASSED.**
+
+### 5. Verify diff is minimal — DONE
+
+The entire diff is a single line change on line 40 of `mods/pr-merge.md`. No unrelated modifications, no whitespace changes, no other files touched (besides the entity file itself). **PASSED.**
+
+### Recommendation: PASSED
+
+All five acceptance criteria are met. The change is a single-line edit to the canonical template that conditionally appends `Closes {issue}` when the entity has a linked issue. The wording is clear, the conditional logic is correct, and the implementation matches the ideation spec exactly.
