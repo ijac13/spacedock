@@ -1,7 +1,7 @@
 ---
 id: 087
 title: Codex direct skill dispatch - remove packaged agent wrapper dependency
-status: implementation
+status: validation
 source: CL - 085 gap review
 started: 2026-04-03T16:54:38Z
 completed:
