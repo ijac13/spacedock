@@ -1,13 +1,13 @@
 ---
 id: 099
 title: "Agent-captain interaction guardrails: idle handling and direct communication"
-status: validation
+status: done
 source: "#8, CL observation"
 started: 2026-04-08T18:30:29Z
-completed:
-verdict:
+completed: 2026-04-08T22:06:22Z
+verdict: PASSED
 score:
-worktree: .worktrees/spacedock-ensign-agent-captain-interaction-guardrails
+worktree: 
 issue: "#8"
 pr: #54
 ---
