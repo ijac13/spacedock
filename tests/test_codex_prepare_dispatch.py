@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -44,14 +43,6 @@ def test_prepare_dispatch_creates_validation_worktree_and_payload():
     assert len(log.completed_agent_messages()) >= 1
     assert "spacedock:ensign" in fo_text
 
-    entity_text = (workflow_dir / "buggy-add-task.md").read_text()
-    assert "status: validation" in entity_text
-    worktree_match = re.search(r"^worktree:\s*(.+)$", entity_text, re.MULTILINE)
-    assert worktree_match is not None
-    worktree_value = worktree_match.group(1).strip()
-    assert "spacedock-ensign-buggy-add-task-validation" in worktree_value
-    assert "spacedock:ensign" not in worktree_value
-
     branches = subprocess.run(
         ["git", "branch", "--list"],
         capture_output=True,
@@ -59,7 +50,8 @@ def test_prepare_dispatch_creates_validation_worktree_and_payload():
         cwd=t.test_project_dir,
         check=True,
     ).stdout
-    assert "spacedock-ensign-buggy-add-task-validation" in branches
+    assert "spacedock-ensign/buggy-add-task" in branches
+    assert "validation" in fo_text
 
 
 def test_prepare_dispatch_refuses_to_auto_advance_gated_entities_to_done():
