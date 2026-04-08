@@ -1,13 +1,13 @@
 ---
 id: 103
 title: "Bug: single-entity mode still creates teams instead of using bare-mode dispatch"
-status: implementation
+status: done
 source: CL observation
 started: 2026-04-08T19:16:08Z
-completed:
-verdict:
+completed: 2026-04-08T20:49:59Z
+verdict: PASSED
 score:
-worktree: .worktrees/spacedock-ensign-single-entity-skips-team-creation
+worktree: 
 issue:
 pr: #51
 ---
