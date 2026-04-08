@@ -1,7 +1,7 @@
 ---
 id: 097
 title: FO guardrail on repo edits before implementation dispatch
-status: implementation
+status: validation
 source: "#30"
 started: 2026-04-08T15:43:14Z
 completed:
