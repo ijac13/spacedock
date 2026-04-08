@@ -149,10 +149,11 @@ def main():
                 code_violations.append(f"{name}({file_path})")
         elif name == "Bash":
             cmd = inp.get("command", "")
-            # Check for shell writes to code/test files
+            # Strip harmless /dev/null redirections before checking for write indicators
+            cmd_stripped = re.sub(r'\d*>/dev/null', '', cmd)
             write_indicators = ("sed ", "echo ", "cat ", "tee ", ">", ">>")
             target_indicators = ("helper.py", "test_helper.py", "tests/")
-            if any(w in cmd for w in write_indicators) and any(t_ in cmd for t_ in target_indicators):
+            if any(w in cmd_stripped for w in write_indicators) and any(t_ in cmd for t_ in target_indicators):
                 code_violations.append(f"Bash({cmd[:80]})")
 
     if not code_violations:
@@ -177,7 +178,9 @@ def main():
                 mod_violations.append(f"{name}({file_path})")
         elif name == "Bash":
             cmd = inp.get("command", "")
-            if "_mods/" in cmd and any(w in cmd for w in ("sed ", "echo ", "cat ", "tee ", ">", ">>")):
+            # Strip harmless /dev/null redirections before checking for write indicators
+            cmd_stripped = re.sub(r'\d*>/dev/null', '', cmd)
+            if "_mods/" in cmd and any(w in cmd_stripped for w in ("sed ", "echo ", "cat ", "tee ", ">", ">>")):
                 mod_violations.append(f"Bash({cmd[:80]})")
 
     if not mod_violations:

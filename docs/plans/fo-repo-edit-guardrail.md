@@ -172,6 +172,9 @@ This test should also be added to the Testing Resources table in the workflow RE
 6. Commit all changes on the worktree branch — DONE
    Committed as `ede2439` on `spacedock-ensign/fo-repo-edit-guardrail`.
 
+7. Fix false positive in Bash write-detection heuristic (validation feedback) — DONE
+   `2>/dev/null` and `>/dev/null` stderr/stdout redirections matched the `>` write indicator, causing false positives on harmless commands like `ls -la _mods/ 2>/dev/null`. Fixed by stripping `/dev/null` redirections from the command string before checking write indicators. Applied to both the code/test and mod Bash heuristics.
+
 ### Validation Stage Report
 
 1. Verify AC1: FO Write Scope section exists with allow-list and prohibition — DONE
