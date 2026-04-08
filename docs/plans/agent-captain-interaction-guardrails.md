@@ -259,3 +259,24 @@ The static template check (Tier 1) is the reliable guardrail for the idle proble
 7. **Verify AC7 dependency documented** — DONE. AC7 (E2E FO idle guardrail test) is documented as depending on task 102 merge in both the ideation AC definitions (line 203) and the implementation report (line 241). Not silently skipped.
 
 Recommendation: **PASSED**
+
+## Stage Report: validation (E2E tests — AC6, AC7)
+
+1. **Create tests/test_agent_captain_interaction.py with AC6 and AC7 tests** — DONE. New E2E test file uses `run_first_officer()` (non-interactive `claude -p` mode) with the `spike-no-gate` fixture. After the FO session completes, the test finds subagent JSONL logs at `~/.claude/projects/<slug>/<session-id>/subagents/` and parses them with `LogParser`. AC6 checks ensign produces direct text output and SendMessage only targets team-lead. AC7 checks no premature shutdown commands appear before the FO acknowledges agent completion.
+
+   Key design decisions:
+   - Used `run_first_officer()` instead of `InteractiveSession` — the PTY-based harness has workspace trust dialog issues and unreliable session teardown. `claude -p` with `--agent` supports team dispatch and subagent logs equally well.
+   - Custom `_project_slug()` function replaces all non-alphanumeric characters (except dashes) with dashes, matching Claude Code's actual slug generation (the InteractiveSession harness only replaces `/`, missing `_` and other characters).
+   - AC7 tracks completion evidence from FO text output (not just tool_result entries), since the FO's text often mentions "complete"/"done" before sending shutdown messages.
+
+2. **Run the tests** — DONE. Both runs passed:
+   - Run 1: 6 passed, 0 failed. 1 subagent dispatched, 4 direct text blocks, 0 SendMessage calls, 0 shutdown commands.
+   - Run 2: 9 passed, 0 failed. 2 subagents dispatched, each with 3 direct text blocks and SendMessage only to team-lead. FO sent 2 shutdown messages but only after completion evidence.
+
+3. **Document results and any issues** — DONE. Documented in this report. Issues encountered and resolved:
+   - InteractiveSession workspace trust dialog blocking session startup (not used in final approach)
+   - InteractiveSession `stop()` hanging on `os.waitpid()` when claude process tree doesn't respond to SIGTERM (not used in final approach)
+   - `get_subagent_logs()` slug computation doesn't match Claude Code's actual slug (underscore not replaced with dash) — wrote custom `_project_slug()` in the test
+   - `LogParser.tool_calls()` returns `input` values that may not be dicts — added defensive `sm_to()`/`sm_msg()` helpers
+
+4. **Commit on worktree branch** — see below.
