@@ -1,9 +1,9 @@
 ---
 id: 099
 title: "Agent-captain interaction guardrails: idle handling and direct communication"
-status: backlog
+status: ideation
 source: "#8, CL observation"
-started:
+started: 2026-04-08T18:30:29Z
 completed:
 verdict:
 score:
