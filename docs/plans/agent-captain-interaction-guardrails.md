@@ -225,3 +225,19 @@ The static template check (Tier 1) is the reliable guardrail for the idle proble
 - [x] 4. Propose testing — DONE. Three tiers: static template checks (Tier 1), E2E subagent log analysis via InteractiveSession (Tier 2, depends on spike 102), idle guardrail behavioral test deferred (Tier 3, partial coverage only).
 - [x] 5. Define acceptance criteria — DONE. Seven ACs: five verifiable now via static checks, two verifiable after spike 102 merges.
 - [x] 6. Consider edge cases — DONE. Six edge cases analyzed (bare mode, single-entity, feedback stages, simultaneous signals, non-interactive stages, captain direct addressing).
+
+## Stage Report: implementation
+
+1. **Add DISPATCH IDLE GUARDRAIL to FO runtime doc** — DONE. Added paragraph to `references/claude-first-officer-runtime.md` after the Agent Back-off section. Wording matches the ideation report exactly: idle is normal between-turn state, three explicit shutdown conditions (completion message, captain request, stage transition), never interpret idle as stuck/unresponsive.
+
+2. **Add Captain Communication section to ensign runtime doc (with Shift+Up/Down correction)** — DONE. Added `## Captain Communication` section to `references/claude-ensign-runtime.md` after Clarification. Corrected the ideation report's claim that the captain cannot address ensigns directly — the section notes the captain switches to the ensign via Shift+Up/Down in the TUI.
+
+3. **Add static template tests to test_agent_content.py** — DONE. Two new tests:
+   - `test_assembled_claude_first_officer_has_dispatch_idle_guardrail`: Verifies guardrail heading, between-turn state language, three shutdown conditions, and "never interpret idle" wording.
+   - `test_assembled_claude_ensign_has_captain_communication`: Verifies Captain Communication section, direct text output instruction, SendMessage scoped to agent-to-agent, and Shift+Up/Down mention.
+
+4. **Run tests — verify they pass** — DONE. All 13 tests pass (11 existing + 2 new), no regressions.
+
+5. **Document that E2E behavioral tests (AC6, AC7) depend on task 102** — DONE. AC6 (ensign uses direct text for captain-visible output) and AC7 (FO does not issue premature shutdown) both require the InteractiveSession harness from task 102. Static template checks (AC1-AC5) are implemented and passing now. E2E behavioral tests will be added when task 102 merges.
+
+6. **Commit all changes on the worktree branch** — DONE (see below).

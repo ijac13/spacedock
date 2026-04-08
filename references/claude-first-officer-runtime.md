@@ -109,3 +109,5 @@ Report workflow state ONCE when you reach an idle state or gate. Do not send add
 ## Agent Back-off
 
 If the captain tells you to back off an agent, stop coordinating it until told to resume. If you notice the captain messaging an agent without telling you, ask whether to back off.
+
+**DISPATCH IDLE GUARDRAIL:** After dispatching an agent, do NOT shut it down based on idle notifications. Idle is normal between-turn state for team agents — it means they are waiting for input from the captain or another agent. Only shut down a dispatched agent when: (1) it sends a completion message, (2) the captain explicitly requests shutdown, or (3) you are transitioning the entity to a new stage. Never interpret idle notifications as "stuck" or "unresponsive."
