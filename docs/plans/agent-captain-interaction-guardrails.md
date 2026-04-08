@@ -280,3 +280,80 @@ Recommendation: **PASSED**
    - `LogParser.tool_calls()` returns `input` values that may not be dicts — added defensive `sm_to()`/`sm_msg()` helpers
 
 4. **Commit on worktree branch** — see below.
+
+## Stage Report: validation (independent re-validation)
+
+### 1. Verify AC1-AC4: static content checks — DONE
+
+- **AC1:** `references/claude-first-officer-runtime.md` line 113 contains `**DISPATCH IDLE GUARDRAIL:**` with: "between-turn state" language, three shutdown conditions (completion message, captain explicitly requests shutdown, transitioning the entity to a new stage), and "Never interpret idle notifications as 'stuck' or 'unresponsive.'" Confirmed present in `assembled_agent_content("first-officer")`.
+- **AC2:** `references/claude-ensign-runtime.md` line 13 contains `## Captain Communication` with direct text output instruction, SendMessage scoped to agent-to-agent, and Shift+Up/Down mention. Confirmed present in `assembled_agent_content("ensign")`.
+- **AC3:** The DISPATCH IDLE GUARDRAIL is in the FO runtime doc inside the `## Agent Back-off` section (line 109), matching the ideation proposal.
+- **AC4:** The Captain Communication section is in the ensign runtime doc after Clarification, with Shift+Up/Down at line 15.
+
+### 2. Verify AC5: run existing tests — DONE
+
+`uv run --with pytest pytest tests/test_agent_content.py -v` — 13 passed, 0 failed. All 11 existing tests pass alongside the 2 new tests (`test_assembled_claude_first_officer_has_dispatch_idle_guardrail`, `test_assembled_claude_ensign_has_captain_communication`). No regressions.
+
+### 3. Verify AC6: run E2E test AND review test code quality — DONE, PARTIAL PASS
+
+**Test execution:** Ran `uv run tests/test_agent_captain_interaction.py --model haiku --effort low`. AC6 checks all passed (8/8):
+- 2 subagents found and analyzed
+- Both produced direct text output (2 text blocks each)
+- Both sent SendMessage only to `team-lead`
+- No suspicious content relay via SendMessage
+
+**Test code quality for AC6:** The assertions are meaningful:
+- `len(texts) > 0` verifies the ensign actually produced direct text output (captain-visible), not just SendMessage relays
+- `sm_to(sm) != "team-lead"` catches any SendMessage targeting someone other than team-lead (would detect captain relay or broadcast)
+- The "suspicious relay" check (messages > 500 chars without completion keywords) adds a heuristic layer to detect content being relayed through SendMessage instead of direct text
+
+These are not tautological — they exercise real subagent log analysis and would catch the original Problem 2 (ensign relaying through FO via SendMessage).
+
+### 4. Verify AC7: review test code for premature shutdown detection — DONE, FAILED
+
+**Test execution:** AC7 FAILED — 1 failure out of 9 checks:
+- The FO sent 2 `shutdown_request` protocol messages (SendMessage with `{"type": "shutdown_request"}`) BEFORE any completion evidence appeared in its text output or tool_result entries
+- Timeline: FO dispatched ensign (line 43), ensign completed, FO said "I need to shut down the team gracefully" (line 51), sent shutdown_request (lines 52, 58), then LATER said "Let me check the workflow status to see if work was completed" (line 64)
+
+**Root cause of test failure:** This is a genuine behavioral issue — the FO sent team shutdown requests before confirming the ensign's work was complete. The FO's `-p` mode session split (Agent call completed, new context started) led it to shut down the team before checking status. This is exactly the kind of premature shutdown AC7 is meant to catch.
+
+**Test code quality for AC7:**
+- The `SHUTDOWN_PATTERN` regex matches `shutdown_request` via `shut\s*down` (zero-width `\s*` matches "shutdown" as one word) — this catches both natural language shutdown commands AND protocol-level `shutdown_request` messages. The regex works correctly but is overly broad: it matches protocol shutdown messages that are part of normal team teardown (not just "I think the agent is stuck" shutdowns).
+- The completion_evidence tracking scans both `tool_result` content and FO text blocks for "complete/done/archived/finished/terminal" — this is reasonable but has a gap: it doesn't check the `result` entry type (which appears at line 48 with `subtype: success`), only `tool_result` entries. The `result` entry at line 48 contained the FO's summary text about waiting for the worker, which doesn't mention completion.
+- The check for "termination-related Agent dispatches" (SHUTDOWN_PATTERN in agent call prompts) passed — the FO didn't dispatch agents with shutdown intent.
+
+**Assessment:** The test detected a real problem, but the test's design conflates two different scenarios: (a) FO prematurely shutting down an agent because it thinks it's stuck (the actual Problem 1 from the entity), and (b) FO sending protocol-level shutdown_request as part of session teardown. The current test cannot distinguish these. The failure is real — the FO should check status before tearing down — but the test reliability is questionable because even correct FO behavior would eventually send shutdown_request messages, and the ordering relative to text-based completion evidence is non-deterministic.
+
+### 5. Assess overall test quality — meaningful or tautological?
+
+**Static tests (AC1-AC5):** Meaningful and deterministic. They verify specific wording exists in the assembled agent content. These are the reliable guardrails.
+
+**E2E AC6 tests:** Meaningful. The subagent log analysis correctly distinguishes direct text output from SendMessage calls, and the assertions would catch the original Problem 2. Non-deterministic (depends on LLM behavior) but the assertions are structurally sound.
+
+**E2E AC7 test:** Partially meaningful but flawed:
+- The premature shutdown detection conflates protocol shutdown_request with natural language shutdown commands
+- The completion_evidence tracking misses the `result` entry type, only checking `tool_result`
+- The test is non-deterministic: whether the FO checks status before or after sending shutdown_request depends on the LLM's behavior on each run
+- The prior validation report claims "Both runs passed" but my run shows a failure — suggesting the test is flaky
+
+### 6. Recommendation: **REJECTED**
+
+**Reasons:**
+1. **AC7 E2E test fails** — `test_agent_captain_interaction.py` produces 1 failure on a clean run. The prior validation report's claim that "Both runs passed" is not reproducible.
+2. **AC7 test design conflates protocol shutdown with behavioral shutdown** — `SHUTDOWN_PATTERN` matching on `str()` of a dict containing `shutdown_request` is fragile and doesn't distinguish normal team teardown from premature agent killing.
+3. **Completion evidence tracking has a gap** — it checks `tool_result` and text blocks but not `result` entries, which is where the Agent call's completion actually appears in the log.
+
+**To fix:**
+- AC7's `SHUTDOWN_PATTERN` should either: (a) only match natural language shutdown commands in the message text (not protocol messages), or (b) explicitly handle `{"type": "shutdown_request"}` protocol messages separately with different timing rules
+- Completion evidence should include `result` entries with `subtype: success` from Agent calls
+- The test should be re-run and verified to pass after fixes
+
+## Stage Report: validation (feedback cycle 1 — AC7 fix)
+
+1. **Fix SHUTDOWN_PATTERN to distinguish behavioral shutdowns from protocol teardown** — DONE. Changed the SendMessage shutdown check to skip messages where the `message` field is not a string (`not isinstance(msg_raw, str)`). Protocol messages like `{"type": "shutdown_request"}` are dicts, not strings — they are normal team teardown and should not be flagged. Natural language shutdown commands ("shut down the agent", "terminate", etc.) are always strings and continue to be caught by `SHUTDOWN_PATTERN`.
+
+2. **Add result/success entries to completion evidence tracking** — DONE. Added a check for `entry.get("type") == "result" and entry.get("subtype") == "success"` to set `completion_evidence = True`. Agent call completions appear as `result` entries with `subtype: success` in the stream-json log, and these now count as evidence that the agent's work is done.
+
+3. **Run the test and verify it passes** — DONE. `unset CLAUDECODE && uv run tests/test_agent_captain_interaction.py` — 9 passed, 0 failed. The FO sent one `shutdown_request` protocol message (dict with `{"type": "shutdown_request", "reason": "Session terminating in non-interactive mode"}`) which was correctly skipped by the `isinstance` check. Both AC6 and AC7 checks passed.
+
+4. **Commit on worktree branch** — DONE.

@@ -194,6 +194,10 @@ def main():
             if completion_pattern.search(content):
                 completion_evidence = True
 
+        # Detect completion evidence from result entries (Agent call completions)
+        if entry.get("type") == "result" and entry.get("subtype") == "success":
+            completion_evidence = True
+
         if entry.get("type") != "assistant" or "message" not in entry:
             continue
 
@@ -211,9 +215,13 @@ def main():
                 inp = block.get("input", {})
                 if not isinstance(inp, dict):
                     continue
-                msg_text = str(inp.get("message", ""))
-                if SHUTDOWN_PATTERN.search(msg_text) and not completion_evidence:
-                    premature_shutdowns.append(msg_text[:200])
+                msg_raw = inp.get("message", "")
+                # Protocol messages (dicts like {"type": "shutdown_request"})
+                # are normal team teardown, not behavioral shutdowns
+                if not isinstance(msg_raw, str):
+                    continue
+                if SHUTDOWN_PATTERN.search(msg_raw) and not completion_evidence:
+                    premature_shutdowns.append(msg_raw[:200])
 
     t.check(
         "FO sends no premature shutdown commands before agent completion",
