@@ -1,13 +1,13 @@
 ---
 id: 102
 title: "Spike: multi-turn team test harness"
-status: backlog
+status: implementation
 source: "099 testing gap — no infra for interactive team behavior tests"
-started:
+started: 2026-04-08T18:49:36Z
 completed:
 verdict:
 score: 0.8
-worktree:
+worktree: .worktrees/spacedock-ensign-multi-turn-test-harness
 issue:
 pr:
 ---
