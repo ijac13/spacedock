@@ -101,10 +101,7 @@ def build_codex_first_officer_invocation_prompt(
         Treat that path as the explicit workflow target. Do not ask to discover alternatives.
         Stay tightly bounded to the requested goal.
         Let the skill bootstrap the packaged workflow contract and follow it directly.
-        For bounded single-entity dispatches, prefer the helper at `~/.agents/skills/spacedock/scripts/codex_prepare_dispatch.py`
-        instead of manually editing frontmatter, composing worktree names, or building the worker assignment by hand.
-        For bounded terminal-completion runs, prefer the helper at `~/.agents/skills/spacedock/scripts/codex_finalize_terminal_entity.py`
-        instead of freehand merge-hook, merge, archive, or worktree-cleanup steps.
+        Use the shared first-officer runtime directly for bounded dispatch and completion steps.
         Any worker you spawn in this run MUST use `fork_context=false` with a fully self-contained prompt.
         For bounded single-entity runs, treat the first completed worker summary as sufficient evidence for your final response unless it is missing the requested verdict or outcome.
         After `wait_agent(...)` returns the needed verdict or outcome, do not reread entity files, rerun `status`, or continue the loop. Respond once and stop immediately.

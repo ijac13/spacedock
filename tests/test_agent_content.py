@@ -97,9 +97,10 @@ def test_code_project_guardrails_cover_worktrees_and_scaffolding():
 
 def test_codex_runtime_docs_cover_merge_hook_finalize_path():
     text = read_text("references/codex-first-officer-runtime.md")
-    assert "codex_finalize_terminal_entity.py" in text
+    assert "codex_finalize_terminal_entity.py" not in text
     assert "merge hooks" in text.lower()
     assert "archive" in text.lower()
+    assert "fork_context=false" in text
 
 
 def test_assembled_claude_first_officer_has_gate_guardrails():
