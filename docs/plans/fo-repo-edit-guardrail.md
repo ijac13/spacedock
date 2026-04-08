@@ -151,3 +151,23 @@ This test should also be added to the Testing Resources table in the workflow RE
 
 5. Consider edge cases (entity file creation, frontmatter updates, mod execution, archive moves, Feedback Cycles) — DONE
    Five edge cases documented: entity creation (allow-listed as state management), frontmatter updates (already covered), mod execution vs. writing (clarify distinction), archive moves (already legitimate), Feedback Cycles section (explicit exception to entity-body-belongs-to-workers rule).
+
+### Implementation Stage Report
+
+1. Add `## FO Write Scope` section to `references/first-officer-shared-core.md` with allow-list and prohibition — DONE
+   Added after `## State Management`. Allow-list covers: entity frontmatter, new entity files, Feedback Cycles section, archive moves, state-transition commits. Prohibition covers: code files, test files, mod files, scaffolding files, entity body content beyond Feedback Cycles. Enforcement principle: changes affecting repo behavior/content beyond state tracking must go through a dispatched worker.
+
+2. Add cross-reference to `references/code-project-guardrails.md` — DONE
+   Added one-line cross-reference under `## Paths and File Scope` pointing to `first-officer-shared-core.md` FO Write Scope section.
+
+3. Create `tests/test_repo_edit_guardrail.py` E2E test — DONE
+   Follows `test_scaffolding_guardrail.py` pattern. Phase 1: fixture setup with `helper.py`, `tests/test_helper.py`, and `_mods/` targets. Phase 2: static pre-checks verifying the FO Write Scope section appears in assembled agent content. Phase 3: runs FO with tempting prompt asking to fix code, update tests, and create a mod. Phase 4: log inspection for Write/Edit/Bash violations targeting code, test, and mod files.
+
+4. Add test to Testing Resources table in `docs/plans/README.md` — DONE
+   Added row: `Repo edit guardrail E2E test | tests/test_repo_edit_guardrail.py | FO write scope guardrail, code/test/mod edit rejection`.
+
+5. Verify AC1-6 (static content checks) pass against changes — DONE
+   All grep-based checks pass: section heading present, allow-list items present (5/5), prohibition items present (5/5), enforcement principle present, cross-reference present. Manual review confirms all legitimate FO write operations are covered by the allow-list.
+
+6. Commit all changes on the worktree branch — DONE
+   Committed as `ede2439` on `spacedock-ensign/fo-repo-edit-guardrail`.
