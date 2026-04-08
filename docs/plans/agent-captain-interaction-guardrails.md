@@ -241,3 +241,21 @@ The static template check (Tier 1) is the reliable guardrail for the idle proble
 5. **Document that E2E behavioral tests (AC6, AC7) depend on task 102** — DONE. AC6 (ensign uses direct text for captain-visible output) and AC7 (FO does not issue premature shutdown) both require the InteractiveSession harness from task 102. Static template checks (AC1-AC5) are implemented and passing now. E2E behavioral tests will be added when task 102 merges.
 
 6. **Commit all changes on the worktree branch** — DONE (see below).
+
+## Stage Report: validation
+
+1. **Verify AC1: FO has DISPATCH IDLE GUARDRAIL** — DONE. `references/claude-first-officer-runtime.md` line 113 contains `**DISPATCH IDLE GUARDRAIL:**` with between-turn state language, three explicit shutdown conditions (completion message, captain requests shutdown, stage transition), and "Never interpret idle notifications as 'stuck' or 'unresponsive.'"
+
+2. **Verify AC2: Ensign has Captain Communication section** — DONE. `references/claude-ensign-runtime.md` line 13 contains `## Captain Communication` with direct text output instruction, SendMessage scoped to agent-to-agent, and Shift+Up/Down mention.
+
+3. **Verify AC3: Guardrail in correct location in FO runtime doc** — DONE. The DISPATCH IDLE GUARDRAIL paragraph is at line 113, inside the `## Agent Back-off` section (line 109), matching the proposed location from ideation.
+
+4. **Verify AC4: Ensign section mentions Shift+Up/Down** — DONE. Line 15 contains "Shift+Up/Down in the TUI" explaining how the captain switches to the ensign agent.
+
+5. **Verify AC5: All tests pass** — DONE. `uv run --with pytest pytest tests/test_agent_content.py -v` — 13 passed, 0 failed. The two new tests (`test_assembled_claude_first_officer_has_dispatch_idle_guardrail`, `test_assembled_claude_ensign_has_captain_communication`) both pass alongside all 11 existing tests.
+
+6. **Verify AC6 dependency documented** — DONE. AC6 (E2E ensign communication pattern test) is documented as depending on task 102 merge in both the ideation AC definitions (line 198) and the implementation report (line 241). Not silently skipped.
+
+7. **Verify AC7 dependency documented** — DONE. AC7 (E2E FO idle guardrail test) is documented as depending on task 102 merge in both the ideation AC definitions (line 203) and the implementation report (line 241). Not silently skipped.
+
+Recommendation: **PASSED**
