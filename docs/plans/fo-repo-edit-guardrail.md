@@ -1,13 +1,13 @@
 ---
 id: 097
 title: FO guardrail on repo edits before implementation dispatch
-status: ideation
+status: implementation
 source: "#30"
 started: 2026-04-08T15:43:14Z
 completed:
 verdict:
 score:
-worktree:
+worktree: .worktrees/spacedock-ensign-fo-repo-edit-guardrail
 issue: "#30"
 pr:
 ---
