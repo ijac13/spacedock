@@ -1,13 +1,13 @@
 ---
 id: 087
 title: Codex direct skill dispatch - remove packaged agent wrapper dependency
-status: ideation
+status: implementation
 source: CL - 085 gap review
 started: 2026-04-03T16:54:38Z
 completed:
 verdict:
 score: 0.72
-worktree:
+worktree: .worktrees/ensign-codex-direct-skill-dispatch
 issue:
 pr:
 ---
@@ -21,6 +21,21 @@ That leaves an unnecessary wrapper layer in the Codex path:
 - `codex_prepare_dispatch.py` emits `role_asset_kind: agent` for packaged workers
 
 This means 085 fixed Claude boot mechanics but did not finish the architectural simplification. We still need `agents/` in Codex even though the real source of truth is already split across `skills/` and `references/`.
+
+## Current regression on main
+
+The current live Codex gate test on `main` shows a concrete helper/runtime bug that overlaps this task's scope:
+
+- the first officer presents the correct gate review and says it is waiting for approval
+- but `codex_prepare_dispatch.py` is still invoked for the entity and returns a payload for the terminal `done` stage
+- that helper mutates main-branch frontmatter to `status: done` and writes a `done` worktree path before approval exists
+
+This means the next implementation slice should address both problems together:
+
+1. remove the remaining Codex dependency on packaged agent wrappers
+2. stop Codex dispatch helpers from advancing gated entities past the gate before approval
+
+The combined fix belongs in the same surface area (`scripts/codex_prepare_dispatch.py`, `scripts/test_lib.py`, Codex runtime prompts, and helper tests), so it should be handled as one change rather than two unrelated patches.
 
 ## Goal
 
@@ -55,6 +70,7 @@ Make Codex dispatch packaged logical ids directly through skills and references,
 4. Codex helper tests are updated to assert the new bootstrap contract.
 5. Live Codex tests for gate, rejection, merge-hook, and packaged dispatch still pass.
 6. Claude-side runtime behavior and 085's skill-preload design remain intact.
+7. The live Codex gate test no longer writes `status: done` for a gated entity before approval.
 
 ## Test plan
 
