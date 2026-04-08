@@ -20,14 +20,44 @@ def _clean_env() -> dict[str, str]:
 def _strip_ansi(text: str) -> str:
     """Remove ANSI escape sequences from terminal output."""
     return re.sub(
-        r"\x1b\[[>?]?[0-9;]*[A-Za-z]"
-        r"|\x1b\][^\x07]*\x07"
-        r"|\x1b[()][A-Z0-9]"
-        r"|\x1b>[0-9;]*[a-zA-Z]"
-        r"|\x1b<[a-zA-Z]",
+        r"\x1b\[[>?]?[0-9;]*[A-Za-z]"  # CSI sequences (incl. private modes)
+        r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC sequences (BEL or ST terminator)
+        r"|\x1b[()][A-Z0-9]"  # Character set selection
+        r"|\x1b>[0-9;]*[a-zA-Z]"  # DEC private set
+        r"|\x1b<[a-zA-Z]"  # DEC private reset
+        r"|\x1b[=#][0-9]*"  # Keypad/charset mode
+        r"|\x1b[ -/][0-9A-Z@-~]"  # Two-byte escape sequences
+        r"|\x1b[78DEHM]"  # Single-char escapes (save/restore cursor, etc.)
+        r"|\x07"  # Bare BEL
+        r"|\r"  # Carriage return (prevents doubled lines)
+        r"|\x1b\[[\d;]*m",  # SGR (color/style) — explicit for clarity
         "",
         text,
     )
+
+
+# Standard key escape sequences for PTY input
+_KEY_SEQUENCES: dict[str, bytes] = {
+    # Arrow keys
+    "up": b"\x1b[A",
+    "down": b"\x1b[B",
+    "right": b"\x1b[C",
+    "left": b"\x1b[D",
+    # Shift + arrow (modifier 2 = Shift)
+    "shift-up": b"\x1b[1;2A",
+    "shift-down": b"\x1b[1;2B",
+    "shift-right": b"\x1b[1;2C",
+    "shift-left": b"\x1b[1;2D",
+    # Common control keys
+    "enter": b"\r",
+    "escape": b"\x1b",
+    "tab": b"\t",
+    "backspace": b"\x7f",
+    # Ctrl combinations
+    "ctrl-c": b"\x03",
+    "ctrl-d": b"\x04",
+    "ctrl-z": b"\x1a",
+}
 
 
 class InteractiveSession:
@@ -110,6 +140,23 @@ class InteractiveSession:
         time.sleep(0.05)
         os.write(self._fd, b"\r")
 
+    def send_key(self, key_name: str) -> None:
+        """Send a special key sequence by name.
+
+        Supported keys: up, down, left, right, shift-up, shift-down,
+        shift-left, shift-right, enter, escape, tab, backspace,
+        ctrl-c, ctrl-d, ctrl-z.
+        """
+        if not self._started or self._fd is None:
+            raise RuntimeError("Session not started")
+        seq = _KEY_SEQUENCES.get(key_name.lower())
+        if seq is None:
+            raise ValueError(
+                f"Unknown key {key_name!r}. "
+                f"Known keys: {', '.join(sorted(_KEY_SEQUENCES))}"
+            )
+        os.write(self._fd, seq)
+
     def wait_for(self, pattern: str, timeout: float = 30.0, min_matches: int = 2) -> bool:
         """Wait for a regex pattern to appear in output produced after the last send().
 
@@ -170,29 +217,45 @@ class InteractiveSession:
         match = re.search(r"session[:\s]+([0-9a-f-]{36})", clean, re.IGNORECASE)
         return match.group(1) if match else None
 
-    def get_subagent_logs(self, project_dir: str | Path) -> list[Path]:
-        """Find subagent JSONL logs for this session in the claude projects directory.
+    def get_subagent_logs(self, project_dir: str | Path) -> dict[str, Path]:
+        """Find subagent JSONL logs for this session.
 
-        The session must have been started with a specific project directory
-        so we can locate the logs under ~/.claude/projects/<slug>/<session-id>/subagents/.
+        Looks under ~/.claude/projects/<slug>/ for the most recently modified
+        session directory that contains a subagents/ subdirectory.
+
+        Returns a dict mapping agent ID (from filename) to the JSONL log path.
+        Agent metadata (agentType, description) can be read from the
+        corresponding .meta.json file if it exists.
         """
         claude_dir = Path.home() / ".claude" / "projects"
         project_slug = str(Path(project_dir).resolve()).replace("/", "-")
-        if project_slug.startswith("-"):
-            project_slug = project_slug
-        else:
+        if not project_slug.startswith("-"):
             project_slug = "-" + project_slug
 
         project_session_dir = claude_dir / project_slug
         if not project_session_dir.is_dir():
-            return []
+            return {}
 
-        logs = []
+        # Find the most recently modified session directory with subagent logs
+        best_dir: Path | None = None
+        best_mtime: float = 0
         for session_dir in project_session_dir.iterdir():
-            if session_dir.is_dir():
-                subagents_dir = session_dir / "subagents"
-                if subagents_dir.is_dir():
-                    logs.extend(sorted(subagents_dir.glob("*.jsonl")))
+            if not session_dir.is_dir():
+                continue
+            subagents_dir = session_dir / "subagents"
+            if subagents_dir.is_dir():
+                mtime = subagents_dir.stat().st_mtime
+                if mtime > best_mtime:
+                    best_mtime = mtime
+                    best_dir = subagents_dir
+
+        if best_dir is None:
+            return {}
+
+        logs: dict[str, Path] = {}
+        for log_file in sorted(best_dir.glob("*.jsonl")):
+            # Filename is agent-<id>.jsonl — use stem as the key
+            logs[log_file.stem] = log_file
         return logs
 
     def _drain(self, timeout: float = 0.5) -> None:

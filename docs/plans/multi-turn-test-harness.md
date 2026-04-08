@@ -136,6 +136,28 @@ Turn 2 (BETA_MARKER): PASS
 Multi-turn: PASS
 ```
 
+### Implementation finishing work
+
+**Key sequence support** — **DONE**
+- Added `send_key(key_name)` method to `InteractiveSession`
+- Supports: arrow keys, Shift+arrow (Shift+Up `\x1b[1;2A`, Shift+Down `\x1b[1;2B`), Enter, Escape, Tab, Backspace, Ctrl+C/D/Z
+- Key map defined in `_KEY_SEQUENCES` dict for easy extension
+- Validates key name and session state before sending
+
+**Subagent log discovery** — **DONE**
+- Rewrote `get_subagent_logs()` to return `dict[str, Path]` (agent ID → log path) instead of flat list
+- Selects the most recently modified session directory with subagent logs (by `st_mtime`)
+- Agent metadata available via `.meta.json` sidecar files
+
+**ANSI stripping** — **DONE**
+- Extended `_strip_ansi()` to handle: OSC sequences with ST terminator (`\x1b\\`), keypad/charset mode escapes, two-byte escape sequences, DEC single-char escapes (`\x1b7`, `\x1b8`, etc.), bare BEL, carriage returns
+- Added inline comments for each regex branch
+
+**POC test update** — **DONE**
+- Split into offline tests (no claude needed) and live tests (`--live` flag)
+- Offline tests cover: ANSI stripping, key sequence definitions, `send_key` validation, empty log discovery
+- Live tests demonstrate: multi-turn, Shift+Down key send, subagent log collection
+
 ### Completion checklist
 
 1. Answer spike question 1: PTY driving feasibility — **DONE**
@@ -144,3 +166,8 @@ Multi-turn: PASS
 4. Answer spike question 4: Captain-to-ensign switching — **DONE** (not possible)
 5. Build proof of concept (if feasible) — **DONE** (`test_lib_interactive.py` + passing POC test)
 6. Commit findings and any code on the worktree branch — **DONE**
+7. Add key sequence support (send_key method with Shift+Up/Down) — **DONE**
+8. Robust subagent log discovery — **DONE**
+9. ANSI stripping improvements — **DONE**
+10. Update POC test with team switching demonstration — **DONE**
+11. Commit all changes — **DONE**
