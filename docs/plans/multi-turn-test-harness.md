@@ -9,7 +9,7 @@ verdict:
 score: 0.8
 worktree: .worktrees/spacedock-ensign-multi-turn-test-harness
 issue:
-pr:
+pr: #52
 ---
 
 We can't test team interaction behavior (idle handling, captain-to-ensign communication, agent routing) because all tests use `claude -p` (single prompt, single response). This spike investigates what's feasible and builds a minimum viable multi-turn test harness.
