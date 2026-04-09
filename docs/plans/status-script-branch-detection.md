@@ -108,3 +108,45 @@ The `os.path.isdir(dir_path)` check was not modified. Existing test `test_orphan
 ### 6. Run all tests — DONE
 
 Full test suite (65 tests) passes with zero failures.
+
+## Stage Report
+
+### Validation
+
+#### 1. Run the full test suite and report results — DONE
+
+Ran all 65 tests via `python3 -m unittest` (pytest not available in this environment). All 65 tests pass with zero failures in 5.4s. No warnings or unexpected output.
+
+#### 2. Verify AC1: namespaced branches with `/` correctly detected — DONE
+
+Test `test_orphans_namespaced_branch_detected` exercises this case. The test creates a worktree directory at `.worktrees/ensign-feature-name`, sets up porcelain output mapping that path to `refs/heads/ensign/feature-name`, and asserts `BRANCH_EXISTS: yes`. The test passes. The implementation resolves the worktree path via `os.path.realpath()` and looks it up in the `worktree_paths` dict, bypassing the old `os.path.basename()` name-guessing entirely.
+
+#### 3. Verify AC2: missing worktrees correctly reported as non-existing — DONE
+
+Test `test_orphans_missing_worktree_detected` creates an entity with `worktree: .worktrees/ensign-ghost` but neither creates the directory nor includes it in the porcelain output. Asserts both `DIR_EXISTS: no` and `BRANCH_EXISTS: no`. The test passes.
+
+#### 4. Verify AC3: simple branches without `/` still work — no regression — DONE
+
+Test `test_orphans_simple_branch_still_works` uses `refs/heads/remove-codex-dispatcher` (no namespace separator). Asserts `BRANCH_EXISTS: yes`. The test passes, confirming no regression for simple branch names.
+
+#### 5. Verify AC4: DIR_EXISTS behavior unchanged — DONE
+
+The `os.path.isdir(dir_path)` check at line 338 was not modified by this change. The pre-existing test `test_orphans_with_existence_checks` continues to pass. DIR_EXISTS logic is independent of the branch detection fix.
+
+#### 6. Code review of `scan_orphans()` porcelain parsing — DONE
+
+Reviewed the implementation at `skills/commission/bin/status:312-347`.
+
+**Correctness assessment**: The porcelain parsing correctly handles the git worktree list format. Each worktree block starts with `worktree <path>`, contains a `branch <ref>` line, and ends with a blank line. The state machine (`current_path` set on `worktree` line, consumed on `branch` line, reset on blank line) correctly tracks this.
+
+**Edge cases considered**:
+- **Detached HEAD worktrees**: These have `HEAD <sha>` and `detached` lines but no `branch` line. The code handles this correctly — `current_path` is set but never stored in `worktree_paths` because no `branch` line fires, then `current_path` is reset on the blank line. This means detached-HEAD worktrees are treated as "branch not exists", which is correct since they have no branch.
+- **Bare worktrees**: The main worktree entry has `branch refs/heads/main` and is correctly captured. This doesn't affect orphan detection since the main worktree wouldn't match any entity's worktree path.
+- **Symlink resolution**: Both sides use `os.path.realpath()` — the porcelain path at line 326 and the entity's resolved path at line 339. This ensures consistent comparison even if paths involve symlinks.
+- **Value stored**: The dict stores `True` as the value (line 326) — the branch name itself is discarded. This is fine since the function only needs to know whether a worktree path has a branch, not what the branch name is.
+
+**One minor note**: The `worktree_paths` variable is a dict used as a set (`worktree_paths[key] = True`). An actual `set()` would be marginally cleaner, but this is a style preference, not a correctness issue.
+
+#### 7. Recommendation — PASSED
+
+All four acceptance criteria are met with passing tests. The code change is correct, minimal (net -2 lines), and handles edge cases properly. The porcelain parsing state machine is sound. No regressions detected across the full 65-test suite.
