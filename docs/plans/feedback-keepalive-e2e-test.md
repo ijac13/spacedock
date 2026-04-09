@@ -217,3 +217,33 @@ The shared-core line 112 auto-bounces REJECTED recommendations into the feedback
 4. Design the test flow (what to send, what to assert) — DONE
 5. Define how to detect premature shutdown (log inspection, team config, output scanning) — DONE
 6. Define acceptance criteria with test plan — DONE
+
+## Stage Report: implementation
+
+### 1. Create test fixture at tests/fixtures/keepalive-pipeline/ — DONE
+
+Created `tests/fixtures/keepalive-pipeline/` with:
+- `README.md` — workflow definition with `backlog → implementation (worktree) → validation (worktree, fresh, feedback-to: implementation, gate) → done (terminal)`
+- `keepalive-test-task.md` — seed entity at `status: backlog` with acceptance criteria for an `add(a, b)` function
+- `math_ops.py` — deliberately buggy implementation (`return a - b`) to force validation rejection
+- `tests/test_add.py` — test suite that will fail against the buggy implementation
+
+### 2. Write E2E test at tests/test_feedback_keepalive.py with Tier 1 and Tier 2 assertions — DONE
+
+Created `tests/test_feedback_keepalive.py` with:
+- **Tier 1 assertion:** Temporal log scanning between implementation completion and validation dispatch — verifies no shutdown SendMessage targets the implementation agent during this window
+- **Tier 2 assertion:** After REJECTED signal, verifies feedback routed via SendMessage to the kept-alive implementation agent (not via fresh Agent() dispatch)
+- `scan_keepalive_events()` function walks JSONL log entries in order, tracking implementation dispatch, completion, validation dispatch, shutdown messages, rejection signals, and feedback routing method
+- Falls back gracefully (SKIP) when pipeline doesn't progress far enough within budget
+
+### 3. Test follows existing patterns (test_lib.py, LogParser, run_first_officer) — DONE
+
+Uses `TestRunner`, `LogParser`, `create_test_project`, `setup_fixture`, `install_agents`, `run_first_officer`, `git_add_commit`, and `rejection_signal_present` from `scripts/test_lib.py`. Follows the same Phase 1/2/3 structure as `test_rejection_flow.py` and `test_reuse_dispatch.py`. Includes static template checks against `first-officer-shared-core.md`.
+
+### 4. Test is runnable with standard invocation — DONE
+
+Runnable via `unset CLAUDECODE && uv run tests/test_feedback_keepalive.py`. File is executable with `#!/usr/bin/env -S uv run` shebang. Supports `--model`, `--effort`, `--agent` flags consistent with other tests.
+
+### 5. All changes committed on branch — DONE
+
+All files committed on branch `spacedock-ensign/feedback-keepalive-e2e-test`.
