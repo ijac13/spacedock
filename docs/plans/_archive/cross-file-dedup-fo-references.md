@@ -1,13 +1,13 @@
 ---
 id: 108
 title: Cross-file deduplication in FO reference files
-status: validation
+status: done
 source: CL — PR #57
 started: 2026-04-09T18:16:10Z
-completed:
-verdict:
+completed: 2026-04-09T19:26:48Z
+verdict: PASSED
 score:
-worktree: .worktrees/spacedock-ensign-cross-file-dedup-fo-references
+worktree: 
 issue:
 pr: "#57"
 ---
