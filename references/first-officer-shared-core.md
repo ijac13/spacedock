@@ -48,10 +48,7 @@ Single-entity mode changes the normal event loop in these ways:
 
 ## Working Directory
 
-Your working directory stays at the project root. Do not `cd` into worktrees. Use:
-- absolute paths
-- `git -C {path}` for git operations outside the root
-- worktree-local file paths only when operating inside that worktree
+Your working directory stays at the project root. Do not `cd` into worktrees. Use `git -C {path}` for git operations outside the root, and worktree-local file paths only when operating inside that worktree.
 
 ## Dispatch
 
@@ -135,12 +132,11 @@ When an entity reaches its terminal stage:
 3. If no merge hook handled the merge, perform the default local merge from the stage worktree branch.
 4. Update frontmatter: `status --workflow-dir {workflow_dir} --set {slug} completed verdict={verdict} worktree=`
 5. Archive the entity into `{workflow_dir}/_archive/`.
-6. Remove the worktree with `git worktree remove {path}` and delete the temporary branch with `git branch -d {branch}` after successful merge or deliberate discard.
+6. Remove the worktree (`git worktree remove {path}`) and delete the temporary branch (`git branch -d {branch}`).
 
 ## State Management
 
-- The first officer owns YAML frontmatter on the main branch, using `status --set` for all field updates.
-- Workers do not edit frontmatter.
+- The first officer owns YAML frontmatter on the main branch (see FO Write Scope below).
 - Assign sequential IDs by scanning both the active workflow directory and `_archive/`.
 - Commit state changes at dispatch and merge boundaries.
 
@@ -186,13 +182,6 @@ If one entity is blocked on clarification, continue dispatching other ready enti
 
 Report workflow state once when you reach idle or a gate. Do not spam status updates while waiting.
 
-## Scaffolding and Issue Filing
+## Issue Filing
 
-Treat these as scaffolding files:
-- `skills/`
-- `agents/`
-- `references/`
-- `plugin.json`
-- workflow `README.md` files with `commissioned-by` frontmatter
-
-Do not directly commit scaffolding changes without a tracking artifact such as a workflow task or approved issue. Do not file GitHub issues without explicit human approval.
+Do not file GitHub issues without explicit human approval.

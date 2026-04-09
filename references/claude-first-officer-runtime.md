@@ -9,22 +9,15 @@ At startup (after reading the README, before dispatch):
 1. Derive the project name from `basename $(git rev-parse --show-toplevel)` and the directory basename from the workflow directory path.
 2. Probe for team support: `ToolSearch(query="select:TeamCreate", max_results=1)`.
 3. If the result contains a TeamCreate definition, run `TeamCreate(team_name="{project_name}-{dir_basename}")`.
-   - **IMPORTANT:** TeamCreate may return a different `team_name` than requested (e.g., if the name is taken by a stale session, it falls back to a random name). Always read the returned `team_name` from the TeamCreate result and store it — use this actual team name for all subsequent dispatch calls, not the originally requested name.
+   - **IMPORTANT:** TeamCreate may return a different `team_name` than requested. Always store the returned `team_name` and use it for all subsequent calls.
    - **NEVER delete existing team directories** (`rm -rf ~/.claude/teams/...`) — stale directories belong to other sessions.
-4. If ToolSearch returns no match, enter **bare mode**. Report the following to the captain and skip TeamCreate:
+4. If ToolSearch returns no match, enter **bare mode**: dispatch is sequential (one subagent at a time), completions return inline, and feedback cycles are sequential re-dispatches. Report the mode to the captain. All workflow functionality is preserved.
 
-   ```
-   Teams are not available in this session. Operating in bare mode:
-   - Dispatch is sequential (one agent at a time via subagent)
-   - Agent completion returns via subagent mechanism instead of messaging
-   - Feedback cycles require sequential re-dispatch instead of inter-agent messaging
-
-   All workflow functionality is preserved. Dispatch and gate behavior are unchanged.
-   ```
+**TeamCreate recovery procedure:** Call TeamDelete in its own message (no other tool calls). Wait for the result. Then call TeamCreate in a subsequent message. Store the returned `team_name` (it may differ). Do NOT combine TeamDelete, TeamCreate, or Agent dispatch in the same message — Claude Code executes all tool calls in a message in parallel, so dependent calls will race.
 
 **TeamCreate failure recovery:** If TeamCreate fails mid-session:
 
-- **"Already leading team" error:** Call TeamDelete in its own message (no other tool calls). Wait for the result. Then call TeamCreate in a subsequent message. Do NOT combine TeamDelete, TeamCreate, or Agent dispatch in the same message — Claude Code executes all tool calls in a message in parallel, so the dependent calls will race.
+- **"Already leading team" error:** Follow the recovery procedure above.
 - **Other errors (quota, internal):** Fall back to bare mode for the remainder of the session. Report the failure and mode change to the captain.
 - **Block all Agent dispatch** until team setup resolves (either TeamCreate succeeds or bare mode is entered). Never dispatch agents while team state is uncertain.
 
@@ -38,30 +31,25 @@ Split worker identity into:
 - `dispatch_agent_id` — the logical name used in the Agent tool's `subagent_type` parameter (e.g., `spacedock:ensign`)
 - `worker_key` — filesystem-safe stem for worktrees and branches. Derive by replacing `:` with `-` (e.g., `spacedock:ensign` → `spacedock-ensign`). For bare agent names without a namespace (e.g., `ensign`), `worker_key` equals `dispatch_agent_id`.
 
-Use `worker_key` in worktree paths (`.worktrees/{worker_key}-{slug}`) and branch names (`{worker_key}/{slug}`). Never leak `:` into filesystem paths.
+Use `worker_key` in worktree paths (`.worktrees/{worker_key}-{slug}`) and branch names (`{worker_key}/{slug}`).
 
 ## Dispatch Adapter
 
 Use the Agent tool to spawn each worker. **Use Agent() for initial dispatch** — SendMessage is only used in the completion path to advance a reused agent to its next stage. **NEVER use `subagent_type="first-officer"`** — that clones yourself instead of dispatching a worker.
 
-**Sequencing rule:** Team lifecycle calls (TeamCreate, TeamDelete) and Agent dispatch calls must NEVER appear in the same tool-call message. Claude Code executes all tool calls within a message in parallel — if TeamCreate fails, Agent calls in the same message still execute, spawning orphan workers. Always resolve team state in one message, then dispatch agents in a subsequent message.
+**Sequencing rule:** Team lifecycle calls (TeamCreate, TeamDelete) and Agent dispatch calls must NEVER appear in the same tool-call message — parallel execution causes races (see recovery procedure above). Always resolve team state in one message, then dispatch agents in a subsequent message.
 
 **REQUIRED — Team health check (not in bare mode or single-entity mode):**
 
-**STOP. Do NOT call Agent() until you have verified the team is healthy.** Run `test -f ~/.claude/teams/{team_name}/config.json` via the Bash tool. You MUST do this before every Agent dispatch batch. If the command succeeds, proceed to dispatch. If the file is missing, the team's on-disk state has been corrupted — STOP and recover:
+**STOP. Do NOT call Agent() until you have verified the team is healthy.** Run `test -f ~/.claude/teams/{team_name}/config.json` via the Bash tool. You MUST do this before every Agent dispatch batch. If the command succeeds, proceed to dispatch. If the file is missing, the team's on-disk state has been corrupted — STOP and follow the TeamCreate recovery procedure above. If recovery fails, fall back to bare mode.
 
-1. Call TeamDelete in its own message (no other tool calls). This clears the in-memory "Already leading team" state.
-2. Wait for the result. Then call TeamCreate in its own message (no other tool calls).
-3. If TeamCreate succeeds, store the returned `team_name` (it may differ from the original) and proceed with dispatch in a subsequent message.
-4. If TeamCreate fails, fall back to bare mode for the remainder of the session. Report the failure and mode change to the captain.
-
-Only fill `{named_variables}` — do not expand bracketed placeholders or add behavioral instructions beyond what the dispatch template specifies. All paths in the dispatch prompt MUST be absolute (rooted at `$project_root`).
+Only fill `{named_variables}` — do not expand bracketed placeholders or add behavioral instructions beyond what the dispatch template specifies.
 
 ```
 Agent(
     subagent_type="{dispatch_agent_id}",
     name="{worker_key}-{slug}-{stage}",
-    {if not bare mode: 'team_name="{team_name}"',}  // use the actual team_name returned by TeamCreate, not the requested name
+    {if not bare mode: 'team_name="{team_name}"',}
     prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim]\n\n{if worktree: 'Your working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nYour git branch is {branch}. All commits MUST be on this branch. Do NOT switch branches or commit to main.\nDo NOT modify YAML frontmatter in entity files.\nDo NOT modify files under agents/ or references/ — these are plugin scaffolding.'}\nRead the entity file at {entity_file_path} for full context.\n\n{if stage has feedback-to: insert feedback instructions}\n\n### Completion checklist\n\nWrite a ## Stage Report section into the entity file when done.\nMark each: DONE, SKIPPED (with rationale), or FAILED (with details).\n\n[CHECKLIST — insert numbered checklist from step 2]\n\n### Summary\n{brief description of what was accomplished}\n\nEvery checklist item must appear in your report. Do not omit items."
 )
 ```
@@ -103,8 +91,6 @@ After each agent completion:
 3. **If nothing is dispatchable** — Fire `idle` hooks (from registered mods), then re-run `status --next`. If entities became dispatchable (e.g., a hook advanced an entity), dispatch them. If still nothing, the event loop iteration ends.
 
 Repeat from step 1 after each agent completion until the captain ends the session or, in single-entity mode, until the target entity is resolved.
-
-Report workflow state ONCE when you reach an idle state or gate. Do not send additional status messages while waiting.
 
 ## Agent Back-off
 
