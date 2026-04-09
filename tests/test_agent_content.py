@@ -39,10 +39,24 @@ def section_text(text: str, heading: str, stop_patterns: tuple[str, ...]) -> str
 
 def test_first_officer_skill_reads_references_directly():
     text = read_text("skills/first-officer/SKILL.md")
-    assert "first-officer-shared-core.md" in text
-    assert "code-project-guardrails.md" in text
+    assert "@references/first-officer-shared-core.md" in text
+    assert "@references/code-project-guardrails.md" in text
     assert "claude-first-officer-runtime.md" in text
-    assert "${CLAUDE_SKILL_DIR}" in text
+    assert "codex-first-officer-runtime.md" in text
+    assert "CLAUDECODE" in text
+    assert "CODEX_HOME" in text
+    assert "${CLAUDE_SKILL_DIR}" not in text
+
+
+def test_ensign_skill_reads_references_directly():
+    text = read_text("skills/ensign/SKILL.md")
+    assert "@references/ensign-shared-core.md" in text
+    assert "code-project-guardrails.md" in text
+    assert "claude-ensign-runtime.md" in text
+    assert "codex-ensign-runtime.md" in text
+    assert "CLAUDECODE" in text
+    assert "CODEX_HOME" in text
+    assert "${CLAUDE_SKILL_DIR}" not in text
 
 
 def test_agent_entry_points_use_skill_preloading():
@@ -57,7 +71,7 @@ def test_agent_entry_points_use_skill_preloading():
 
 
 def test_first_officer_shared_core_covers_all_behavioral_sections():
-    text = read_text("references/first-officer-shared-core.md")
+    text = read_text("skills/first-officer/references/first-officer-shared-core.md")
 
     for heading in [
         "## Startup",
@@ -80,7 +94,7 @@ def test_first_officer_shared_core_covers_all_behavioral_sections():
 
 
 def test_ensign_shared_core_keeps_stage_report_protocol():
-    text = read_text("references/ensign-shared-core.md")
+    text = read_text("skills/ensign/references/ensign-shared-core.md")
     assert "## Stage Report: {stage_name}" in text
     assert "overwrite" in text.lower()
     assert "agents/" in text
@@ -88,7 +102,7 @@ def test_ensign_shared_core_keeps_stage_report_protocol():
 
 
 def test_code_project_guardrails_cover_worktrees_and_scaffolding():
-    text = read_text("references/code-project-guardrails.md")
+    text = read_text("skills/first-officer/references/code-project-guardrails.md")
     assert ".worktrees/" in text
     assert "agents/" in text
     assert "git worktree" in text
@@ -96,7 +110,7 @@ def test_code_project_guardrails_cover_worktrees_and_scaffolding():
 
 
 def test_codex_runtime_docs_cover_merge_hook_finalize_path():
-    text = read_text("references/codex-first-officer-runtime.md")
+    text = read_text("skills/first-officer/references/codex-first-officer-runtime.md")
     assert "codex_finalize_terminal_entity.py" not in text
     assert "merge hooks" in text.lower()
     assert "archive" in text.lower()
@@ -218,6 +232,24 @@ def test_assembled_claude_ensign_has_captain_communication():
 
     # Captain switches to ensign via Shift+Up/Down
     assert "Shift+Up/Down" in text
+
+
+def test_assembled_codex_first_officer_has_dispatch_adapter():
+    t = TestRunner("agent content", keep_test_dir=False)
+    text = assembled_agent_content(t, "first-officer", runtime="codex")
+
+    assert "fork_context=false" in text
+    assert "spawn_agent" in text
+    assert "TeamCreate" not in text
+
+
+def test_assembled_codex_ensign_has_completion_summary_contract():
+    t = TestRunner("agent content", keep_test_dir=False)
+    text = assembled_agent_content(t, "ensign", runtime="codex")
+
+    assert "completion summary" in text.lower()
+    assert "logical worker id" in text.lower()
+    assert "SendMessage" not in text
 
 
 if __name__ == "__main__":

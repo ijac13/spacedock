@@ -2,10 +2,16 @@
 name: ensign
 description: Execute workflow stage work as a dispatched worker.
 ---
-Read these reference files to load the ensign operating contract:
 
-1. Read `${CLAUDE_SKILL_DIR}/../../references/ensign-shared-core.md`
-2. Read `${CLAUDE_SKILL_DIR}/../../references/code-project-guardrails.md`
-3. Read `${CLAUDE_SKILL_DIR}/../../references/claude-ensign-runtime.md`
+## Operating contract
+
+@references/ensign-shared-core.md
+@../first-officer/references/code-project-guardrails.md
+
+## Runtime adapter
+
+Load the runtime adapter for your platform:
+- Claude Code (`CLAUDECODE` env var is set): read `references/claude-ensign-runtime.md`
+- Codex (`CODEX_HOME` env var is set): read `references/codex-ensign-runtime.md`
 
 Then read your assignment and begin work.
