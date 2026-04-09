@@ -58,33 +58,14 @@ How does the skill detect which runtime it's on? Options:
 
 ### Runtime detection mechanism
 
-SKILL.md is a markdown prompt — it cannot branch with if/else. The detection must be an instruction to the agent. The recommended mechanism:
+SKILL.md is a markdown prompt — it cannot branch with if/else. The detection must be an instruction to the agent.
 
-**Use `${CLAUDE_SKILL_DIR}` expansion as the detection signal.** Claude Code substitutes `${CLAUDE_SKILL_DIR}` to the skill directory's absolute path during skill invocation (Phase 2 of skill loading — see ch12-extensibility.md). Codex does NOT perform this substitution. So:
+**Mechanism: check the `CLAUDECODE` environment variable.** This variable is set by Claude Code sessions (it's the reason tests must `unset CLAUDECODE` before launching subprocess sessions). It is never set in Codex. The check is a simple `echo $CLAUDECODE` or a Bash test. The SKILL.md instructs the agent to check this variable and read the corresponding runtime file.
 
-- If the agent sees a literal unexpanded `${CLAUDE_SKILL_DIR}` in the prompt, it's on Codex.
-- If `${CLAUDE_SKILL_DIR}` resolved to an actual path, it's on Claude Code.
-
-However, this is fragile — the agent may not reliably distinguish expanded vs unexpanded variable syntax in its own prompt text. A more robust approach:
-
-**Instruct the agent to check for the `CLAUDECODE` environment variable.** This variable is set by Claude Code sessions (it's the reason tests must `unset CLAUDECODE` before launching subprocess sessions). It is never set in Codex. The check is a simple `echo $CLAUDECODE` or a Bash test.
-
-But even simpler: **use the path structure itself.** On Claude Code, `${CLAUDE_SKILL_DIR}` expands to the real path (e.g., `/path/to/spacedock/skills/first-officer`). On Codex, the skill is loaded from `~/.agents/skills/spacedock/first-officer/SKILL.md` — but importantly, Codex reads the SKILL.md content and presents it to the model without path variable substitution.
-
-**Recommended approach: conditional instructions in SKILL.md.** The SKILL.md tells the agent to read the shared core and guardrails (always), then detect the runtime and read the appropriate runtime reference. Detection is based on whether `${CLAUDE_SKILL_DIR}` was substituted (agent can try to read a file using the path — if it works, it's Claude Code).
-
-Actually, the simplest reliable approach: **use two separate path patterns and let the agent try them.** But this is messy.
-
-**Final recommendation: explicit conditional instruction.**
-
-The SKILL.md should:
-1. Always read shared-core and guardrails (using `${CLAUDE_SKILL_DIR}` for Claude, relative/bare paths for Codex)
-2. Instruct the agent to determine the runtime: "If you have access to the `TeamCreate` tool or the `CLAUDECODE` environment variable is set, you are on Claude Code — read the Claude runtime. Otherwise, you are on Codex — read the Codex runtime."
-
-This is robust because:
-- `TeamCreate` is a Claude Code team tool that Codex never has
-- `CLAUDECODE` env var is set by Claude Code, never by Codex
-- Both signals are already used in the codebase (the Claude runtime itself probes for TeamCreate)
+Alternatives considered and rejected:
+- **`${CLAUDE_SKILL_DIR}` expansion detection** — Claude Code substitutes this variable; Codex does not. But the agent cannot reliably distinguish expanded vs unexpanded variable syntax in its own prompt text. Fragile.
+- **Tool availability probing** (e.g., TeamCreate exists → Claude Code) — works in principle, but adds a tool call to the boot path and couples detection to a specific tool that may change.
+- **Separate skill entrypoints per platform** — would require different SKILL.md files or paths, breaking the single-entrypoint design.
 
 ### Before/after for skill files
 
@@ -177,7 +158,7 @@ Option A is the simpler path and works with the existing test infrastructure. Th
 
 The Codex packaged worker dispatch path (`codex-first-officer-runtime.md` § Dispatch Adapter) already describes how to resolve logical ids to `worker_key`, build self-contained prompts, and `spawn_agent` with `fork_context=false`. The worker prompt instructs the spawned agent to read its skill definition from `~/.agents/skills/{namespace}/{name}/SKILL.md`. Since that SKILL.md will now have the conditional runtime detection, the Codex ensign worker will correctly load `codex-ensign-runtime.md` instead of `claude-ensign-runtime.md`.
 
-No changes needed to the dispatch adapter itself — the fix is entirely in the SKILL.md entrypoints.
+No dispatch adapter changes are expected — the fix should be entirely in the SKILL.md entrypoints. The Codex E2E test (AC5) will verify whether dispatch prompt construction also needs correction.
 
 ### Test plan
 
@@ -212,7 +193,7 @@ E2E tests are proportional to risk: the change is small (2 SKILL.md files, condi
 - [x] Define acceptance criteria with test plan
   6 acceptance criteria with specific test methods. 8 tests total: 3 static, 3 assembled-content, 2 E2E.
 - [x] Address Codex packaged worker dispatch alignment
-  No dispatch adapter changes needed. The fix is entirely in SKILL.md entrypoints. Codex workers will pick up the correct runtime through the same conditional when they read their own SKILL.md.
+  No dispatch adapter changes expected — Codex workers should pick up the correct runtime through the same SKILL.md conditional. The Codex E2E test will verify whether dispatch prompt construction also needs correction.
 
 ### Summary
 
