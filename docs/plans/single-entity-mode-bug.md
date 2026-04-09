@@ -291,3 +291,29 @@ Result: "Session ready" was printed (function returned), but the FO never booted
 **REJECTED.** AC1, AC2, and AC4 are correct. `tests/README.md` and `docs/plans/README.md` updates are good. `--runtime` flag exists. However, AC3 still fails:
 
 The `start_with_trust_handling()` function has a logic bug: it checks for the `❯` prompt character before checking for the trust dialog, but `❯` appears as the selection indicator in the trust dialog itself. The function returns early thinking the prompt is ready, never dismissing the trust dialog. Fix: swap the check order so trust dialog detection runs before prompt-ready detection.
+
+## Stage Report: validation (round 3)
+
+### 1. AC1 and AC2 (reference file fixes): DONE — no change from prior rounds.
+
+### 2. AC3: PTY E2E test — live run
+
+**FAILED.** Trust dialog is now detected and dismissed (output shows "Trust dialog detected, sending Enter to accept..." and "Session ready"). The check-order fix in `1f9a94a` works for the trust dialog itself.
+
+However, the FO skill invocation fails. The session sent `/spacedock:first-officer` but the TUI received only the tail fragment "icer" (visible in output as `❯ icer`). The model responded "I'm not sure what you mean by 'icer'."
+
+**Root cause:** After dismissing the trust dialog, `start_with_trust_handling()` still checks `clean` (the cumulative output) for `❯`. The `❯` from the *trust dialog's selection indicator* is still present in the cumulative output. When `trust_handled` is set to `True`, the next loop iteration skips the trust check and falls through to the `❯` prompt-ready check — which matches the stale `❯` from the trust dialog, returning immediately before the TUI is actually ready for input.
+
+Result: the function returns while the TUI is still transitioning. The `send()` call types `/spacedock:first-officer` character by character, but the TUI is not yet accepting input, so the first ~20 characters are lost and only "icer" arrives.
+
+**Fix required:** After dismissing the trust dialog, reset the output buffer (or record the position) so the prompt-ready check only looks at output *after* the trust dialog was dismissed. For example, after sending Enter, set `session._raw_output = b""` or record `post_trust_pos = len(session._raw_output)` and check only `clean[post_trust_pos:]` for `❯`.
+
+### 3. AC4: DONE — no change.
+
+### 4. tests/README.md and docs/plans/README.md: DONE — no change.
+
+### 5. --runtime flag: DONE — no change.
+
+### 6. Recommendation
+
+**REJECTED.** Same root cause as round 2 (stale `❯` in cumulative output) manifesting differently. The trust dialog is now dismissed, but the function returns before the TUI is ready because it matches `❯` from the old trust dialog output. Need to reset or offset the output buffer after trust dismissal.
