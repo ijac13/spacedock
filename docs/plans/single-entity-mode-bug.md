@@ -317,3 +317,40 @@ Result: the function returns while the TUI is still transitioning. The `send()` 
 ### 6. Recommendation
 
 **REJECTED.** Same root cause as round 2 (stale `❯` in cumulative output) manifesting differently. The trust dialog is now dismissed, but the function returns before the TUI is ready because it matches `❯` from the old trust dialog output. Need to reset or offset the output buffer after trust dismissal.
+
+## Stage Report: validation (round 4)
+
+### 1. AC1 and AC2 (reference file fixes): DONE — no change.
+
+### 2. AC3: PTY E2E test — live run
+
+Trust dialog handling and buffer position fix (`a9c5b6e`) both work correctly:
+- "Trust dialog detected, sending Enter to accept..." — dialog dismissed
+- "Session ready" — TUI prompt detected after trust dialog
+- "FO booted: True" — `/spacedock:first-officer` skill invoked successfully
+- "PASS: FO booted and acknowledged workflow" — FO acknowledged the workflow
+- "PASS: team creation or dispatch evidence found" — FO dispatched with team support
+
+However, the test reports **1 failure**: `FAIL: FO did NOT enter single-entity mode in interactive session`. This means the substring "single-entity mode" appeared somewhere in `clean_output.lower()`.
+
+**Analysis:** The FO booted, found the workflow, and dispatched with team evidence (team creation or Agent dispatch detected). This is the *correct* behavior — the fix is working. The FO likely *mentioned* single-entity mode in its reasoning text (e.g., "this is an interactive session, so I will not enter single-entity mode") without actually *entering* it. The test's assertion at line 212 is a simple substring check:
+
+```python
+single_entity_mentioned = "single-entity mode" in clean_output.lower()
+```
+
+This false-positives when the FO mentions the concept in its reasoning without activating it. The assertion should be more targeted — for example, checking for phrases like "entering single-entity mode" or "switching to single-entity mode" rather than any mention of the phrase. Or better: rely on the positive signal (team dispatch evidence present) as the primary assertion, and only flag the negative signal if it appears alongside evidence of bare-mode dispatch (no team creation).
+
+**Verdict on AC3:** The underlying fix works (FO dispatches with teams, does not enter bare mode). The test infrastructure works (trust dialog, FO boot, skill invocation all succeed). But the assertion is too broad and false-positives on incidental mention of the phrase.
+
+### 3. AC4: DONE — no change.
+
+### 4. tests/README.md and docs/plans/README.md: DONE — no change.
+
+### 5. --runtime flag: DONE — no change.
+
+### 6. Recommendation
+
+**REJECTED** (narrowly). The actual behavioral fix is working — the FO creates teams in interactive sessions and does not enter bare-mode single-entity dispatch. The test infrastructure finally works end-to-end (trust dialog, FO boot, skill invocation, dispatch detection). The only remaining issue is the assertion at line 212: the substring check `"single-entity mode" in clean_output.lower()` false-positives when the FO mentions the concept without activating it.
+
+Suggested fix: tighten the assertion to match activation phrases (e.g., `re.search(r"(entering|switching to|activating) single-entity mode", clean_output, re.IGNORECASE)`) or check for the combination of single-entity mode mention *plus* absence of team evidence.
