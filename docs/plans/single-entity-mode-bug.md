@@ -210,56 +210,84 @@ The root cause is a single sentence in the shared core (`references/first-office
 
 **DONE.** Added entry to the Testing Resources table in `docs/plans/README.md`.
 
-## Stage Report: validation
+## Stage Report: validation (round 1)
 
 ### 1. Verify AC1: shared core trigger scoped to non-interactive
 
-**DONE.** `references/first-officer-shared-core.md` line 39 now reads: "Single-entity mode activates when the session is non-interactive (e.g., invoked via `claude -p` or `codex exec`) and the prompt names a specific entity to process through the workflow. Do not enter single-entity mode in interactive sessions — naming an entity in conversation is normal dispatch, not a mode switch." Confirmed: contains "non-interactive", does NOT contain the old trigger ("When the user names a specific entity and asks to process it through the workflow, switch into single-entity mode").
+**DONE.** Confirmed "non-interactive" present, old trigger text removed.
 
 ### 2. Verify AC2: Codex runtime trigger scoped to non-interactive
 
-**DONE.** `references/codex-first-officer-runtime.md` line 16 now reads: "If the session is non-interactive (e.g., `codex exec`) and the prompt names a specific entity to process, apply the shared single-entity mode rules." Confirmed: contains "non-interactive", does NOT contain the old trigger ("If the user names a specific entity and asks to process it through the workflow").
+**DONE.** Confirmed "non-interactive" present, old trigger text removed.
 
-### 3. Verify AC3: PTY E2E test exists and tests correct behavior
+### 3. Verify AC3: PTY E2E test — FAILED (trust dialog not handled)
 
-**FAILED.** `tests/test_single_entity_mode.py` exists (161 lines) and has correct structure (imports `InteractiveSession`, checks for single-entity mode absence, checks for team dispatch evidence). However, the live test run **failed**:
+Live test failed. Trust dialog blocked the session.
+
+### 4. Verify AC4: -p mode single-entity behavior preserved — DONE
+
+### 5. Static content tests — DONE (all 6 passed)
+
+### 6. Recommendation: REJECTED
+
+Two issues: trust dialog handling broken, missing `--runtime` flag.
+
+## Stage Report: validation (round 2)
+
+### 1. Verify AC1: shared core trigger scoped to non-interactive
+
+**DONE.** No change from round 1 — `references/first-officer-shared-core.md` line 39 correctly requires non-interactive session context.
+
+### 2. Verify AC2: Codex runtime trigger scoped to non-interactive
+
+**DONE.** No change from round 1 — `references/codex-first-officer-runtime.md` line 16 correctly requires non-interactive session context.
+
+### 3. Verify AC3: PTY E2E test — live run
+
+**FAILED.** The implementation added a `start_with_trust_handling()` function (lines 74-122) that checks for the trust dialog and sends Enter to dismiss it. However, the live test still fails:
 
 ```
-$ unset CLAUDECODE && uv run tests/test_single_entity_mode.py --live
+$ unset CLAUDECODE && uv run tests/test_single_entity_mode.py
 ```
 
-The test got stuck at Claude Code's "trust this folder" security prompt. The test creates a temp directory (`/var/folders/.../sem-test-...`) and passes it as `cwd` to `InteractiveSession`, but the harness does not handle the trust dialog for untrusted directories. The FO never booted — the session timed out waiting for the trust prompt to be dismissed.
+Result: "Session ready" was printed (function returned), but the FO never booted and the output tail still shows the trust dialog.
 
-Root cause: The existing `test_interactive_poc.py` works because it does not set a `cwd` (runs in the repo root, which is already trusted). The single-entity mode test needs to either:
-- Handle the trust prompt in the PTY harness (send Enter/arrow keys to dismiss it)
-- Or use the `--dangerously-skip-permissions` flag or equivalent to bypass the trust check for test directories
+**Root cause:** The `start_with_trust_handling()` function checks for `\u276f` (❯) as the prompt-ready signal (line 113) *before* checking for the trust dialog (line 116). The trust dialog uses `❯` as its selection indicator (`❯1.Yes,Itrustthisfolder`), so the function detects `❯` inside the trust dialog UI and returns early — thinking the session is ready, without ever dismissing the trust dialog.
 
-Additionally, CL requires the test to support a `--runtime` flag for both Claude Code and Codex runtimes. The current test is Claude Code-only.
+**Fix required:** The trust dialog check must run *before* the prompt-ready check. The function should look for trust-related keywords first, dismiss the dialog if found, then wait for the actual prompt. Alternatively, the prompt-ready check could require `❯` to appear *without* trust dialog text nearby.
 
 ### 4. Verify AC4: -p mode single-entity behavior preserved
 
-**DONE.** `tests/test_single_entity_team_skip.py` exists (133 lines). Uses `run_first_officer()` which invokes `claude -p` (non-interactive pipe mode). Tests that:
-- `TeamCreate` is absent from tool calls (team creation skipped)
-- `Agent` calls have no `team_name` parameter (bare-mode dispatch)
-- At least one `Agent` dispatch occurred (sanity check)
-The `-p` flag makes the session non-interactive, so the updated trigger still fires correctly.
+**DONE.** No change from round 1. `tests/test_single_entity_team_skip.py` correctly tests pipe-mode single-entity behavior.
 
-### 5. Run existing static/content tests that touch affected files
+### 5. Verify tests/README.md exists with test authoring guidelines
 
-**DONE.** Ran the static content checks from `test_reuse_dispatch.py` against the shared core. All 6 checks passed:
-- reuse conditions documented in shared-core: PASS
-- SendMessage format in reuse path: PASS
-- fresh: true disqualifies reuse: PASS
-- worktree mode match required: PASS
-- bare mode guard present: PASS
-- dispatch step uses neutral language: PASS
+**DONE.** `tests/README.md` exists (189 lines) and covers:
+- Test infrastructure overview (`test_lib.py` vs `test_lib_interactive.py`)
+- Standard CLI flags convention (`--runtime`, `--model`, `--budget`, `--effort`)
+- When to use which harness (static, non-interactive E2E, interactive PTY, offline)
+- Fixture conventions with existing fixtures table
+- Running tests instructions (`unset CLAUDECODE && uv run tests/test_*.py`)
+- File requirements (shebang, ABOUTME, argparse, exit codes)
+- Trust dialog handling note referencing `test_single_entity_mode.py`
 
-Note: The full `uv run tests/test_reuse_dispatch.py` E2E test was not run (requires live claude session); only the static portions were extracted and executed.
+### 6. Verify docs/plans/README.md references tests/README.md
 
-### 6. Recommendation
+**DONE.** The Testing Resources table in `docs/plans/README.md` (line 184) includes:
+```
+| Test authoring guidelines | `tests/README.md` | Test infrastructure, CLI conventions, fixtures, when to use which harness |
+```
 
-**REJECTED.** AC1 and AC2 (reference file fixes) are correct. AC4 (pipe mode preservation) is verified by existing test. However, AC3 has two issues requiring implementation changes:
+### 7. Verify --runtime flag exists in the test
 
-1. **Live test fails:** The PTY test gets stuck at the "trust this folder" security prompt when running with a temp directory `cwd`. The harness needs to handle this prompt or bypass it for test directories.
+**DONE.** `tests/test_single_entity_mode.py` line 32 has `--runtime` with `choices=["claude"]` and `default="claude"`. The comment at line 33 explains: "Runtime to test (claude only — this tests interactive sessions)". This is appropriate since Codex does not have an interactive TUI equivalent.
 
-2. **Missing `--runtime` support:** CL requires the test to support both Claude Code and Codex runtimes via a `--runtime` flag. The current implementation is Claude Code-only.
+### 8. Run existing static/content tests
+
+**DONE.** Same results as round 1 — all 6 static checks from `test_reuse_dispatch.py` pass.
+
+### 9. Recommendation
+
+**REJECTED.** AC1, AC2, and AC4 are correct. `tests/README.md` and `docs/plans/README.md` updates are good. `--runtime` flag exists. However, AC3 still fails:
+
+The `start_with_trust_handling()` function has a logic bug: it checks for the `❯` prompt character before checking for the trust dialog, but `❯` appears as the selection indicator in the trust dialog itself. The function returns early thinking the prompt is ready, never dismissing the trust dialog. Fix: swap the check order so trust dialog detection runs before prompt-ready detection.
