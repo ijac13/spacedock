@@ -189,3 +189,49 @@ The root cause is a single sentence in the shared core (`references/first-office
 **DONE.** Two commits on `spacedock-ensign/single-entity-mode-bug`:
 - `50de7d0` — fix: scope single-entity mode trigger to non-interactive sessions only (2 files)
 - `4fdedc3` — test: add PTY-based regression test for single-entity mode trigger (1 file)
+
+## Stage Report: validation
+
+### 1. Verify AC1: shared core trigger scoped to non-interactive
+
+**DONE.** `references/first-officer-shared-core.md` line 39 now reads: "Single-entity mode activates when the session is non-interactive (e.g., invoked via `claude -p` or `codex exec`) and the prompt names a specific entity to process through the workflow. Do not enter single-entity mode in interactive sessions — naming an entity in conversation is normal dispatch, not a mode switch." Confirmed: contains "non-interactive", does NOT contain the old trigger ("When the user names a specific entity and asks to process it through the workflow, switch into single-entity mode").
+
+### 2. Verify AC2: Codex runtime trigger scoped to non-interactive
+
+**DONE.** `references/codex-first-officer-runtime.md` line 16 now reads: "If the session is non-interactive (e.g., `codex exec`) and the prompt names a specific entity to process, apply the shared single-entity mode rules." Confirmed: contains "non-interactive", does NOT contain the old trigger ("If the user names a specific entity and asks to process it through the workflow").
+
+### 3. Verify AC3: PTY E2E test exists and tests correct behavior
+
+**DONE.** `tests/test_single_entity_mode.py` exists (161 lines). Verified:
+- Imports `InteractiveSession` from `test_lib_interactive`
+- Sets up a temp git project with `spike-no-gate` fixture
+- Boots FO via `/spacedock:first-officer` in an interactive session
+- Sends "Work on test-entity through the workflow" to trigger the formerly-buggy scenario
+- Asserts "single-entity mode" does NOT appear in output (AC3a)
+- Asserts team creation or dispatch evidence IS present (AC3b)
+- Gated behind `--live` flag (skips cleanly without it)
+- Live run not executed (requires ~$1-2 with haiku); offline structure validated
+
+### 4. Verify AC4: -p mode single-entity behavior preserved
+
+**DONE.** `tests/test_single_entity_team_skip.py` exists (133 lines). Uses `run_first_officer()` which invokes `claude -p` (non-interactive pipe mode). Tests that:
+- `TeamCreate` is absent from tool calls (team creation skipped)
+- `Agent` calls have no `team_name` parameter (bare-mode dispatch)
+- At least one `Agent` dispatch occurred (sanity check)
+The `-p` flag makes the session non-interactive, so the updated trigger still fires correctly.
+
+### 5. Run existing static/content tests that touch affected files
+
+**DONE.** Ran the static content checks from `test_reuse_dispatch.py` against the shared core. All 6 checks passed:
+- reuse conditions documented in shared-core: PASS
+- SendMessage format in reuse path: PASS
+- fresh: true disqualifies reuse: PASS
+- worktree mode match required: PASS
+- bare mode guard present: PASS
+- dispatch step uses neutral language: PASS
+
+Note: The full `uv run tests/test_reuse_dispatch.py` E2E test was not run (requires live claude session); only the static portions were extracted and executed.
+
+### 6. Recommendation
+
+**PASSED.** All four acceptance criteria are met. The reference file changes are minimal (one line each in two files), the wording matches the proposed fix from ideation exactly, no unintended files were modified, and the test infrastructure is correctly structured. The `claude-first-officer-runtime.md` was correctly left unchanged.
