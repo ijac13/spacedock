@@ -1,7 +1,7 @@
 ---
 id: 105
 title: Add idle hallucination guardrail to FO runtime
-status: implementation
+status: validation
 source: CL — observed twice in production sessions
 started: 2026-04-09T05:11:48Z
 completed:
