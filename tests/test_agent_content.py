@@ -71,7 +71,7 @@ def test_first_officer_shared_core_covers_all_behavioral_sections():
         "## State Management",
         "## Mod Hook Convention",
         "## Clarification and Communication",
-        "## Scaffolding and Issue Filing",
+        "## Issue Filing",
     ]:
         assert heading in text
 
@@ -171,7 +171,7 @@ def test_assembled_claude_first_officer_has_team_health_check():
 
     # AC2: Recovery sequence — TeamDelete alone, then TeamCreate alone, then dispatch
     assert re.search(
-        r"TeamDelete.*its own message.*TeamCreate.*its own message",
+        r"TeamDelete.*its own message.*TeamCreate.*subsequent message",
         assembled, re.DOTALL,
     )
 
