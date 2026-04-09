@@ -1,13 +1,13 @@
 ---
 id: 111
 title: Status script reports worktree branches as missing when they exist
-status: validation
+status: done
 source: FO boot anomaly — 2026-04-09
 started: 2026-04-09T22:00:38Z
-completed:
-verdict:
+completed: 2026-04-09T22:23:28Z
+verdict: PASSED
 score:
-worktree: .worktrees/spacedock-ensign-status-script-branch-detection
+worktree: 
 issue:
 pr: #59
 ---

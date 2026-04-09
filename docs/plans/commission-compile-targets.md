@@ -36,7 +36,6 @@ Treat commission as a compiler with a `--target` parameter. The pipeline definit
 
 ### Evidence
 
-- `references/codex-tools.md` already contains a solo operator prompt — this is effectively a hand-compiled Codex target
 - The first-officer template is the Claude Code target
 - A portable target is just the PTP format without any orchestration layer
 
