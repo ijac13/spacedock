@@ -209,16 +209,21 @@ def main():
         print("--- Phase 4: Validation ---")
 
         clean_output = session.get_clean_output()
-        single_entity_mentioned = "single-entity mode" in clean_output.lower()
 
-        if single_entity_mentioned:
-            fail("FO did NOT enter single-entity mode in interactive session")
-        else:
-            pass_("FO did NOT enter single-entity mode in interactive session")
+        # Match only activation phrases — the FO may mention "single-entity
+        # mode" in reasoning text (e.g., "won't enter single-entity mode")
+        # without actually activating it.
+        single_entity_activated = bool(re.search(
+            r"(entering|switching to|activating|in) single-entity mode",
+            clean_output, re.IGNORECASE,
+        ))
 
-        if team_evidence:
-            pass_("team creation or dispatch evidence found")
-        else:
+        # Team evidence is the primary pass signal
+        if team_evidence and not single_entity_activated:
+            pass_("FO used team dispatch (not single-entity mode)")
+        elif single_entity_activated:
+            fail("FO did NOT activate single-entity mode in interactive session")
+        elif not team_evidence:
             fail("team creation or dispatch evidence found")
 
         # Informational: bare mode is acceptable (teams may not be available),
