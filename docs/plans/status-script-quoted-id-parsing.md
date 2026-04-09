@@ -108,3 +108,11 @@ Observed symptom: an agent saw existing entities going up to 010 and chose to st
 - DONE: Added targeted coverage in `tests/test_status_script.py` for quoted IDs in `NEXT_ID` calculation and quoted `id` / `pr` filtering.
 - DONE: Verified the parser change with `uv run --with pytest python tests/test_status_script.py -q` and `python3 -m py_compile skills/commission/bin/status`; both passed.
 - DONE: The implementation stays within the existing manual YAML parsing approach and does not add new dependencies.
+
+## Stage Report: validation
+
+- PASSED: The implementation satisfies the acceptance criteria for normalization of quoted frontmatter values.
+- PASSED: `parse_frontmatter()` now strips matching surrounding quotes at the shared parse point, so downstream consumers see normalized values consistently. Evidence: [`skills/commission/bin/status`](../skills/commission/bin/status):63-66.
+- PASSED: The new test coverage exercises both quoted `id` and quoted `pr` matching, including `NEXT_ID` behavior. Evidence: [`tests/test_status_script.py`](../tests/test_status_script.py):723-741.
+- PASSED: Focused verification succeeded. Evidence: `uv run --with pytest python tests/test_status_script.py -q` returned `66 passed`, and `python3 -m py_compile skills/commission/bin/status` passed.
+- PASSED: No additional dependencies or parser rewrites were introduced; the fix remains localized to the existing frontmatter parser.
