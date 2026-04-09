@@ -339,9 +339,41 @@ The pre-staging optimization broke the test's core assumptions:
 - Option B: Have the test prompt explicitly instruct the FO to dispatch an implementation agent first (even for already-complete work), but this fights the FO's natural behavior.
 - Option C: Start entity at `status: backlog` but use a minimal implementation task that completes fast, giving more budget for the rejection cycle.
 
-### 10. Recommendation: REJECTED
+### 10. Live E2E test execution (run 3, backlog with trivial task) — DONE
 
-The test fails 2/9 checks on live execution with the pre-staged fixture. The pre-staging optimization (commit `73669c1`) broke the test's core keepalive scenario by eliminating the implementation agent dispatch that's required for keepalive to be meaningful. The fixture needs to allow the FO to dispatch an implementation agent before advancing to validation.
+After fixture revert (commit `bb54762`), entity starts from backlog with trivial task.
+
+Ran `unset CLAUDECODE && uv run tests/test_feedback_keepalive.py`:
+
+- **Wallclock:** 228s, 132 assistant messages (claude-haiku-4-5-20251001)
+- **Phase 1 (setup):** PASS — status script runs, entity detected as dispatchable
+- **Phase 2 (FO run):** FO dispatched 3 ensigns: 2 implementation, 1 validation
+- **Tier 1:** PASS — no shutdown detected between implementation completion and validation dispatch
+- **Tier 2:** FAIL — 1 failure: "no feedback routing observed after rejection"
+
+**Result: 9 passed, 1 failed (out of 10 checks) — FAIL**
+
+**Root cause analysis — two issues:**
+
+**Issue 1: Implementation ensign fixed the bug.** The FO's log shows: "The implementation agent created `greeting.txt` with the correct content and fixed the add function so tests pass." The implementation ensign proactively fixed `math_ops.py` (changing `a - b` to `a + b`), so validation found no issues and recommended PASSED. No rejection occurred, so the feedback routing path was never exercised.
+
+**Issue 2: False positive rejection detection.** Despite no actual rejection, `scan_keepalive_events()` set `rejection_seen: True` because the FO's final summary narrative contained the hypothetical text: "If validation had recommended **REJECTED**, the first officer would have..." The regex `r"REJECTED|recommend reject"` matched this hypothetical narrative, causing the test to enter the Tier 2 assertion path instead of the SKIP path. This turned a harmless SKIP into a FAIL.
+
+**Needed fixes:**
+
+1. **Fixture bug must survive implementation.** The buggy `math_ops.py` is too easily fixed by the ensign. Options:
+   - Make the bug less obvious (e.g., off-by-one in a complex function rather than `a - b` vs `a + b`)
+   - Separate the buggy code from the implementation task so the ensign doesn't touch it
+   - Pre-commit the buggy file and instruct the entity NOT to modify `math_ops.py` (only create `greeting.txt`)
+
+2. **Rejection detection needs tighter matching.** The `rejection_pattern` in `scan_keepalive_events()` should avoid matching hypothetical/narrative text. Options:
+   - Only count rejection from `tool_result` entries (actual agent results), not from FO narrative text
+   - Require rejection pattern to appear at sentence/line start, not embedded in hypothetical clauses
+   - Use `rejection_signal_present()` from test_lib.py as the authoritative rejection check and skip Tier 2 assertions when `scan_keepalive_events()` doesn't independently confirm rejection from structured log data
+
+### 11. Recommendation: REJECTED
+
+The test fails 1/10 checks on live execution (run 3). Two root causes: (1) the implementation ensign proactively fixes the buggy code, preventing the rejection that Tier 2 needs; (2) the rejection detection regex produces a false positive from the FO's hypothetical narrative, converting a harmless SKIP into a FAIL.
 
 ### Checklist
 
@@ -354,4 +386,5 @@ The test fails 2/9 checks on live execution with the pre-staged fixture. The pre
 7. Verify test is syntactically valid and runnable — DONE
 8. Live E2E test execution (run 1, backlog start) — DONE (8/8 passed, Tier 2 SKIPped)
 9. Live E2E test execution (run 2, pre-staged) — FAILED (7/9 passed, 2 failed — no impl agent dispatched)
-10. REJECTED — pre-staged fixture breaks keepalive scenario
+10. Live E2E test execution (run 3, backlog with trivial task) — FAILED (9/10 passed, 1 failed — false positive rejection + ensign fixed bug)
+11. REJECTED — fixture bug doesn't survive implementation; rejection detection has false positive
