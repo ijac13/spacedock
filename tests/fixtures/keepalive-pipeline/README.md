@@ -57,12 +57,12 @@ The initial holding stage.
 
 ### implementation
 
-Write the code described in the task.
+Complete the work described in the task.
 
 - **Inputs:** A task description with acceptance criteria
-- **Outputs:** Working code committed to the worktree
-- **Good:** Code that satisfies the acceptance criteria
-- **Bad:** Code that does not match the described behavior
+- **Outputs:** Deliverables committed to the worktree
+- **Good:** Deliverables that satisfy the acceptance criteria
+- **Bad:** Missing or incorrect deliverables
 
 ### validation
 
@@ -81,7 +81,7 @@ Terminal stage. The task is complete.
 
 | Resource | Path | Covers |
 |----------|------|--------|
-| Add test | `tests/test_add.py` | Verifies the add function returns correct sums |
+| Add test | `tests/test_add.py` | Tests for add function (deliberately buggy — forces validation rejection) |
 
 ## Commit Discipline
 
