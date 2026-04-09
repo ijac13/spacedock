@@ -80,3 +80,31 @@ This is ~10 lines changed in a single function, no other code paths affected.
 ### 5. Scope assessment — DONE
 
 This is a simple, self-contained fix. Only `scan_orphans()` in `skills/commission/bin/status` needs to change. No other code paths reference this function's internals. The fix changes how the function indexes and looks up branch data — from a set-based lookup by guessed name to a dict-based lookup by resolved path. No changes needed to callers, output format, or other functions.
+
+## Stage Report
+
+### 1. Fix `scan_orphans()` to use path-to-branch dict — DONE
+
+Changed `scan_orphans()` in `skills/commission/bin/status` (lines 312-347) to:
+- Parse `git worktree list --porcelain` into a `worktree_paths` dict keyed by `os.path.realpath(worktree_path)` instead of a `worktree_branches` set of branch names
+- Look up each entity's worktree by resolving `os.path.realpath(os.path.join(git_root, wt))` against the dict, instead of guessing the branch name from `os.path.basename()`
+
+### 2. Unit tests for AC1: namespaced branches — DONE
+
+`test_orphans_namespaced_branch_detected`: Porcelain output maps a worktree path to `refs/heads/ensign/feature-name`. Entity has `worktree: .worktrees/ensign-feature-name`. Asserts `BRANCH_EXISTS: yes`.
+
+### 3. Unit tests for AC2: missing worktrees — DONE
+
+`test_orphans_missing_worktree_detected`: Porcelain output has no entry for the entity's worktree path. Asserts `BRANCH_EXISTS: no` and `DIR_EXISTS: no`.
+
+### 4. Unit tests for AC3: simple branches — DONE
+
+`test_orphans_simple_branch_still_works`: Porcelain output maps a worktree path to `refs/heads/remove-codex-dispatcher` (no `/` namespace). Asserts `BRANCH_EXISTS: yes`.
+
+### 5. Verify AC4: DIR_EXISTS unchanged — DONE
+
+The `os.path.isdir(dir_path)` check was not modified. Existing test `test_orphans_with_existence_checks` continues to pass, confirming DIR_EXISTS behavior is unchanged.
+
+### 6. Run all tests — DONE
+
+Full test suite (65 tests) passes with zero failures.
