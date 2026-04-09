@@ -1,0 +1,31 @@
+---
+id: 105
+title: Add idle hallucination guardrail to FO runtime
+status: backlog
+source: CL — observed twice in production sessions
+started:
+completed:
+verdict:
+score: 0.9
+worktree:
+issue:
+pr:
+---
+
+After repeated idle notifications with no human input, the FO can hallucinate a user instruction (e.g., "Human: let's do a debrief and wrap up") and act on it. This has happened twice, causing destructive actions (unauthorized agent shutdowns, fabricated debrief invocations).
+
+## Root cause
+
+Idle notifications arrive as `user`-role messages. After enough consecutive ones with no real human content, the model fills the silence by generating text that looks like a user turn and then acts on it.
+
+## Proposed fix
+
+Add to `references/claude-first-officer-runtime.md` in the Agent Back-off section:
+
+**IDLE HALLUCINATION GUARDRAIL:** After acknowledging idle notifications once (e.g., "Ensign still available, standing by"), produce ZERO output for all subsequent idle notifications until a real human message arrives. Do not generate text, invoke tools, or take any action in response to repeated idle notifications.
+
+## Acceptance criteria
+
+1. The guardrail text is present in `references/claude-first-officer-runtime.md`
+2. Existing guardrails in the Agent Back-off section are preserved
+3. No other files are modified
