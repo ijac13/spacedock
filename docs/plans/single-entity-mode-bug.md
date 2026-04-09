@@ -9,7 +9,7 @@ verdict:
 score: 0.8
 worktree: .worktrees/spacedock-ensign-single-entity-mode-bug
 issue:
-pr:
+pr: #55
 ---
 
 The FO enters single-entity mode during normal interactive sessions when the user mentions a specific entity. Single-entity mode is designed for non-interactive `-p` invocations. In interactive sessions, the FO should use the standard event loop with team support.
