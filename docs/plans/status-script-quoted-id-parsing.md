@@ -100,3 +100,11 @@ Observed symptom: an agent saw existing entities going up to 010 and chose to st
    - Test: Create entity file with `id: 084`. Parse frontmatter and assert `id` field is `084`.
 
    **Test approach:** Unit tests in a new or existing test file that exercise `parse_frontmatter()` directly and `compute_next_id()` with fixture files in a temp directory. No E2E tests needed — the bug is purely in string handling within a single function. Estimated complexity: low (< 30 minutes).
+
+## Stage Report: implementation
+
+- DONE: Normalized quoted frontmatter values in `skills/commission/bin/status` so `id: "084"` and `pr: "#28"` are stored without surrounding quote characters.
+- DONE: Kept the change localized to the shared parser so `compute_next_id()`, `--where`, and display paths all see the same normalized values.
+- DONE: Added targeted coverage in `tests/test_status_script.py` for quoted IDs in `NEXT_ID` calculation and quoted `id` / `pr` filtering.
+- DONE: Verified the parser change with `uv run --with pytest python tests/test_status_script.py -q` and `python3 -m py_compile skills/commission/bin/status`; both passed.
+- DONE: The implementation stays within the existing manual YAML parsing approach and does not add new dependencies.
