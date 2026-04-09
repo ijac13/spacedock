@@ -9,7 +9,7 @@ verdict:
 score: 0.9
 worktree: .worktrees/ensign-runtime-aware-skill-loading
 issue:
-pr:
+pr: #58
 ---
 
 ## Problem
