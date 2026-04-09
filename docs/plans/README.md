@@ -181,6 +181,7 @@ Validation pilots should use these when verifying implementation work:
 | Scaffolding guardrail E2E test | `tests/test-scaffolding-guardrail.sh` | Scaffolding change guardrail, issue filing guardrail |
 | Merge hook guardrail E2E test | `tests/test-merge-hook-guardrail.sh` | Merge hook fires before local merge, no-mods fallback |
 | Repo edit guardrail E2E test | `tests/test_repo_edit_guardrail.py` | FO write scope guardrail, code/test/mod edit rejection |
+| Test authoring guidelines | `tests/README.md` | Test infrastructure, CLI conventions, fixtures, when to use which harness |
 
 The test harness documents how to run `claude -p` with `--plugin-dir` for non-interactive commission testing, plus structural and guardrail assertions against the generated output. Use it for any task that changes `skills/commission/SKILL.md` or the first-officer template.
 

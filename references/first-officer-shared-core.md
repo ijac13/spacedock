@@ -36,7 +36,7 @@ The `--set` flag updates entity frontmatter fields:
 
 ## Single-Entity Mode
 
-When the user names a specific entity and asks to process it through the workflow, switch into single-entity mode.
+Single-entity mode activates when the session is non-interactive (e.g., invoked via `claude -p` or `codex exec`) and the prompt names a specific entity to process through the workflow. Do not enter single-entity mode in interactive sessions — naming an entity in conversation is normal dispatch, not a mode switch.
 
 Single-entity mode changes the normal event loop in these ways:
 - scope dispatch to the named entity only
