@@ -247,3 +247,66 @@ Runnable via `unset CLAUDECODE && uv run tests/test_feedback_keepalive.py`. File
 ### 5. All changes committed on branch — DONE
 
 All files committed on branch `spacedock-ensign/feedback-keepalive-e2e-test`.
+
+## Stage Report: validation
+
+### 1. Verify AC1: test file exists — DONE
+
+`tests/test_feedback_keepalive.py` exists (14,356 bytes, executable). Confirmed via filesystem inspection.
+
+### 2. Verify AC2: test uses test_lib.py infrastructure — DONE
+
+Lines 18-22 import `LogParser`, `TestRunner`, `create_test_project`, `setup_fixture`, `install_agents`, `run_first_officer`, `git_add_commit`, and `rejection_signal_present` from `scripts/test_lib.py`. All imports verified working. Follows the same Phase 1/2/3 structure as `test_rejection_flow.py`.
+
+### 3. Verify AC3: fixture exists with correct stage definitions — DONE
+
+`tests/fixtures/keepalive-pipeline/` exists with:
+- `README.md` — YAML frontmatter defines `validation` stage with `feedback-to: implementation`, `fresh: true`, `gate: true`, `worktree: true`. Pipeline is `backlog → implementation (worktree) → validation (worktree, fresh, feedback-to: implementation, gate) → done (terminal)`.
+- `keepalive-test-task.md` — seed entity at `status: backlog` with acceptance criteria for `add(a, b)`.
+- `math_ops.py` — deliberately buggy (`return a - b`), will force validation rejection.
+- `tests/test_add.py` — test suite that fails against the buggy implementation. Syntactically valid.
+
+### 4. Verify AC4: Tier 1 shutdown detection assertion present — DONE
+
+`scan_keepalive_events()` (lines 42-156) walks JSONL entries in temporal order, tracking the window between `impl_completion_seen` and `validation_dispatch_seen`. During this window, any SendMessage whose `message` field matches `SHUTDOWN_PATTERN` (line 27-30: `shut\s*down|terminat|kill|stop|cancel.*agent`) is captured in `shutdown_before_validation`. Lines 268-275 assert `len(events["shutdown_before_validation"]) == 0` — failing the test if any shutdown messages are detected in the keepalive window.
+
+### 5. Verify AC5: Tier 2 feedback routing assertion present — DONE
+
+After `rejection_seen` is set (lines 85-86, 103-104), the scanner checks two things:
+- `feedback_via_send_message` (lines 140-145): SendMessage to the implementation agent containing rejection/fix/feedback keywords → proves keepalive worked (PASS at line 300).
+- `feedback_via_fresh_agent` (lines 120-122): fresh Agent() dispatch for implementation after rejection → proves keepalive failed (FAIL at line 302).
+- Fallback at lines 304-315: if neither is detected, checks for any SendMessage to implementation agent; if none found, fails with "no feedback routing observed."
+
+### 6. Verify AC6: test logic would catch premature shutdown — DONE
+
+Two complementary detection paths:
+
+**Path A (Tier 1):** If FO sends a shutdown SendMessage to the impl agent between completion and validation dispatch, `SHUTDOWN_PATTERN` catches it and the assertion at line 270 fails.
+
+**Path B (Tier 2):** If the impl agent was killed (by any mechanism), the FO must dispatch a fresh Agent() for implementation after rejection. This is caught by `feedback_via_fresh_agent` (line 122) and reported as FAIL at line 302 ("keepalive failed — agent was killed and re-dispatched").
+
+The tiers are complementary: Tier 1 catches explicit shutdown messages; Tier 2 catches the consequence of any shutdown (even non-message-based) by detecting whether feedback routing used SendMessage (agent alive) or fresh Agent dispatch (agent dead). If neither detection fires, the test still fails at line 315 ("no feedback routing observed"), so there is no silent pass.
+
+**Minor note:** Tier 1's shutdown detection at line 134 does not filter by `to` field — it catches shutdown-like messages to ANY agent during the window, not just the implementation agent. In this simple 3-stage pipeline this is unlikely to cause false positives, since only the implementation agent exists during that window. Not a blocker.
+
+### 7. Verify test is syntactically valid and runnable — DONE
+
+- `python3 -c "import py_compile; py_compile.compile('tests/test_feedback_keepalive.py', doraise=True)"` — SYNTAX OK
+- All imports resolve successfully (`test_lib` symbols verified)
+- `python3 tests/test_feedback_keepalive.py --help` — runs, shows expected flags (`--runtime`, `--agent`, `--model`, `--effort`)
+- Static checks against `first-officer-shared-core.md` verified: all three regex patterns (`keepalive rule`, `auto-bounce rule`, `feedback rejection flow`) match current shared-core content
+
+### 8. Recommendation: PASSED
+
+All six acceptance criteria are met. The test file exists, uses the correct infrastructure, has a properly structured fixture with `feedback-to: implementation`, and implements both Tier 1 (shutdown detection in the transition window) and Tier 2 (feedback routing method after rejection) assertions. The assertion logic would catch premature shutdown through complementary detection paths. Static template checks are present and currently pass. The test is syntactically valid and runnable.
+
+### Checklist
+
+1. Verify AC1: test file exists — DONE
+2. Verify AC2: test uses test_lib.py infrastructure — DONE
+3. Verify AC3: fixture exists with correct stage definitions — DONE
+4. Verify AC4: Tier 1 shutdown detection assertion present — DONE
+5. Verify AC5: Tier 2 feedback routing assertion present — DONE
+6. Verify AC6: test logic would catch premature shutdown — DONE
+7. Verify test is syntactically valid and runnable — DONE
+8. PASSED
