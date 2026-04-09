@@ -296,24 +296,52 @@ The tiers are complementary: Tier 1 catches explicit shutdown messages; Tier 2 c
 - `python3 tests/test_feedback_keepalive.py --help` — runs, shows expected flags (`--runtime`, `--agent`, `--model`, `--effort`)
 - Static checks against `first-officer-shared-core.md` verified: all three regex patterns (`keepalive rule`, `auto-bounce rule`, `feedback rejection flow`) match current shared-core content
 
-### 8. Live E2E test execution — DONE
+### 8. Live E2E test execution (run 1, entity at backlog) — DONE
 
-Ran `unset CLAUDECODE && uv run tests/test_feedback_keepalive.py` — full results:
+Ran `unset CLAUDECODE && uv run tests/test_feedback_keepalive.py` with entity starting at `status: backlog`:
 
 - **Wallclock:** 230s, 112 assistant messages (claude-haiku-4-5-20251001), ~4.2M tokens
 - **Phase 1 (setup):** PASS — status script runs, entity detected as dispatchable
 - **Phase 2 (FO run):** FO dispatched 3 ensigns total: 2 implementation, 1 validation
 - **Tier 1 (keepalive at transition):** PASS — no shutdown SendMessage detected between implementation completion and validation dispatch
-- **Tier 2 (feedback routing):** SKIP — rejection not observed; pipeline completed validation dispatch but didn't reach REJECTED signal within budget. This is the expected graceful fallback when the pipeline doesn't progress far enough.
-- **Static template checks:** 3/3 PASS — keepalive rule, auto-bounce rule, and feedback rejection flow all found in shared-core
+- **Tier 2 (feedback routing):** SKIP — rejection not observed within budget
+- **Static template checks:** 3/3 PASS
 
-**Final result: 8 passed, 0 failed (out of 8 checks) — PASS**
+**Result: 8 passed, 0 failed (out of 8 checks) — PASS**
 
-Note: Tier 2 SKIPped rather than failing, which is the designed behavior (lines 317-318). The test gracefully handles budget-constrained runs where the full rejection cycle doesn't complete. Tier 1 was fully exercised and confirmed the keepalive rule is followed at the implementation-to-validation transition.
+### 9. Live E2E test execution (run 2, entity pre-staged at implementation) — DONE
 
-### 9. Recommendation: PASSED
+After fixture update (commit `73669c1`) pre-staged entity at `status: implementation` with completed stage report to skip the slow implementation phase and reach Tier 2.
 
-All six acceptance criteria are met. The test file exists, uses the correct infrastructure, has a properly structured fixture with `feedback-to: implementation`, and implements both Tier 1 (shutdown detection in the transition window) and Tier 2 (feedback routing method after rejection) assertions. The assertion logic would catch premature shutdown through complementary detection paths. Static template checks are present and currently pass. Live E2E execution confirms the test runs end-to-end and produces a clean PASS result.
+Ran `unset CLAUDECODE && uv run tests/test_feedback_keepalive.py`:
+
+- **Wallclock:** 184s, 67 assistant messages (claude-haiku-4-5-20251001)
+- **Phase 1 (setup):** PASS — status script runs, entity detected as dispatchable
+- **Phase 2 (FO run):** FO dispatched 2 ensigns: 0 implementation, 2 validation
+- **Tier 1:** SKIP — no implementation agent was dispatched (FO correctly recognized implementation was already complete)
+- **Tier 2:** FAIL — rejection detected, but no feedback routing observed (neither SendMessage nor fresh Agent dispatch)
+
+**Result: 7 passed, 2 failed (out of 9 checks) — FAIL**
+
+**Root cause analysis:**
+
+The pre-staging optimization broke the test's core assumptions:
+
+1. **FAIL: "FO dispatched Agent() for implementation stage"** (line 246) — The FO never dispatched an implementation agent because the entity's implementation stage was already complete. The test unconditionally requires `len(impl_dispatches) >= 1`.
+
+2. **FAIL: "no feedback routing observed after rejection"** (line 316) — The keepalive scenario requires an implementation agent to exist so it can be kept alive and receive feedback. Since no implementation agent was dispatched, there's nothing to keep alive and no target for feedback routing. The FO detected REJECTED but had no implementation agent to SendMessage to.
+
+**The fundamental problem:** The keepalive rule says "when dispatching validation with `feedback-to: implementation`, keep the implementation agent alive." Pre-staging at implementation-complete means no implementation agent is ever created. The test needs the full pipeline: implementation dispatch -> completion -> validation dispatch (keepalive window) -> rejection -> feedback routing to kept-alive agent.
+
+**Needed fixes (for implementation agent):**
+
+- Option A: Revert entity to `status: backlog` so the FO dispatches implementation first, then use a higher budget or smarter prompt to ensure the full rejection cycle completes.
+- Option B: Have the test prompt explicitly instruct the FO to dispatch an implementation agent first (even for already-complete work), but this fights the FO's natural behavior.
+- Option C: Start entity at `status: backlog` but use a minimal implementation task that completes fast, giving more budget for the rejection cycle.
+
+### 10. Recommendation: REJECTED
+
+The test fails 2/9 checks on live execution with the pre-staged fixture. The pre-staging optimization (commit `73669c1`) broke the test's core keepalive scenario by eliminating the implementation agent dispatch that's required for keepalive to be meaningful. The fixture needs to allow the FO to dispatch an implementation agent before advancing to validation.
 
 ### Checklist
 
@@ -324,5 +352,6 @@ All six acceptance criteria are met. The test file exists, uses the correct infr
 5. Verify AC5: Tier 2 feedback routing assertion present — DONE
 6. Verify AC6: test logic would catch premature shutdown — DONE
 7. Verify test is syntactically valid and runnable — DONE
-8. Live E2E test execution — DONE (8/8 passed, Tier 2 SKIPped as expected)
-9. PASSED
+8. Live E2E test execution (run 1, backlog start) — DONE (8/8 passed, Tier 2 SKIPped)
+9. Live E2E test execution (run 2, pre-staged) — FAILED (7/9 passed, 2 failed — no impl agent dispatched)
+10. REJECTED — pre-staged fixture breaks keepalive scenario
