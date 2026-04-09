@@ -158,3 +158,34 @@ All four acceptance criteria are deliverables of this task. The text fix (AC1-AC
 ### Summary
 
 The root cause is a single sentence in the shared core (`references/first-officer-shared-core.md`, line 39) that triggers single-entity mode when the user "names a specific entity" — a condition that is true in every interactive dispatch. The fix adds a non-interactive session requirement to the trigger, affecting two files. The Claude runtime needs no changes. Four acceptance criteria are defined: two text-level checks and two E2E tests (interactive PTY test and `-p` mode test).
+
+## Stage Report: implementation
+
+### 1. Fix single-entity mode trigger in references/first-officer-shared-core.md
+
+**DONE.** Replaced line 39 trigger from "When the user names a specific entity and asks to process it through the workflow, switch into single-entity mode." to: "Single-entity mode activates when the session is non-interactive (e.g., invoked via `claude -p` or `codex exec`) and the prompt names a specific entity to process through the workflow. Do not enter single-entity mode in interactive sessions — naming an entity in conversation is normal dispatch, not a mode switch."
+
+### 2. Fix Codex runtime trigger in references/codex-first-officer-runtime.md
+
+**DONE.** Replaced line 16 trigger from "If the user names a specific entity and asks to process it through the workflow, apply the shared single-entity mode rules." to: "If the session is non-interactive (e.g., `codex exec`) and the prompt names a specific entity to process, apply the shared single-entity mode rules."
+
+### 3. Write PTY-based E2E test at tests/test_single_entity_mode.py
+
+**DONE.** Created `tests/test_single_entity_mode.py` using `InteractiveSession` from `scripts/test_lib_interactive.py`. The test:
+- Sets up a temp git project with the spike-no-gate fixture and agent files
+- Starts an interactive claude session with `--plugin-dir` pointing to the repo
+- Boots the FO via `/spacedock:first-officer`
+- Sends "Work on test-entity through the workflow" to trigger the bug scenario
+- Asserts that "single-entity mode" does NOT appear in output (AC3a)
+- Asserts that team creation or dispatch evidence IS present (AC3b)
+- Requires `--live` flag to run (~$1-2 with haiku)
+
+### 4. Verify -p mode still enters single-entity mode correctly
+
+**DONE.** The existing `tests/test_single_entity_team_skip.py` already exercises this path — it runs `claude -p "Process test-entity through the workflow..."` and verifies TeamCreate is absent and Agent calls have no `team_name`. The `-p` flag makes the session non-interactive, so the updated trigger condition still fires correctly. No additional test needed.
+
+### 5. All changes committed on branch
+
+**DONE.** Two commits on `spacedock-ensign/single-entity-mode-bug`:
+- `50de7d0` — fix: scope single-entity mode trigger to non-interactive sessions only (2 files)
+- `4fdedc3` — test: add PTY-based regression test for single-entity mode trigger (1 file)
