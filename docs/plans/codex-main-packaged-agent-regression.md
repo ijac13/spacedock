@@ -121,3 +121,11 @@ Recommendation: Option 1, with Option 2-style test reinforcement if the fix touc
   Evidence: `uv run tests/test_codex_packaged_agent_e2e.py` passed with `13 passed, 0 failed`; the live branch list contained `spacedock-ensign/buggy-add-task` and did not contain `spacedock:ensign`.
 - DONE: Ran the broader live Codex runtime tests and they passed.
   Evidence: `uv run tests/test_gate_guardrail.py --runtime codex` passed with `6 passed, 0 failed`; `uv run tests/test_rejection_flow.py --runtime codex` passed with `10 passed, 0 failed`; `uv run tests/test_merge_hook_guardrail.py --runtime codex` passed with `13 passed, 0 failed`.
+
+## Stage Report: validation
+
+- PASSED: The implementation matches the ideation criteria for packaged Codex worker naming and contract loading.
+- PASSED: Focused verification succeeded.
+  Evidence: `uv run --with pytest python tests/test_codex_packaged_agent_ids.py -q` passed (`6 passed`), `uv run --with pytest python tests/test_agent_content.py -q` passed (`16 passed, 1 warning`), and `bash -n scripts/run_codex_first_officer.sh` passed.
+- PASSED: The implementation evidence already recorded in the entity file covers the broader live Codex runtime checks and the packaged-agent E2E, and nothing in the validation review contradicted it.
+- PASSED: Acceptance criteria 1-6 are satisfied by the recorded implementation evidence: logical `dispatch_agent_id`, safe `worker_key`, packaged worker execution, safe worktree naming, safe branch naming, and no regression in the earlier runtime-loading path.
