@@ -1,13 +1,13 @@
 ---
 id: 106
 title: E2E test for feedback-to keepalive — FO must not kill implementation agent during validation
-status: ideation
+status: implementation
 source: CL — observed FO prematurely shutting down implementation ensign when entering validation (feedback-to stage)
 started: 2026-04-09T15:24:00Z
 completed:
 verdict:
 score: 0.85
-worktree:
+worktree: .worktrees/spacedock-ensign-feedback-keepalive-e2e-test
 issue:
 pr:
 ---
