@@ -202,15 +202,19 @@ The root cause is a single sentence in the shared core (`references/first-office
 
 ### 3. Verify AC3: PTY E2E test exists and tests correct behavior
 
-**DONE.** `tests/test_single_entity_mode.py` exists (161 lines). Verified:
-- Imports `InteractiveSession` from `test_lib_interactive`
-- Sets up a temp git project with `spike-no-gate` fixture
-- Boots FO via `/spacedock:first-officer` in an interactive session
-- Sends "Work on test-entity through the workflow" to trigger the formerly-buggy scenario
-- Asserts "single-entity mode" does NOT appear in output (AC3a)
-- Asserts team creation or dispatch evidence IS present (AC3b)
-- Gated behind `--live` flag (skips cleanly without it)
-- Live run not executed (requires ~$1-2 with haiku); offline structure validated
+**FAILED.** `tests/test_single_entity_mode.py` exists (161 lines) and has correct structure (imports `InteractiveSession`, checks for single-entity mode absence, checks for team dispatch evidence). However, the live test run **failed**:
+
+```
+$ unset CLAUDECODE && uv run tests/test_single_entity_mode.py --live
+```
+
+The test got stuck at Claude Code's "trust this folder" security prompt. The test creates a temp directory (`/var/folders/.../sem-test-...`) and passes it as `cwd` to `InteractiveSession`, but the harness does not handle the trust dialog for untrusted directories. The FO never booted — the session timed out waiting for the trust prompt to be dismissed.
+
+Root cause: The existing `test_interactive_poc.py` works because it does not set a `cwd` (runs in the repo root, which is already trusted). The single-entity mode test needs to either:
+- Handle the trust prompt in the PTY harness (send Enter/arrow keys to dismiss it)
+- Or use the `--dangerously-skip-permissions` flag or equivalent to bypass the trust check for test directories
+
+Additionally, CL requires the test to support a `--runtime` flag for both Claude Code and Codex runtimes. The current test is Claude Code-only.
 
 ### 4. Verify AC4: -p mode single-entity behavior preserved
 
@@ -234,4 +238,8 @@ Note: The full `uv run tests/test_reuse_dispatch.py` E2E test was not run (requi
 
 ### 6. Recommendation
 
-**PASSED.** All four acceptance criteria are met. The reference file changes are minimal (one line each in two files), the wording matches the proposed fix from ideation exactly, no unintended files were modified, and the test infrastructure is correctly structured. The `claude-first-officer-runtime.md` was correctly left unchanged.
+**REJECTED.** AC1 and AC2 (reference file fixes) are correct. AC4 (pipe mode preservation) is verified by existing test. However, AC3 has two issues requiring implementation changes:
+
+1. **Live test fails:** The PTY test gets stuck at the "trust this folder" security prompt when running with a temp directory `cwd`. The harness needs to handle this prompt or bypass it for test directories.
+
+2. **Missing `--runtime` support:** CL requires the test to support both Claude Code and Codex runtimes via a `--runtime` flag. The current implementation is Claude Code-only.
