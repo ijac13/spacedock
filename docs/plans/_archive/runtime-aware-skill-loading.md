@@ -1,13 +1,13 @@
 ---
 id: 109
 title: Make skill entrypoints runtime-aware — Codex loads Codex runtime, Claude loads Claude runtime
-status: implementation
+status: done
 source: CL diagnosis — Codex main broken, skill loads wrong runtime contract
 started: 2026-04-09T18:16:42Z
-completed:
-verdict:
+completed: 2026-04-09T21:32:06Z
+verdict: PASSED
 score: 0.9
-worktree: .worktrees/ensign-runtime-aware-skill-loading
+worktree: 
 issue:
 pr: #58
 ---
