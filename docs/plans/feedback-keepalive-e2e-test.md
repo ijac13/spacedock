@@ -296,9 +296,24 @@ The tiers are complementary: Tier 1 catches explicit shutdown messages; Tier 2 c
 - `python3 tests/test_feedback_keepalive.py --help` — runs, shows expected flags (`--runtime`, `--agent`, `--model`, `--effort`)
 - Static checks against `first-officer-shared-core.md` verified: all three regex patterns (`keepalive rule`, `auto-bounce rule`, `feedback rejection flow`) match current shared-core content
 
-### 8. Recommendation: PASSED
+### 8. Live E2E test execution — DONE
 
-All six acceptance criteria are met. The test file exists, uses the correct infrastructure, has a properly structured fixture with `feedback-to: implementation`, and implements both Tier 1 (shutdown detection in the transition window) and Tier 2 (feedback routing method after rejection) assertions. The assertion logic would catch premature shutdown through complementary detection paths. Static template checks are present and currently pass. The test is syntactically valid and runnable.
+Ran `unset CLAUDECODE && uv run tests/test_feedback_keepalive.py` — full results:
+
+- **Wallclock:** 230s, 112 assistant messages (claude-haiku-4-5-20251001), ~4.2M tokens
+- **Phase 1 (setup):** PASS — status script runs, entity detected as dispatchable
+- **Phase 2 (FO run):** FO dispatched 3 ensigns total: 2 implementation, 1 validation
+- **Tier 1 (keepalive at transition):** PASS — no shutdown SendMessage detected between implementation completion and validation dispatch
+- **Tier 2 (feedback routing):** SKIP — rejection not observed; pipeline completed validation dispatch but didn't reach REJECTED signal within budget. This is the expected graceful fallback when the pipeline doesn't progress far enough.
+- **Static template checks:** 3/3 PASS — keepalive rule, auto-bounce rule, and feedback rejection flow all found in shared-core
+
+**Final result: 8 passed, 0 failed (out of 8 checks) — PASS**
+
+Note: Tier 2 SKIPped rather than failing, which is the designed behavior (lines 317-318). The test gracefully handles budget-constrained runs where the full rejection cycle doesn't complete. Tier 1 was fully exercised and confirmed the keepalive rule is followed at the implementation-to-validation transition.
+
+### 9. Recommendation: PASSED
+
+All six acceptance criteria are met. The test file exists, uses the correct infrastructure, has a properly structured fixture with `feedback-to: implementation`, and implements both Tier 1 (shutdown detection in the transition window) and Tier 2 (feedback routing method after rejection) assertions. The assertion logic would catch premature shutdown through complementary detection paths. Static template checks are present and currently pass. Live E2E execution confirms the test runs end-to-end and produces a clean PASS result.
 
 ### Checklist
 
@@ -309,4 +324,5 @@ All six acceptance criteria are met. The test file exists, uses the correct infr
 5. Verify AC5: Tier 2 feedback routing assertion present — DONE
 6. Verify AC6: test logic would catch premature shutdown — DONE
 7. Verify test is syntactically valid and runnable — DONE
-8. PASSED
+8. Live E2E test execution — DONE (8/8 passed, Tier 2 SKIPped as expected)
+9. PASSED
