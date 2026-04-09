@@ -1,9 +1,9 @@
 ---
 id: 104
 title: Workflow discovery — analyze conversation history to recommend workflows
-status: backlog
+status: ideation
 source: CL brainstorm during 057 ideation
-started:
+started: 2026-04-09T02:08:14Z
 completed:
 verdict:
 score:
