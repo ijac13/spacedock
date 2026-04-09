@@ -311,18 +311,21 @@ def compute_next_id(active_entities, archive_dir):
 
 def scan_orphans(entities, git_root):
     """Return entities with non-empty worktree field, with dir/branch existence info."""
-    worktree_branches = set()
+    worktree_paths = {}
     try:
         result = subprocess.run(
             ['git', 'worktree', 'list', '--porcelain'],
             capture_output=True, text=True, cwd=git_root
         )
         if result.returncode == 0:
+            current_path = None
             for line in result.stdout.split('\n'):
-                if line.startswith('branch '):
-                    branch = line[len('branch '):].strip()
-                    short = branch.replace('refs/heads/', '')
-                    worktree_branches.add(short)
+                if line.startswith('worktree '):
+                    current_path = line[len('worktree '):].strip()
+                elif line.startswith('branch ') and current_path is not None:
+                    worktree_paths[os.path.realpath(current_path)] = True
+                elif line == '':
+                    current_path = None
     except FileNotFoundError:
         pass
 
@@ -333,8 +336,7 @@ def scan_orphans(entities, git_root):
             continue
         dir_path = os.path.join(git_root, wt)
         dir_exists = 'yes' if os.path.isdir(dir_path) else 'no'
-        branch_name = os.path.basename(wt) if '/' in wt else wt
-        branch_exists = 'yes' if branch_name in worktree_branches else 'no'
+        branch_exists = 'yes' if os.path.realpath(dir_path) in worktree_paths else 'no'
         orphans.append({
             'id': e.get('id', ''),
             'slug': e.get('slug', ''),
