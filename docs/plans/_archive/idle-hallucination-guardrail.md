@@ -1,13 +1,13 @@
 ---
 id: 105
 title: Add idle hallucination guardrail to FO runtime
-status: validation
+status: done
 source: CL — observed twice in production sessions
 started: 2026-04-09T05:11:48Z
-completed:
-verdict:
+completed: 2026-04-09T05:28:08Z
+verdict: PASSED
 score: 0.9
-worktree: .worktrees/spacedock-ensign-idle-hallucination-guardrail
+worktree: 
 issue:
 pr:
 ---
