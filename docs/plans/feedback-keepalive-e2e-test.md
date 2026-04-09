@@ -9,7 +9,7 @@ verdict:
 score: 0.85
 worktree: .worktrees/spacedock-ensign-feedback-keepalive-e2e-test
 issue:
-pr:
+pr: #56
 ---
 
 The FO's shared core says: when the next stage has `feedback-to` pointing at the completed stage, keep the completed agent alive. The FO violated this rule by shutting down the implementation ensign when advancing to validation (which has `feedback-to: implementation`).
