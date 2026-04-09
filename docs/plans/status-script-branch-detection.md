@@ -1,9 +1,9 @@
 ---
 id: 111
 title: Status script reports worktree branches as missing when they exist
-status: backlog
+status: ideation
 source: FO boot anomaly — 2026-04-09
-started:
+started: 2026-04-09T22:00:38Z
 completed:
 verdict:
 score:
