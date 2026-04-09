@@ -1,47 +1,67 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run
+# /// script
+# requires-python = ">=3.10"
+# ///
 # ABOUTME: PTY-based E2E regression test for single-entity mode trigger condition.
 # ABOUTME: Verifies that interactive sessions create teams (not bare mode) when a user names an entity.
 
 from __future__ import annotations
 
+import argparse
+import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from test_lib_interactive import InteractiveSession
+from test_lib_interactive import InteractiveSession, _strip_ansi
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "spike-no-gate"
+
+
+def parse_args() -> tuple[argparse.Namespace, list[str]]:
+    parser = argparse.ArgumentParser(
+        description="Single-entity mode interactive regression test"
+    )
+    parser.add_argument(
+        "--runtime", choices=["claude"], default="claude",
+        help="Runtime to test (claude only — this tests interactive sessions)",
+    )
+    parser.add_argument("--agent", default="spacedock:first-officer")
+    parser.add_argument("--model", default="haiku", help="Model to use (default: haiku)")
+    parser.add_argument(
+        "--budget", type=float, default=2.00,
+        help="Max budget in USD (default: 2.00)",
+    )
+    return parser.parse_known_args()
 
 
 def setup_test_project() -> Path:
     """Create a temp git project with the spike-no-gate fixture and agent files."""
     project_dir = Path(tempfile.mkdtemp(prefix="sem-test-"))
 
-    # Initialize git repo
     subprocess.run(["git", "init", str(project_dir)], capture_output=True, check=True)
     subprocess.run(
         ["git", "commit", "--allow-empty", "-m", "init"],
         capture_output=True, check=True, cwd=project_dir,
     )
 
-    # Copy fixture into workflow directory
     workflow_dir = project_dir / "spike-workflow"
     shutil.copytree(FIXTURE_DIR, workflow_dir)
     status = workflow_dir / "status"
     if status.exists():
         status.chmod(status.stat().st_mode | 0o111)
 
-    # Install agent files
     agents_dir = project_dir / ".claude" / "agents"
     agents_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(REPO_ROOT / "agents" / "first-officer.md", agents_dir / "first-officer.md")
     shutil.copy2(REPO_ROOT / "agents" / "ensign.md", agents_dir / "ensign.md")
 
-    # Commit everything
     subprocess.run(["git", "add", "-A"], capture_output=True, check=True, cwd=project_dir)
     subprocess.run(
         ["git", "commit", "-m", "setup: single-entity mode interactive test"],
@@ -51,110 +71,176 @@ def setup_test_project() -> Path:
     return project_dir
 
 
-def test_interactive_dispatch_creates_team():
-    """Verify that naming an entity in an interactive session triggers team dispatch, not single-entity mode."""
-    print("--- Setup: Create test project ---")
+def start_with_trust_handling(session: InteractiveSession, ready_timeout: float = 30.0) -> None:
+    """Start the session, handling the workspace trust dialog if it appears.
+
+    Claude Code shows a trust dialog for untrusted directories. This function
+    detects the dialog and sends Enter to accept it before waiting for the
+    normal prompt.
+    """
+    if session._started:
+        raise RuntimeError("Session already started")
+
+    from test_lib_interactive import _clean_env
+    import pty
+    import select
+
+    env = _clean_env()
+    cmd = ["claude", "--model", session.model, "--permission-mode", session.permission_mode]
+    if session.max_budget_usd is not None:
+        cmd.extend(["--max-budget-usd", str(session.max_budget_usd)])
+    cmd.extend(session.extra_args)
+
+    pid, fd = pty.fork()
+    if pid == 0:
+        if session.cwd:
+            os.chdir(session.cwd)
+        os.execvpe("claude", cmd, env)
+        os._exit(1)
+
+    session._pid = pid
+    session._fd = fd
+    session._started = True
+
+    start = time.time()
+    trust_handled = False
+    while time.time() - start < ready_timeout:
+        session._drain(timeout=1.0)
+        clean = session.get_clean_output()
+
+        # Check for the normal prompt
+        if "\u276f" in clean:
+            return
+
+        # Check for trust dialog and dismiss it
+        if not trust_handled and re.search(r"trust|Trust this folder|Do you want to trust", clean, re.IGNORECASE):
+            print("  Trust dialog detected, sending Enter to accept...")
+            os.write(fd, b"\r")
+            time.sleep(1.0)
+            trust_handled = True
+
+    raise TimeoutError(f"Session did not become ready within {ready_timeout}s")
+
+
+def main():
+    args, extra_args = parse_args()
+
+    print("=== Single-Entity Mode Interactive Regression Test ===")
+    print()
+
+    passes = 0
+    failures = 0
+
+    def pass_(label: str):
+        nonlocal passes
+        passes += 1
+        print(f"  PASS: {label}")
+
+    def fail(label: str):
+        nonlocal failures
+        failures += 1
+        print(f"  FAIL: {label}")
+
+    # --- Phase 1: Set up test project ---
+
+    print("--- Phase 1: Set up test project ---")
     project_dir = setup_test_project()
     print(f"  Project dir: {project_dir}")
 
     abs_workflow = project_dir / "spike-workflow"
 
     session = InteractiveSession(
-        model="haiku",
-        max_budget_usd=2.00,
+        model=args.model,
+        max_budget_usd=args.budget,
         cwd=project_dir,
-        extra_args=["--plugin-dir", str(REPO_ROOT)],
+        extra_args=["--plugin-dir", str(REPO_ROOT), *extra_args],
     )
 
     try:
-        print("--- Starting interactive session ---")
-        session.start(ready_timeout=20)
+        # --- Phase 2: Start session and boot FO ---
+
+        print()
+        print("--- Phase 2: Start interactive session ---")
+        start_with_trust_handling(session, ready_timeout=30)
         print("  Session ready")
 
-        # Boot the FO skill
-        print("--- Sending FO skill invocation ---")
-        session.send(f"/spacedock:first-officer")
-        # Wait for the FO to acknowledge the workflow — look for entity-related output
-        booted = session.wait_for(r"spike-workflow|backlog|dispatch|status", timeout=90, min_matches=1)
+        print("  Sending FO skill invocation...")
+        session.send("/spacedock:first-officer")
+        booted = session.wait_for(
+            r"spike-workflow|backlog|dispatch|status|workflow",
+            timeout=90,
+            min_matches=1,
+        )
         print(f"  FO booted: {booted}")
 
         if not booted:
             clean = session.get_clean_output()
             print("  WARNING: FO did not boot within timeout")
             print(f"  Output tail: ...{clean[-500:]}")
-            return False
+            fail("FO booted and acknowledged workflow")
+            return
 
-        # Ask to work on a specific entity by name — this is the trigger that
-        # used to incorrectly activate single-entity mode
-        print("--- Sending entity dispatch request ---")
+        pass_("FO booted and acknowledged workflow")
+
+        # --- Phase 3: Send entity dispatch request ---
+
+        print()
+        print("--- Phase 3: Entity dispatch request ---")
         session.send(f"Work on test-entity through the workflow at {abs_workflow}")
-        # Wait for evidence of team creation or agent dispatch
         team_evidence = session.wait_for(
             r"[Tt]eam|TeamCreate|team_name|dispatch|[Aa]gent",
             timeout=120,
             min_matches=1,
         )
-        print(f"  Team/dispatch evidence found: {team_evidence}")
 
-        # Check for absence of single-entity mode
-        clean_output = session.get_clean_output()
-        single_entity_mentioned = "single-entity mode" in clean_output.lower()
-        bare_mode_mentioned = "bare mode" in clean_output.lower() or "bare-mode" in clean_output.lower()
+        # --- Phase 4: Assertions ---
 
         print()
-        print("=== Assertions ===")
+        print("--- Phase 4: Validation ---")
 
-        passed = True
+        clean_output = session.get_clean_output()
+        single_entity_mentioned = "single-entity mode" in clean_output.lower()
 
-        # AC3a: FO must NOT enter single-entity mode in interactive session
         if single_entity_mentioned:
-            print("  FAIL: FO entered single-entity mode in interactive session")
-            passed = False
+            fail("FO did NOT enter single-entity mode in interactive session")
         else:
-            print("  PASS: FO did NOT enter single-entity mode")
+            pass_("FO did NOT enter single-entity mode in interactive session")
 
-        # AC3b: FO should show team creation or dispatch evidence
         if team_evidence:
-            print("  PASS: Team creation or dispatch evidence found")
+            pass_("team creation or dispatch evidence found")
         else:
-            print("  FAIL: No team creation or dispatch evidence found")
-            passed = False
+            fail("team creation or dispatch evidence found")
 
-        # Informational: bare mode check (bare mode is acceptable if teams
-        # aren't available, but single-entity mode is not)
+        # Informational: bare mode is acceptable (teams may not be available),
+        # but single-entity mode is not
+        bare_mode_mentioned = "bare mode" in clean_output.lower() or "bare-mode" in clean_output.lower()
         if bare_mode_mentioned:
             print("  INFO: Bare mode detected (teams may not be available — this is OK)")
             print("        The key assertion is that single-entity mode was NOT triggered")
-
-        return passed
 
     finally:
         print()
         print("--- Stopping session ---")
         session.stop()
-        # Clean up temp directory
-        shutil.rmtree(project_dir, ignore_errors=True)
+        if failures > 0:
+            print(f"  Test dir preserved at: {project_dir}")
+        else:
+            shutil.rmtree(project_dir, ignore_errors=True)
         print("  Done")
 
+    # --- Results ---
 
-def main():
-    print("=== Single-Entity Mode Interactive Regression Test ===")
+    print()
+    print("=== Results ===")
+    total = passes + failures
+    print(f"  {passes} passed, {failures} failed (out of {total} checks)")
     print()
 
-    if "--live" not in sys.argv:
-        print("--- Live test skipped (pass --live to run) ---")
-        print("This test requires a live claude session (~$1-2 with haiku).")
-        print()
-        print("=== Skipped ===")
-        return
-
-    success = test_interactive_dispatch_creates_team()
-    print()
-    if success:
-        print("=== PASS ===")
-    else:
-        print("=== FAIL ===")
+    if failures > 0:
+        print("RESULT: FAIL")
         sys.exit(1)
+    else:
+        print("RESULT: PASS")
 
 
 if __name__ == "__main__":
