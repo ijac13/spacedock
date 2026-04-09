@@ -12,45 +12,95 @@ issue:
 pr:
 ---
 
-The Codex packaged-agent live test still fails on `main` after the runtime-loading work landed.
+The Codex packaged-agent regression is now narrower than the earlier runtime-loading bug. The worker boots and finishes, but the Codex path still sometimes names the worktree and branch from the bare worker stem instead of the safe packaged key.
 
-## Problem
+## Problem Statement
 
-`tests/test_codex_packaged_agent_e2e.py` no longer times out in the original way, but it still fails its packaged safe-naming assertions on `main`.
+`tests/test_codex_packaged_agent_e2e.py` still fails on `main` because the packaged logical id `spacedock:ensign` is not consistently threaded into the safe `worker_key` used for filesystem and branch naming.
 
 Observed failure shape:
 
-- first officer boots and dispatches a worker
-- worker completes and returns a result
-- test still fails because the packaged logical id `spacedock:ensign` is not consistently converted into the safe worker key `spacedock-ensign`
-- resulting worktree/branch names use `ensign` instead of `spacedock-ensign`
+- first officer boots and dispatches a worker successfully
+- the worker completes and returns a result
+- the test still fails on safe-naming assertions
+- live output shows `.worktrees/ensign-buggy-add-task` and `ensign/buggy-add-task` where `spacedock-ensign-*` is expected
 
-## Why this matters
+This is a naming regression, not a worker-loading regression. The earlier runtime-loading fix should stay intact.
 
-The Codex runtime contract requires a split between:
+## Root-Cause Hypothesis
 
-- `dispatch_agent_id` — logical packaged id, e.g. `spacedock:ensign`
-- `worker_key` — filesystem-safe name, e.g. `spacedock-ensign`
+The Codex path is likely resolving the packaged worker correctly, but one later step still falls back to the raw agent stem when constructing stateful names. The most likely fault line is the dispatch helper that bridges:
 
-If the FO collapses the worker key to bare `ensign`, the packaged-agent path still does not preserve namespace-safe naming in worktree and branch state.
+- logical dispatch id: `spacedock:ensign`
+- safe worker key: `spacedock-ensign`
 
-## Evidence
+The bug probably lives where the Codex launcher updates entity state, creates the worktree, or derives the temporary branch name after resolution. If that code uses `dispatch_agent_id` or the bare `ensign` stem instead of `worker_key`, the runtime contract diverges exactly the way the live evidence shows.
 
-- `tests/test_codex_packaged_agent_e2e.py` fails on `main`
-- failure assertions are:
-  - FO keeps packaged logical id while dispatch stays on shared safe naming
-  - safe packaged worker key appears in worktree path
-  - safe packaged worker key appears in branch names
-- live logs showed worktree/branch values like:
-  - `.worktrees/ensign-buggy-add-task`
-  - `ensign/buggy-add-task`
-  instead of `spacedock-ensign-*`
+## Likely Code Surfaces
 
-## Expected outcome
+- `scripts/test_lib.py`
+  - `resolve_codex_worker()`
+  - `build_codex_worker_bootstrap_prompt()`
+  - `run_codex_first_officer()`
+- `skills/first-officer/references/codex-first-officer-runtime.md`
+- `skills/first-officer/references/claude-first-officer-runtime.md`
+- `skills/first-officer/references/first-officer-shared-core.md`
+- `tests/test_codex_packaged_agent_ids.py`
+- `tests/test_codex_packaged_agent_e2e.py`
 
-Fix the Codex packaged dispatch path so:
+The shared references already describe the correct split. The remaining work is to make the Codex implementation consistently honor it on the packaged path.
 
-1. `dispatch_agent_id` stays `spacedock:ensign`
-2. `worker_key` becomes `spacedock-ensign`
-3. state updates, worktree creation, branch naming, and reporting all use the safe worker key consistently
-4. `tests/test_codex_packaged_agent_e2e.py` passes on `main`
+## Proposed Approach
+
+### Option 1: Minimal Codex dispatch fix
+
+Patch the Codex dispatch helper so every branch/worktree/status name is derived from `worker_key` after resolution. Keep `dispatch_agent_id` unchanged for reporting and skill lookup. This is the smallest change and the best fit if the bug is just one stale fallback to `ensign`.
+
+### Option 2: Tighten the shared contract
+
+Update the Codex runtime references and helper tests together so the naming split is asserted in one place and reused by both the launcher and the live E2E. This is slightly broader, but it reduces the chance of reintroducing the same fallback in a second helper.
+
+### Option 3: Relax the test expectation
+
+Allow bare `ensign` in the packaged-agent E2E. This would hide the bug rather than fix it, so it should not be chosen.
+
+Recommendation: Option 1, with Option 2-style test reinforcement if the fix touches a shared helper.
+
+## Acceptance Criteria
+
+1. `dispatch_agent_id` stays `spacedock:ensign` for the packaged Codex worker path.
+   - Test: `tests/test_codex_packaged_agent_ids.py` still asserts the resolved payload keeps the logical id unchanged.
+2. `worker_key` becomes `spacedock-ensign` and is the only value used for worktree and branch naming.
+   - Test: `tests/test_codex_packaged_agent_ids.py` and `tests/test_codex_packaged_agent_e2e.py` both assert the safe key appears in the derived names.
+3. The Codex run still loads and executes the packaged worker contract correctly.
+   - Test: `tests/test_codex_packaged_agent_e2e.py` still sees a spawned worker and a completed worker message.
+4. The live worktree path contains `spacedock-ensign` and does not contain `spacedock:ensign`.
+   - Test: `tests/test_codex_packaged_agent_e2e.py` reads the entity file and checks the `worktree:` frontmatter value.
+5. The branch list contains `spacedock-ensign/` and does not contain `spacedock:ensign`.
+   - Test: `tests/test_codex_packaged_agent_e2e.py` checks `git branch --list` output.
+6. The fix does not reopen the earlier runtime-loading regression.
+   - Test: rerun the Codex packaged-agent E2E after the change and confirm the worker still boots, completes, and reports the right logical id.
+
+## Test Plan
+
+- Fast static/unit coverage:
+  - `tests/test_codex_packaged_agent_ids.py`
+  - cost: low
+  - complexity: low
+  - purpose: prove the resolver still splits `dispatch_agent_id` from `worker_key` correctly
+- Live Codex E2E:
+  - `tests/test_codex_packaged_agent_e2e.py`
+  - cost: medium to high
+  - complexity: medium
+  - purpose: prove the real Codex path writes the safe packaged key into worktree and branch state
+- No separate browser/UI E2E is needed.
+  - The failure is fully observable through the Codex log, the entity file, and git state.
+
+## Stage Report: ideation
+
+- DONE: Clarified the problem as a naming regression on the Codex packaged-agent path, not a repeat of the runtime-loading failure.
+- DONE: Identified the likely fault line as the helper or runtime path that turns a resolved packaged worker into stateful names.
+- DONE: Listed the most relevant code surfaces, centered on `scripts/test_lib.py`, the first-officer runtime references, and the packaged-agent tests.
+- DONE: Proposed three approaches and recommended the minimal Codex dispatch fix with test reinforcement.
+- DONE: Wrote concrete acceptance criteria, each with an explicit verification method.
+- DONE: Wrote a proportional test plan covering cheap unit coverage and one live Codex E2E; no browser E2E is needed.
