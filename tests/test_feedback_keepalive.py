@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -18,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     LogParser, TestRunner, create_test_project, setup_fixture,
     install_agents, run_first_officer, git_add_commit,
-    rejection_signal_present,
 )
 
 
@@ -94,14 +92,14 @@ def scan_keepalive_events(log: LogParser) -> dict:
             continue
 
         for block in entry["message"].get("content", []):
-            # FO text containing completion or rejection signals
+            # FO text containing completion signals (but NOT rejection —
+            # rejection is only detected from structured tool_result entries
+            # to avoid false positives from hypothetical FO narrative)
             if block.get("type") == "text":
                 text = block.get("text", "")
                 if impl_dispatch_seen and not impl_completion_seen:
                     if completion_pattern.search(text):
                         impl_completion_seen = True
-                if rejection_pattern.search(text):
-                    rejection_seen = True
 
             if block.get("type") != "tool_use":
                 continue
@@ -165,17 +163,10 @@ def main():
     print("--- Phase 1: Set up test project from fixture ---")
 
     create_test_project(t)
-    fixture_dir = t.repo_root / "tests" / "fixtures" / "keepalive-pipeline"
     setup_fixture(t, "keepalive-pipeline", "keepalive-pipeline")
     install_agents(t, include_ensign=True)
 
-    # Copy the buggy implementation and tests into the repo root
-    shutil.copy2(fixture_dir / "math_ops.py", t.test_project_dir)
-    tests_dir = t.test_project_dir / "tests"
-    tests_dir.mkdir(exist_ok=True)
-    shutil.copy2(fixture_dir / "tests" / "test_add.py", tests_dir)
-
-    git_add_commit(t.test_project_dir, "setup: keepalive test fixture with buggy implementation")
+    git_add_commit(t.test_project_dir, "setup: keepalive test fixture")
 
     status_cmd = ["python3", str(t.repo_root / "skills" / "commission" / "bin" / "status"),
                   "--workflow-dir", "keepalive-pipeline"]
@@ -230,7 +221,6 @@ def main():
     log.write_tool_calls(t.log_dir / "tool-calls.json")
 
     agent_calls = log.agent_calls()
-    fo_text = "\n".join(log.fo_texts())
 
     print()
     print("[Agent Dispatch Overview]")
@@ -286,15 +276,7 @@ def main():
     print()
     print("[Tier 2 — Feedback Routing via SendMessage]")
 
-    entity_main = t.test_project_dir / "keepalive-pipeline" / "keepalive-test-task.md"
-    worktrees_dir = t.test_project_dir / ".worktrees"
-
-    rejection_found = rejection_signal_present(
-        "keepalive-pipeline", "keepalive-test-task",
-        entity_main, worktrees_dir, fo_text,
-    )
-
-    if rejection_found or events["rejection_seen"]:
+    if events["rejection_seen"]:
         t.pass_("rejection signal detected in logs or entity")
 
         if events["feedback_via_send_message"]:

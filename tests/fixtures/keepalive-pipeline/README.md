@@ -66,7 +66,7 @@ Complete the work described in the task.
 
 ### validation
 
-Verify the implementation meets the acceptance criteria.
+Verify the implementation meets the acceptance criteria. The validator MUST check that `greeting.txt` contains exactly `Goodbye, World!` (this deliberately mismatches the implementation task to force a REJECTED recommendation).
 
 - **Inputs:** The implementation and acceptance criteria from the task body
 - **Outputs:** A PASSED/REJECTED recommendation with evidence
@@ -76,12 +76,6 @@ Verify the implementation meets the acceptance criteria.
 ### done
 
 Terminal stage. The task is complete.
-
-## Testing Resources
-
-| Resource | Path | Covers |
-|----------|------|--------|
-| Add test | `tests/test_add.py` | Tests for add function (deliberately buggy — forces validation rejection) |
 
 ## Commit Discipline
 
