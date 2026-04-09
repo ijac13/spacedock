@@ -763,6 +763,92 @@ class TestBootOption(unittest.TestCase):
             self.assertEqual(parts[-2], 'no')
             self.assertEqual(parts[-1], 'no')
 
+    def test_orphans_namespaced_branch_detected(self):
+        """Branch with / in name is correctly detected via worktree path lookup."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wt_path = os.path.join(tmpdir, '.worktrees', 'ensign-feature-name')
+            os.makedirs(wt_path)
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'feature-name.md': entity('001', 'Feature', 'implementation',
+                                          worktree='.worktrees/ensign-feature-name'),
+            })
+            worktree_output = (
+                'worktree /main\n'
+                'HEAD abc123\n'
+                'branch refs/heads/main\n'
+                '\n'
+                'worktree %s\n'
+                'HEAD def456\n'
+                'branch refs/heads/ensign/feature-name\n'
+                '\n'
+            ) % wt_path
+            fake_bin = self._make_fake_git(tmpdir, worktree_output)
+            path = fake_bin + os.pathsep + self._path_without_gh()
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': path})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.split('\n')
+            feature_line = [l for l in lines if 'feature-name' in l and '001' in l][0]
+            parts = feature_line.split()
+            # dir exists, branch exists
+            self.assertEqual(parts[-2], 'yes', 'DIR_EXISTS should be yes')
+            self.assertEqual(parts[-1], 'yes', 'BRANCH_EXISTS should be yes')
+
+    def test_orphans_missing_worktree_detected(self):
+        """Entity whose worktree path is not in git worktree list reports BRANCH_EXISTS: no."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Don't create the worktree directory either
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'ghost.md': entity('002', 'Ghost', 'implementation',
+                                   worktree='.worktrees/ensign-ghost'),
+            })
+            worktree_output = (
+                'worktree /main\n'
+                'HEAD abc123\n'
+                'branch refs/heads/main\n'
+                '\n'
+            )
+            fake_bin = self._make_fake_git(tmpdir, worktree_output)
+            path = fake_bin + os.pathsep + self._path_without_gh()
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': path})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.split('\n')
+            ghost_line = [l for l in lines if 'ghost' in l and '002' in l][0]
+            parts = ghost_line.split()
+            self.assertEqual(parts[-2], 'no', 'DIR_EXISTS should be no')
+            self.assertEqual(parts[-1], 'no', 'BRANCH_EXISTS should be no')
+
+    def test_orphans_simple_branch_still_works(self):
+        """Branch without / in name is still correctly detected (no regression)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wt_path = os.path.join(tmpdir, '.worktrees', 'remove-codex-dispatcher')
+            os.makedirs(wt_path)
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'codex.md': entity('003', 'Codex', 'implementation',
+                                   worktree='.worktrees/remove-codex-dispatcher'),
+            })
+            worktree_output = (
+                'worktree /main\n'
+                'HEAD abc123\n'
+                'branch refs/heads/main\n'
+                '\n'
+                'worktree %s\n'
+                'HEAD def456\n'
+                'branch refs/heads/remove-codex-dispatcher\n'
+                '\n'
+            ) % wt_path
+            fake_bin = self._make_fake_git(tmpdir, worktree_output)
+            path = fake_bin + os.pathsep + self._path_without_gh()
+            result = run_status(tmpdir, '--boot', script_path=self.script_path,
+                               extra_env={'PATH': path})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.split('\n')
+            codex_line = [l for l in lines if 'codex' in l and '003' in l][0]
+            parts = codex_line.split()
+            self.assertEqual(parts[-2], 'yes', 'DIR_EXISTS should be yes')
+            self.assertEqual(parts[-1], 'yes', 'BRANCH_EXISTS should be yes')
+
     # AC5: ORPHANS: none
     def test_orphans_none(self):
         """ORPHANS shows 'ORPHANS: none' when no entities have worktree fields."""
