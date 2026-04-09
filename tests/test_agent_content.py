@@ -115,6 +115,10 @@ def test_codex_runtime_docs_cover_merge_hook_finalize_path():
     assert "merge hooks" in text.lower()
     assert "archive" in text.lower()
     assert "fork_context=false" in text
+    assert "spacedock-ensign" in text
+    assert "Never collapse a packaged logical id" in text
+    assert "role_asset_name: ensign" in text
+    assert "{worker_key}/{slug}" in text
 
 
 def test_assembled_claude_first_officer_has_gate_guardrails():

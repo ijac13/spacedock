@@ -103,6 +103,12 @@ def build_codex_first_officer_invocation_prompt(
         Let the skill bootstrap the packaged workflow contract and follow it directly.
         Use the shared first-officer runtime directly for bounded dispatch and completion steps.
         Any worker you spawn in this run MUST use `fork_context=false` with a fully self-contained prompt.
+        For packaged workers, keep the logical id in reporting and use the safe key for naming.
+        When the packaged worker is `spacedock:ensign`, the worker key is `spacedock-ensign` and
+        must be used for worktree, branch, and session names. Worktree paths use
+        `.worktrees/{{worker_key}}-{{slug}}` and branches use `{{worker_key}}/{{slug}}`.
+        Never collapse it to bare `ensign`.
+        Keep `dispatch_agent_id: spacedock:ensign` but use `role_asset_name: ensign` for the packaged skill asset.
         For bounded single-entity runs, treat the first completed worker summary as sufficient evidence for your final response unless it is missing the requested verdict or outcome.
         After `wait_agent(...)` returns the needed verdict or outcome, do not reread entity files, rerun `status`, or continue the loop. Respond once and stop immediately.
         Do not load reference docs unless you hit a real blocker.

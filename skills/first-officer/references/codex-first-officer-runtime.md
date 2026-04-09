@@ -25,6 +25,11 @@ When the workflow path is explicit, do not spend time rediscovering alternatives
 - Treat names like `spacedock:ensign` as logical ids, not native Codex agent types.
 - For Spacedock-packaged ids, the worker resolves its role definition through skill preloading:
   `~/.agents/skills/{namespace}/{name}/SKILL.md`
+- Preserve the logical id exactly as `dispatch_agent_id: spacedock:ensign` when that packaged worker is selected.
+- Derive the safe naming key as `worker_key: spacedock-ensign`.
+- Use the concrete asset stem `role_asset_name: ensign` for the packaged skill; do not reuse the logical id there.
+- Use `worker_key` for worktree paths as `.worktrees/{worker_key}-{slug}` and branch names as `{worker_key}/{slug}`.
+- Never collapse a packaged logical id to bare `ensign` for worktree, branch, or session naming.
 
 Split worker identity into:
 - `dispatch_agent_id`
