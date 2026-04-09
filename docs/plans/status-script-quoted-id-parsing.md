@@ -1,9 +1,9 @@
 ---
 id: 113
 title: Status script misparses quoted YAML IDs
-status: backlog
+status: ideation
 source: CL — observed agent workaround for ID sequencing, 2026-04-09
-started:
+started: 2026-04-09T22:42:40Z
 completed:
 verdict:
 score:
