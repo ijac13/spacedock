@@ -190,8 +190,8 @@ def main():
     print("[Static Template Checks]")
 
     # Supplementary static checks
-    core = (REPO_ROOT / "references" / "first-officer-shared-core.md").read_text()
-    runtime = (REPO_ROOT / "references" / "claude-first-officer-runtime.md").read_text()
+    core = (REPO_ROOT / "skills" / "first-officer" / "references" / "first-officer-shared-core.md").read_text()
+    runtime = (REPO_ROOT / "skills" / "first-officer" / "references" / "claude-first-officer-runtime.md").read_text()
     assembled = assembled_agent_content(t, "first-officer")
 
     t.check("reuse conditions documented in shared-core",

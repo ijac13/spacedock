@@ -302,32 +302,34 @@ def install_agents(runner: TestRunner, include_ensign: bool = False) -> Path:
     return fo_path
 
 
-def assembled_agent_content(runner: TestRunner, agent_name: str) -> str:
+def assembled_agent_content(runner: TestRunner, agent_name: str, runtime: str = "claude") -> str:
     """Read a thin agent wrapper and all its referenced files, returning combined content.
 
     This concatenates the agent entry point with the reference files it
     instructs the agent to read, so tests can check the full behavioral
     contract without running the agent.
     """
-    refs_dir = runner.repo_root / "references"
+    if runtime not in {"claude", "codex"}:
+        raise ValueError(f"Unknown runtime: {runtime}")
+    fo_refs = runner.repo_root / "skills" / "first-officer" / "references"
+    ensign_refs = runner.repo_root / "skills" / "ensign" / "references"
     if agent_name == "first-officer":
-        ref_files = [
-            "first-officer-shared-core.md",
-            "code-project-guardrails.md",
-            "claude-first-officer-runtime.md",
+        ref_paths = [
+            fo_refs / "first-officer-shared-core.md",
+            fo_refs / "code-project-guardrails.md",
+            fo_refs / f"{runtime}-first-officer-runtime.md",
         ]
     elif agent_name == "ensign":
-        ref_files = [
-            "ensign-shared-core.md",
-            "code-project-guardrails.md",
-            "claude-ensign-runtime.md",
+        ref_paths = [
+            ensign_refs / "ensign-shared-core.md",
+            fo_refs / "code-project-guardrails.md",
+            ensign_refs / f"{runtime}-ensign-runtime.md",
         ]
     else:
-        ref_files = []
+        ref_paths = []
 
     parts = [(runner.repo_root / "agents" / f"{agent_name}.md").read_text()]
-    for ref_file in ref_files:
-        ref_path = refs_dir / ref_file
+    for ref_path in ref_paths:
         if ref_path.exists():
             parts.append(ref_path.read_text())
     return "\n\n".join(parts)
