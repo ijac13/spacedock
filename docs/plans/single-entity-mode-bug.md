@@ -174,11 +174,13 @@ The root cause is a single sentence in the shared core (`references/first-office
 **DONE.** Created `tests/test_single_entity_mode.py` using `InteractiveSession` from `scripts/test_lib_interactive.py`. The test:
 - Sets up a temp git project with the spike-no-gate fixture and agent files
 - Starts an interactive claude session with `--plugin-dir` pointing to the repo
+- Handles the workspace trust dialog for untrusted temp directories
 - Boots the FO via `/spacedock:first-officer`
 - Sends "Work on test-entity through the workflow" to trigger the bug scenario
 - Asserts that "single-entity mode" does NOT appear in output (AC3a)
 - Asserts that team creation or dispatch evidence IS present (AC3b)
-- Requires `--live` flag to run (~$1-2 with haiku)
+- Supports `--runtime`, `--model`, `--budget` CLI flags per test conventions
+- Runs by default (no `--live` gate)
 
 ### 4. Verify -p mode still enters single-entity mode correctly
 
@@ -186,9 +188,27 @@ The root cause is a single sentence in the shared core (`references/first-office
 
 ### 5. All changes committed on branch
 
-**DONE.** Two commits on `spacedock-ensign/single-entity-mode-bug`:
-- `50de7d0` — fix: scope single-entity mode trigger to non-interactive sessions only (2 files)
-- `4fdedc3` — test: add PTY-based regression test for single-entity mode trigger (1 file)
+**DONE.** Six commits on `spacedock-ensign/single-entity-mode-bug`:
+- `50de7d0` — fix: scope single-entity mode trigger to non-interactive sessions only
+- `4fdedc3` — test: add PTY-based regression test for single-entity mode trigger
+- `185ca9d` — report: implementation stage report for single-entity-mode-bug
+- `9620b10` — fix: handle trust dialog and add --runtime flag in PTY test
+- `e47f228` — docs: add test authoring guidelines at tests/README.md
+- `09ef21f` — docs: reference tests/README.md from workflow Testing Resources
+
+### 6. Create tests/README.md with test authoring guidelines
+
+**DONE.** Created `tests/README.md` covering:
+- Test infrastructure overview (`test_lib.py` vs `test_lib_interactive.py`)
+- Standard CLI flags convention (`--runtime`, `--model`, `--budget`)
+- When to use which harness (static, non-interactive E2E, interactive PTY, offline)
+- Fixture conventions (directory structure, existing fixtures table)
+- Running tests (`unset CLAUDECODE && uv run tests/test_*.py`)
+- File requirements (shebang, ABOUTME comments, argparse, exit codes)
+
+### 7. Reference tests/README.md from docs/plans/README.md
+
+**DONE.** Added entry to the Testing Resources table in `docs/plans/README.md`.
 
 ## Stage Report: validation
 
