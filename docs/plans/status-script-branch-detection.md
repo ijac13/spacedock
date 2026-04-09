@@ -9,7 +9,7 @@ verdict:
 score:
 worktree: .worktrees/spacedock-ensign-status-script-branch-detection
 issue:
-pr:
+pr: #59
 ---
 
 The `status --boot` ORPHANS section reports `BRANCH_EXISTS: no` for entities whose branches actually exist both as local branches and as git worktrees.
