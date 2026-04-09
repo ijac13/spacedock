@@ -9,7 +9,7 @@ verdict:
 score: 0.88
 worktree: .worktrees/ensign-codex-main-packaged-agent-regression
 issue:
-pr:
+pr: #60
 ---
 
 The Codex packaged-agent regression is now narrower than the earlier runtime-loading bug. The worker boots and finishes, but the Codex path still sometimes names the worktree and branch from the bare worker stem instead of the safe packaged key.
