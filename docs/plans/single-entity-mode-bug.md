@@ -1,7 +1,7 @@
 ---
 id: 101
 title: "FO incorrectly enters single-entity mode during normal interactive dispatch"
-status: implementation
+status: validation
 source: CL observation — seen 3x in Claude Code, 1x in Codex
 started: 2026-04-09T15:24:00Z
 completed:

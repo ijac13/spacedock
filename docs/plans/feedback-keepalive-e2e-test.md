@@ -1,7 +1,7 @@
 ---
 id: 106
 title: E2E test for feedback-to keepalive — FO must not kill implementation agent during validation
-status: implementation
+status: validation
 source: CL — observed FO prematurely shutting down implementation ensign when entering validation (feedback-to stage)
 started: 2026-04-09T15:24:00Z
 completed:
