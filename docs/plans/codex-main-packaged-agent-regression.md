@@ -119,3 +119,5 @@ Recommendation: Option 1, with Option 2-style test reinforcement if the fix touc
   Evidence: `uv run --with pytest python tests/test_codex_packaged_agent_ids.py -q`, `uv run --with pytest python tests/test_agent_content.py -q`, and `bash -n scripts/run_codex_first_officer.sh` all passed.
 - DONE: Ran the live Codex packaged-agent E2E from this worktree.
   Evidence: `uv run tests/test_codex_packaged_agent_e2e.py` passed with `13 passed, 0 failed`; the live branch list contained `spacedock-ensign/buggy-add-task` and did not contain `spacedock:ensign`.
+- DONE: Ran the broader live Codex runtime tests and they passed.
+  Evidence: `uv run tests/test_gate_guardrail.py --runtime codex` passed with `6 passed, 0 failed`; `uv run tests/test_rejection_flow.py --runtime codex` passed with `10 passed, 0 failed`; `uv run tests/test_merge_hook_guardrail.py --runtime codex` passed with `13 passed, 0 failed`.
