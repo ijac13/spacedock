@@ -1,7 +1,7 @@
 ---
 title: Codex main packaged-agent regression after merged runtime-loading changes
 id: 110
-status: implementation
+status: validation
 source: CL observation after merge to main
 started: 2026-04-09T21:36:48Z
 completed:
