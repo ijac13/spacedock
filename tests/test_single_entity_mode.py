@@ -108,16 +108,19 @@ def start_with_trust_handling(session: InteractiveSession, ready_timeout: float 
         session._drain(timeout=1.0)
         clean = session.get_clean_output()
 
-        # Check for the normal prompt
-        if "\u276f" in clean:
-            return
-
-        # Check for trust dialog and dismiss it
-        if not trust_handled and re.search(r"trust|Trust this folder|Do you want to trust", clean, re.IGNORECASE):
+        # Check for trust dialog BEFORE prompt-ready — the trust dialog
+        # uses ❯ as a selection indicator (e.g., "❯ 1. Yes, I trust this
+        # folder"), which would false-positive the prompt-ready check.
+        if not trust_handled and re.search(r"trust.*folder|Do you want to trust", clean, re.IGNORECASE):
             print("  Trust dialog detected, sending Enter to accept...")
             os.write(fd, b"\r")
             time.sleep(1.0)
             trust_handled = True
+            continue
+
+        # Check for the normal prompt (only after trust dialog is handled)
+        if "\u276f" in clean:
+            return
 
     raise TimeoutError(f"Session did not become ready within {ready_timeout}s")
 
