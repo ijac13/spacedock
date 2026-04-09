@@ -193,14 +193,15 @@ def main():
 
     # --- Phase 2: Run the first officer ---
 
-    print(f"--- Phase 2: Run first officer ({args.runtime}, this takes ~60-180s) ---")
+    print(f"--- Phase 2: Run first officer ({args.runtime}, this takes ~60-120s) ---")
 
     abs_workflow = t.test_project_dir / "keepalive-pipeline"
     fo_exit = run_first_officer(
         t,
         (
             f"Process the entity `keepalive-test-task` through the workflow at {abs_workflow}/. "
-            "Drive it from backlog through implementation and validation. "
+            "The entity is at status: implementation with a completed stage report. "
+            "Dispatch the implementation ensign, then advance to validation. "
             "The validation stage has feedback-to: implementation, so you must keep the implementation "
             "agent alive when dispatching validation. "
             "When you encounter a gate review where the reviewer recommends REJECTED, "
