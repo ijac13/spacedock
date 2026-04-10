@@ -1,7 +1,7 @@
 ---
 id: 118
 title: Update pr-merge mod with rich PR body template
-status: implementation
+status: validation
 source: CL brainstorm during 2026-04-10 session — PR body thinness observed on #62
 score: 0.80
 ---
