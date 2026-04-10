@@ -9,7 +9,7 @@ started: 2026-04-10T23:10:09Z
 completed:
 verdict:
 issue:
-pr:
+pr: #70
 ---
 
 `skills/commission/bin/claude-team context-budget` reads `resident_tokens` from the **last assistant turn** in the subagent jsonl. When an ensign dies mid-turn (context overflow, tool error), the final logged turn has zero-valued usage fields. The script reports `resident_tokens: 0` and `reuse_ok: true` for an ensign that actually hit 170k+ and is dead in the water.
