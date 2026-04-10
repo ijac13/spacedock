@@ -1,13 +1,13 @@
 ---
 id: 116
 title: Refresh README and architectural docs for correctness and time-to-value
-status: validation
+status: done
 source: CL directive during 2026-04-10 session — after 115 validation dispatch
 started: 2026-04-10T17:05:36Z
-completed:
-verdict:
+completed: 2026-04-10T20:17:25Z
+verdict: PASSED
 score:
-worktree: .worktrees/spacedock-ensign-readme-and-architecture-refresh
+worktree: 
 issue:
 pr:
 ---
