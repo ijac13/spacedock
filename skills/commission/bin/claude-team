@@ -9,14 +9,8 @@ import os
 import sys
 
 
-CONTEXT_LIMITS = {
-    "claude-opus-4-6": 200000,
-    "claude-opus-4-6[1m]": 1000000,
-    "claude-sonnet-4-6": 200000,
-}
-
-HAIKU_PREFIX = "claude-haiku-4-5-"
 DEFAULT_CONTEXT_LIMIT = 200000
+EXTENDED_CONTEXT_LIMIT = 1000000
 THRESHOLD_PCT = 60
 
 
@@ -55,34 +49,44 @@ def find_subagent_jsonl(name: str) -> str | None:
 
 
 def extract_resident_tokens(jsonl_path: str) -> int | None:
-    """Extract resident tokens from the last assistant entry's usage block.
+    """Extract resident tokens by scanning backward for the first non-zero usage.
+
+    An ensign that dies mid-turn (context overflow) leaves a trailing assistant
+    entry with all-zero usage fields. Scanning backward from end-of-file for the
+    first assistant entry with a non-zero usage sum yields the true peak resident
+    tokens for both live ensigns (last turn) and dead ensigns (last real turn).
 
     Returns input_tokens + cache_creation_input_tokens + cache_read_input_tokens,
-    or None if no assistant entry with usage is found.
+    or None if no assistant entry with non-zero usage is found.
     """
-    last_usage = None
     with open(jsonl_path, "r") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if entry.get("type") == "assistant":
-                msg = entry.get("message", {})
-                if isinstance(msg, dict) and "usage" in msg:
-                    last_usage = msg["usage"]
+        lines = f.readlines()
 
-    if last_usage is None:
-        return None
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if entry.get("type") != "assistant":
+            continue
+        msg = entry.get("message", {})
+        if not isinstance(msg, dict):
+            continue
+        usage = msg.get("usage")
+        if not isinstance(usage, dict):
+            continue
+        resident = (
+            usage.get("input_tokens", 0)
+            + usage.get("cache_creation_input_tokens", 0)
+            + usage.get("cache_read_input_tokens", 0)
+        )
+        if resident > 0:
+            return resident
 
-    return (
-        last_usage.get("input_tokens", 0)
-        + last_usage.get("cache_creation_input_tokens", 0)
-        + last_usage.get("cache_read_input_tokens", 0)
-    )
+    return None
 
 
 def lookup_model(name: str) -> str | None:
@@ -108,11 +112,15 @@ def lookup_model(name: str) -> str | None:
 
 
 def context_limit_for_model(model: str) -> int:
-    """Map a model name to its context window size."""
-    if model in CONTEXT_LIMITS:
-        return CONTEXT_LIMITS[model]
-    if model.startswith(HAIKU_PREFIX):
-        return 200000
+    """Infer the context window size from the model name suffix.
+
+    Claude Code encodes extended-context variants with a bracket suffix like
+    `[1m]` (e.g. `claude-opus-4-6[1m]`). Any model name containing `[1m]` is
+    the 1M-context variant. Everything else defaults to 200k, which is the
+    standard Claude context window and safe fallback for unknown models.
+    """
+    if "[1m]" in model:
+        return EXTENDED_CONTEXT_LIMIT
     return DEFAULT_CONTEXT_LIMIT
 
 

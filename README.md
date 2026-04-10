@@ -13,6 +13,7 @@ Spacedock turns directories of markdown files into structured workflows operated
 - **Isolation.** Stages that need it run in their own git worktree and branch; lightweight stages run inline on main. You declare which is which, and the first officer enforces it.
 - **Declarative and flexible.** Mission shape, stages, work item schema, and gates all live in plain markdown. The whole workflow is a few files in your repo that you can read, edit, fork, and commit like any other code.
 - **Composable.** A single repo can host several workflows side by side, and work items in one workflow can reference items in another when your work spans more than one mission shape.
+- **Reliable subagent recovery.** Workers nearing their context limit are replaced before they die; uncommitted work in their worktree is preserved for the successor. No silent data loss mid-task.
 
 ## Quick Start
 
