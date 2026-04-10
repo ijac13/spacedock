@@ -4,6 +4,12 @@ title: FO context-aware reuse — respawn fresh above 60%, and handle zombie dea
 status: validation
 source: CL directive after 116 cycle-2 impl ensign died at ~80% context without completing cycle-2 feedback
 score: 0.80
+worktree: .worktrees/spacedock-ensign-fo-context-aware-reuse
+started: 2026-04-10T21:25:49Z
+completed:
+verdict:
+issue:
+pr: "#68"
 ---
 
 Two related FO runtime gaps observed during task 116 cycle 2, both about kept-alive ensign lifecycle:
