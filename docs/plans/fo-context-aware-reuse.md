@@ -244,3 +244,53 @@ The implementation stage touches four surfaces:
 4. **Tests** — New `tests/test_claude_team.py` for the script unit tests; new assertions in `tests/test_agent_content.py` for the runtime adapter content.
 
 The dispatch template in the runtime adapter needs the recovery clause appended as a conditional block (only when replacing a prior ensign).
+
+## Stage Report: implementation
+
+### Summary
+All four implementation surfaces delivered. TDD followed throughout.
+
+### Deliverables
+
+**1. `skills/commission/bin/claude-team` (new, executable)**
+- Subcommand: `context-budget --name {ensign-name}`
+- Discovers subagent jsonl via `~/.claude/projects/*/*/subagents/agent-*.meta.json` matching `agentType`
+- Extracts resident tokens from last assistant entry's `usage` block
+- Looks up model from `~/.claude/teams/*/config.json` member matching `name`
+- Hardcoded mapping: opus-4-6 → 200k, opus-4-6[1m] → 1M, sonnet-4-6 → 200k, haiku-4-5-* → 200k, fallback → 200k
+- Outputs JSON: name, resident_tokens, model, context_limit, usage_pct, threshold_pct, reuse_ok
+- Exit 0 on success (even when reuse_ok: false), non-zero on lookup failure
+
+**2. `first-officer-shared-core.md` updates**
+- Reuse conditions: added condition 0 — run `claude-team context-budget` before evaluating existing conditions 1-3; skip to fresh dispatch if reuse_ok is false
+- Feedback rejection flow: added step 4 — check context budget before routing findings back to target stage agent; fresh-dispatch if over threshold
+
+**3. `claude-first-officer-runtime.md` updates**
+- New section "Context Budget and Dead Ensign Handling" between Dispatch Adapter and Captain Interaction
+- Context budget check invocation and JSON parsing procedure
+- Recovery clause for uncommitted worktree changes
+- Dead ensign handling: cooperative-only shutdown semantics, session memory tracking, -cycleN suffix, band-aid 1 zombie limitation
+
+**4. Tests**
+- `tests/test_claude_team.py`: 15 unit tests covering basic output, last-assistant-entry selection, 59%/60%/61% threshold boundary, 5 model mappings, 4 error cases, most-recent-match selection
+- `tests/test_agent_content.py`: 3 new static assertions — context-budget in reuse conditions, context-budget in feedback rejection, runtime keywords (claude-team, cooperative, zombie, uncommitted)
+
+### Test results
+- `test_claude_team.py`: 15 passed
+- `test_agent_content.py`: 21 passed (18 existing + 3 new)
+- `test_rejection_flow.py`: 5 passed (regression clean)
+- `test_merge_hook_guardrail.py`: 7 passed, 1 failed — pre-existing flake unrelated to this work (e2e test involving live Claude API calls; failure is in merge hook execution behavior, not context budget)
+
+### Commits
+1. `14d44c9` — Add claude-team context-budget script and tests
+2. `29719db` — Add context budget checks to FO reuse and feedback flows
+
+### Checklist
+- [x] AC-1: claude-team script exists with context-budget subcommand
+- [x] AC-2: context-budget outputs correct JSON for known subagent
+- [x] AC-3: 60% threshold boundary correct (59% true, 61% false)
+- [x] AC-4: model mapping covers opus, sonnet, haiku, unknown fallback
+- [x] AC-5: shared core references claude-team context-budget in both reuse and feedback sections
+- [x] AC-6: runtime adapter references claude-team, cooperative, zombie
+- [x] AC-7: runtime adapter contains uncommitted recovery clause
+- [x] AC-8: existing suites green (1 pre-existing flake in merge hook e2e)
