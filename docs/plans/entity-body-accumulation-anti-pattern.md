@@ -230,3 +230,24 @@ Option A (separate stage-history file) is recommended. It fixes the root cause â
 ### Summary
 
 Implemented the compact-reports + append-only approach instead of Option A (separate stage-history file). Three contract files changed: ensign shared core gets size guidelines (30-50 lines) and append-only write mode; FO completion gate reads the last appended stage report; FO dispatch template directs ensigns to the current spec instead of "full context." No new files created, no schema changes, no FO Write Scope changes. Direction changed mid-implementation from Option A to this simpler approach per captain instruction.
+
+## Stage Report: validation
+
+- [x] Diff scope: 5 commits, 6 files changed
+  Only expected files modified. One minor scope leak: fo-context-aware-reuse.md status field changed (unrelated to this entity).
+- [x] Static suite: test_agent_content.py 22/22 passed
+  `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_agent_content.py -q`
+- [ ] SKIP: E2E test_rejection_flow.py
+  Requires live LLM runtime (spawns actual agents). Imports cleanly, no regressions detectable statically.
+- [x] Ensign shared core contracts verified
+  Size guideline (30-50 lines) at line 47, append-only at line 54, cycle N suffix at line 55.
+- [x] FO shared core completion gate verified
+  Line 84: reads "last `## Stage Report` section (the latest report is always appended at the end)".
+- [x] FO runtime dispatch template verified
+  Line 53: says "for the current spec" with note that prior cycle reports are appended at end.
+- [x] No new files created
+  git diff --name-status shows zero A entries. No stage-history files or new directories.
+
+### Summary
+
+All static contracts verified. Implementation delivers compact reports (30-50 line guideline), append-only writes (no overwrite, cycle N suffix for re-dos), and targeted dispatch reading ("for the current spec" not "for full context"). Note: one unrelated file (fo-context-aware-reuse.md) was modified in this branch â€” minor scope leak, non-blocking.
