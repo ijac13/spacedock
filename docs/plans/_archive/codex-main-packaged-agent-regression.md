@@ -1,13 +1,13 @@
 ---
 title: Codex main packaged-agent regression after merged runtime-loading changes
 id: 110
-status: validation
+status: done
 source: CL observation after merge to main
 started: 2026-04-09T21:36:48Z
-completed:
-verdict:
+completed: 2026-04-10T15:30:50Z
+verdict: PASSED
 score: 0.88
-worktree: .worktrees/ensign-codex-main-packaged-agent-regression
+worktree: 
 issue:
 pr: #60
 ---
