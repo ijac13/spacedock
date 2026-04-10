@@ -1,13 +1,13 @@
 ---
 id: 113
 title: Status script misparses quoted YAML IDs
-status: validation
+status: done
 source: CL — observed agent workaround for ID sequencing, 2026-04-09
 started: 2026-04-09T22:42:40Z
-completed:
-verdict:
+completed: 2026-04-10T05:01:24Z
+verdict: PASSED
 score:
-worktree: .worktrees/ensign-status-script-quoted-id-parsing
+worktree: 
 issue:
 pr: #61
 ---
