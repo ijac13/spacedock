@@ -9,14 +9,8 @@ import os
 import sys
 
 
-CONTEXT_LIMITS = {
-    "claude-opus-4-6": 200000,
-    "claude-opus-4-6[1m]": 1000000,
-    "claude-sonnet-4-6": 200000,
-}
-
-HAIKU_PREFIX = "claude-haiku-4-5-"
 DEFAULT_CONTEXT_LIMIT = 200000
+EXTENDED_CONTEXT_LIMIT = 1000000
 THRESHOLD_PCT = 60
 
 
@@ -118,11 +112,15 @@ def lookup_model(name: str) -> str | None:
 
 
 def context_limit_for_model(model: str) -> int:
-    """Map a model name to its context window size."""
-    if model in CONTEXT_LIMITS:
-        return CONTEXT_LIMITS[model]
-    if model.startswith(HAIKU_PREFIX):
-        return 200000
+    """Infer the context window size from the model name suffix.
+
+    Claude Code encodes extended-context variants with a bracket suffix like
+    `[1m]` (e.g. `claude-opus-4-6[1m]`). Any model name containing `[1m]` is
+    the 1M-context variant. Everything else defaults to 200k, which is the
+    standard Claude context window and safe fallback for unknown models.
+    """
+    if "[1m]" in model:
+        return EXTENDED_CONTEXT_LIMIT
     return DEFAULT_CONTEXT_LIMIT
 
 

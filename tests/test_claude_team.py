@@ -187,8 +187,10 @@ class TestModelMapping:
         ("claude-opus-4-6", 200000),
         ("claude-opus-4-6[1m]", 1000000),
         ("claude-sonnet-4-6", 200000),
+        ("claude-sonnet-4-6[1m]", 1000000),  # heuristic works on any base model
         ("claude-haiku-4-5-20251001", 200000),
         ("unknown-model-xyz", 200000),
+        ("unknown-model-xyz[1m]", 1000000),  # heuristic works on unknown models too
     ])
     def test_model_context_limits(self, tmp_path, model, expected_limit):
         usage = {
