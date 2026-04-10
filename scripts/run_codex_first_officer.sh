@@ -40,6 +40,12 @@ Use the \`spacedock:first-officer\` skill to manage the workflow at \`$workflow_
 
 Treat that path as the explicit workflow target. Do not ask to discover alternatives.
 Do not narrate setup beyond what is needed to report a blocker or final outcome.
+For packaged workers, keep the logical id in reporting and use the safe key for naming.
+When the packaged worker is `spacedock:ensign`, the worker key is `spacedock-ensign` and
+must be used for worktree, branch, and session names. Worktree paths use
+`.worktrees/{worker_key}-{slug}` and branches use `{worker_key}/{slug}`.
+Never collapse it to bare `ensign`.
+Keep `dispatch_agent_id: spacedock:ensign` but use `role_asset_name: ensign` for the packaged skill asset.
 Once you have enough context to dispatch the first worker, dispatch immediately.
 Stop after the first meaningful outcome for this run.
 EOF

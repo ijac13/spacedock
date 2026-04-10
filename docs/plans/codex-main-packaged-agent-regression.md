@@ -104,3 +104,28 @@ Recommendation: Option 1, with Option 2-style test reinforcement if the fix touc
 - DONE: Proposed three approaches and recommended the minimal Codex dispatch fix with test reinforcement.
 - DONE: Wrote concrete acceptance criteria, each with an explicit verification method.
 - DONE: Wrote a proportional test plan covering cheap unit coverage and one live Codex E2E; no browser E2E is needed.
+
+## Stage Report: implementation
+
+- DONE: Kept `dispatch_agent_id` logical for the packaged Codex path while making the safe `worker_key` explicit for namespaced packaged workers.
+  Evidence: `scripts/test_lib.py`, `scripts/run_codex_first_officer.sh`, and `skills/first-officer/references/codex-first-officer-runtime.md` now say `dispatch_agent_id: spacedock:ensign`, `worker_key: spacedock-ensign`, and `role_asset_name: ensign`.
+- DONE: Made worktree and branch naming consistently use the safe key instead of the bare stem.
+  Evidence: the runtime prompt and shell launcher now specify `.worktrees/{worker_key}-{slug}` for worktrees and `{worker_key}/{slug}` for branches; live E2E created `.worktrees/spacedock-ensign-buggy-add-task` and `spacedock-ensign/buggy-add-task`.
+- DONE: Preserved packaged worker-contract loading and execution.
+  Evidence: `tests/test_codex_packaged_agent_e2e.py` completed successfully with `13 passed, 0 failed`; the live log shows the worker completed and returned `Verdict: REJECTED` with the logical id `spacedock:ensign`.
+- DONE: Added or adjusted targeted tests to lock the naming behavior.
+  Evidence: `tests/test_codex_packaged_agent_ids.py` and `tests/test_agent_content.py` now assert the safe key, asset stem, and `{worker_key}/{slug}` branch template.
+- DONE: Ran focused verification for touched helpers/tests.
+  Evidence: `uv run --with pytest python tests/test_codex_packaged_agent_ids.py -q`, `uv run --with pytest python tests/test_agent_content.py -q`, and `bash -n scripts/run_codex_first_officer.sh` all passed.
+- DONE: Ran the live Codex packaged-agent E2E from this worktree.
+  Evidence: `uv run tests/test_codex_packaged_agent_e2e.py` passed with `13 passed, 0 failed`; the live branch list contained `spacedock-ensign/buggy-add-task` and did not contain `spacedock:ensign`.
+- DONE: Ran the broader live Codex runtime tests and they passed.
+  Evidence: `uv run tests/test_gate_guardrail.py --runtime codex` passed with `6 passed, 0 failed`; `uv run tests/test_rejection_flow.py --runtime codex` passed with `10 passed, 0 failed`; `uv run tests/test_merge_hook_guardrail.py --runtime codex` passed with `13 passed, 0 failed`.
+
+## Stage Report: validation
+
+- PASSED: The implementation matches the ideation criteria for packaged Codex worker naming and contract loading.
+- PASSED: Focused verification succeeded.
+  Evidence: `uv run --with pytest python tests/test_codex_packaged_agent_ids.py -q` passed (`6 passed`), `uv run --with pytest python tests/test_agent_content.py -q` passed (`16 passed, 1 warning`), and `bash -n scripts/run_codex_first_officer.sh` passed.
+- PASSED: The implementation evidence already recorded in the entity file covers the broader live Codex runtime checks and the packaged-agent E2E, and nothing in the validation review contradicted it.
+- PASSED: Acceptance criteria 1-6 are satisfied by the recorded implementation evidence: logical `dispatch_agent_id`, safe `worker_key`, packaged worker execution, safe worktree naming, safe branch naming, and no regression in the earlier runtime-loading path.
