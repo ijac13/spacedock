@@ -151,3 +151,27 @@ The captain should decide between (1) "add fields on demand" and (2+3) "enforce 
 **Commits:**
 - `2d11d2e` — test: add failing tests for --set with missing frontmatter field
 - `166ecb1` — fix: update_frontmatter inserts fields missing from frontmatter
+
+## Stage Report: validation
+
+**Validator:** Claude (ensign worker)
+
+**Verification performed:**
+
+1. **Diff inspection:** 3 commits on branch (`2d11d2e`, `166ecb1`, `aca4884`). Changed files: `skills/commission/bin/status` (8-line fix), `tests/test_status_set_missing_field.py` (149 lines, 5 tests), `docs/plans/status-set-missing-field-silent-noop.md` (stage report). Two phantom diffs on unrelated plan files from main advancing. Scope is clean.
+
+2. **Fix logic review:** The fix tracks written fields in a `set`, computes missing fields after the rewrite loop, and inserts them before the closing `---` with correct `fm_end` increment for multiple inserts. Edge cases verified: empty frontmatter (all fields inserted), special YAML characters (matches existing behavior), empty values (works), insertion order (stable, follows `resolved` dict order).
+
+3. **New tests:** 5/5 passed.
+4. **Existing status tests:** 66/66 passed, no regressions.
+5. **Static suite:** 18/18 passed.
+6. **Manual repro:** Created temp entity with only `id`, `title`, `status`. Ran `status --set task-x pr=#99`. Confirmed `pr: #99` inserted before closing `---`, body preserved, existing fields untouched.
+
+**Per-AC verdicts:**
+
+- **AC1** (missing field written or errors loudly): PASS — `pr=#99` on a seed missing `pr` inserts the field. Confirmed via test and manual repro.
+- **AC2** (existing behavior not broken): PASS — 66/66 existing tests pass; `test_set_existing_field_still_works` confirms update path.
+- **AC3** (SKILL.md / README template updated if schema stricter): N/A — fix is additive (auto-inserts missing fields), schema is not stricter.
+- **AC4** (tests cover four cases): PASS — 5 tests cover: insertion of missing field, existing field update, mixed fields, body preservation, existing field preservation.
+
+**Recommendation: PASSED**
