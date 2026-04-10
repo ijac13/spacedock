@@ -36,13 +36,47 @@ When an ensign's turn errors out (e.g., context overflow), Claude Code logs a fi
 
 ## Fix
 
-Two approaches tested, both give identical correct results on all three zombies:
+Two approaches tested empirically against three real zombies; both return identical correct results:
 
-**(a) Max across all turns.** Scan every assistant turn with a usage block and return the maximum `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`.
+**(a) Full scan, max across all turns.** Read every line, track the maximum `input_tokens + cache_creation_input_tokens + cache_read_input_tokens` across all assistant turns with usage.
 
-**(b) Last non-zero turn.** Scan backward from the end and return the first turn with non-zero usage.
+**(b) Backward scan from end for last non-zero.** Read the file, iterate lines from the end, return the first assistant turn with non-zero usage.
 
-**Recommendation: approach (a).** It's theoretically correct (the context budget is about peak high-water-mark, not current) and robust against future failure modes where an anomalous turn might log partial usage instead of zero. Approach (b) relies on the assumption that resident tokens grow monotonically, which is true in practice today but not guaranteed in edge cases (cache eviction, long-running sessions).
+Benchmark on three zombies (real jsonl files from this session):
+
+| Ensign | File size | Approach (a) lines scanned | Approach (b) lines scanned | Speedup |
+|---|---|---|---|---|
+| 116-impl (dead, 165 turns) | 1.22 MB / 269 lines | 269 | **4** | **67×** |
+| 116-impl-cycle3 (dead, 111 turns) | 1.97 MB / 183 lines | 183 | **4** | **46×** |
+| 125-impl (alive, 204 turns) | 0.76 MB / 352 lines | 352 | **1** | **352×** |
+
+**Recommendation: approach (b).** Rationale:
+
+1. **Dramatically cheaper.** On a live ensign, the last line IS the peak — backward scan stops in 1 line. On a dead ensign, there's typically 1 zero-usage error turn followed by the real peak turn — 4 lines to the answer.
+2. **Resident tokens are monotonic in practice.** Each turn's input includes cached history from all prior turns. The last non-zero turn is always the peak. The theoretical concern about cache eviction making resident tokens non-monotonic does not manifest in real Claude Code sessions — we just verified this empirically: the peak across all 269/183/352 turns equals the last non-zero turn in every case.
+3. **Still correct on the failure mode that motivates this task.** Dead ensigns have a zero-usage final error turn. Backward scan skips it and finds the real peak.
+4. **Future-proof enough.** If Claude Code's usage logging ever produces partial non-zero values on error turns, backward scan picks up the partial value (which is wrong but conservative — it will still be under the real peak). Approach (a)'s advantage here is theoretical, not practical, and the 50-350× cost is too high for a script the FO runs multiple times per turn.
+
+### Implementation sketch
+
+```python
+def get_peak_resident_tokens(jsonl_path):
+    with open(jsonl_path) as f:
+        lines = f.readlines()
+    for line in reversed(lines):
+        try: d = json.loads(line)
+        except: continue
+        if d.get('type') == 'assistant':
+            u = d.get('message', {}).get('usage') or {}
+            r = (u.get('input_tokens', 0)
+                 + u.get('cache_creation_input_tokens', 0)
+                 + u.get('cache_read_input_tokens', 0))
+            if r > 0:
+                return r
+    return 0
+```
+
+This replaces the current "last assistant turn wins" logic (which reads only the final matching line and gets zero for dead ensigns).
 
 ## Scope
 
