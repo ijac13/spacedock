@@ -124,26 +124,57 @@ Yes, one line in the normal status output. The captain should know when an ensig
 1. **Completion and Gates → reuse conditions** (shared-core lines 93-98): Add as condition 0 (checked first, before the existing three conditions). If context budget is exceeded, skip straight to fresh dispatch.
 2. **Feedback Rejection Flow → step 4** (shared-core line 120): Before routing findings back to the target stage, check whether the target-stage ensign's context budget allows reuse. If not, shut it down and fresh-dispatch.
 
-**Location in runtime adapter:** The model-to-context mapping and the jsonl-parsing procedure go in `claude-first-officer-runtime.md`, in a new section between "Dispatch Adapter" and "Captain Interaction."
+**Implementation: `skills/commission/bin/claude-team` helper.** The mechanical work (jsonl discovery, usage parsing, model-to-context mapping, threshold arithmetic) lives in a new Python script at `skills/commission/bin/claude-team` with a `context-budget` subcommand. The FO calls the script and reads the structured output; no prose-driven jsonl parsing in the runtime adapter.
 
-**Procedure:**
+This script is the foundation for future team-operation subcommands:
+- `claude-team context-budget --name {ensign-name}` (this task)
+- `claude-team build-dispatch ...` (task 120, later)
+- `claude-team verify-member --name {ensign-name}` (task 119 band-aid 1, later)
 
-1. **Locate the ensign's jsonl.** The subagent session files live at `~/.claude/projects/{project_path_hash}/{parent_session_id}/subagents/`. Each subagent has an `agent-{id}.jsonl` and an `agent-{id}.meta.json`. Read the `.meta.json` files to find the one whose `agentType` matches the ensign's dispatch name (e.g., `spacedock-ensign-{slug}-{stage}`). The matching `.jsonl` contains the conversation history.
+One entrypoint, subcommands, shared config discovery (project path, session ID, team config path). The FO runtime adapter says "run `claude-team context-budget`" instead of a paragraph of jsonl-parsing prose. This directly addresses issue #63's "prose where there should be structure" thesis for team operations.
 
-2. **Extract resident tokens.** Read the last assistant-role message in the jsonl. Parse its `usage` block. Compute: `resident_tokens = input_tokens + cache_creation_input_tokens + cache_read_input_tokens`. These three fields together represent the total context consumed by that turn. (Output tokens are not counted — they don't persist in the context window.)
+**`context-budget` subcommand interface:**
 
-3. **Look up the context limit.** Read the ensign's model from the team config or dispatch parameters. Look up in the hardcoded mapping:
+```bash
+skills/commission/bin/claude-team context-budget --name spacedock-ensign-foo-impl
+```
+
+Output (JSON to stdout):
+```json
+{
+  "name": "spacedock-ensign-foo-impl",
+  "resident_tokens": 170668,
+  "model": "claude-opus-4-6",
+  "context_limit": 200000,
+  "usage_pct": 85.3,
+  "threshold_pct": 60,
+  "reuse_ok": false
+}
+```
+
+Exit code 0 on success (even when `reuse_ok` is false — that's data, not an error). Non-zero on lookup failure (ensign not found, jsonl missing, etc.).
+
+**Internal logic:**
+
+1. **Discover the subagent jsonl.** Read `~/.claude/projects/{project_path_hash}/{parent_session_id}/subagents/agent-*.meta.json` files. Match `agentType` to the `--name` argument. If multiple matches (jsonl rotation observed in this session), use the most recently modified. Return the sibling `.jsonl` path.
+
+2. **Extract resident tokens.** Scan the jsonl for the last assistant-role entry with a `usage` block. Compute: `resident_tokens = input_tokens + cache_creation_input_tokens + cache_read_input_tokens`.
+
+3. **Look up model context limit.** Read the ensign's `model` from `~/.claude/teams/{team}/config.json` (team auto-discovered from the project session). Hardcoded mapping:
    - `claude-opus-4-6` → 200,000
    - `claude-opus-4-6[1m]` → 1,000,000
    - `claude-sonnet-4-6` → 200,000
    - `claude-haiku-4-5-*` → 200,000
-   - Fallback for unknown models → 200,000 (with captain notification)
+   - Fallback for unknown models → 200,000
 
-4. **Compute threshold.** `threshold = context_limit × 0.60`.
+4. **Compute and emit.** `usage_pct = resident_tokens / context_limit * 100`. `reuse_ok = usage_pct <= threshold_pct`.
 
-5. **Decide.**
-   - If `resident_tokens > threshold`: Do NOT reuse. Log to captain: "Context budget: {name} at {pct}% of {limit} — fresh-dispatching replacement." Shut down the old ensign (if alive). Fresh-dispatch with a `-cycleN` or `-fresh` suffix. Include the recovery clause in the dispatch prompt (see below).
-   - If `resident_tokens ≤ threshold`: Proceed with normal reuse.
+**FO runtime adapter procedure (replaces prose parsing):**
+
+1. Run `skills/commission/bin/claude-team context-budget --name {ensign-name}`.
+2. Parse the JSON output.
+3. If `reuse_ok` is `false`: do NOT reuse. Log to captain: "Context budget: {name} at {usage_pct}% of {context_limit} — fresh-dispatching replacement." Shut down the old ensign (if alive). Fresh-dispatch with a `-cycleN` suffix. Include the recovery clause.
+4. If `reuse_ok` is `true`: proceed with normal reuse.
 
 **Recovery clause for fresh-dispatch prompt:** Add to the dispatch template when replacing a context-exhausted ensign:
 
@@ -178,34 +209,38 @@ There is no automatic timeout — the FO cannot reliably distinguish "slow but a
 
 | # | Criterion | Test method |
 |---|-----------|-------------|
-| AC-1 | Shared core has context budget check in Completion/Gates reuse conditions and Feedback Rejection Flow, with 60% threshold and resident-tokens procedure | Static: grep for "60%" and "resident" in `first-officer-shared-core.md`, verify matches in both sections |
-| AC-2 | Runtime adapter documents model-to-context mapping for `claude-opus-4-6` (200k) and `claude-opus-4-6[1m]` (1M) | Static: grep for `200,000` and `1,000,000` in `claude-first-officer-runtime.md` |
-| AC-3 | Fresh-dispatch template includes recovery clause for uncommitted worktree state | Static: grep for "uncommitted" in `claude-first-officer-runtime.md` dispatch template section |
-| AC-4 | Runtime adapter documents that `shutdown_request` is cooperative-only and must not be sent to dead ensigns; documents fresh-dispatch with distinct name for recovery | Static: grep for "cooperative" and "dead" in `claude-first-officer-runtime.md` |
-| AC-5 | Runtime adapter documents that band-aid 1 does not detect zombies; FO must track dead ensigns in session memory | Static: grep for "zombie" in `claude-first-officer-runtime.md` |
-| AC-6 | `tests/test_agent_content.py` has assertions covering AC-1 through AC-5 | Run test suite; new tests pass on fix commit, fail on parent |
-| AC-7 | Existing test suites stay green | Run `test_agent_content.py`, `test_rejection_flow.py`, `test_merge_hook_guardrail.py` |
+| AC-1 | `skills/commission/bin/claude-team` exists as an executable Python script with a `context-budget` subcommand | `claude-team context-budget --help` exits 0; `ls -la` confirms executable bit |
+| AC-2 | `context-budget` subcommand outputs correct JSON (resident_tokens, model, context_limit, usage_pct, reuse_ok) for a known subagent | Unit test: create a fixture jsonl with known usage data, run `claude-team context-budget`, assert JSON fields match expected values |
+| AC-3 | `context-budget` returns `reuse_ok: false` when resident > 60% of context limit, `true` when ≤ 60% | Unit test: fixture at 65% → false; fixture at 55% → true |
+| AC-4 | Model-to-context mapping covers `claude-opus-4-6` (200k), `claude-opus-4-6[1m]` (1M), and falls back to 200k for unknown models | Unit test: assert each mapping entry and the fallback |
+| AC-5 | Shared core has context budget check in Completion/Gates reuse conditions and Feedback Rejection Flow, referencing `claude-team context-budget` | Static: grep for "claude-team context-budget" in `first-officer-shared-core.md`, verify matches in both sections |
+| AC-6 | Runtime adapter references `claude-team context-budget` (not prose jsonl parsing) and documents the dead-ensign handling procedure (cooperative shutdown limitation, zombie tracking) | Static: grep for "claude-team" and "cooperative" and "zombie" in `claude-first-officer-runtime.md` |
+| AC-7 | Fresh-dispatch template includes recovery clause for uncommitted worktree state | Static: grep for "uncommitted" in `claude-first-officer-runtime.md` |
+| AC-8 | Existing test suites stay green | Run `test_agent_content.py`, `test_rejection_flow.py`, `test_merge_hook_guardrail.py` |
 
 ### Test plan
 
+**Unit tests for `claude-team context-budget`** (new test file, e.g., `tests/test_claude_team.py`):
+- Create fixture subagent jsonl + meta.json with known usage data. Run `context-budget`. Assert JSON output matches expected values (resident_tokens, model, context_limit, usage_pct, reuse_ok).
+- Test the 60% threshold boundary: fixture at 59% → `reuse_ok: true`; fixture at 61% → `reuse_ok: false`.
+- Test model mapping: each known model maps to the correct limit; unknown model falls back to 200k.
+- Test error cases: missing jsonl, missing meta.json, no assistant turns in jsonl.
+
 **Static assertions** (in `tests/test_agent_content.py`):
-- AC-1: Assert assembled FO shared-core content contains "60%" in proximity to "resident" (or "resident tokens") in both the reuse-conditions context and the feedback-rejection context.
-- AC-2: Assert assembled FO runtime-adapter content contains "200,000" and "1,000,000" in the model mapping section.
-- AC-3: Assert assembled FO runtime-adapter content contains "uncommitted" in the dispatch template or recovery section.
-- AC-4: Assert assembled FO runtime-adapter content contains "cooperative" near "shutdown" and "dead ensign" or equivalent.
-- AC-5: Assert assembled FO runtime-adapter content contains "zombie" in context of band-aid 1 or team config.
+- AC-5: Assert assembled FO shared-core content contains "claude-team context-budget" in both the reuse-conditions and feedback-rejection contexts.
+- AC-6: Assert assembled FO runtime-adapter content references "claude-team" (not prose jsonl parsing) and contains "cooperative" and "zombie" for the dead-ensign handling.
+- AC-7: Assert "uncommitted" appears in the dispatch template section.
 
-**Regression**: Run existing suites (`test_agent_content.py`, `test_rejection_flow.py`, `test_merge_hook_guardrail.py`) to confirm no breakage.
+**Regression**: Run existing suites to confirm no breakage.
 
-**No E2E test** for the 60% behavior itself. Simulating context overflow requires a real multi-turn subagent session consuming >120k tokens, which is prohibitively expensive. The rule is documented prose; compliance is verified by static assertions plus live captain observation.
-
-**No unit test for jsonl parsing.** The procedure is prose instructions for the FO, not executable code. If a helper script is added later (task 120 scope), that script should have its own unit tests.
+**No E2E test** for the 60% behavior itself. Simulating context overflow is prohibitively expensive. The threshold is enforced by `claude-team context-budget` (unit-tested) + FO prose rules (static-asserted) + live captain observation.
 
 ### Implementation notes for the next stage
 
-The implementation stage needs to modify three files:
-1. `skills/first-officer/references/first-officer-shared-core.md` — Add context budget check to Completion/Gates reuse conditions and Feedback Rejection Flow.
-2. `skills/first-officer/references/claude-first-officer-runtime.md` — Add Context Budget section (model mapping, jsonl procedure, threshold computation) and Dead Ensign Handling section (cooperative shutdown limitation, zombie tracking, band-aid 1 interaction).
-3. `tests/test_agent_content.py` — Add static assertions for AC-1 through AC-5.
+The implementation stage touches four surfaces:
+1. **New script: `skills/commission/bin/claude-team`** — Python, executable, subcommand architecture. First subcommand: `context-budget`. The script is the foundation for future subcommands (`build-dispatch` from task 120, `verify-member` from task 119).
+2. **`skills/first-officer/references/first-officer-shared-core.md`** — Add context budget check to Completion/Gates reuse conditions and Feedback Rejection Flow, referencing `claude-team context-budget`.
+3. **`skills/first-officer/references/claude-first-officer-runtime.md`** — Add Context Budget section (references `claude-team context-budget` output), Dead Ensign Handling section, and recovery clause in the dispatch template.
+4. **Tests** — New `tests/test_claude_team.py` for the script unit tests; new assertions in `tests/test_agent_content.py` for the runtime adapter content.
 
 The dispatch template in the runtime adapter needs the recovery clause appended as a conditional block (only when replacing a prior ensign).
