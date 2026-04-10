@@ -1304,5 +1304,16 @@ class TestSetOption(unittest.TestCase):
             self.assertEqual(fields['status'], 'done')
 
 
+class TestStatusScriptExecutable(unittest.TestCase):
+    """Regression: the status script file must have the executable bit set."""
+
+    def test_status_script_is_executable(self):
+        self.assertTrue(os.path.exists(TEMPLATE_PATH), f"{TEMPLATE_PATH} not found")
+        self.assertTrue(
+            os.access(TEMPLATE_PATH, os.X_OK),
+            f"{TEMPLATE_PATH} is not executable",
+        )
+
+
 if __name__ == '__main__':
     unittest.main()
