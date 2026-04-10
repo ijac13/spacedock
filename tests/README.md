@@ -137,11 +137,13 @@ Existing fixtures and their purposes:
 
 ## Running Tests
 
-Tests use `uv run`. When running from inside a Claude Code session, unset `CLAUDECODE` first:
+Tests use `uv run`. When running from inside a Claude Code session (including from dispatched team agents / ensigns), unset `CLAUDECODE` first — Claude Code refuses to launch as a subprocess when this variable is set. The `unset CLAUDECODE &&` prefix is the escape hatch:
 
 ```bash
 unset CLAUDECODE && uv run tests/test_agent_content.py
 ```
+
+This works from any context: your terminal, the FO session, a dispatched ensign's Bash tool call, or a CI runner. The spawned `claude -p` subprocess gets its own isolated home directory with the project's OAuth token, so authentication is handled automatically.
 
 Static tests (no live session needed):
 
