@@ -219,6 +219,44 @@ def test_assembled_claude_first_officer_has_dispatch_idle_guardrail():
     assert re.search(r"never interpret idle.*stuck.*unresponsive", text, re.IGNORECASE)
 
 
+def test_assembled_claude_first_officer_dispatch_template_has_team_mode_completion_signal():
+    """The team-mode dispatch prompt MUST tell the worker to SendMessage(to="team-lead", ...) on completion.
+
+    Without this, team-dispatched ensigns never see a completion-signal instruction
+    (see task 107 / bug #30703 — team-dispatched agents lose their agents/{name}.md body),
+    and the FO's DISPATCH IDLE GUARDRAIL waits forever for a message that never arrives.
+    """
+    t = TestRunner("agent content", keep_test_dir=False)
+    text = assembled_agent_content(t, "first-officer")
+
+    runtime_path = Path(__file__).resolve().parent.parent / "skills" / "first-officer" / "references" / "claude-first-officer-runtime.md"
+    runtime_text = runtime_path.read_text()
+
+    dispatch_section = section_text(runtime_text, "## Dispatch Adapter", (r"^## ",))
+
+    # The team-mode Agent() prompt template must include an explicit SendMessage
+    # completion instruction. The inner quotes may be escaped (because the prompt
+    # literal itself lives inside a double-quoted string in the Agent(...) template).
+    assert re.search(
+        r'SendMessage\(to=\\?"team-lead\\?"',
+        dispatch_section,
+    ), (
+        "Dispatch Adapter section must instruct team-dispatched workers to "
+        'SendMessage(to="team-lead", ...) on completion.'
+    )
+
+    # The instruction must be gated on team mode — bare mode returns inline and does not need SendMessage.
+    assert re.search(
+        r"if\s+not\s+bare\s+mode|team[- ]mode|when.*team_name",
+        dispatch_section,
+        re.IGNORECASE,
+    ), "Completion-signal instruction must be conditional on team mode."
+
+    # The assembled FO contract must contain the same signal (sanity check that the
+    # runtime file is actually the one loaded via assembled_agent_content).
+    assert re.search(r'SendMessage\(to=\\?"team-lead\\?"', text)
+
+
 def test_assembled_claude_ensign_has_captain_communication():
     t = TestRunner("agent content", keep_test_dir=False)
     text = assembled_agent_content(t, "ensign")
