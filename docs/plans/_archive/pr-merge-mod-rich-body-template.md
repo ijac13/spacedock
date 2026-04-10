@@ -1,13 +1,13 @@
 ---
 id: 118
 title: Update pr-merge mod with rich PR body template
-status: validation
+status: done
 source: CL brainstorm during 2026-04-10 session — PR body thinness observed on #62
 score: 0.80
-worktree: .worktrees/spacedock-ensign-pr-merge-mod-rich-body-template
+worktree: 
 started: 2026-04-10T17:40:54Z
-completed:
-verdict:
+completed: 2026-04-10T19:08:32Z
+verdict: PASSED
 issue:
 pr: "#64"
 ---
