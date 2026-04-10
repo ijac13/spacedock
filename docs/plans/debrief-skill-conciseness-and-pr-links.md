@@ -9,7 +9,7 @@ started: 2026-04-10T23:31:01Z
 completed:
 verdict:
 issue:
-pr:
+pr: #71
 ---
 
 The debrief skill (`skills/debrief/SKILL.md`) currently produces debriefs with a commit list grouped by entity, where each shipped task has its full commit history inlined. For a 10-task session, this produces 100+ lines of commit enumeration that duplicate information already in the shipped PR. Captain feedback during the 2026-04-10 debrief:
