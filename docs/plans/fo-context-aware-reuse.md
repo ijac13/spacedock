@@ -294,3 +294,24 @@ All four implementation surfaces delivered. TDD followed throughout.
 - [x] AC-6: runtime adapter references claude-team, cooperative, zombie
 - [x] AC-7: runtime adapter contains uncommitted recovery clause
 - [x] AC-8: existing suites green (1 pre-existing flake in merge hook e2e)
+
+## Stage Report: validation
+
+### Verdict: PASSED
+
+### Test results (independently reproduced)
+- `test_claude_team.py`: 15/15 passed
+- `test_agent_content.py`: 21/21 passed
+- `test_rejection_flow.py`: skipped — live-API E2E test, not runnable without Claude API access
+- `claude-team context-budget --help`: exits 0, correct usage output
+
+### Diff scope
+6 files changed, 577 insertions, 4 deletions. All expected; no unexpected files.
+
+### Code inspection
+- Script logic verified: jsonl discovery via meta.json, resident tokens formula correct, model mapping complete with fallback, 60% threshold, JSON output has all 7 fields.
+- Runtime adapter: references `claude-team context-budget`, documents cooperative shutdown limitation, zombie tracking, `-cycleN` suffix, band-aid 1 limitation, recovery clause for uncommitted work.
+- Shared core: context budget check in both reuse conditions (condition 0) and feedback rejection flow (step 4), both reference `claude-team context-budget`.
+
+### Notes
+- E2E rejection flow test could not be independently verified (requires live API). Implementation report claims 5/5. Static assertions covering the same content patterns do pass.
