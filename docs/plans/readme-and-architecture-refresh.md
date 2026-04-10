@@ -1,7 +1,7 @@
 ---
 id: 116
 title: Refresh README and architectural docs for correctness and time-to-value
-status: implementation
+status: validation
 source: CL directive during 2026-04-10 session — after 115 validation dispatch
 started: 2026-04-10T17:05:36Z
 completed:
