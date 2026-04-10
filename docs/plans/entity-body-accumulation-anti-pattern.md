@@ -211,3 +211,22 @@ Option A is the right choice because:
 ### Summary
 
 Option A (separate stage-history file) is recommended. It fixes the root cause — stage reports accumulating in the entity body — with minimal schema disruption. The ensign write path is unchanged (stage reports still go into the entity body). The FO gains a new responsibility at stage boundaries: move the completed stage report to a companion `{slug}-stage-history.md` file. The dispatch template loses its blanket "read the entity file for full context" instruction in favor of targeted reading instructions. PR body extraction, the status tool, refit, and commission are all unaffected. The empirical data from task 116 predicts an 80% reduction in per-read token cost for the entity file, saving ~65k tokens over the lifecycle of a multi-cycle task.
+
+## Stage Report: implementation
+
+- [x] Update ensign-shared-core.md Stage Report Protocol with size guideline and append-only writes
+  ec3e26f — 30-50 line max, one-line evidence, commit SHAs instead of diffs, append at end of file, cycle N suffix for re-dos
+- [x] Update first-officer-shared-core.md completion gate to read last stage report
+  bbe25d5 — completion step 1 now reads "last `## Stage Report` section (appended at the end)"
+- [x] Update claude-first-officer-runtime.md dispatch template with targeted reading instruction
+  bbe25d5 — "for the current spec" replaces "for full context"; notes prior cycle reports appended at end
+- [x] Add static assertions in test_agent_content.py for all four contracts
+  8a8b47b (failing), d3460e8 (passing) — size guideline, append mode, no "for full context", FO reads last report
+- [x] Update existing test_ensign_shared_core_keeps_stage_report_protocol assertion
+  d3460e8 — "overwrite" → "append" to match new protocol; fixed section_text stop pattern for code block
+- [x] Full regression: test_agent_content.py 22/22 pass, test_rejection_flow.py 5/5 pass
+  test_merge_hook_guardrail.py running (E2E with model calls, long runtime)
+
+### Summary
+
+Implemented the compact-reports + append-only approach instead of Option A (separate stage-history file). Three contract files changed: ensign shared core gets size guidelines (30-50 lines) and append-only write mode; FO completion gate reads the last appended stage report; FO dispatch template directs ensigns to the current spec instead of "full context." No new files created, no schema changes, no FO Write Scope changes. Direction changed mid-implementation from Option A to this simpler approach per captain instruction.
