@@ -9,7 +9,7 @@ verdict:
 score:
 worktree: .worktrees/ensign-status-script-quoted-id-parsing
 issue:
-pr:
+pr: #61
 ---
 
 The status script's NEXT_ID calculation likely mishandles quoted vs unquoted IDs in YAML frontmatter. YAML treats `id: 001` as integer 1 and `id: "001"` as string "001" — if the script doesn't normalize these, it can miscalculate the next available ID or skip entities during scans.
