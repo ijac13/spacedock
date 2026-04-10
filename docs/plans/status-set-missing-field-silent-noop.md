@@ -9,7 +9,7 @@ started: 2026-04-10T21:24:08Z
 completed:
 verdict:
 issue:
-pr:
+pr: #67
 ---
 
 `skills/commission/bin/status --set {slug} {field}={value}` reports success and echoes the intended field=value pair to stdout, but does NOT write anything to the entity file when the target `{field}` is not already present in the YAML frontmatter. The file is unchanged, `git diff` is empty, and the only signal is the stdout echo (which looks identical to a successful write).
