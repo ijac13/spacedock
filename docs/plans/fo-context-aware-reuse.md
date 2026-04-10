@@ -1,7 +1,7 @@
 ---
 id: 121
 title: FO context-aware reuse — respawn fresh above 60%, and handle zombie dead ensigns
-status: ideation
+status: implementation
 source: CL directive after 116 cycle-2 impl ensign died at ~80% context without completing cycle-2 feedback
 score: 0.80
 ---
