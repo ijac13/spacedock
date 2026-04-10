@@ -27,7 +27,7 @@ Read the assignment context provided by the first officer. It defines:
 
 ## Stage Report Protocol
 
-Write or replace a `## Stage Report: {stage_name}` section in the entity file body using this exact structure:
+Append a `## Stage Report: {stage_name}` section at the end of the entity file using this exact structure:
 
 ```markdown
 ## Stage Report: {stage_name}
@@ -44,12 +44,15 @@ Write or replace a `## Stage Report: {stage_name}` section in the entity file bo
 {2-3 sentences: what was done, key decisions, anything notable}
 ```
 
+Size guideline: stage reports should be 30-50 lines maximum. One-line evidence per checklist item. Do not paste before/after diffs inline — the git log is the diff; include commit SHAs instead. Do not paste full test output — `5/5 passed` is sufficient.
+
 Rules:
 - `[x]` means complete
 - `[ ] SKIP:` means intentionally skipped with rationale
 - `[ ] FAIL:` means attempted and failed with concrete details
 - every checklist item must appear
-- if redoing a stage after rejection, overwrite the existing report instead of appending a second report
+- append the report at the end of the entity file — do not read the entire entity body to find an insertion point
+- if redoing a stage after rejection, append a new `## Stage Report: {stage_name} (cycle N)` section at the end rather than locating and overwriting the prior report — the latest report is always the last one in the file
 
 ## Completion
 

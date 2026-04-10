@@ -81,8 +81,8 @@ Feedback-stage worker instructions must preserve this rule: a review stage check
 
 When a worker completes:
 
-1. Read the entity file.
-2. Review the `## Stage Report` section against the checklist. Every dispatched checklist item must be represented as DONE, SKIPPED, or FAILED.
+1. Read the entity file's last `## Stage Report` section (the latest report is always appended at the end of the file).
+2. Review the stage report against the checklist. Every dispatched checklist item must be represented as DONE, SKIPPED, or FAILED.
 3. If checklist items are missing, send the worker back once to repair the report.
 4. Check whether the completed stage is gated.
 

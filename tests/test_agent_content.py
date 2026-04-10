@@ -96,7 +96,7 @@ def test_first_officer_shared_core_covers_all_behavioral_sections():
 def test_ensign_shared_core_keeps_stage_report_protocol():
     text = read_text("skills/ensign/references/ensign-shared-core.md")
     assert "## Stage Report: {stage_name}" in text
-    assert "overwrite" in text.lower()
+    assert "append" in text.lower()
     assert "agents/" in text
     assert "Do NOT modify YAML frontmatter" in text
 
@@ -317,6 +317,38 @@ def test_assembled_codex_first_officer_has_dispatch_adapter():
     assert "fork_context=false" in text
     assert "spawn_agent" in text
     assert "TeamCreate" not in text
+
+
+def test_ensign_stage_report_has_size_guideline():
+    text = read_text("skills/ensign/references/ensign-shared-core.md")
+    report_section = section_text(text, "## Stage Report Protocol", (r"^## Completion",))
+    assert re.search(r"30.50 lines", report_section), (
+        "Stage Report Protocol must include a 30-50 line size guideline"
+    )
+
+
+def test_ensign_stage_report_uses_append_mode():
+    text = read_text("skills/ensign/references/ensign-shared-core.md")
+    report_section = section_text(text, "## Stage Report Protocol", (r"^## Completion",))
+    assert "append" in report_section.lower(), (
+        "Stage Report Protocol must instruct appending the stage report"
+    )
+
+
+def test_dispatch_template_uses_targeted_read_instruction():
+    text = read_text("skills/first-officer/references/claude-first-officer-runtime.md")
+    dispatch_section = section_text(text, "## Dispatch Adapter", (r"^## ",))
+    assert "for full context" not in dispatch_section, (
+        "Dispatch template must not unconditionally instruct reading 'for full context'"
+    )
+
+
+def test_fo_completion_reads_last_stage_report():
+    text = read_text("skills/first-officer/references/first-officer-shared-core.md")
+    completion_section = section_text(text, "## Completion and Gates", (r"^## Feedback",))
+    assert "last" in completion_section.lower(), (
+        "Completion and Gates must reference reading the last stage report"
+    )
 
 
 def test_assembled_codex_ensign_has_completion_summary_contract():
