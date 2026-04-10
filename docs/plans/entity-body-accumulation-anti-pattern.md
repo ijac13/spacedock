@@ -1,7 +1,7 @@
 ---
 id: 125
 title: "Entity body accumulation anti-pattern — stage reports shouldn't append forever"
-status: implementation
+status: validation
 source: "FO diagnosis after both 116 cycle-2 and cycle-3 impl ensigns died from context overflow driven by entity-body reads"
 score: 0.85
 worktree: .worktrees/spacedock-ensign-entity-body-accumulation
