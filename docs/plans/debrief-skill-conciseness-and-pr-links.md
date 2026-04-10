@@ -143,3 +143,18 @@ Update `skills/debrief/SKILL.md`:
 **Commits:** `c5b8dee` (SKILL.md rewrite).
 
 **Result:** PASSED — ready for validation gate.
+
+---
+
+## Stage Report — validation
+
+**Scope verified:** `skills/debrief/SKILL.md` + this plan only. `git diff main..HEAD --stat` confirms two files touched.
+
+**Checks performed:**
+- SKILL.md read end-to-end. Phase 2a splits commits into PR-squash / pr-merge-mod-landing / non-PR buckets with explicit suppression rules; no longer groups by entity slug (line 103 says so explicitly). Phase 2b emits `- **{id}** \`{slug}\` — [#{N}]({pr_url}). {desc}` with multi-PR variant. Phase 2f scans `seed:`/`file:` prefixes for Filed section. Phase 3 Step 1 draft template has the expected sections (Shipped, Filed, Non-PR commits, Decisions, Issues—Workflow, Issues—Spacedock, Observations, What's Next). Phase 4 Step 3 file template mirrors Phase 3. PR URL construction at Phase 3 Step 1 line 179 reads `.claude-plugin/plugin.json` `repository` (string and object forms).
+- Unchanged surface: Phase 1 Discovery, Phase 2c/d/e, Phase 3 Step 2–3, Phase 4 Steps 1/2/4 — confirmed.
+- Target-shape cross-check: read `_debriefs/2026-04-10-01.md` once. Section structure and PR link format line up with Phase 3/4 templates.
+- Mental walkthrough (3 shipped + 2 seeds): instructions are unambiguous for commit splitting, PR-number resolution from pr-merge-mod commits, and bullet emission. Clear.
+- Regression: `unset CLAUDECODE && uv run --with pytest python tests/test_agent_content.py -q` → 25 passed, 1 warning. Grep confirms no test file references the debrief skill — no direct coverage exists for skill instructions (noted, not a blocker).
+
+**Result:** PASSED — recommend merge.
