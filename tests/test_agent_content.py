@@ -121,6 +121,40 @@ def test_codex_runtime_docs_cover_merge_hook_finalize_path():
     assert "{worker_key}/{slug}" in text
 
 
+def test_pr_merge_mod_copies_share_rich_body_template():
+    installed = read_text("docs/plans/_mods/pr-merge.md")
+    canonical = read_text("mods/pr-merge.md")
+
+    assert installed == canonical, "pr-merge mod drift: docs/plans/_mods/ and mods/ must match"
+
+    for text in (installed, canonical):
+        assert "### PR body template" in text
+        assert "Template structure" in text
+        assert "Extraction rules" in text
+        assert "Motivation lead" in text
+        assert "## What changed" in text
+        assert "## Evidence" in text
+        assert "## Review guidance" in text
+        assert "Workflow entity: {entity title}" in text
+        assert "Closes {issue}" in text
+        assert "Related" in text
+        assert "100-200 words" in text
+
+    for section_name in (
+        "Motivation lead",
+        "What changed",
+        "Evidence",
+        "Review guidance",
+        "Workflow entity",
+        "Closes",
+        "Related",
+    ):
+        assert installed.count(section_name) >= 2, (
+            f"section name {section_name!r} must appear in both the template "
+            f"structure and extraction rules tables"
+        )
+
+
 def test_assembled_claude_first_officer_has_gate_guardrails():
     t = TestRunner("agent content", keep_test_dir=False)
     text = assembled_agent_content(t, "first-officer")
