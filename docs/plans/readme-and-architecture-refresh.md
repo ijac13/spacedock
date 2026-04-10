@@ -405,3 +405,23 @@ Then send the one-time bootstrap completion signal via `SendMessage(to="team-lea
 
 Spacedock's docs are in reasonable shape but have accumulated small, specific drift (6 concrete in-scope fixes) and a larger time-to-value gap (no Getting Started walkthrough, no "who this is for / not for" paragraph, no known-issues surface). The correctness audit is small enough that Track 1 + Track 2 should stay in a single task. The largest single win is the Getting Started section plus the known-issues callout, which together close most of the 3-minute onboarding gap. The ideation resolves all five seed questions, produces nine verifiable ACs with explicit test methods, and scopes the test plan at static grep checks plus a fresh-reader subagent dry-run — no E2E, no code changes, docs-only.
 
+### Feedback Cycles
+
+**Cycle 1** (2026-04-10 17:50Z) — Captain REJECTED at validation gate.
+
+All 9 mechanical ACs passed, but a parallel staff DevRel reviewer recommended REVISE with 3 P0 blockers that the structural ACs did not catch. The captain accepted the DevRel findings and added additional directives compressing the Getting Started walkthrough. The full feedback has been routed to the kept-alive implementation ensign via SendMessage. Summary of fixes requested this cycle:
+
+- **DevRel P0-1:** Move Concepts table to after Quick Start (the vocabulary landing needs context first).
+- **DevRel P0-2:** Move Known Issues above Getting Started, as a "Before You Start" section, so team-mode users see the FO-hang warning before they hit it.
+- **DevRel P0-3:** Python3 pre-flight — **subsumed** by the captain's Getting Started rewrite (see below).
+- **DevRel P1-1:** Fix L5 three-commands-in-one-sentence.
+- **DevRel P1-2:** Remove or relocate "experimental support for other coding agents" noise.
+- **DevRel P1-3:** Default `git clone` to HTTPS instead of SSH.
+- **DevRel P2-1 / P2-2:** Workflow directory naming phrasing; self-referential `docs/plans/` example relocation.
+- **Captain directive:** Getting Started is too long — make it much shorter.
+- **Captain directive:** Prerequisites reduce to just "claude or codex" (no python3, git, gh itemization).
+- **Captain directive — Claude path:** marketplace install → launch as first officer → run `/spacedock:commission`. Compressed sequence.
+- **Captain directive — Codex path:** add a symlink install into `~/.agents/skills/spacedock` (ensign must figure out exact target — likely `ln -s /path/to/spacedock/skills ~/.agents/skills/spacedock` or similar; consult `skills/first-officer/references/codex-first-officer-runtime.md` and `skills/ensign/references/codex-ensign-runtime.md` for the canonical path).
+
+Fresh validation will be dispatched after the implementation ensign reports the fix round complete.
+
