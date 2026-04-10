@@ -1,7 +1,7 @@
 ---
 id: 126
 title: "claude-team context-budget reports stale tokens for dead ensigns — use peak, not last turn"
-status: implementation
+status: validation
 source: "FO observation during 2026-04-10 session — running claude-team against dead zombies from this session"
 score: 0.80
 worktree: .worktrees/spacedock-ensign-claude-team-peak-token
