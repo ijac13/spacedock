@@ -52,17 +52,9 @@ Spacedock turns directories of markdown files into structured workflows operated
 
 ### Example workflows
 
-**Email triage:**
+**Email triage:** `claude --agent spacedock:first-officer "/spacedock:commission Email triage: fetch, categorize, and act on Gmail inbox. Entity: a batch of up to 50 emails. Stages: intake (use gws-cli, triage in:inbox and read email body if necessary, categorize, propose action per email, output as table) → approval (Captain reviews proposal) -> execute (carry out approved actions, do not mark as read). Use gws-cli (https://github.com/googleworkspace/cli/tree/main/skills/gws-gmail), GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws/<account> for different accounts. Walk me through gws-cli setup if not already done."`
 
-```bash
-claude --agent spacedock:first-officer "/spacedock:commission Email triage: fetch, categorize, and act on Gmail inbox. Entity: a batch of up to 50 emails. Stages: intake (use gws-cli, triage in:inbox and read email body if necessary, categorize, propose action per email, output as table) → approval (Captain reviews proposal) -> execute (carry out approved actions, do not mark as read). Use gws-cli (https://github.com/googleworkspace/cli/tree/main/skills/gws-gmail), GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws/<account> for different accounts. Walk me through gws-cli setup if not already done."
-```
-
-**[Superpowers](https://github.com/anthropics/superpowers)-style dev task workflow:**
-
-```bash
-claude --agent spacedock:first-officer "/spacedock:commission Dev task workflow: superpowers-style design → plan → implement → review with ## Design and ## Implementation Plan inlined in the entity body (no separate spec/plan files), implement on isolated worktrees with strict TDD, design and review gated for approval."
-```
+**[Superpowers](https://github.com/obra/superpowers)-style dev task workflow:** `claude --agent spacedock:first-officer "/spacedock:commission Dev task workflow: superpowers-style design → plan → implement → review with ## Design and ## Implementation Plan inlined in the entity body (no separate spec/plan files), implement on isolated worktrees with strict TDD, design and review gated for approval."`
 
 ## What a Work Item Looks Like
 
@@ -129,7 +121,7 @@ When a new Spacedock release is available, use `/spacedock:refit` to upgrade you
 ## Use Cases
 
 - **Email triage**: classify and route incoming messages with AI agents, escalate to a human at review gates
-- **Dev task workflow**: [superpowers](https://github.com/anthropics/superpowers)-style design -> plan -> implement -> review with approval gates
+- **Dev task workflow**: [superpowers](https://github.com/obra/superpowers)-style design -> plan -> implement -> review with approval gates
 - **Content publishing**: manage drafts through editing, review, and publication stages
 - **Research workflows**: process papers or data through analysis, synthesis, and validation
 - **Dogfooding Spacedock's own development.** Spacedock is self-hosted. Its own development runs on a plain text workflow at [`docs/plans/`](docs/plans/). Run `skills/commission/bin/status --workflow-dir docs/plans` to see the current state.
