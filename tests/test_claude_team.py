@@ -254,6 +254,110 @@ class TestErrorCases:
         assert result.returncode != 0
 
 
+class TestPeakTokens:
+    """Peak-token extraction: scan backward past zero-usage final turns."""
+
+    def test_dead_ensign_zero_final_turn_returns_peak(self, tmp_path):
+        """An ensign that died mid-turn has a zero-usage final assistant entry.
+
+        The script must report the last non-zero peak, not zero.
+        """
+        projects_dir = tmp_path / ".claude" / "projects" / "test-project" / "session-1" / "subagents"
+        projects_dir.mkdir(parents=True, exist_ok=True)
+
+        meta_path = projects_dir / "agent-abc123.meta.json"
+        jsonl_path = projects_dir / "agent-abc123.jsonl"
+
+        meta_path.write_text(json.dumps({"agentType": "spacedock-ensign-foo-impl"}))
+
+        lines = [
+            json.dumps({"type": "assistant", "message": {"role": "assistant", "usage": {
+                "input_tokens": 10000, "cache_creation_input_tokens": 20000, "cache_read_input_tokens": 30000,
+            }}}),
+            json.dumps({"type": "assistant", "message": {"role": "assistant", "usage": {
+                "input_tokens": 50000, "cache_creation_input_tokens": 60000, "cache_read_input_tokens": 65000,
+            }}}),
+            # Dead turn: all zeros
+            json.dumps({"type": "assistant", "message": {"role": "assistant", "usage": {
+                "input_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
+            }}}),
+        ]
+        jsonl_path.write_text("\n".join(lines) + "\n")
+
+        make_team_config(tmp_path, "test-team", "spacedock-ensign-foo-impl", "claude-opus-4-6")
+
+        result = run_context_budget(tmp_path, "spacedock-ensign-foo-impl")
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        data = json.loads(result.stdout)
+        # Second turn: 50000 + 60000 + 65000 = 175000 on a 200000-limit -> 87.5%
+        assert data["resident_tokens"] == 175000
+        assert data["usage_pct"] == pytest.approx(87.5)
+        assert data["reuse_ok"] is False
+
+    def test_live_ensign_last_turn_is_peak(self, tmp_path):
+        """A healthy ensign's last turn has non-zero usage; returns that value."""
+        projects_dir = tmp_path / ".claude" / "projects" / "test-project" / "session-1" / "subagents"
+        projects_dir.mkdir(parents=True, exist_ok=True)
+
+        meta_path = projects_dir / "agent-abc123.meta.json"
+        jsonl_path = projects_dir / "agent-abc123.jsonl"
+
+        meta_path.write_text(json.dumps({"agentType": "spacedock-ensign-foo-impl"}))
+
+        lines = [
+            json.dumps({"type": "assistant", "message": {"role": "assistant", "usage": {
+                "input_tokens": 1000, "cache_creation_input_tokens": 500, "cache_read_input_tokens": 500,
+            }}}),
+            json.dumps({"type": "assistant", "message": {"role": "assistant", "usage": {
+                "input_tokens": 5000, "cache_creation_input_tokens": 3000, "cache_read_input_tokens": 2000,
+            }}}),
+            json.dumps({"type": "assistant", "message": {"role": "assistant", "usage": {
+                "input_tokens": 20000, "cache_creation_input_tokens": 15000, "cache_read_input_tokens": 15000,
+            }}}),
+        ]
+        jsonl_path.write_text("\n".join(lines) + "\n")
+
+        make_team_config(tmp_path, "test-team", "spacedock-ensign-foo-impl", "claude-opus-4-6")
+
+        result = run_context_budget(tmp_path, "spacedock-ensign-foo-impl")
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        data = json.loads(result.stdout)
+        # Last turn: 20000 + 15000 + 15000 = 50000 on 200000 -> 25%
+        assert data["resident_tokens"] == 50000
+        assert data["usage_pct"] == pytest.approx(25.0)
+        assert data["reuse_ok"] is True
+
+    def test_multiple_trailing_zero_turns(self, tmp_path):
+        """Multiple trailing zero-usage assistant turns still return the real peak."""
+        projects_dir = tmp_path / ".claude" / "projects" / "test-project" / "session-1" / "subagents"
+        projects_dir.mkdir(parents=True, exist_ok=True)
+
+        meta_path = projects_dir / "agent-abc123.meta.json"
+        jsonl_path = projects_dir / "agent-abc123.jsonl"
+
+        meta_path.write_text(json.dumps({"agentType": "spacedock-ensign-foo-impl"}))
+
+        zero_turn = json.dumps({"type": "assistant", "message": {"role": "assistant", "usage": {
+            "input_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
+        }}})
+        lines = [
+            json.dumps({"type": "assistant", "message": {"role": "assistant", "usage": {
+                "input_tokens": 40000, "cache_creation_input_tokens": 40000, "cache_read_input_tokens": 40000,
+            }}}),
+            zero_turn,
+            zero_turn,
+            zero_turn,
+        ]
+        jsonl_path.write_text("\n".join(lines) + "\n")
+
+        make_team_config(tmp_path, "test-team", "spacedock-ensign-foo-impl", "claude-opus-4-6")
+
+        result = run_context_budget(tmp_path, "spacedock-ensign-foo-impl")
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        data = json.loads(result.stdout)
+        assert data["resident_tokens"] == 120000
+
+
 class TestMostRecentMatch:
     """When multiple meta.json files match, use most recently modified."""
 
