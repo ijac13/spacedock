@@ -9,7 +9,7 @@ verdict:
 score: 0.90
 worktree: .worktrees/spacedock-ensign-fo-dispatch-template-completion-signal
 issue:
-pr:
+pr: #62
 ---
 
 Team-dispatched ensigns finish their stage work and then go idle silently, and the FO sits waiting indefinitely. This is the "FO idle after ensign completion" pattern observed across several recent sessions.
