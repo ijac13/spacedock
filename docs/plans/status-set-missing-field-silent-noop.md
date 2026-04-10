@@ -1,7 +1,7 @@
 ---
 id: 122
 title: "status --set silently no-ops when target field is missing from frontmatter"
-status: implementation
+status: validation
 source: FO observation during 118 merge hook execution (2026-04-10)
 score: 0.70
 worktree: .worktrees/spacedock-ensign-status-set-missing-field
