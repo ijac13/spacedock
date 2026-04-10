@@ -1,7 +1,7 @@
 ---
 id: 115
 title: FO dispatch template missing completion-signal instruction
-status: implementation
+status: validation
 source: CL diagnosis during 2026-04-10 boot session
 started: 2026-04-10T15:41:22Z
 completed:
