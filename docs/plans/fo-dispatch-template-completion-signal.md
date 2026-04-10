@@ -178,3 +178,61 @@ Scope: completion-signal only. The other 3 missing protocol items listed in task
    - `e9db417 fix: add team-mode completion signal to FO dispatch prompt template` (the one-line template change that satisfies both tests)
 
 8. [x] This stage report was written with per-item evidence, an explicit before/after diff of the template change (item 4), and the concrete test commands that were run (items 2, 3, 5, 6).
+
+## Stage Report: validation
+
+**Recommendation: PASSED**
+
+1. [x] Read the entity body and the implementation Stage Report in full. The implementation claims to (a) add a static assertion in `tests/test_agent_content.py`, (b) add an E2E regression test at `tests/test_dispatch_completion_signal.py` with fixture `tests/fixtures/completion-signal-pipeline/`, and (c) change exactly one line in `skills/first-officer/references/claude-first-officer-runtime.md:53` to append a team-mode-only `### Completion Signal` section to the Agent() prompt template, gated on `{if not bare mode: '...'}`. Evidence claims: pre-fix E2E timed out at 600s (exit 124); post-fix E2E passed at 242s wallclock; static suite 17/17; rejection flow 5/5; merge hook guardrail 11/11.
+
+2. [x] Inspected the diff. `git log main..HEAD --oneline` shows 3 commits: `a9ba14f` (failing regressions), `e9db417` (template fix), `d8d917f` (implementation report). `git diff main..HEAD --stat` confirms the scope: the only production file changed is `skills/first-officer/references/claude-first-officer-runtime.md` (1 insertion, 1 deletion). Test-side additions: `tests/test_agent_content.py` (+38), `tests/test_dispatch_completion_signal.py` (new, 141 lines), `tests/fixtures/completion-signal-pipeline/` (new fixture with README + task). `git show e9db417` confirms the fix commit touches only the runtime template file — no scope creep. Template tail on line 53 verified: the new section is inside `{if not bare mode: '\n\n### Completion Signal\n\nThis is a team-mode dispatch...SendMessage(to=\"team-lead\"...'}`, correctly gated.
+
+3. [x] **AC1 — static assertion present and meaningful.** Ran `unset CLAUDECODE && uv run --with pytest python tests/test_agent_content.py -q` from the worktree: `17 passed, 1 warning in 0.02s`. The new test `test_assembled_claude_first_officer_dispatch_template_has_team_mode_completion_signal` asserts the regex `SendMessage\(to=\\?"team-lead\\?"` is present in the extracted `## Dispatch Adapter` section AND in the assembled FO agent content. This is NOT a tautology — the assembled text comes from the actual runtime file via `assembled_agent_content`, not from a string literal embedded in the test itself. I also verified via `git diff main..HEAD -- tests/test_agent_content.py` that the test reads the runtime file and calls `section_text(...)` to scope the assertion to the Dispatch Adapter section.
+
+4. [x] **AC2 — completion-signal is gated on team mode.** Inspected `skills/first-officer/references/claude-first-officer-runtime.md:53` directly. The relevant tail of the Agent() prompt literal reads: `...Every checklist item must appear in your report. Do not omit items.{if not bare mode: '\n\n### Completion Signal\n\nThis is a team-mode dispatch. When you finish (after all commits and stage report writes are done), your last action MUST be:\n\n    SendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage_name}. Report written to {entity_file_path}.\")\n\nPlain text only. No JSON. Until you send this message, the first officer cannot observe your completion and the entity will not advance to the next stage.'}`. The gate `{if not bare mode: '...'}` is the same form used elsewhere in the file (e.g. line 52 for `team_name=`), and the static test also asserts a team-mode conditional marker is present. Bare-mode dispatch (which returns inline and does not need SendMessage) is unaffected.
+
+5. [x] **AC3 — E2E regression passes; entity advances without manual intervention.** Ran `unset CLAUDECODE && uv run tests/test_dispatch_completion_signal.py` twice from the worktree.
+
+   **Run 1 (FAILED — FO flake):** wallclock 72s, FO exited cleanly (exit 0), the dispatched ensign prompt DID carry the `SendMessage(to="team-lead"` instruction (verified via `agent-prompts.txt`), but the FO prematurely shut down the ensign at event ~65 in `fo-log.jsonl` and the entity remained at `status: work`. This is a model-side flake on haiku — the FO saw "Spawned successfully", went into "Standing by", then after 3 Bash/Read cycles decided to tear down the team without waiting for the ensign's SendMessage. Critically this is NOT caused by the fix: the template change is present and loaded correctly at runtime, and the greeting.txt deliverable was already created in the worktree by the ensign before the FO shut it down. The DISPATCH IDLE GUARDRAIL should have kept the FO waiting longer in this case, but that is a separate and pre-existing FO behavior issue orthogonal to the completion-signal template fix.
+
+   **Run 2 (PASSED):** wallclock 260s (in line with the implementation report's 242s), exit 0, all 5 checks green:
+   ```
+   PASS: status script runs without errors
+   PASS: first officer exited cleanly within timeout (no pre-fix hang)
+   PASS: FO dispatched at least one ensign
+   PASS: entity advanced and was archived without manual captain intervention
+   PASS: dispatched ensign prompt carries SendMessage completion-signal instruction
+   ```
+   The entity reached `_archive/completion-signal-task.md` without manual captain intervention, confirming the full completion-signal-propagation loop works end-to-end as designed.
+
+   **Caveat for the first officer:** AC3 is satisfied by run 2, but the flake on run 1 indicates `test_dispatch_completion_signal.py` is not 100% reliable on haiku. The flake is a model-reliability issue on the FO side (premature shutdown), not a defect in the template fix being validated. I recommend tracking the flakiness as a separate follow-up task on the FO's DISPATCH IDLE GUARDRAIL behavior — it is NOT a reason to REJECT this fix.
+
+6. [x] **AC4 — regression suites still green.** Reran both required suites from the worktree.
+
+   Static agent content suite: `unset CLAUDECODE && uv run --with pytest python tests/test_agent_content.py -q` → `17 passed, 1 warning in 0.02s`.
+
+   Rejection flow E2E: `unset CLAUDECODE && uv run tests/test_rejection_flow.py` →
+   ```
+   === Rejection Flow E2E Test (claude) ===
+   PASS: status script runs without errors
+   PASS: status --next detects dispatchable entity
+   PASS: FO dispatched an ensign for validation stage
+   PASS: reviewer stage report contains REJECTED recommendation
+   PASS: FO dispatched ensign for fix after rejection (3 total ensign dispatches)
+   === Results ===
+     5 passed, 0 failed
+   RESULT: PASS
+   ```
+   (The FO exceeded the 600s soft timeout, which the harness marks as expected for budget-cap cases; all 5 behavioral checks pass, matching the implementation report's observation for this suite.)
+
+7. [x] Independent sanity check of commit `e9db417`. `git show e9db417 --stat` confirms the fix commit touches exactly one file — `skills/first-officer/references/claude-first-officer-runtime.md` — with a 1-insertion, 1-deletion single-line edit. The full diff shows the edit adds the `{if not bare mode: '\n\n### Completion Signal...'}` block to the tail of the `prompt="..."` literal on line 53 and nothing else. No scope creep, no unrelated edits, no whitespace churn, and no touched files under `agents/` or outside `skills/first-officer/references/`.
+
+8. [x] **Final recommendation: PASSED.** Every acceptance criterion holds based on my own reruns:
+   - AC1: evidence — run of `tests/test_agent_content.py` (17/17 passed) with a new non-tautological assertion against the `## Dispatch Adapter` section of the runtime file.
+   - AC2: evidence — direct inspection of `skills/first-officer/references/claude-first-officer-runtime.md:53` showing the completion-signal block inside `{if not bare mode: '...'}`.
+   - AC3: evidence — run 2 of `tests/test_dispatch_completion_signal.py` (260s wallclock, entity archived without manual captain intervention, dispatched ensign prompt carries the SendMessage instruction). Run 1 failed due to an unrelated FO shutdown flake that did not originate from the fix under test.
+   - AC4: evidence — `tests/test_agent_content.py` 17/17 and `tests/test_rejection_flow.py` 5/5 green on my reruns.
+
+   **Note to first officer:** the `test_dispatch_completion_signal.py` flake on haiku is worth tracking as a follow-up (the FO shutting down the ensign after ~72s without waiting for the SendMessage), but it is NOT a blocker for this task and should not cause a REJECTED recommendation. The completion-signal template fix itself is correct, scoped, and effective.
+
+9. [x] Committing this Stage Report on the branch with message `report: validation stage for fo-dispatch-template-completion-signal`.
