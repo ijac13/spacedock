@@ -56,6 +56,21 @@ Agent(
 
 In bare mode, dispatch blocks until the subagent completes — concurrent dispatch of multiple entities is not possible. Dispatch one entity at a time and process completions inline.
 
+## Context Budget and Dead Ensign Handling
+
+**Context budget check:** Run `{spacedock_plugin_dir}/skills/commission/bin/claude-team context-budget --name {ensign-name}`. Parse the JSON output. If `reuse_ok` is `false`, log to captain and fresh-dispatch with recovery clause.
+
+**Model-to-context mapping:** The model-to-context-limit mapping lives in the `claude-team` script, not in the runtime adapter prose.
+
+**Recovery clause** (conditional, only when replacing a prior ensign): The prior ensign was shut down due to context budget limits. Its worktree may contain uncommitted changes. Run `git status` and `git diff` first. Commit legitimate WIP or reset broken changes.
+
+**Dead ensign handling:**
+
+- `SendMessage(shutdown_request)` is cooperative-only; do NOT send to dead or unresponsive ensigns.
+- Track dead ensigns in session memory (a mental list); do not route work to dead names.
+- Fresh-dispatch under `-cycleN` suffix when replacing a zombie ensign.
+- Band-aid 1 (post-dispatch config check) does NOT detect zombies — zombies pass the check. Session memory is the authoritative dead-vs-alive tracker.
+
 ## Captain Interaction
 
 The captain is the user of the Claude Code session. Communicate with the captain via direct text output (not SendMessage). Gate reviews, status reports, and clarification requests are presented as formatted text in the conversation.

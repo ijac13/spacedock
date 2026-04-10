@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+# ABOUTME: Team utility for Claude Code agent coordination.
+# ABOUTME: Subcommands: context-budget (check agent context window usage and reuse eligibility).
+
+import argparse
+import glob
+import json
+import os
+import sys
+
+
+CONTEXT_LIMITS = {
+    "claude-opus-4-6": 200000,
+    "claude-opus-4-6[1m]": 1000000,
+    "claude-sonnet-4-6": 200000,
+}
+
+HAIKU_PREFIX = "claude-haiku-4-5-"
+DEFAULT_CONTEXT_LIMIT = 200000
+THRESHOLD_PCT = 60
+
+
+def find_subagent_jsonl(name: str) -> str | None:
+    """Find the most recently modified subagent jsonl matching the given name.
+
+    Scans ~/.claude/projects/*/subagents/agent-*.meta.json for agentType matching name.
+    Also scans with session subdirectory: ~/.claude/projects/*/*/subagents/agent-*.meta.json.
+    Returns the sibling .jsonl path, or None.
+    """
+    home = os.path.expanduser("~")
+    patterns = [
+        os.path.join(home, ".claude", "projects", "*", "subagents", "agent-*.meta.json"),
+        os.path.join(home, ".claude", "projects", "*", "*", "subagents", "agent-*.meta.json"),
+    ]
+
+    matches = []
+    for pattern in patterns:
+        for meta_path in glob.glob(pattern):
+            try:
+                with open(meta_path, "r") as f:
+                    meta = json.load(f)
+                if meta.get("agentType") == name:
+                    mtime = os.path.getmtime(meta_path)
+                    jsonl_path = meta_path.replace(".meta.json", ".jsonl")
+                    if os.path.isfile(jsonl_path):
+                        matches.append((mtime, jsonl_path))
+            except (json.JSONDecodeError, OSError):
+                continue
+
+    if not matches:
+        return None
+
+    matches.sort(key=lambda x: x[0], reverse=True)
+    return matches[0][1]
+
+
+def extract_resident_tokens(jsonl_path: str) -> int | None:
+    """Extract resident tokens from the last assistant entry's usage block.
+
+    Returns input_tokens + cache_creation_input_tokens + cache_read_input_tokens,
+    or None if no assistant entry with usage is found.
+    """
+    last_usage = None
+    with open(jsonl_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if entry.get("type") == "assistant":
+                msg = entry.get("message", {})
+                if isinstance(msg, dict) and "usage" in msg:
+                    last_usage = msg["usage"]
+
+    if last_usage is None:
+        return None
+
+    return (
+        last_usage.get("input_tokens", 0)
+        + last_usage.get("cache_creation_input_tokens", 0)
+        + last_usage.get("cache_read_input_tokens", 0)
+    )
+
+
+def lookup_model(name: str) -> str | None:
+    """Find the model for a team member by name.
+
+    Scans ~/.claude/teams/*/config.json for a member whose name matches.
+    Returns the model string, or None.
+    """
+    home = os.path.expanduser("~")
+    pattern = os.path.join(home, ".claude", "teams", "*", "config.json")
+
+    for config_path in glob.glob(pattern):
+        try:
+            with open(config_path, "r") as f:
+                config = json.load(f)
+            for member in config.get("members", []):
+                if member.get("name") == name:
+                    return member.get("model")
+        except (json.JSONDecodeError, OSError):
+            continue
+
+    return None
+
+
+def context_limit_for_model(model: str) -> int:
+    """Map a model name to its context window size."""
+    if model in CONTEXT_LIMITS:
+        return CONTEXT_LIMITS[model]
+    if model.startswith(HAIKU_PREFIX):
+        return 200000
+    return DEFAULT_CONTEXT_LIMIT
+
+
+def cmd_context_budget(args: argparse.Namespace) -> int:
+    name = args.name
+
+    jsonl_path = find_subagent_jsonl(name)
+    if jsonl_path is None:
+        print(f"Error: no subagent jsonl found for '{name}'", file=sys.stderr)
+        return 1
+
+    resident_tokens = extract_resident_tokens(jsonl_path)
+    if resident_tokens is None:
+        print(f"Error: no assistant entries with usage in {jsonl_path}", file=sys.stderr)
+        return 1
+
+    model = lookup_model(name)
+    if model is None:
+        print(f"Error: no team config found for member '{name}'", file=sys.stderr)
+        return 1
+
+    context_limit = context_limit_for_model(model)
+    usage_pct = round(resident_tokens / context_limit * 100, 1)
+    reuse_ok = usage_pct <= THRESHOLD_PCT
+
+    result = {
+        "name": name,
+        "resident_tokens": resident_tokens,
+        "model": model,
+        "context_limit": context_limit,
+        "usage_pct": usage_pct,
+        "threshold_pct": THRESHOLD_PCT,
+        "reuse_ok": reuse_ok,
+    }
+
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Claude Code team utilities")
+    subparsers = parser.add_subparsers(dest="command")
+
+    budget_parser = subparsers.add_parser("context-budget", help="Check agent context budget")
+    budget_parser.add_argument("--name", required=True, help="Agent name to look up")
+
+    args = parser.parse_args()
+
+    if args.command is None:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
+
+    if args.command == "context-budget":
+        sys.exit(cmd_context_budget(args))
+
+
+if __name__ == "__main__":
+    main()
