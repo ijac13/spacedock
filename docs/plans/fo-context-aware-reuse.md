@@ -1,12 +1,18 @@
 ---
 id: 121
-title: FO should respawn fresh ensign when kept-alive context > 60%
+title: FO context-aware reuse — respawn fresh above 60%, and handle zombie dead ensigns
 status: backlog
 source: CL directive after 116 cycle-2 impl ensign died at ~80% context without completing cycle-2 feedback
-score: 0.75
+score: 0.80
 ---
 
-Kept-alive ensigns (feedback-to keepalive, reuse across stages) can run out of context mid-cycle and die silently, losing uncommitted work. This happened during task 116 cycle-2: the kept-alive implementation ensign was at 80.7% of 200k (155 turns) when the FO routed cycle-2 feedback to it. The ensign consumed enough additional context during the cycle-2 rewrite to hit the 200k ceiling and died mid-turn. It left +43/-53 lines of uncommitted README.md changes in the worktree, never sent a completion signal, and never escalated — the FO had explicitly warned "escalate if you hit a context wall" but the ensign just died without self-reporting.
+Two related FO runtime gaps observed during task 116 cycle 2, both about kept-alive ensign lifecycle:
+
+**Gap 1 — context overflow from reuse.** Kept-alive ensigns (feedback-to keepalive, reuse across stages) can run out of context mid-cycle and die silently, losing uncommitted work. During 116 cycle 2: the kept-alive impl ensign was at 80.7% of 200k (155 turns) when the FO routed cycle-2 feedback. It consumed enough additional context during the cycle-2 rewrite to hit 200k and died mid-turn. It left +43/-53 lines of uncommitted README.md changes in the worktree, never sent a completion signal, and never escalated — the FO had warned "escalate if you hit a context wall" but the ensign died without self-reporting.
+
+**Gap 2 — dead ensigns cannot be shut down.** Once an ensign has died (context overflow, tool-use error, or any other mid-turn failure), the FO has no mechanism to evict it from the team config. The documented shutdown path is `SendMessage(to=..., message={type: "shutdown_request"})`, which is cooperative — it requires the target agent to be responsive enough to process the request and approve its own shutdown. A dead agent cannot do that. The FO observed this in the 116 cycle-2 recovery: after the impl ensign died and CL confirmed the death, the FO sent a shutdown_request anyway out of reflex, which was silently dropped. The dead ensign remained listed in `~/.claude/teams/{team}/config.json` as a zombie member for the rest of the session. This bloats the team state, confuses post-dispatch verification (band-aid 1 from issue #63 still passes for the zombie, so it can't be used to detect the dead state), and violates the least-surprise principle.
+
+The two gaps compound: because dead ensigns can't be shut down, the FO must fresh-dispatch a sibling with a distinct name (e.g., `...-cycle3`) rather than reusing the original slot. This is workable but noisy — the team config accumulates dead zombies until the session ends.
 
 ## Proposed rule
 
@@ -35,10 +41,19 @@ When the 60% check fails and the FO fresh-dispatches, the fresh ensign must be t
 
 ## Scope
 
+**Gap 1 — context-aware reuse:**
+
 1. Add a **"context budget check"** step to `skills/first-officer/references/first-officer-shared-core.md` in the Dispatch and Feedback Rejection Flow sections.
 2. Document the model-to-context mapping in `skills/first-officer/references/claude-first-officer-runtime.md`.
 3. Fresh-dispatch template must include a recovery-from-uncommitted-work clause.
 4. Static assertion in `tests/test_agent_content.py` that the new rule text is present in the assembled FO content.
+
+**Gap 2 — dead ensign handling:**
+
+5. Document in `skills/first-officer/references/claude-first-officer-runtime.md` that `SendMessage(shutdown_request)` is cooperative-only and has no effect on dead/unresponsive ensigns. The FO must NOT reflexively send shutdown_request to an ensign believed to be dead — it's a no-op that creates false confidence.
+6. Document the "fresh-dispatch with distinct name" recovery pattern: when an ensign is known dead, the FO dispatches a sibling with a `-cycleN` or `-fresh` suffix rather than trying to reuse the dead slot. The dead ensign's entry stays as a zombie in team config until session end; the FO must not conflate the zombie with live state.
+7. Add a post-dispatch assertion note: band-aid 1 (verify new member in config) does NOT detect zombies — a zombie still passes the band-aid 1 check. The FO must track dead ensigns in session memory (or via sentinel file in the worktree) rather than relying on team config state alone.
+8. Consider: if the captain or an operator signals that an ensign is dead (e.g., "the impl ensign is over and dead"), the FO should (a) NOT send shutdown_request, (b) stop routing any further work to that name, (c) fresh-dispatch under a new name, (d) optionally note the zombie in session state so it's not accidentally addressed again later.
 
 ## Out of scope
 
@@ -54,9 +69,13 @@ When the 60% check fails and the FO fresh-dispatches, the fresh ensign must be t
    - Test: grep for `200` and `1000000` (or `1M`) in the Claude runtime file.
 3. When the FO decides to fresh-dispatch (either from the 60% check or any other cause), the dispatch prompt template includes a clause that tells the fresh ensign to inspect the worktree for uncommitted prior work and decide whether to preserve or reset it.
    - Test: grep for "uncommitted" or "prior ensign" in the dispatch template section of the runtime adapter.
-4. `tests/test_agent_content.py` has a new assertion covering the three points above.
-   - Test: the new test passes on the fix commit and fails on the parent commit.
-5. Existing suites stay green.
+4. `skills/first-officer/references/claude-first-officer-runtime.md` documents the dead-ensign shutdown gap: `SendMessage(shutdown_request)` is cooperative and has no effect on dead/unresponsive ensigns; the FO must NOT reflexively send it, and must fresh-dispatch under a distinct name (typically `-cycleN` or `-fresh` suffix) to recover.
+   - Test: grep for "shutdown_request is cooperative" or "dead ensign" or equivalent in the Claude runtime file returns matches.
+5. The same runtime file documents that band-aid 1 (post-dispatch team config membership check) does NOT detect zombies — a dead ensign still passes band-aid 1. The FO must track dead ensigns in session memory, not rely on team config state alone.
+   - Test: grep for "zombie" or "does not detect" or equivalent in the band-aid 1 section of the Claude runtime file.
+6. `tests/test_agent_content.py` has new assertions covering AC-1 through AC-5 above.
+   - Test: the new tests pass on the fix commit and fail on the parent commit.
+7. Existing suites stay green.
    - Test: `unset CLAUDECODE && uv run --with pytest python tests/test_agent_content.py -q`, `tests/test_rejection_flow.py`, `tests/test_merge_hook_guardrail.py`.
 
 ## Test Plan
