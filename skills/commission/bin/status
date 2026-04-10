@@ -572,6 +572,7 @@ def update_frontmatter(filepath, updates):
             resolved[field] = value
 
     # Rewrite matching lines in frontmatter
+    written = set()
     for i in range(fm_start + 1, fm_end):
         line = lines[i]
         if ':' in line and not line[0].isspace():
@@ -579,6 +580,13 @@ def update_frontmatter(filepath, updates):
             key_stripped = key.strip()
             if key_stripped in resolved:
                 lines[i] = f'{key_stripped}: {resolved[key_stripped]}'
+                written.add(key_stripped)
+
+    # Insert fields not already present in frontmatter before closing ---
+    missing = [f for f in resolved if f not in written]
+    for field in missing:
+        lines.insert(fm_end, f'{field}: {resolved[field]}')
+        fm_end += 1
 
     with open(filepath, 'w') as f:
         f.write('\n'.join(lines))
