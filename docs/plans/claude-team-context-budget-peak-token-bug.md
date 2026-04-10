@@ -151,3 +151,24 @@ This replaces the current "last assistant turn wins" logic (which reads only the
 - `bbf8740` fix: scan backward for peak resident tokens in claude-team context-budget
 
 Ready for validation. FO sanity check against live zombies pending.
+
+## Stage Report: validation
+
+**Verdict**: PASSED
+
+**Scope vs origin/main**: `git diff origin/main..HEAD --stat` shows 3 files only — `skills/commission/bin/claude-team`, `tests/test_claude_team.py`, `docs/plans/claude-team-context-budget-peak-token-bug.md`. Commits `2b173d9`, `bbf8740`, `492be9f`, `a2521c6`. (Local main is stale behind origin by one commit — unrelated file shows only when diffing against local main.)
+
+**Test suite**: `unset CLAUDECODE && uv run --with pytest python tests/test_claude_team.py -v` → 20 passed.
+
+**Peak-token fix inspection** (`skills/commission/bin/claude-team:51-89`): `extract_resident_tokens` calls `f.readlines()` once, iterates via `reversed(lines)`, returns first non-zero `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`. No forward linear scan.
+
+**[1m] heuristic inspection** (`skills/commission/bin/claude-team:114-124`): `context_limit_for_model` returns `EXTENDED_CONTEXT_LIMIT` (1,000,000) iff `"[1m]" in model`, else `DEFAULT_CONTEXT_LIMIT` (200,000). No model-name dict.
+
+**Model parametrize coverage** (`tests/test_claude_team.py:186-194`): 7 cases — `claude-opus-4-6` (200k), `claude-opus-4-6[1m]` (1M), `claude-sonnet-4-6` (200k), `claude-sonnet-4-6[1m]` (1M — proves heuristic isn't opus-specific), `claude-haiku-4-5-20251001` (200k), `unknown-model-xyz` (200k fallback), `unknown-model-xyz[1m]` (1M).
+
+**Live zombie sanity**: all three members in team config produce expected outputs.
+- `…readme-and-architecture-refresh-implementation` → resident_tokens 174808, usage_pct 87.4, reuse_ok false.
+- `…readme-and-architecture-refresh-implementation-cycle3` → resident_tokens 170668, usage_pct 85.3, reuse_ok false.
+- `…entity-body-accumulation-implementation` → resident_tokens 83761, usage_pct 41.9, reuse_ok true.
+
+**Regression**: `unset CLAUDECODE && uv run --with pytest python tests/test_agent_content.py -q` → 25 passed (1 pre-existing collection warning, unrelated).
