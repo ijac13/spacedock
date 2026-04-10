@@ -1,11 +1,11 @@
 ---
 id: 125
 title: "Entity body accumulation anti-pattern — stage reports shouldn't append forever"
-status: backlog
+status: ideation
 source: "FO diagnosis after both 116 cycle-2 and cycle-3 impl ensigns died from context overflow driven by entity-body reads"
 score: 0.85
 worktree:
-started:
+started: 2026-04-10T21:25:50Z
 completed:
 verdict:
 issue:
