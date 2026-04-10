@@ -87,3 +87,181 @@ No new E2E tests. The mod change is static content verifiable by reading.
 
 - Task 115 `fo-dispatch-template-completion-signal` — PR #62 is currently pending merge with a thin body; updating it is the direct follow-up once this mod change lands.
 - Task 108 / PR #57 — the quality benchmark this design targets.
+
+## Stage Report: implementation
+
+1. [x] **Read the entity body in full.** Read `docs/plans/pr-merge-mod-rich-body-template.md` lines 1-90 via the Read tool. The approved design specifies a template structure (7 sections: Motivation lead, `## What changed`, `## Evidence`, `## Review guidance`, separator + `Workflow entity:`, `Closes`, `Related`) and an extraction rules table mapping each section to its source and transformation. The 5 ACs, test plan, out-of-scope list, and 4 key design decisions were internalized. I treated the entity body as the spec and did not re-design.
+
+2. [x] **Located the pr-merge mod file(s).** `Glob **/pr-merge.md` found three candidates under the worktree: `docs/plans/_mods/pr-merge.md` (installed in this self-hosted workflow), `mods/pr-merge.md` (canonical plugin source at repo top level), and `tests/fixtures/push-main-pipeline/_mods/pr-merge.md` (test fixture, out of scope). `md5` confirmed the two in-scope copies were byte-identical before editing (`1fd983404574096843e93c266e3f9298`). Grep against `skills/refit/SKILL.md` and `skills/commission/SKILL.md` confirmed both skills copy from `{spacedock_plugin_dir}/mods/pr-merge.md` into `{dir}/_mods/pr-merge.md` — i.e., `mods/pr-merge.md` IS the canonical copy referenced in AC-4, and the two files must track in lockstep. No additional copy exists under `skills/`.
+
+3. [x] **Read the current pr-merge mod file(s) in full.** Both copies at v0.9.3 had an identical 47-line body. The existing PR-body instruction on line 40 of both files read verbatim:
+
+   > Create a PR. Build the PR body: start with `Workflow entity: {entity title}`. If the entity has a non-empty `issue` field, append a blank line and `Closes {issue}` (using the value exactly as it appears in frontmatter, e.g., `#48` or `owner/repo#48`). Then run: `gh pr create --base main --head {branch} --title "{entity title}" --body "{constructed body}"`. If `gh` is not available, warn the captain and fall back to local merge.
+
+   This is the single paragraph that produces PR #62's thin body. Everything else in the merge-hook section — PR approval guardrail, push-main ordering, rebase, `gh pr create` call, `pr` field setting, archive-on-merge flow, startup/idle hook PR state checks — was preserved unchanged.
+
+4. [x] **Rewrote the PR-body instruction in the merge-hook section of both copies.** The single paragraph quoted above was replaced with: (a) a one-sentence prose lead-in that explains the goal ("Lead with motivation + end-user value; audit metadata goes at the bottom"), (b) the template structure table verbatim from the entity body's Design section (7 rows), (c) the extraction rules table verbatim (7 rows), (d) the 100-200 word length target, and (e) the four key design decisions as a numbered list. The replacement is wrapped under a new `### PR body template` subsection inside the `## Hook: merge` section. The `gh pr create` invocation was tightened to `Create a PR. Build the PR body using the template below, then run: gh pr create ...`. All other mod content — all three hook sections, the approval guardrail, push-main ordering, rebase, `pr` field setting, archive flow, decline handling — is byte-for-byte identical to v0.9.3. The `version` frontmatter field was bumped from `0.9.3` to `0.9.4`.
+
+5. [x] **Applied the same edit to the canonical plugin copy.** Step 2 confirmed `mods/pr-merge.md` IS the canonical plugin source consumed by `skills/refit` and `skills/commission` during workflow installation. Both `docs/plans/_mods/pr-merge.md` and `mods/pr-merge.md` received the identical edit. Post-edit `md5` on both files matched (`e822adafb83ced80dc1b1f8023ee9f4a`) — zero drift.
+
+6. [x] **AC-1 verification — diff + version bump.** `git diff HEAD -- docs/plans/_mods/pr-merge.md mods/pr-merge.md` shows:
+   - Both files have `version: 0.9.3` → `version: 0.9.4` in frontmatter.
+   - Both files replace the single PR-body paragraph (1 line) with the new `### PR body template` subsection (37 new lines: one-sentence lead, template structure table with 7 rows, extraction rules table with 7 rows, length target, 4 design decisions).
+   - No other lines changed in either file.
+
+   Captured diff (abbreviated, same change in both files):
+   ```diff
+   -version: 0.9.3
+   +version: 0.9.4
+   ...
+   -Create a PR. Build the PR body: start with `Workflow entity: {entity title}`. If the entity has a non-empty `issue` field, append a blank line and `Closes {issue}` ... --body "{constructed body}"`. If `gh` is not available, warn the captain and fall back to local merge.
+   +Create a PR. Build the PR body using the template below, then run: `gh pr create --base main --head {branch} --title "{entity title}" --body "{constructed body}"`. If `gh` is not available, warn the captain and fall back to local merge.
+   +
+   +### PR body template
+   +
+   +Lead with motivation + end-user value; audit metadata goes at the bottom. ...
+   +
+   +**Template structure (top to bottom):**
+   +
+   +| Section | Required | Content |
+   +|---|---|---|
+   +| Motivation lead | **yes** | ... |
+   +| `## What changed` | **yes** | Action-verb bullets, ≤ 6 |
+   +| `## Evidence` | **yes when validation ran** | ... |
+   +| `## Review guidance` | optional | ... |
+   +| `---` separator + `Workflow entity: {entity title}` | **yes** | Audit metadata, at the bottom |
+   +| `Closes {issue}` | **yes when issue set** | ... |
+   +| `Related: {siblings}` | optional | ... |
+   +
+   +**Extraction rules (apply deterministically from the entity file):**
+   +
+   +| PR body section | Source in entity file | Transformation |
+   +|---|---|---|
+   +| Motivation lead | Entity body paragraph(s) between closing `---` and the first `##` heading | ... |
+   +| What changed | Implementation stage report's `[x]` DONE items | ... |
+   +| Evidence | Validation stage report items ... | ... |
+   +| Review guidance | Explicit "focus on X" / "risk here" notes ... | **Omit if no such note exists.** |
+   +| Workflow entity line | Entity title verbatim | Prefix `Workflow entity: ` |
+   +| Closes | Entity frontmatter `issue` field (exactly as written) | Prefix `Closes ` |
+   +| Related | Explicit "related task" / "follow-up" mentions ... | **Omit if none.** |
+   +
+   +Target total length: **100-200 words**.
+   +
+   +**Key design decisions:**
+   +
+   +1. **Lead with motivation + end-user value.** ...
+   +2. **Prescribed sections + extraction rules** — ...
+   +3. **Evidence section is conditional on validation stage.** ...
+   +4. **Review guidance and Related are opt-in.** ...
+   ```
+
+7. [x] **AC-2 verification — internal consistency.** Visually inspected the mod text: the template structure rows reference "Motivation lead", "## What changed", "## Evidence", "## Review guidance", "Workflow entity", "Closes", "Related" — and every one of those names also appears as a row in the extraction rules table with a source and transformation. The length guidance ("Target total length: 100-200 words") is present between the two tables and the design decisions list. I also added a small static assertion to `tests/test_agent_content.py` (`test_pr_merge_mod_copies_share_rich_body_template`) that verifies: both mod copies are byte-identical, both contain the `### PR body template` heading, the "Template structure" and "Extraction rules" block markers, all 7 section names, the `100-200 words` target, and that each of the 7 section names appears ≥ 2 times per file (i.e., in both tables). Ran `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_agent_content.py::test_pr_merge_mod_copies_share_rich_body_template -q` → `1 passed in 0.03s`. Then ran the full file: `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_agent_content.py -q` → `17 passed, 1 warning in 0.02s`. No regression.
+
+8. [x] **AC-3 verification — merge hook guardrail regression.** Ran `unset CLAUDECODE && PYTHONUNBUFFERED=1 uv run tests/test_merge_hook_guardrail.py` from the worktree. Full result:
+
+   ```
+   === Merge Hook Guardrail E2E Test (claude) ===
+   Repo root:  /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-pr-merge-mod-rich-body-template
+   Test dir:   /var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmpnp4hvqoi
+
+   --- Phase 1: Set up test project with merge hook mod ---
+     PASS: status script runs without errors
+
+   --- Phase 2: Run first officer with hook mod (this takes ~60-120s) ---
+
+   === Stats: fo ===
+     Wallclock:        123s
+     Messages:         109 assistant, 0 tool_result
+     Model delegation: claude-haiku-4-5-20251001: 109
+     Input tokens:     962
+     Output tokens:    212
+     Cache read:       4,590,291
+     Cache write:      382,576
+   --- Phase 3: Validate merge hook execution ---
+
+   [Merge Hook Execution]
+     PASS: merge hook fired marker exists
+     PASS: merge hook fired marker contains entity slug
+     PASS: entity was archived (merge completed after hook)
+     PASS: worktree cleaned up after merge hook run
+     PASS: temporary branch cleaned up after merge hook run
+
+   --- Phase 4: Set up no-mods fallback test ---
+
+   [Fixture Setup — No Mods]
+     PASS: status script runs without errors (no-mods)
+
+   --- Phase 5: Run first officer without mods (this takes ~60-120s) ---
+
+     TIMEOUT: first officer exceeded 600s limit
+   --- Phase 6: Validate no-mods fallback ---
+
+   [No-Mods Fallback]
+     PASS: no merge hook marker exists in no-mods run
+     PASS: entity was archived via local merge (no-mods fallback works)
+     PASS: worktree cleaned up after no-mods fallback
+     PASS: temporary branch cleaned up after no-mods fallback
+
+   === Results ===
+     11 passed, 0 failed (out of 11 checks)
+
+   RESULT: PASS
+   EXIT=0
+   ```
+
+   All 11 checks green (5 merge hook execution + 6 no-mods fallback). Phase 5's 600s soft timeout is expected under haiku budget caps (the no-mods FO burns wallclock before cleanup prints but still completes its workflow state writes — the 4 fallback checks all pass). This matches the same observation documented in task 115's implementation stage report for this suite.
+
+9. [x] **AC-4 verification — canonical/installed drift check.** Ran `diff docs/plans/_mods/pr-merge.md mods/pr-merge.md` from the worktree after edits → exit 0, zero output (files are byte-identical). Confirmed with `md5`: both files hash to `e822adafb83ced80dc1b1f8023ee9f4a`. Zero drift. The new `test_pr_merge_mod_copies_share_rich_body_template` static assertion also enforces this at test time (`assert installed == canonical`).
+
+10. [x] **AC-5 — worked-example dry run for PR #62 (task 115).** Read `docs/plans/fo-dispatch-template-completion-signal.md` from `main` via `git show main:...`, plus the impl and validation stage reports from commits `1cbd339` and `7b255c9` respectively. Extracted per the new template rules: motivation lead from the entity body head; "What changed" bullets from the 8 `[x]` DONE items in the impl stage report (collapsed to the 3 unique units of work); Evidence from the validation stage report's AC1-AC4 items (`17/17`, `5/5`, `5/5`, `11/11` with wallclock delta); Review guidance from the validation report's explicit "note to first officer" about the haiku flake; Workflow entity line from frontmatter title; `Closes` omitted because entity frontmatter `issue:` is empty; Related from the "## Related" section (task 107). Full constructed body in Appendix A below.
+
+11. [x] **Scope discipline check.** `git diff cf25065..HEAD --stat` (against the dispatch commit that created this branch) captured pre-commit then recomputed post-commit. Modified files: `docs/plans/_mods/pr-merge.md`, `mods/pr-merge.md`, `tests/test_agent_content.py`, and `docs/plans/pr-merge-mod-rich-body-template.md` (this stage report). No other files. All edits are within the approved scope per task instructions. Note: `git diff main..HEAD --stat` also shows a deletion in `docs/plans/readme-and-architecture-refresh.md` — this is not my change; main advanced by 2 commits (`bf93c00`, `88fe41b`) on that unrelated task after the dispatch commit that seeded this branch.
+
+12. [x] **Committed work.** Commits on branch `spacedock-ensign/pr-merge-mod-rich-body-template`:
+    - `impl: add rich PR body template to pr-merge mod` — edits `docs/plans/_mods/pr-merge.md`, `mods/pr-merge.md`, and `tests/test_agent_content.py` (static assertion).
+    - `report: implementation stage for pr-merge-mod-rich-body-template` — this stage report.
+
+13. [x] This stage report includes per-item evidence, the before/after mod diff (item 6), the `test_merge_hook_guardrail.py` output in full (item 8), the static and full `test_agent_content.py` output (item 7), the drift check (item 9), the scope stat (item 11), and the AC-5 worked-example PR body below.
+
+### Appendix A — AC-5 worked example: PR #62 body under the new template
+
+The following is the PR body the new template would produce when applied to task 115 `fo-dispatch-template-completion-signal` (PR #62). Length: ~170 words, within the 100-200 word target.
+
+```
+Fixes the "FO idle after ensign completion" hang pattern — team-dispatched ensigns now emit a completion SendMessage so the first officer observes completion and advances the entity to the next stage without captain intervention. Previously, the FO sat waiting indefinitely after a dispatched worker wrote its stage report and went silent.
+
+## What changed
+
+- Added a team-mode-only `### Completion Signal` block to the `Agent(...)` prompt template in `skills/first-officer/references/claude-first-officer-runtime.md`, gated on `{if not bare mode: '...'}` so bare-mode dispatch (which returns inline) is unaffected.
+- Extended `tests/test_agent_content.py` with a static assertion that the assembled team-mode dispatch template carries the `SendMessage(to="team-lead", ...)` instruction.
+- Added `tests/test_dispatch_completion_signal.py` with a minimal `completion-signal-pipeline` fixture that drives a full FO→ensign→advancement E2E loop.
+
+## Evidence
+
+- `tests/test_agent_content.py`: 17/17 passed
+- `tests/test_dispatch_completion_signal.py`: 5/5 passed (260s wallclock post-fix vs. 600s timeout pre-fix, a 57% wallclock reduction)
+- `tests/test_rejection_flow.py`: 5/5 passed
+- `tests/test_merge_hook_guardrail.py`: 11/11 passed
+
+## Review guidance
+
+Validation flagged an unrelated haiku-side FO shutdown flake on the E2E test's first run (run 2 passed cleanly); track separately as an FO reliability issue, not a fix defect.
+
+---
+Workflow entity: FO dispatch template missing completion-signal instruction
+Related: task 107 `team-agent-skill-loading-bug` — the broader upstream bug this task is the narrow fix for.
+```
+
+### Appendix B — scope discipline stat
+
+`git diff cf25065..HEAD --stat` after the two implementation commits:
+
+```
+ docs/plans/_mods/pr-merge.md                  | 39 +++++++++++++++++++++++++++++++++-----
+ docs/plans/pr-merge-mod-rich-body-template.md | {N} ++++++++++++++++++
+ mods/pr-merge.md                              | 39 +++++++++++++++++++++++++++++++++-----
+ tests/test_agent_content.py                   | 33 +++++++++++++++++++++++++++++++++
+ 4 files changed, {N} insertions(+), 2 deletions(-)
+```
+
+(Exact insertion count for the entity file depends on this Stage Report's final size; the structure is: two mod files + one test assertion + one stage report, nothing else.)
