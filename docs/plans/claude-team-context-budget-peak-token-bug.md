@@ -116,3 +116,38 @@ This replaces the current "last assistant turn wins" logic (which reads only the
 - **Task 121** `fo-context-aware-reuse` (just landed) — this task fixes a latent bug in 121's implementation that would have made the 60% rule ineffective for dead ensigns, which is one of the two main failure modes the rule exists to address.
 - **Task 125** `entity-body-accumulation-anti-pattern` (just landed) — tangential; 125 reduces the rate of context overflow, 121 detects when it's happening, 126 ensures 121's detection is accurate.
 - **Session empirical data 2026-04-10** — three zombies in the team config gave identical test results for both fix approaches, validating the direction.
+
+## Implementation stage report (2026-04-10)
+
+**Outcome**: fix landed on `spacedock-ensign/claude-team-peak-token`. Dead ensigns now report their true peak instead of zero; live ensigns unchanged.
+
+**Approach**: took approach (b) — backward scan from end-of-file for the first assistant turn with non-zero usage sum — as recommended by the entity body. One-function change in `skills/commission/bin/claude-team`:`extract_resident_tokens`.
+
+**TDD order**:
+1. Added three new tests in `tests/test_claude_team.py::TestPeakTokens`:
+   - `test_dead_ensign_zero_final_turn_returns_peak`: fixture with peak at 175k followed by a zero-usage error turn; expects 175k and `reuse_ok: false` at 87.5%.
+   - `test_live_ensign_last_turn_is_peak`: monotonic growth fixture; expects the last turn (50k, 25%) and `reuse_ok: true`.
+   - `test_multiple_trailing_zero_turns`: peak followed by three consecutive zero-usage turns; expects the peak (120k), confirming backward scan skips all zeros.
+2. Ran the tests — confirmed 2 of 3 failed (dead-ensign and trailing-zeros returned 0), live-ensign already passed (current code also picks last turn when nonzero).
+3. Committed failing tests: `2b173d9`.
+4. Applied the fix: replaced the forward-scan "last wins" loop with a reversed-iteration loop that returns the first assistant entry with a positive `input_tokens + cache_creation_input_tokens + cache_read_input_tokens` sum. Returns `None` if no such entry exists (existing "no assistant turns" error path preserved).
+5. Committed the fix: `bbf8740`.
+
+**Test results**:
+- `tests/test_claude_team.py`: 18/18 pass (15 pre-existing + 3 new).
+- `tests/test_agent_content.py`: 25/25 pass (regression, no interface change).
+
+**Semantic note**: if a jsonl contains only zero-usage assistant entries, `extract_resident_tokens` now returns `None` (error) instead of `0` (success). No pre-existing test covered this case; the new behavior is the right call — we can't determine a real peak, so it's an error. Documented in the function docstring.
+
+**Skipped the optional backward-scan-efficiency test** — it would require mocking `open`/`readlines`, which pulls in fragile monkeypatching for a correctness-neutral property. The entity body explicitly marked it optional.
+
+**Files touched**:
+- `skills/commission/bin/claude-team` (fix)
+- `tests/test_claude_team.py` (3 new tests)
+- `docs/plans/claude-team-context-budget-peak-token-bug.md` (this report)
+
+**Commits**:
+- `2b173d9` test: add failing tests for peak-token extraction on dead ensigns
+- `bbf8740` fix: scan backward for peak resident tokens in claude-team context-budget
+
+Ready for validation. FO sanity check against live zombies pending.
