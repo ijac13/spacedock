@@ -114,3 +114,32 @@ Update `skills/debrief/SKILL.md`:
 - **Task 116** `readme-and-architecture-refresh` — the session's largest task, contributed to the debrief verbosity observation.
 - **Task 118** `pr-merge-mod-rich-body-template` — established the pattern of "roll up detail into structured PR bodies". This task applies the same principle to debriefs.
 - **2026-04-10 #1 debrief** — the hand-crafted target shape the revised skill should produce automatically.
+
+---
+
+## Stage Report — implementation (cycle 1)
+
+**Scope:** `skills/debrief/SKILL.md` rewrite. Replaced the grouped-by-entity "Commits" section with three new sections: Shipped (one bullet per task with PR link), Filed (backlog), and Non-PR commits (workflow-only). PR URL construction reuses the existing `.claude-plugin/plugin.json` reader from Phase 3 Step 3.
+
+**What changed:**
+
+- **Phase 2a (Commits)** — now splits commits into three buckets: (1) PR squash-merges ending `(#NN)` roll up into Shipped, (2) pr-merge mod landings (`merge: {slug} done (PASSED) via PR #NN`) are consumed by 2b to resolve PR numbers, (3) non-PR commits are listed individually. Routine state churn (`dispatch:`, `advance:`, `state:`, `track:`) and captured commits (`seed:`, `file:`, `merge: ... via PR #NN`) are explicitly suppressed to avoid noise. Consolidation guidance for feedback/ideation cycle groups and revert cross-referencing preserved from the target's hand-crafted format.
+- **Phase 2b (Task state changes)** — retitled "Shipped entities". Resolves PR number(s) per entity from the pr-merge landing commit, pulls one-sentence description from the entity's problem-statement paragraph (fallback to title), and emits the `- **{id}** \`{slug}\` — [#{N}]({url}). {desc}` format. Multi-PR (main + fixups) variant documented inline.
+- **Phase 2f (NEW — Filed entities)** — scans for `seed:`/`file:` commits and emits one bullet per new backlog entity. Dual-listing rule: entities that both filed and shipped the same session appear in both sections.
+- **Phase 3 Step 1 (Draft template)** — replaced with the new Shipped / Filed / Non-PR commits / Decisions / Issues—Workflow / Issues—Spacedock / Observations / What's Next structure. PR URL construction logic inlined at the top of Step 1 with a forward-reference to Step 3 for the reader.
+- **Phase 4 Step 3 (File template)** — mirrors the Phase 3 draft structure. Adds optional narrative framing above Shipped (matching `2026-04-10-01.md`'s opening paragraph) and the "organized by tier" hint for What's Next.
+
+**Preserved unchanged:** Phase 1 (Discovery), Phase 2c/d/e (gate decisions, issues scan, what's next), Phase 3 Step 2 (captain commentary), Phase 3 Step 3 (GitHub issue filing), Phase 4 Steps 1/2/4 (sequence, duration, commit).
+
+**Verification (by eye):** walked through the 2026-04-10 session commit range (`31a3cb5..df72c7e`) mentally against the rewritten skill. Confirmed:
+- All ten shipped entities (059, 060, 061, 115, 116, 118, 121, 122, 125, 126) resolve their PR numbers from the `merge: ... done (PASSED) via PR #NN` landing commits.
+- 116's multi-PR case (#65 + #66 fixups) is handled by the multi-PR format variant.
+- All nine filed entities (117–126) caught by the `seed:`/`file:` scan in 2f.
+- The Non-PR commits section would capture `5c0a472` (docs:), `5acdbff` + `461f4cc` (direct-merge + revert), feedback cycles on 116 (consolidated), ideation stage reports on 121/125 (consolidated), `d9bab3c`/`850dcc1`/`ffb3fe1`/`fbee0d2` (update: mid-session scope) — matching the target.
+- Routine state commits (`dispatch:`, `advance:`, `state:`, `track:`) and `seed:`/`file:` commits would be suppressed from Non-PR — matching the target's omissions.
+
+**Scope compliance:** docs-only; no code, tests, or runtime adapters touched. Only `skills/debrief/SKILL.md` and this plan's stage report appended.
+
+**Commits:** `c5b8dee` (SKILL.md rewrite).
+
+**Result:** PASSED — ready for validation gate.
