@@ -422,6 +422,7 @@ All 9 mechanical ACs passed, but a parallel staff DevRel reviewer recommended RE
 - **Captain directive:** Prerequisites reduce to just "claude or codex" (no python3, git, gh itemization).
 - **Captain directive — Claude path:** marketplace install → launch as first officer → run `/spacedock:commission`. Compressed sequence.
 - **Captain directive — Codex path:** add a symlink install into `~/.agents/skills/spacedock` (ensign must figure out exact target — likely `ln -s /path/to/spacedock/skills ~/.agents/skills/spacedock` or similar; consult `skills/first-officer/references/codex-first-officer-runtime.md` and `skills/ensign/references/codex-ensign-runtime.md` for the canonical path).
+- **Captain addendum (sent mid-cycle):** Concepts table is too implementation-detailed ("The plugin-shipped `spacedock:ensign` worker" etc.). Strip the implementation labels and surface the three user-visible value props early in the README instead: **approval (gates)**, **worktree isolation**, and **declarative & flexible** (plain-text markdown, no runtime, trivially editable and forkable). The Concepts table itself should become much shorter and lose the `spacedock:ensign` / "plugin-shipped" phrasing.
 
 Fresh validation will be dispatched after the implementation ensign reports the fix round complete.
 
