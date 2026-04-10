@@ -124,3 +124,30 @@ The captain should decide between (1) "add fields on demand" and (2+3) "enforce 
 - Task 118 `pr-merge-mod-rich-body-template` — whose seed I wrote minimally, which is where I hit the bug twice.
 - Task 121 `fo-context-aware-reuse` — adjacent FO reliability concern, tangential.
 - The minimal seed pattern was written because the FO Write Scope rule says "new entity files — seed task creation (frontmatter + brief description body)" without specifying which fields are required. Seeds should probably have a canonical schema.
+
+## Stage Report: implementation
+
+**Approach:** Option 1 — add missing fields automatically. When `--set` targets a field not present in the frontmatter, insert it before the closing `---`.
+
+**Root cause:** `update_frontmatter()` in `skills/commission/bin/status` (line 574) iterates only over existing frontmatter lines and rewrites matches. Fields not already present are silently ignored — `resolved` dict contains the intended values but they are never written.
+
+**Fix (8 lines changed in `skills/commission/bin/status`):**
+- Track which resolved fields were actually written during the existing-line rewrite loop (`written` set).
+- After the loop, compute `missing = [f for f in resolved if f not in written]`.
+- Insert each missing field as `{field}: {value}` before the closing `---` line, incrementing `fm_end` to keep the insertion point correct for multiple missing fields.
+
+**Tests added (`tests/test_status_set_missing_field.py`, 5 tests):**
+1. `test_set_missing_field_inserts_it` — core bug fix: missing `pr` field is inserted.
+2. `test_set_existing_field_still_works` — regression: existing field update path unchanged.
+3. `test_set_mixed_existing_and_missing_fields` — mixed: `status` (existing) + `pr` + `worktree` (missing) all written.
+4. `test_set_missing_field_preserves_body` — body content after frontmatter is intact.
+5. `test_set_missing_field_preserves_existing_fields` — unmodified fields (id, title, status) are untouched.
+
+**Test results:**
+- New tests: 5/5 passed (2 failed before fix, confirming bug).
+- Existing `test_status_script.py`: 66/66 passed (no regressions).
+- Static suite `test_agent_content.py`: 18/18 passed.
+
+**Commits:**
+- `2d11d2e` — test: add failing tests for --set with missing frontmatter field
+- `166ecb1` — fix: update_frontmatter inserts fields missing from frontmatter
