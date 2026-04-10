@@ -1,7 +1,7 @@
 ---
 id: 127
 title: "Debrief skill — tighten output: PR links, drop per-PR commit lists, keep non-PR commits"
-status: implementation
+status: validation
 source: "CL feedback during 2026-04-10 debrief: 'a bit too verbose'"
 score: 0.60
 worktree: .worktrees/spacedock-ensign-debrief-skill-update
