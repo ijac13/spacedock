@@ -96,7 +96,7 @@ def test_first_officer_shared_core_covers_all_behavioral_sections():
 def test_ensign_shared_core_keeps_stage_report_protocol():
     text = read_text("skills/ensign/references/ensign-shared-core.md")
     assert "## Stage Report: {stage_name}" in text
-    assert "overwrite" in text.lower()
+    assert "append" in text.lower()
     assert "agents/" in text
     assert "Do NOT modify YAML frontmatter" in text
 
@@ -321,7 +321,7 @@ def test_assembled_codex_first_officer_has_dispatch_adapter():
 
 def test_ensign_stage_report_has_size_guideline():
     text = read_text("skills/ensign/references/ensign-shared-core.md")
-    report_section = section_text(text, "## Stage Report Protocol", (r"^## ",))
+    report_section = section_text(text, "## Stage Report Protocol", (r"^## Completion",))
     assert re.search(r"30.50 lines", report_section), (
         "Stage Report Protocol must include a 30-50 line size guideline"
     )
@@ -329,7 +329,7 @@ def test_ensign_stage_report_has_size_guideline():
 
 def test_ensign_stage_report_uses_append_mode():
     text = read_text("skills/ensign/references/ensign-shared-core.md")
-    report_section = section_text(text, "## Stage Report Protocol", (r"^## ",))
+    report_section = section_text(text, "## Stage Report Protocol", (r"^## Completion",))
     assert "append" in report_section.lower(), (
         "Stage Report Protocol must instruct appending the stage report"
     )
