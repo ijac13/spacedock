@@ -328,5 +328,35 @@ def test_assembled_codex_ensign_has_completion_summary_contract():
     assert "SendMessage" not in text
 
 
+def test_assembled_claude_first_officer_has_context_budget_in_reuse_conditions():
+    t = TestRunner("agent content", keep_test_dir=False)
+    text = assembled_agent_content(t, "first-officer")
+
+    reuse_section = section_text(text, "## Completion and Gates", (r"^## Feedback", r"^## Merge"))
+    assert "claude-team context-budget" in reuse_section, (
+        "Reuse conditions must reference claude-team context-budget check"
+    )
+
+
+def test_assembled_claude_first_officer_has_context_budget_in_feedback_rejection():
+    t = TestRunner("agent content", keep_test_dir=False)
+    text = assembled_agent_content(t, "first-officer")
+
+    rejection_section = section_text(text, "## Feedback Rejection Flow", (r"^## Merge",))
+    assert "claude-team context-budget" in rejection_section, (
+        "Feedback rejection flow must reference claude-team context-budget check"
+    )
+
+
+def test_assembled_claude_first_officer_runtime_has_context_budget_section():
+    t = TestRunner("agent content", keep_test_dir=False)
+    text = assembled_agent_content(t, "first-officer")
+
+    assert "claude-team" in text
+    assert "cooperative" in text.lower()
+    assert "zombie" in text.lower()
+    assert "uncommitted" in text.lower()
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__]))

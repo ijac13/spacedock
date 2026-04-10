@@ -92,6 +92,7 @@ The checklist review should produce an explicit count summary in the form:
 If the stage is not gated: If terminal, proceed to merge. Otherwise, determine whether to reuse the current agent or dispatch fresh for the next stage.
 
 **Reuse conditions** (all must hold — if any fails, dispatch fresh):
+0. Before evaluating reuse conditions, run `claude-team context-budget --name {ensign-name}`. If `reuse_ok` is `false`, skip to fresh dispatch.
 1. Not in bare mode (teams available)
 2. Next stage does NOT have `fresh: true`
 3. Next stage has the same `worktree` mode as the completed stage
@@ -117,9 +118,10 @@ When a feedback stage recommends REJECTED:
 1. Read the rejected stage's `feedback-to` target. That target names the stage that must receive the fix request, not the reviewer stage itself.
 2. Track feedback cycles in a `### Feedback Cycles` section in the entity body.
 3. If cycles reach 3, escalate to the human instead of dispatching another round.
-4. Route the findings back to the target stage in the same worktree.
-5. Re-run the reviewer after fixes.
-6. Re-enter the normal gate flow with the updated result.
+4. Before routing findings back to the target stage agent, run `claude-team context-budget --name {ensign-name}`. If `reuse_ok` is `false`, shut down the old ensign and fresh-dispatch.
+5. Route the findings back to the target stage in the same worktree.
+6. Re-run the reviewer after fixes.
+7. Re-enter the normal gate flow with the updated result.
 
 The first officer owns the `### Feedback Cycles` section and keeps it on the main branch.
 
