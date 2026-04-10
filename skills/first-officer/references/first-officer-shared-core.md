@@ -24,7 +24,7 @@ The status viewer ships with the plugin at `skills/commission/bin/status`. Resol
 
 Invoke it as:
 ```
-python3 {spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {workflow_dir} [--next|--archived|--where ...|--boot]
+{spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {workflow_dir} [--next|--archived|--where ...|--boot]
 ```
 
 Use `--boot` at startup to gather mods, next ID, orphans, PR state, and dispatchable entities in a single call. Use `--next`, `--where "pr !="`, etc. for targeted queries during the event loop. `--boot` is incompatible with `--next`, `--archived`, and `--where`.

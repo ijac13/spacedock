@@ -298,7 +298,7 @@ pr:
 View the workflow overview:
 
 ```bash
-python3 {spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {dir}
+{spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {dir}
 ```
 
 Output columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
@@ -306,13 +306,13 @@ Output columns: ID, SLUG, STATUS, TITLE, SCORE, SOURCE.
 Include archived {entity_label_plural} with `--archived`:
 
 ```bash
-python3 {spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {dir} --archived
+{spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {dir} --archived
 ```
 
 Find dispatchable {entity_label_plural} ready for their next stage:
 
 ```bash
-python3 {spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {dir} --next
+{spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {dir} --next
 ```
 
 Find {entity_label_plural} in a specific stage:
@@ -460,7 +460,7 @@ Process entities following the first-officer event loop. When the workflow reach
 If the pilot run fails (agent errors, YAML gets mangled, dispatch issues):
 
 - Report exactly what happened, including any error messages
-- Show the current state of the workflow with `python3 {spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {dir}`
+- Show the current state of the workflow with `{spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {dir}`
 - Do not retry automatically — let {captain} decide next steps
 
 This is v0. Either it works or we learn why it didn't.
