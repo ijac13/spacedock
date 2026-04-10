@@ -9,7 +9,7 @@ verdict:
 score:
 worktree: .worktrees/spacedock-ensign-readme-and-architecture-refresh
 issue:
-pr:
+pr: "#65"
 ---
 
 Audit and update Spacedock's README and architectural documentation against two independent lenses: **correctness** (does the written material match how the system actually behaves today?) and **time-to-value for potential users** (can someone landing on the repo understand what this is, decide if they want it, and get a working first workflow up quickly?).
