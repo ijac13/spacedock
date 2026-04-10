@@ -77,3 +77,21 @@ Archived entity files (`docs/plans/_archive/*.md`) and `docs/superpowers/specs/*
 - **Task 121** `fo-context-aware-reuse` (landed) — introduced `claude-team` with the correct exec bit and no `python3` prefix. This task brings `status` into line.
 - **Task 123** `status-tool-as-workflow-op-cli` (backlog) — bigger rewrite of the status tool. This task is a prerequisite cleanup that 123 should inherit.
 - **Task 122** `status-set-missing-field-silent-noop` (landed) — the recent status-script bug fix. Touched the same file; would have been a natural place to fix the exec bit if it had been noticed then.
+
+## Implementation Stage Report
+
+**Result:** PASSED. Branch `spacedock-ensign/status-exec-bit`.
+
+**Changes (3 commits):**
+- `aa880d5` Restore exec bit (`100644` → `100755`) on `skills/commission/bin/status` + regression test `test_status_script_is_executable` in `tests/test_status_script.py`.
+- `f1dae32` Doc sweep — dropped `python3 ` prefix from 6 live references across 3 files (`scripts/test-harness.md` x2, `skills/commission/SKILL.md` x4, `skills/first-officer/references/first-officer-shared-core.md` x1).
+- (this report)
+
+**Evidence:**
+- `git ls-files --stage skills/commission/bin/status` → `100755 fa0820f8... 0`.
+- Direct invocation `./skills/commission/bin/status --workflow-dir docs/plans` exit 0, prints entity table (first rows: 114 fo-enforce-mod-blocking-at-runtime backlog, 119 fo-dispatch-phase-1-band-aids backlog, ...).
+- `uv run --with pytest python tests/test_status_script.py -v` → 67 passed (including new exec-bit test).
+- `uv run --with pytest python tests/test_agent_content.py -q` → 25 passed.
+- Remaining `python3 .../bin/status` references are all in `_archive/` or `docs/superpowers/specs/` (out of scope) or this entity file itself.
+
+**Scope adherence:** 6 files touched — exactly the 6 listed in the dispatch brief. No unrelated drive-bys.
