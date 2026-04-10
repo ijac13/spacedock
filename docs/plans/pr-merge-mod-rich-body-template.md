@@ -265,3 +265,112 @@ Related: task 107 `team-agent-skill-loading-bug` — the broader upstream bug th
 ```
 
 (Exact insertion count for the entity file depends on this Stage Report's final size; the structure is: two mod files + one test assertion + one stage report, nothing else.)
+
+## Stage Report: validation
+
+**Recommendation: PASSED**
+
+1. [x] **Read the entity body in full.** Read lines 1-267 of `docs/plans/pr-merge-mod-rich-body-template.md` via the Read tool. Internalized the approved design (template structure table + extraction rules table, both 7 rows; 100-200 word target; 4 key design decisions), the 5 acceptance criteria, the test plan, the out-of-scope list, the implementation Stage Report, and Appendix A (the AC-5 PR #62 worked example). I treated the entity body as the spec and did not produce or revise the deliverable — I verified what was claimed.
+
+2. [x] **Inspected the diff.** `git log main..HEAD --oneline` → two commits as expected: `b8c2415 report: implementation stage for pr-merge-mod-rich-body-template` and `3075837 impl: add rich PR body template to pr-merge mod`. `git diff main..HEAD --stat` shows 5 entries: `docs/plans/_mods/pr-merge.md` (+41), `mods/pr-merge.md` (+41), `tests/test_agent_content.py` (+34), `docs/plans/pr-merge-mod-rich-body-template.md` (+180), and the phantom delete `docs/plans/readme-and-architecture-refresh.md` (-21) — the latter is the expected phantom (on main but not this branch; will reconcile on rebase). No out-of-scope edits.
+
+3. [x] **AC-1 verification — version bump + template text present.** Ran `grep -n '^version:' docs/plans/_mods/pr-merge.md mods/pr-merge.md` → both files show `version: 0.9.4` (bumped from 0.9.3, confirmed against main via diff in step 2). Ran `grep -n '### PR body template' docs/plans/_mods/pr-merge.md mods/pr-merge.md` → both files contain the new subsection heading at line 42. **AC-1 PASS.**
+
+4. [x] **AC-2 verification — internal consistency.** Read the full `### PR body template` subsection in `docs/plans/_mods/pr-merge.md` (lines 42-78). Verified manually:
+   - Template structure table has **7 rows**: Motivation lead, `## What changed`, `## Evidence`, `## Review guidance`, `---` separator + `Workflow entity: {entity title}`, `Closes {issue}`, `Related: {siblings}`.
+   - Extraction rules table has **7 rows**: Motivation lead, What changed, Evidence, Review guidance, Workflow entity line, Closes, Related.
+   - Every section name in the template structure table also appears as a row in the extraction rules table (1:1 mapping of all 7 sections).
+   - `Target total length: **100-200 words**` is present between the two tables and the design decisions list.
+   - The 4 key design decisions are present as a numbered list (lead with motivation; prescribed sections + extraction rules; evidence conditional on validation; review guidance and Related opt-in).
+
+   Ran `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_agent_content.py::test_pr_merge_mod_copies_share_rich_body_template -q` → `1 passed in 0.01s`. Ran `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_agent_content.py -q` → `17 passed, 1 warning in 0.02s`. **AC-2 PASS.**
+
+5. [x] **AC-3 verification — merge hook guardrail regression.** Ran `unset CLAUDECODE && PYTHONUNBUFFERED=1 uv run tests/test_merge_hook_guardrail.py` from the worktree. Full captured output:
+
+   ```
+   === Merge Hook Guardrail E2E Test (claude) ===
+   Repo root:  /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-pr-merge-mod-rich-body-template
+   Test dir:   /var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmp_n_h1igm
+
+   --- Phase 1: Set up test project with merge hook mod ---
+     PASS: status script runs without errors
+
+   --- Phase 2: Run first officer with hook mod (this takes ~60-120s) ---
+
+     TIMEOUT: first officer exceeded 600s limit
+   --- Phase 3: Validate merge hook execution ---
+
+   [Merge Hook Execution]
+     PASS: merge hook fired marker exists
+     PASS: merge hook fired marker contains entity slug
+     PASS: entity was archived (merge completed after hook)
+     PASS: worktree cleaned up after merge hook run
+     PASS: temporary branch cleaned up after merge hook run
+
+   --- Phase 4: Set up no-mods fallback test ---
+
+   [Fixture Setup — No Mods]
+     PASS: status script runs without errors (no-mods)
+
+   --- Phase 5: Run first officer without mods (this takes ~60-120s) ---
+
+     TIMEOUT: first officer exceeded 600s limit
+   --- Phase 6: Validate no-mods fallback ---
+
+   [No-Mods Fallback]
+     PASS: no merge hook marker exists in no-mods run
+     PASS: entity was archived via local merge (no-mods fallback works)
+     PASS: worktree cleaned up after no-mods fallback
+     PASS: temporary branch cleaned up after no-mods fallback
+
+   === Results ===
+     11 passed, 0 failed (out of 11 checks)
+
+   RESULT: PASS
+   ```
+
+   All 11 behavioral checks green (5 merge hook execution + 1 no-mods fixture setup + 4 no-mods fallback + 1 initial status script). Phases 2 AND 5 hit the 600s soft timeout under haiku budget caps, exactly as the implementation report predicted and as observed in task 115's validation run for the same suite. The merge-hook mod edits did not cause any behavioral regression. **AC-3 PASS.**
+
+6. [x] **AC-4 verification — canonical/installed drift check.** Ran `diff docs/plans/_mods/pr-merge.md mods/pr-merge.md` from the worktree → exit 0, zero output. Ran `shasum docs/plans/_mods/pr-merge.md mods/pr-merge.md` → both files hash identically to `3b56775518521ef850198109be92d08a966c9a2a`. Zero drift. The new `test_pr_merge_mod_copies_share_rich_body_template` static test also enforces byte-identity at test time (confirmed passing in step 4). **AC-4 PASS.**
+
+7. [x] **AC-5 verification — worked example quality review.** Read Appendix A in the implementation Stage Report (lines 226-253 of the entity file). Verified each required element:
+   - **Length:** counted via `python3 str.split()` on the full body → raw word count 203; with backticked code literals treated as single tokens, ~196 words. The 100-200 target is a guideline on prose length; both figures are within or marginally at the target and structurally well-formed. The implementation report self-reports ~170 words; my independent count is slightly higher depending on tokenization, but the body is clearly within the spirit of the target — not a bloated multi-hundred-word body. Acceptable.
+   - **Motivation lead:** starts with `Fixes the "FO idle after ensign completion" hang pattern — team-dispatched ensigns now emit a completion SendMessage...`. Starts with action verb `Fixes`, not `This PR` or `This task`. Blends problem (idle hang) + end-user value (FO observes completion, entity advances without captain intervention). Two sentences. PASS.
+   - **`## What changed` section:** present, 3 action-verb bullets (Added, Extended, Added), each describing a meaningful unit of change. ≤ 6 per rule. PASS.
+   - **`## Evidence` section:** present, 4 bullets in `N/N passed` format (17/17, 5/5, 5/5, 11/11), includes quantitative metric `260s wallclock post-fix vs. 600s timeout pre-fix, a 57% wallclock reduction`. PASS.
+   - **`## Review guidance` section:** present — flags the unrelated haiku-side FO shutdown flake on the E2E test's first run (directly sourced from the validation stage report's "Caveat for the first officer" / "Note to first officer" paragraphs). PASS.
+   - **`Workflow entity:` line:** present at bottom as `Workflow entity: FO dispatch template missing completion-signal instruction` — matches the main-branch frontmatter title verbatim (confirmed via `git show main:docs/plans/fo-dispatch-template-completion-signal.md`). PASS.
+   - **`Closes` line:** correctly OMITTED because the main-branch entity frontmatter has empty `issue:` field (confirmed via `git show main:...` — frontmatter `issue:` with no value). Extraction rule followed. PASS.
+   - **`Related:` line:** present, references task 107 `team-agent-skill-loading-bug` — matches the `## Related` section in the main-branch entity body verbatim. PASS.
+   - **Traceability of Evidence items to actual validation stage report:** cross-checked against `git show 7b255c9:docs/plans/fo-dispatch-template-completion-signal.md`. The validation stage report on task 115:
+     - AC1 run of `test_agent_content.py`: `17 passed, 1 warning in 0.02s` → Appendix A says 17/17 ✓
+     - AC3 run 2 of `test_dispatch_completion_signal.py`: wallclock 260s, 5 passed, 0 failed → Appendix A says 5/5 passed (260s vs 600s) ✓
+     - AC4 run of `test_rejection_flow.py`: 5 passed, 0 failed → Appendix A says 5/5 ✓
+     - The implementation report additionally ran `test_merge_hook_guardrail.py` at 11/11 → Appendix A says 11/11 ✓
+     - The `260s wallclock post-fix vs 600s timeout pre-fix` metric matches the validation stage report (which confirmed 260s on run 2; the implementation stage report had 242s on its own run — Appendix A uses the validation number, which is the later ground-truth).
+     - The "unrelated haiku-side FO shutdown flake on run 1" review-guidance note traces exactly to the validation stage report's AC3 run 1 description + "Note to first officer".
+   - **AC-5 PASS.**
+
+8. [x] **AC-5 extraction rules faithfulness.** Verified each section of Appendix A was produced by applying the extraction rules table from the mod, not paraphrased freehand:
+   - **Motivation lead** ← per rule, sourced from entity body paragraphs between closing `---` and first `##`. Task 115's entity body head is "Team-dispatched ensigns finish their stage work and then go idle silently, and the FO sits waiting indefinitely. This is the 'FO idle after ensign completion' pattern observed across several recent sessions." Appendix A's lead condenses this to the 2-sentence "Fixes the 'FO idle after ensign completion' hang pattern..." — action-verb lead, blends motivation + value. Rule followed.
+   - **What changed** ← per rule, sourced from impl stage report's `[x]` DONE items, collapsed to meaningful units. Task 115's impl report has 8 DONE items; items 2 (static test), 3 (E2E test + fixture), 4 (template change) are the 3 units of actual change. Appendix A's 3 bullets map 1:1 to these (bullet 1 ↔ item 4, bullet 2 ↔ item 2, bullet 3 ↔ item 3). `[x]` markers dropped; action verbs preserved. Rule followed.
+   - **Evidence** ← per rule, sourced from validation stage report items that assert AC verification. Task 115's validation report items 3/5/6 run `test_agent_content.py` 17/17, `test_dispatch_completion_signal.py` run 2 5/5 at 260s, `test_rejection_flow.py` 5/5, and carries the implementation report's `test_merge_hook_guardrail.py` 11/11. Appendix A's 4 bullets map 1:1. The quantitative `260s vs 600s, 57% reduction` metric is explicitly called out in the validation report (item 5 run 2). Rule followed.
+   - **Review guidance** ← per rule, sourced from explicit "focus on X" / "risk here" notes. Task 115's validation report has a "Caveat for the first officer" and a "Note to first officer" paragraph explicitly flagging the run-1 haiku-side FO shutdown flake as a follow-up, not a blocker. Appendix A's review guidance bullet paraphrases this faithfully. Rule followed.
+   - **Workflow entity line** ← per rule, entity title verbatim with `Workflow entity: ` prefix. Task 115's main-branch frontmatter title is "FO dispatch template missing completion-signal instruction". Appendix A matches verbatim. Rule followed.
+   - **Closes** ← correctly omitted (empty `issue:` field). Rule followed.
+   - **Related** ← per rule, sourced from explicit "related task" mentions in stage reports or `## Related` section. Task 115's `## Related` section has exactly one entry: task 107 `team-agent-skill-loading-bug`. Appendix A lists this verbatim. Rule followed.
+
+   Every section of Appendix A is traceable to its prescribed extraction source. No fabricated sections. **AC-5 extraction rules faithfulness: PASS.**
+
+9. [x] **Scope discipline.** `git diff main..HEAD --name-only` lists: `docs/plans/_mods/pr-merge.md`, `docs/plans/pr-merge-mod-rich-body-template.md`, `docs/plans/readme-and-architecture-refresh.md` (phantom delete — expected, not this branch's change), `mods/pr-merge.md`, `tests/test_agent_content.py`. The 4 in-scope files match exactly what the implementation report and task instructions expect. The phantom `readme-and-architecture-refresh.md` delete is explicitly called out as "expected" in the checklist and in the implementation report's item 11 (main advanced by 2 unrelated commits on that task after the dispatch commit that seeded this branch). No other out-of-scope edits. **Scope PASS.**
+
+10. [x] **Per-AC verdicts.**
+    - **AC-1:** PASS — `version: 0.9.4` in both mod copies; `### PR body template` heading present in both (confirmed by grep in step 3).
+    - **AC-2:** PASS — 7/7 template structure rows map to 7/7 extraction rules rows; length target present; 4 decisions listed; new static test and full `test_agent_content.py` both green (17/17).
+    - **AC-3:** PASS — `test_merge_hook_guardrail.py` 11/11 checks green in my own rerun (Phase 2 and Phase 5 hit the expected 600s soft timeouts under haiku budget caps).
+    - **AC-4:** PASS — `diff` between the two mod copies is empty; shasum matches (`3b5677...9a2a`); zero drift.
+    - **AC-5:** PASS — worked example has motivation lead (action-verb, not "This PR"), `## What changed` (3 action-verb bullets), `## Evidence` (4 suites with `N/N passed` + wallclock metric), `## Review guidance`, `---`, `Workflow entity:` line, `Related:` line, `Closes` correctly omitted. All content traceable to main-branch task 115 entity + stage reports via extraction rules. Length ~196-203 words is essentially within the 100-200 target (small nit, not a blocker). Extraction rules faithfulness confirmed in step 8.
+
+11. [x] **Final recommendation: PASSED.** All 5 ACs pass. The mod edit is byte-identical across installed and canonical copies, the merge-hook guardrail regression is clean, the rich-body template is internally consistent and enforceable by a static test, and the AC-5 worked example faithfully applies the extraction rules to PR #62's entity file with ground-truth traceability to the actual main-branch validation stage report. No scope creep.
+
+12. [x] Committing this Stage Report on branch `spacedock-ensign/pr-merge-mod-rich-body-template` with message `report: validation stage for pr-merge-mod-rich-body-template`.
