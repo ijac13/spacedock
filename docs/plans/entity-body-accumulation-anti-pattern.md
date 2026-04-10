@@ -9,7 +9,7 @@ started: 2026-04-10T21:25:50Z
 completed:
 verdict:
 issue:
-pr:
+pr: #69
 ---
 
 Stage reports currently accumulate in the entity body of the task file itself. Each implementation cycle, validation cycle, feedback rejection, and re-implementation appends more content — ideation reports, stage reports, feedback cycles sections, addenda, reviewer findings. After two or three cycles on a task of moderate complexity, the entity body can grow past 800 lines. Every subsequent ensign dispatched on that task has to read the entire accumulated history to understand its instructions, which blows up its context budget before it can reach the actual deliverable.
