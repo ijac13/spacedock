@@ -424,5 +424,30 @@ All 9 mechanical ACs passed, but a parallel staff DevRel reviewer recommended RE
 - **Captain directive — Codex path:** add a symlink install into `~/.agents/skills/spacedock` (ensign must figure out exact target — likely `ln -s /path/to/spacedock/skills ~/.agents/skills/spacedock` or similar; consult `skills/first-officer/references/codex-first-officer-runtime.md` and `skills/ensign/references/codex-ensign-runtime.md` for the canonical path).
 - **Captain addendum (sent mid-cycle):** Concepts table is too implementation-detailed ("The plugin-shipped `spacedock:ensign` worker" etc.). Strip the implementation labels and surface the three user-visible value props early in the README instead: **approval (gates)**, **worktree isolation**, and **declarative & flexible** (plain-text markdown, no runtime, trivially editable and forkable). The Concepts table itself should become much shorter and lose the `spacedock:ensign` / "plugin-shipped" phrasing.
 
-Fresh validation will be dispatched after the implementation ensign reports the fix round complete.
+Cycle 1 outcome: implementation applied cycle 1 + addendum. Validation cycle 2 PASSED (all 9 ACs + structural ordering). DevRel cycle 2 said SHIP (0 P0 blockers). Strict AC-9 fresh reader PASS. The captain nonetheless rejected at the cycle-2 gate with new directional guidance (below).
+
+**Cycle 2** (2026-04-10 18:25Z) — Captain REJECTED at cycle-2 validation gate with directional feedback. Routing back to implementation. Items are directional (not exact phrases) — the implementer is expected to apply the intent, not mechanical substitutions.
+
+1. "every change reviewable as a normal git diff" — not helpful framing. Replace with something like "concise and high-signal evidence for approval" (stage reports give the captain approval-grade evidence).
+2. "You want Spacedock if" — rewrite the two clauses: (a) "you are a human tired of switching between agent sessions for approval decisions"; (b) "you are an agent that wants to help a human manage repeatable tasks without bothering them for every tiny decision".
+3. Worktree isolation is NOT always-on — it's on-demand. The first officer decides whether a stage's work needs isolation. Capture it as optional / as-needed, not universal.
+4. Avoid the "No X, no Y, just Z" sentence pattern anywhere it appears.
+5. Move the Invictus (Henley) quote to immediately before or after the Captain concept in the Concepts table (implementer's judgment which side).
+6. Add a note encouraging users to run in a sandbox so they can safely bypass permission prompts. Also mention Claude Code's agent team support so the captain can optionally chat directly with subagents (Shift+Up/Down) to give feedback without routing through the first officer.
+7. "Inside your first-officer session" framing is confusing. Support a faster one-command startup: `claude --agent spacedock:first-officer "/spacedock:commission $prompt"`. Implementer must verify the exact syntax works with the current Claude Code CLI. Add two specific example commissions:
+   - **(a) Email triage:** fetch, categorize, and act on Gmail inbox. Entity = a batch of up to 50 emails. Stages: intake (use gws-cli, `triage in:inbox` and read email body if necessary, categorize, propose action per email, output as table) → approval (captain reviews proposal) → execute (carry out approved actions, do NOT mark as read). Use `gws-cli` (https://github.com/googleworkspace/cli/tree/main/skills/gws-gmail), `GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws/<account>` for different accounts. Walk the user through gws-cli setup if not already done.
+   - **(b) Dev task workflow:** superpowers-style design → plan → implement → review, with `## Design` and `## Implementation Plan` inlined in the entity body (no separate spec/plan files). Implement on isolated worktrees with strict TDD. Design and review stages gated for approval.
+8. Drop `codex exec` from the Codex Quick Start — show only interactive Codex.
+9. Known Quirks don't belong in a user-facing README. Remove the "Before You Start — Known Quirks in Team Mode" section entirely. (Cycle 1 moved it above Getting Started; cycle 2 removes it outright.)
+10. Mission is not a role — drop the Mission row from the Concepts table.
+11. "Generated into your workflow directory:" → reword to frame the generation as "when a workflow is commissioned".
+12. Drop the Local Development section entirely. That's contributor-facing, not user-facing.
+13. Add a License section (repo has a LICENSE file — check it and link/cite appropriately).
+14. Drop the standalone Dogfooding section. Instead, add "dogfooding Spacedock's own development" as one item in the existing Use Cases list.
+
+**Additional additive:** mention the session debrief skill (`skills/debrief/SKILL.md`) somewhere in the README — either as a Use Case bullet or in a brief "and more" mention in How It Works / Use Cases.
+
+Fresh validation + DevRel cycle-3 review will be dispatched after the implementation ensign reports the fix round complete. **Note:** this is cycle 2 of feedback; one more rejection would hit the 3-cycle escalation limit and force human escalation instead of another automatic round. The 116 impl ensign's context budget is at 80.7% of 200k as of cycle 2 start — implementer may need to work tersely or escalate to fresh dispatch if context becomes a problem.
+
+
 
