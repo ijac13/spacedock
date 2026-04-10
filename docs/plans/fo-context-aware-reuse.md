@@ -99,3 +99,113 @@ When the 60% check fails and the FO fresh-dispatches, the fresh ensign must be t
 - Task 120 `build-dispatch-structured-helper` — Phase 2 of issue #63
 - anthropics/claude-code (local) issue #63 — umbrella for FO dispatch reliability
 - Session observation (2026-04-10): 116 cycle-2 impl ensign peaked at ~140k tokens during cycle-2 work before dying somewhere past 200k. This is the datapoint that motivates the 60% threshold — the gap between "safe to reuse" and "dead in the water" is narrower than expected.
+
+## Stage Report: ideation
+
+### Open question resolutions
+
+**Q1 — Does the 60% rule apply to stage-advancement reuse?**
+Yes. The rule applies to both feedback routing and stage-advancement reuse — any path that sends additional work to a kept-alive ensign. The proposed rule in the entity body already states this ("feedback rejection routing OR stage reuse advancement"). The empirical evidence supports it: the 116 cycle-2 ensign was at 80.7% when it received feedback work and died mid-turn. Stage advancement sends comparable volumes of work (a full stage definition, checklist, and iterative tool use). An ensign at 65% entering a new stage faces the same risk.
+
+In the shared core, the context budget check inserts before the existing reuse conditions (not-bare, not-fresh, same-worktree-mode). If the budget check fails, the FO treats it the same as a failed reuse condition: shut down the old ensign and fresh-dispatch.
+
+**Q2 — Fallback for unknown models?**
+Conservative fallback to 200,000 tokens. Rationale: unknown models are likely equal to or smaller than 200k (the standard Claude context window). Using a lower assumed limit means the 60% threshold triggers earlier (at 120k resident), which is safely conservative — the FO replaces sooner rather than risking a context death. A hard error would block dispatch unnecessarily and violate the "keep the workflow moving" principle. The fallback should log a one-line note to the captain: "Unknown model {model} — assuming 200k context limit."
+
+**Q3 — Check frequency?**
+Only when routing new work (at the reuse decision point before sending a feedback assignment or stage advancement). Mid-turn checks are not feasible: they would require the ensign to pause, self-report context usage, and wait for FO clearance. The 116 incident demonstrated that ensigns die without self-reporting — the FO cannot rely on cooperative mid-turn reporting. The pre-routing check is sufficient because it's the last point where the FO has control before committing the ensign to more work.
+
+**Q4 — Captain notification on fresh-dispatch?**
+Yes, one line in the normal status output. The captain should know when an ensign is replaced due to context budget because: (a) it's a non-obvious deviation from the expected reuse path, (b) the captain may want to inspect worktree state from the prior ensign, and (c) it aids debugging if the fresh ensign has trouble recovering. Format: "Context budget: {name} at {N}% of {limit} — fresh-dispatching replacement." This is informational, not a gate — the FO proceeds without waiting for acknowledgment.
+
+### Context budget check procedure
+
+**Location in shared core:** The check inserts into two places:
+1. **Completion and Gates → reuse conditions** (shared-core lines 93-98): Add as condition 0 (checked first, before the existing three conditions). If context budget is exceeded, skip straight to fresh dispatch.
+2. **Feedback Rejection Flow → step 4** (shared-core line 120): Before routing findings back to the target stage, check whether the target-stage ensign's context budget allows reuse. If not, shut it down and fresh-dispatch.
+
+**Location in runtime adapter:** The model-to-context mapping and the jsonl-parsing procedure go in `claude-first-officer-runtime.md`, in a new section between "Dispatch Adapter" and "Captain Interaction."
+
+**Procedure:**
+
+1. **Locate the ensign's jsonl.** The subagent session files live at `~/.claude/projects/{project_path_hash}/{parent_session_id}/subagents/`. Each subagent has an `agent-{id}.jsonl` and an `agent-{id}.meta.json`. Read the `.meta.json` files to find the one whose `agentType` matches the ensign's dispatch name (e.g., `spacedock-ensign-{slug}-{stage}`). The matching `.jsonl` contains the conversation history.
+
+2. **Extract resident tokens.** Read the last assistant-role message in the jsonl. Parse its `usage` block. Compute: `resident_tokens = input_tokens + cache_creation_input_tokens + cache_read_input_tokens`. These three fields together represent the total context consumed by that turn. (Output tokens are not counted — they don't persist in the context window.)
+
+3. **Look up the context limit.** Read the ensign's model from the team config or dispatch parameters. Look up in the hardcoded mapping:
+   - `claude-opus-4-6` → 200,000
+   - `claude-opus-4-6[1m]` → 1,000,000
+   - `claude-sonnet-4-6` → 200,000
+   - `claude-haiku-4-5-*` → 200,000
+   - Fallback for unknown models → 200,000 (with captain notification)
+
+4. **Compute threshold.** `threshold = context_limit × 0.60`.
+
+5. **Decide.**
+   - If `resident_tokens > threshold`: Do NOT reuse. Log to captain: "Context budget: {name} at {pct}% of {limit} — fresh-dispatching replacement." Shut down the old ensign (if alive). Fresh-dispatch with a `-cycleN` or `-fresh` suffix. Include the recovery clause in the dispatch prompt (see below).
+   - If `resident_tokens ≤ threshold`: Proceed with normal reuse.
+
+**Recovery clause for fresh-dispatch prompt:** Add to the dispatch template when replacing a context-exhausted ensign:
+
+> The prior ensign for this entity was shut down due to context budget limits. Its worktree may contain uncommitted changes. Your first action is to run `git status` and `git diff` in the worktree. If there is legitimate work-in-progress, commit it with an appropriate message before starting your own work. If the changes are incomplete or broken, reset them with `git checkout .` and start fresh.
+
+### Dead ensign handling procedure
+
+**Detection.** The FO knows an ensign is dead when:
+- The captain explicitly states the ensign is dead (e.g., "the impl ensign is over and dead").
+- The ensign fails to send a completion signal within the expected timeframe and the captain confirms non-responsiveness.
+- The FO observes an Agent tool error indicating the subagent process terminated.
+
+There is no automatic timeout — the FO cannot reliably distinguish "slow but alive" from "dead" without captain input or an error signal.
+
+**Procedure when an ensign is known dead:**
+
+1. **Do NOT send `SendMessage(shutdown_request)`.** It is cooperative and requires the target to process it. A dead agent cannot process messages — the request is silently dropped, creating false confidence that cleanup occurred.
+
+2. **Mark the ensign as dead in session memory.** Maintain a mental list of dead ensign names. Do not route any further work to these names.
+
+3. **Fresh-dispatch under a distinct name.** Use a `-cycle{N}` suffix (e.g., `spacedock-ensign-foo-impl-cycle2`) to avoid name collision with the zombie entry in team config.
+
+4. **Include the recovery clause** from the context budget procedure in the fresh dispatch prompt, since the dead ensign's worktree likely has uncommitted work.
+
+5. **Inform the captain** briefly: "Ensign {name} confirmed dead — dispatching {new-name} to continue."
+
+6. **Do not attempt to clean up the zombie** from `~/.claude/teams/{team}/config.json`. There is no API to remove a dead member. The zombie persists until the session ends. This is a known limitation.
+
+**Band-aid 1 interaction.** The post-dispatch team config membership check (band-aid 1 from issue #63) verifies that a newly dispatched agent appears in config.json. A zombie (dead ensign) also appears in config.json — it was added at dispatch time and never removed. Therefore band-aid 1 cannot distinguish live agents from zombies. The FO must track dead-vs-alive state independently of team config membership. The dead-ensign list in session memory is the authoritative source.
+
+### Acceptance criteria with test methods
+
+| # | Criterion | Test method |
+|---|-----------|-------------|
+| AC-1 | Shared core has context budget check in Completion/Gates reuse conditions and Feedback Rejection Flow, with 60% threshold and resident-tokens procedure | Static: grep for "60%" and "resident" in `first-officer-shared-core.md`, verify matches in both sections |
+| AC-2 | Runtime adapter documents model-to-context mapping for `claude-opus-4-6` (200k) and `claude-opus-4-6[1m]` (1M) | Static: grep for `200,000` and `1,000,000` in `claude-first-officer-runtime.md` |
+| AC-3 | Fresh-dispatch template includes recovery clause for uncommitted worktree state | Static: grep for "uncommitted" in `claude-first-officer-runtime.md` dispatch template section |
+| AC-4 | Runtime adapter documents that `shutdown_request` is cooperative-only and must not be sent to dead ensigns; documents fresh-dispatch with distinct name for recovery | Static: grep for "cooperative" and "dead" in `claude-first-officer-runtime.md` |
+| AC-5 | Runtime adapter documents that band-aid 1 does not detect zombies; FO must track dead ensigns in session memory | Static: grep for "zombie" in `claude-first-officer-runtime.md` |
+| AC-6 | `tests/test_agent_content.py` has assertions covering AC-1 through AC-5 | Run test suite; new tests pass on fix commit, fail on parent |
+| AC-7 | Existing test suites stay green | Run `test_agent_content.py`, `test_rejection_flow.py`, `test_merge_hook_guardrail.py` |
+
+### Test plan
+
+**Static assertions** (in `tests/test_agent_content.py`):
+- AC-1: Assert assembled FO shared-core content contains "60%" in proximity to "resident" (or "resident tokens") in both the reuse-conditions context and the feedback-rejection context.
+- AC-2: Assert assembled FO runtime-adapter content contains "200,000" and "1,000,000" in the model mapping section.
+- AC-3: Assert assembled FO runtime-adapter content contains "uncommitted" in the dispatch template or recovery section.
+- AC-4: Assert assembled FO runtime-adapter content contains "cooperative" near "shutdown" and "dead ensign" or equivalent.
+- AC-5: Assert assembled FO runtime-adapter content contains "zombie" in context of band-aid 1 or team config.
+
+**Regression**: Run existing suites (`test_agent_content.py`, `test_rejection_flow.py`, `test_merge_hook_guardrail.py`) to confirm no breakage.
+
+**No E2E test** for the 60% behavior itself. Simulating context overflow requires a real multi-turn subagent session consuming >120k tokens, which is prohibitively expensive. The rule is documented prose; compliance is verified by static assertions plus live captain observation.
+
+**No unit test for jsonl parsing.** The procedure is prose instructions for the FO, not executable code. If a helper script is added later (task 120 scope), that script should have its own unit tests.
+
+### Implementation notes for the next stage
+
+The implementation stage needs to modify three files:
+1. `skills/first-officer/references/first-officer-shared-core.md` — Add context budget check to Completion/Gates reuse conditions and Feedback Rejection Flow.
+2. `skills/first-officer/references/claude-first-officer-runtime.md` — Add Context Budget section (model mapping, jsonl procedure, threshold computation) and Dead Ensign Handling section (cooperative shutdown limitation, zombie tracking, band-aid 1 interaction).
+3. `tests/test_agent_content.py` — Add static assertions for AC-1 through AC-5.
+
+The dispatch template in the runtime adapter needs the recovery clause appended as a conditional block (only when replacing a prior ensign).
