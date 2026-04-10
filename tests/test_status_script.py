@@ -711,13 +711,34 @@ class TestBootOption(unittest.TestCase):
                     'task-c.md': entity('003', 'Task C', 'backlog'),
                 },
                 archived={
-                    'task-b.md': entity('002', 'Task B', 'done'),
+                    'task-b.md': entity('"004"', 'Task B', 'done'),
                 },
             )
             result = run_status(tmpdir, '--boot', script_path=self.script_path,
                                extra_env={'PATH': self._path_without_gh()})
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn('NEXT_ID: 004', result.stdout)
+            self.assertIn('NEXT_ID: 005', result.stdout)
+
+    # AC4: Quoted values normalize consistently
+    def test_quoted_frontmatter_values_are_normalized(self):
+        """Quoted YAML frontmatter values are parsed without literal quote characters."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'quoted.md': entity('"084"', 'Quoted Task', 'backlog', pr='"#28"'),
+            })
+            result = run_status(tmpdir, '--where', 'id = 084', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')[2:]
+            self.assertEqual(len(lines), 1)
+            self.assertIn('084', lines[0])
+            self.assertNotIn('"084"', result.stdout)
+
+            result2 = run_status(tmpdir, '--where', 'pr = #28', script_path=self.script_path)
+            self.assertEqual(result2.returncode, 0, result2.stderr)
+            lines2 = result2.stdout.strip().split('\n')[2:]
+            self.assertEqual(len(lines2), 1)
+            self.assertIn('quoted', lines2[0])
+            self.assertNotIn('"#28"', result2.stdout)
 
     # AC4: ORPHANS with DIR_EXISTS and BRANCH_EXISTS
     def test_orphans_with_existence_checks(self):
