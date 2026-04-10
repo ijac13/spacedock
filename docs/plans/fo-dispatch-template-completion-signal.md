@@ -1,13 +1,13 @@
 ---
 id: 115
 title: FO dispatch template missing completion-signal instruction
-status: backlog
+status: implementation
 source: CL diagnosis during 2026-04-10 boot session
-started:
+started: 2026-04-10T15:41:22Z
 completed:
 verdict:
 score: 0.90
-worktree:
+worktree: .worktrees/spacedock-ensign-fo-dispatch-template-completion-signal
 issue:
 pr:
 ---
