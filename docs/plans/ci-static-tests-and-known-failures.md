@@ -1,11 +1,11 @@
 ---
 id: 133
 title: "CI for static tests + track known static failures"
-status: backlog
+status: ideation
 source: "CL direction during 2026-04-11 session — session discovered static test regression that slipped through PR #74 merge because no CI ran test_agent_content.py"
 score: 0.80
 worktree:
-started:
+started: 2026-04-11T20:57:12Z
 completed:
 verdict:
 issue:
