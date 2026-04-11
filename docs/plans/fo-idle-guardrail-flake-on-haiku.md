@@ -184,3 +184,24 @@ To keep scope narrow, I updated only `tests/test_dispatch_completion_signal.py` 
 ### Summary
 
 The follow-up change does not claim a fresh Haiku behavioral pass. It closes the original evidence gap by making the task-117 live regression produce a bounded, inspectable outcome when Claude/Haiku is unavailable, while preserving the original live proof path for environments where the provider responds.
+
+## Stage Report: validation (cycle 2)
+
+- [x] Read the entity body, especially the acceptance criteria, prior rejection report, feedback cycle, and follow-up implementation summary/report.
+  Re-read the full task body plus the earlier validation rejection and the follow-up implementation summary before validating the new bounded-skip change.
+- [x] Inspect the actual diff/changed files in the worktree and verify scope stayed bounded.
+  `git diff --name-only 1421f27..70efef7` shows only `tests/test_dispatch_completion_signal.py` and this entity file; the follow-up implementation commit `e9917dc` touched only the live regression harness.
+- [x] Run the applicable tests and report concrete outcomes.
+  `uv run --with pytest python -m pytest tests/test_agent_content.py` passed (`25 passed`), `uv run --with pytest python -m pytest tests/test_claude_team.py` passed (`20 passed`), and `uv run tests/test_dispatch_completion_signal.py --model haiku` completed as `RESULT: SKIP` because the Claude/Haiku preflight produced no result within 30 seconds.
+- [x] Verify each acceptance criterion with evidence and state PASS/FAIL per criterion.
+  AC1 PASS: `skills/first-officer/references/claude-first-officer-runtime.md:53` says the FO "keeps waiting for that explicit completion message"; AC2 PASS: lines 53 and 114 say idle notifications are normal and not a teardown reason; AC3 FAIL: the required live haiku regression did not produce a true pass, only a bounded provider-unavailable skip; AC4 PASS: follow-up scope stayed off task 115's worker template and telemetry/watchdog work; AC5 FAIL: related static suites passed, but the required live dispatch-completion regression still lacks a passing result.
+- [x] Explicitly address whether the new bounded `SKIP` behavior resolves the original rejection or merely narrows it.
+  It narrows the rejection by converting "hung with no evidence" into a bounded, inspectable provider-unavailable outcome, but it does not resolve the original rejection because task 117 still requires evidence that the haiku path can complete with a real `PASS`.
+- [x] Append a complete `## Stage Report: validation` with DONE, SKIPPED, or FAILED coverage for each checklist item and a PASSED/REJECTED recommendation.
+  This `validation (cycle 2)` section covers all checklist items and recommends `REJECTED`.
+- [x] Commit the validation report before reporting completion.
+  Validation report committed in `af0d5dc`.
+
+### Summary
+
+The follow-up implementation is bounded and useful: it makes the live haiku regression fail fast with `RESULT: SKIP` when Claude/Haiku is unavailable, which is better evidence than an unbounded hang. That still does not satisfy task 117's core live-proof requirement, so the honest validation outcome remains `REJECTED` until the same regression completes with a true `PASS`.
