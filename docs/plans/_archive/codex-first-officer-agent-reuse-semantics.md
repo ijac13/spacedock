@@ -1,13 +1,13 @@
 ---
 id: 130
 title: Codex first officer: support reusable worker threads and explicit shutdown semantics
-status: validation
+status: done
 source: FO observation during task 117 rejection flow on 2026-04-10/11
 started: 2026-04-11T05:28:44Z
-completed:
-verdict:
+completed: 2026-04-11T07:05:54Z
+verdict: PASSED
 score: 0.72
-worktree: .worktrees/spacedock-ensign-codex-first-officer-agent-reuse-semantics
+worktree: 
 issue:
 pr:
 ---
