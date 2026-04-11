@@ -1,13 +1,13 @@
 ---
 id: 117
 title: FO DISPATCH IDLE GUARDRAIL flake on haiku — premature ensign shutdown in nested test
-status: ideation
+status: implementation
 source: Validator observation during 115 validation (run 1 of test_dispatch_completion_signal.py)
 started: 2026-04-11T04:45:04Z
 completed:
 verdict:
 score: 0.70
-worktree:
+worktree: .worktrees/spacedock-ensign-fo-idle-guardrail-flake-on-haiku
 issue:
 pr:
 ---
