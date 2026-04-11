@@ -317,4 +317,60 @@ Post-review polish from the captain + staff reviewer. All six fixes are text-lev
 
 6. **`--fields` + `--archived` composition.** Added a bullet to the "Conflicting flags" list in proposed approach §2 stating the combination is allowed and composes additively: `--archived` extends the row set, `--fields` / `--all-fields` extends the column set, both apply to the default table without interaction. No new test required (falls out of the existing scan-then-filter-then-print pipeline).
 
+## Stage Report: implementation
+
+- [x] Read entity body, status script, and test file in full.
+  Entity body read end-to-end; `skills/commission/bin/status` (745 lines) and `tests/test_status_script.py` (1319 lines) inspected before edits.
+- [x] Implement `--where` parser fix (equality + negation, spaced and unspaced, bare-field error).
+  `parse_where_filters()` now uses `!=`-first operator-precedence partitioning; bare fields raise `WHERE_SYNTAX_HELP`. Verified by `TestWhereFilter::test_equality_no_spaces`, `test_negation_no_spaces`, `test_bare_field_errors`, `test_unknown_operator_errors`, `test_value_with_spaces`, `test_field_name_case_sensitive`, `test_equality_no_spaces_custom_field`.
+- [x] Implement `--fields` flag (explicit list, user order, append, nonexistent allowed, errors on empty).
+  New `parse_fields_options()` parses the comma list, `resolve_extra_fields()` routes to the printers. Verified by `TestFieldsOption::test_fields_appends_in_order`, `test_fields_missing_renders_empty`, `test_fields_custom_field_populated`, `test_fields_nonexistent_no_error`.
+- [x] Implement `--all-fields` flag (all non-empty custom fields, sorted, deduped vs defaults).
+  `resolve_extra_fields()` walks every entity's dict, drops defaults/empties, sorts the remainder. Verified by `TestFieldsOption::test_all_fields_sorted_dedup`.
+- [x] Extend `print_next_table()` to support `--fields` / `--all-fields`.
+  Both printers take an optional `extra_fields=` list and append columns via `format_extra_cell()`. Verified by `TestFieldsOption::test_fields_composes_with_next`.
+- [x] Implement `--archive <slug>` subcommand.
+  New `run_archive()` reuses `update_frontmatter()` to stamp `archived:`, then `os.rename()`s into `_archive/`. Verified by `TestArchiveOption::test_archive_moves_and_stamps`, `test_archive_missing_source_errors`, `test_archive_existing_destination_errors`, `test_archive_preserves_completed`, `test_archive_does_not_commit`.
+- [x] Add 7 `--where` tests to the existing `TestWhereFilter` class.
+  Test count for class grew from 10 to 17 (`test_equality_no_spaces`, `test_equality_no_spaces_custom_field`, `test_negation_no_spaces`, `test_bare_field_errors`, `test_unknown_operator_errors`, `test_value_with_spaces`, `test_field_name_case_sensitive`).
+- [x] Add new `TestFieldsOption` class with 10 tests.
+  All ten AC6–AC13 cases present and green.
+- [x] Add new `TestArchiveOption` class with 5 tests.
+  All five AC14–AC18 cases present and green.
+- [x] Add new `TestStatusDocstring` class with docstring regression check.
+  `test_docstring_mentions_new_flags` asserts header contains `--where`, `--fields`, `--all-fields`, `--archive`, and "with or without spaces".
+- [x] Run the full test suite.
+  `unset CLAUDECODE && uv run tests/test_status_script.py` → **90/90 passed** (67 pre-existing + 23 new).
+- [x] Commit the implementation on `spacedock-ensign/status-tool-as-workflow-op-cli`.
+  Commits listed in the summary below.
+- [x] Terminology self-check.
+  Grep for `--columns` in `skills/commission/bin/status` and `tests/test_status_script.py`: **0 occurrences** in both files.
+
+### Acceptance Criteria
+
+- [x] **AC1 — unspaced equality.** `TestWhereFilter::test_equality_no_spaces`, `test_equality_no_spaces_custom_field`.
+- [x] **AC2 — unspaced negation.** `TestWhereFilter::test_negation_no_spaces`.
+- [x] **AC3 — presence/absence regression.** Existing `test_non_empty_filter`, `test_empty_filter`, `test_non_empty_pr_field` still green.
+- [x] **AC4 — bare-field error.** `TestWhereFilter::test_bare_field_errors` asserts all four valid forms in the error.
+- [x] **AC5 — unknown-operator error.** `TestWhereFilter::test_unknown_operator_errors`.
+- [x] **AC6 — `--fields` user-order append + missing empty.** `TestFieldsOption::test_fields_appends_in_order`, `test_fields_missing_renders_empty`.
+- [x] **AC7 — `--fields` on custom frontmatter field.** `TestFieldsOption::test_fields_custom_field_populated`.
+- [x] **AC8 — `--fields` nonexistent no error.** `TestFieldsOption::test_fields_nonexistent_no_error`.
+- [x] **AC9 — `--all-fields` sorted and deduped.** `TestFieldsOption::test_all_fields_sorted_dedup`.
+- [x] **AC10 — `--fields` + `--all-fields` mutually exclusive.** `TestFieldsOption::test_fields_and_all_fields_conflict`.
+- [x] **AC11 — `--fields` composes with `--next`.** `TestFieldsOption::test_fields_composes_with_next`.
+- [x] **AC12 — `--fields` / `--all-fields` with `--boot` error.** `TestFieldsOption::test_fields_incompatible_with_boot`, `test_all_fields_incompatible_with_boot`.
+- [x] **AC13 — `--fields` with `--set` error.** `TestFieldsOption::test_fields_incompatible_with_set`.
+- [x] **AC14 — `--archive` moves and stamps.** `TestArchiveOption::test_archive_moves_and_stamps`.
+- [x] **AC15 — `--archive` missing-source error.** `TestArchiveOption::test_archive_missing_source_errors`.
+- [x] **AC16 — `--archive` existing-destination error.** `TestArchiveOption::test_archive_existing_destination_errors` also asserts both files unchanged.
+- [x] **AC17 — `--archive` does not touch `completed`.** `TestArchiveOption::test_archive_preserves_completed`.
+- [x] **AC18 — `--archive` does not run git.** `TestArchiveOption::test_archive_does_not_commit` (local `git init` fixture).
+- [x] **AC19 — default behavior unchanged.** Entire pre-existing suite (67 tests) still green: `TestDefaultStatus`, `TestNextOption`, `TestFrontmatterParsing`, `TestWhereFilter` (pre-existing 10), `TestBootOption`, `TestSetOption`, `TestStatusScriptExecutable`.
+- [x] **AC20 — docstring documents new surface.** `TestStatusDocstring::test_docstring_mentions_new_flags`.
+
+### Summary
+
+Three surgical edits to `skills/commission/bin/status`: (1) rewrote `parse_where_filters()` as an operator-precedence parser that checks for `!=` before `=` so `"worktree !="` doesn't mis-split, accepts spaced/unspaced forms, and rejects bare field names with a clear error naming the four valid shapes; (2) added `parse_fields_options()`, `resolve_extra_fields()`, and `format_extra_cell()` plus optional `extra_fields=` parameters on both `print_status_table()` and `print_next_table()` so `--fields` and `--all-fields` append custom frontmatter columns consistently across both printers; (3) added `run_archive()` which reuses the existing `update_frontmatter()` insert-if-missing path from task 122 to stamp `archived:` and then `os.rename()`s the entity file into `_archive/`, without touching `completed` or running git. The header docstring gained a dedicated block per new flag plus an explicit "with or without spaces" line so `TestStatusDocstring` is enforceable. 23 new tests added (7 `TestWhereFilter` additions + 10 `TestFieldsOption` + 5 `TestArchiveOption` + 1 `TestStatusDocstring`). Full suite: **90/90 passed**. Zero `--columns` references in shipped files. No design surprises — the ideation patch notes (especially the `!=`-before-`=` precedence rule in edge case 1) were exactly right.
+
 **Commit:** `ideation-patch: status-tool-as-workflow-op-cli — reconcile test class names, test counts, parser precedence, fields+archived composition`. Frontmatter preserved. No files outside `docs/plans/status-tool-as-workflow-op-cli.md` touched.
