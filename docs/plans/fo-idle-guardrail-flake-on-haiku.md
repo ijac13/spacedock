@@ -113,3 +113,28 @@ Do not expand this task into:
 6. [DONE] Appended a complete ideation `## Stage Report` section at the end of the entity body with every checklist item marked DONE.
 
 7. [DONE] Committed the ideation work after updating the entity body.
+
+## Implementation Summary
+
+Strengthened the Claude first-officer runtime in two places only. The dispatch adapter's team-mode completion-signal block now reminds the FO that it keeps waiting for the worker's explicit completion message and that idle notifications are normal while it waits. The `DISPATCH IDLE GUARDRAIL` now explicitly says the FO keeps waiting after dispatch until an explicit completion message arrives and that idle notifications are not a reason to tear down the team.
+
+Regression coverage was tightened in `tests/test_agent_content.py` so the assembled FO contract must keep both the stronger wait-until-completion wording and the dispatch-local reminder. The resulting code/test diff stayed limited to the FO runtime wording and task-117 static regression coverage; task 115's worker completion-signal template and any telemetry/watchdog work were left untouched.
+
+## Stage Report: implementation
+
+- [x] Implement the narrow fix described in the approved ideation: strengthen FO runtime waiting/idle guardrail wording, and reinforce it near dispatch if needed.
+  Updated `skills/first-officer/references/claude-first-officer-runtime.md`; code changes committed in `4b3043c`.
+- [x] Add or update tests proving the new wording is present and guarding against regression.
+  Tightened `tests/test_agent_content.py` to assert explicit post-dispatch waiting, idle-is-normal wording, and dispatch-local reinforcement.
+- [ ] SKIP: Run the relevant regression coverage for this task, including the dispatch-completion/FO wait behavior tests that are practical in this environment.
+  `uv run --with pytest python -m pytest tests/test_agent_content.py` passed (`25 passed`), but the live harness runs for `tests/test_dispatch_completion_signal.py --model haiku` and `tests/test_team_dispatch_sequencing.py --model haiku` did not complete within extended waits in this session, so independent verification should rerun those model-backed checks.
+- [x] Keep scope bounded: do not modify task 115’s worker completion-signal template or add telemetry/watchdog work.
+  Diff stayed limited to the FO runtime reference and task-117 regression coverage.
+- [x] Update the entity body with an implementation summary and append a complete `## Stage Report: implementation` with each checklist item marked DONE, SKIPPED, or FAILED.
+  Added the implementation summary and this stage report to `docs/plans/fo-idle-guardrail-flake-on-haiku.md`.
+- [x] Commit the implementation work in the worktree before reporting completion.
+  Committed the runtime/test changes in `4b3043c` before writing this completion report.
+
+### Summary
+
+The fix stayed on the approved surface: the Claude FO runtime now states more directly that dispatch means wait for an explicit completion message, and that idle notifications are normal rather than evidence to tear the team down. Static regression coverage was updated and passes; the model-backed FO wait regressions were attempted here but remained inconclusive due long-running live harness execution, so they should be rerun during independent verification.
