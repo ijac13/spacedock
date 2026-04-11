@@ -103,3 +103,36 @@ Example drifted output:
 - **Task 121** `fo-context-aware-reuse` — the umbrella task for FO reuse reliability. This bug directly undermines 121's safety check.
 - **Task 116** `readme-and-architecture-refresh` — the task that killed two impl ensigns from context overflow. Was likely a victim of BOTH 125's accumulation bug and this config-lie bug. Worth checking the 116 cycle-2/cycle-3 jsonls to see if the runtime model was bare there too.
 - Session log from 2026-04-11 — parallel session (likely Codex FO or a separate Claude session) independently discovered this during a reuse-path postmortem, providing the empirical evidence cited above.
+
+## Stage Report: implementation
+
+### Summary
+
+Fixed `claude-team context-budget` to derive the context limit from the runtime model observed in the subagent jsonl rather than from the team config's declared model string. Two files changed: `skills/commission/bin/claude-team` (new `extract_runtime_models()` function + updated `cmd_context_budget()`) and `tests/test_claude_team.py` (4 new test scenarios + `model` parameter added to fixture helper). All 24 tests pass (20 existing + 4 new). Status script smoke regression: 90/90.
+
+The drift comparison uses context limit equality rather than string equality, because config stores short names (e.g. `opus[1m]`) while runtime uses full model IDs (e.g. `claude-opus-4-6[1m]`). A string comparison would false-positive on every run even when the context windows match.
+
+### Checklist
+
+1. **Read the entity seed** — DONE. Problem statement, ACs, test plan, edge cases all reviewed.
+2. **Read `skills/commission/bin/claude-team`** — DONE. Confirmed bug at lines 107 (lookup_model returns config string), 122 ([1m] check), 145 (denominator).
+3. **Read `tests/test_claude_team.py`** — DONE. 20 existing tests, subprocess-based pattern with `make_jsonl_fixture` and `make_team_config` helpers.
+4. **Implement runtime-model extraction from jsonl** — DONE. `extract_runtime_models(jsonl_path) -> set[str]` walks assistant entries and collects `message.model` values.
+5. **Update `cmd_context_budget`** — DONE. Prefers runtime model over config, with fallback + drift warning + fallback warning + mixed-models warning.
+6. **Add four new tests** — DONE.
+   - `test_config_1m_runtime_bare_uses_200k` — config `opus[1m]`, runtime bare → 200k, drift warning, `config_declared_model` present.
+   - `test_config_1m_runtime_1m_uses_1m` — config `opus[1m]`, runtime `claude-opus-4-6[1m]` → 1M, no drift warning.
+   - `test_mixed_models_uses_smallest_context` — two models in jsonl → picks smallest (200k), `mixed_models_warning` present.
+   - `test_no_model_in_jsonl_falls_back_to_config` — no model field → uses config `opus[1m]` → 1M, `config_fallback_warning` present.
+7. **pytest: 24/24 green** — DONE. `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_claude_team.py -q` → 24 passed.
+8. **Status script regression: 90/90** — DONE. `unset CLAUDECODE && uv run tests/test_status_script.py` → 90 tests OK.
+9. **AC verification:**
+   - AC1 (context_limit from jsonl runtime model) — VERIFIED: `test_config_1m_runtime_bare_uses_200k` asserts `context_limit == 200000` when runtime is bare.
+   - AC2 (config_drift_warning when models differ) — VERIFIED: `test_config_1m_runtime_bare_uses_200k` asserts `config_drift_warning` present and `config_declared_model == "opus[1m]"`.
+   - AC3 (85k on bare opus → usage_pct ~42.6) — VERIFIED: `test_config_1m_runtime_bare_uses_200k` asserts `usage_pct == pytest.approx(42.6)`.
+   - AC4 (four new test scenarios) — VERIFIED: all four listed in item 6 above.
+   - AC5 (existing 20 tests green) — VERIFIED: 20 passed in the test run.
+   - AC6 (no FO scaffolding changes needed) — VERIFIED: only `claude-team` and `test_claude_team.py` changed.
+10. **Terminology check** — DONE. Grepped for stray 1M assumptions — none found. The fix is general: reads runtime model string, applies `context_limit_for_model()` to it.
+11. **Commit on branch** — DONE. Single commit `2e7d59e` on `spacedock-ensign/claude-team-context-limit-config-lie`.
+12. **Scope audit** — DONE. `git diff --name-only main...HEAD` shows exactly `skills/commission/bin/claude-team`, `tests/test_claude_team.py`, and this entity file.
