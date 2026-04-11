@@ -94,6 +94,10 @@ Do not expand this task into:
 - Task 115 `fo-dispatch-template-completion-signal` keeps the worker-side completion instruction correct and should remain separate.
 - `skills/first-officer/references/claude-first-officer-runtime.md` is the primary fix surface for task 117.
 
+### Feedback Cycles
+
+- Cycle 1 (2026-04-11): Validation REJECTED. Static/runtime checks passed, but the required live haiku regression (`tests/test_dispatch_completion_signal.py --model haiku`) did not complete within the bounded validation run, so AC3 and AC5 remain unproven. Route back to implementation to obtain completed haiku regression evidence or adjust the task/test plan if that live requirement is currently impractical.
+
 ## Stage Report: ideation
 
 1. [DONE] Expanded the task body into a scoped ideation spec with a clearer problem statement, observed failure path, and root-cause framing. The write-up now distinguishes the FO-side premature teardown from task 115's worker completion-signal fix.
