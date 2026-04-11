@@ -242,6 +242,27 @@ This cycle does not change FO runtime behavior or the live regression harness. I
 
 The environment still cannot produce a true live Haiku pass on demand, but the task now distinguishes that external provider limitation from the original FO indefinite-wait bug. With the acceptance criteria revised to require a bounded terminal result rather than a mandatory provider-backed live pass, AC3 and AC5 are now actionable and satisfiable in this worktree.
 
+## Follow-up Implementation Summary (cycle 4)
+
+This cycle addressed the deterministic stale task-129 assertion that validation called out. `tests/test_agent_content.py` no longer asserts the removed `Workflow entity: {entity title}` text in the PR-body-template coverage, while the cycle-3 Haiku addendum and the bounded live-regression behavior remain unchanged.
+
+## Stage Report: implementation (cycle 4)
+
+- [x] Update `tests/test_agent_content.py` so it no longer asserts the stale `Workflow entity: {entity title}` text removed by task 129 / PR #74.
+  Removed the obsolete assertion from `test_pr_merge_mod_copies_share_rich_body_template()` in `tests/test_agent_content.py`.
+- [x] Keep the existing cycle-3 Haiku addendum intact; do not reopen or weaken it unless needed for consistency.
+  No cycle-3 acceptance/test-plan text was changed in this cycle.
+- [x] Keep scope narrow. Do not touch unrelated scaffolding-guardrail surfaces.
+  Changes are limited to `tests/test_agent_content.py` and this entity report.
+- [x] Rerun the relevant tests, at minimum:
+  `uv run --with pytest python -m pytest tests/test_agent_content.py` passed (`25 passed`); `uv run --with pytest python -m pytest tests/test_claude_team.py` passed (`20 passed`); `uv run tests/test_dispatch_completion_signal.py --model haiku` completed as `RESULT: SKIP` due provider-unavailable preflight.
+- [x] Append a new implementation report for this cycle and commit before reporting back.
+  Appended this `implementation (cycle 4)` report and will commit it with the test cleanup before reporting completion.
+
+### Summary
+
+The stale task-129 assertion is now removed, which closes the deterministic validation gap without reopening the Haiku criteria changes from cycle 3. Required deterministic suites still pass, and the live Haiku regression remains bounded and inspectable as provider-unavailable `SKIP` in this environment.
+
 ## Stage Report: validation (cycle 3)
 
 - [x] Read the entity body, especially the acceptance criteria, feedback cycles, and latest implementation addendum.

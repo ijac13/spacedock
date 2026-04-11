@@ -135,7 +135,6 @@ def test_pr_merge_mod_copies_share_rich_body_template():
         assert "## What changed" in text
         assert "## Evidence" in text
         assert "## Review guidance" in text
-        assert "Workflow entity: {entity title}" in text
         assert "Closes {issue}" in text
         assert "Related" in text
         assert "100-200 words" in text
