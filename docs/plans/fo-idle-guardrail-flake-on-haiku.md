@@ -1,7 +1,7 @@
 ---
 id: 117
 title: FO DISPATCH IDLE GUARDRAIL flake on haiku — premature ensign shutdown in nested test
-status: validation
+status: implementation
 source: Validator observation during 115 validation (run 1 of test_dispatch_completion_signal.py)
 started: 2026-04-11T04:45:04Z
 completed:
@@ -19,6 +19,8 @@ During validation of task 115, the validator ensign observed a flake in `tests/t
 The first officer sometimes tears down a dispatched team too early on haiku, even when the worker prompt already contains the completion-signal instruction and the runtime guardrail says to ignore idle notifications. In the failing run, the FO entered a wait posture, executed a few Bash/Read cycles, and then shut the team down before the ensign's `SendMessage(to="team-lead", ...)` completion signal arrived.
 
 That makes this a FO-side behavioral reliability issue, not a worker-template issue. The symptom only shows up in the nested haiku harness; the same workflow passed on a later retry without code changes, which points to model behavior or instruction robustness rather than a deterministic logic bug.
+
+There is also one confirmed main-branch test-health regression that should be folded into this task because it blocks clean validation signal and is already fully attributed: task 129 / PR #74 removed `Workflow entity: {entity title}` from the rich PR-body template, but `tests/test_agent_content.py` still asserts that the string is present. That stale assertion is deterministic, known, and in scope here. Unattributed scaffolding-guardrail failures remain out of scope.
 
 ## Root Cause Framing
 
@@ -55,7 +57,8 @@ Use the smallest fix that directly addresses premature teardown:
 
 - Strengthen the FO runtime wording around dispatch-time waiting and teardown conditions.
 - If needed, repeat the same rule near the dispatch adapter so the model sees it at the point of action.
-- Keep the implementation bounded to the FO runtime reference and the regression test that proves the haiku flake no longer tears down early.
+- Update the stale `tests/test_agent_content.py` assertion left behind by task 129 so main-branch static verification reflects the current PR-body contract.
+- Keep the implementation bounded to the FO runtime reference plus the test surfaces needed for the haiku regression and the stale 129 assertion.
 
 Do not expand this task into:
 
@@ -81,17 +84,22 @@ Do not expand this task into:
 5. Existing related suites still pass.
    - Test: rerun the dispatch-completion regression and the nearby FO guardrail suites that cover dispatch/wait behavior.
 
+6. `tests/test_agent_content.py` no longer asserts the stale task-129 PR-body text and passes against the current PR mod contract.
+   - Test: update the stale assertion to match the current template behavior and rerun `tests/test_agent_content.py`.
+
 ## Test Plan
 
 - Reproduction: keep the original haiku workflow fixture that showed the flake, because the regression is about the FO's shutdown decision under the same conditions. Cost is moderate because it exercises a live model run.
 - Verification: add or reuse a regression test that inspects the FO log for premature teardown and checks that the entity only advances after the worker's completion signal. Cost is moderate, complexity is moderate.
 - Static checks: add a content assertion for the runtime wording so the guardrail cannot silently drift later. Cost is low.
+- Main-branch test-health cleanup: fix the deterministic stale assertion introduced by task 129 so static verification reflects the current PR-body contract. Cost is low.
 - E2E coverage: yes, because this is a behavioral timing bug. Static wording checks alone do not prove the FO will keep waiting on haiku.
 - Out-of-scope follow-up: telemetry or watchdog work can be explored later if the narrower runtime wording still flakes.
 
 ## Related
 
 - Task 115 `fo-dispatch-template-completion-signal` keeps the worker-side completion instruction correct and should remain separate.
+- Task 129 / PR #74 `pr-mod-tighten-body-template` removed `Workflow entity: {entity title}` from the PR mod template; `tests/test_agent_content.py` still contains the old assertion and should be reconciled here.
 - `skills/first-officer/references/claude-first-officer-runtime.md` is the primary fix surface for task 117.
 
 ### Feedback Cycles
