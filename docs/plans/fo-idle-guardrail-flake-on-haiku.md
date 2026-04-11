@@ -9,7 +9,7 @@ verdict:
 score: 0.70
 worktree: .worktrees/spacedock-ensign-fo-idle-guardrail-flake-on-haiku
 issue:
-pr:
+pr: #78
 ---
 
 During validation of task 115, the validator ensign observed a flake in `tests/test_dispatch_completion_signal.py` on the haiku model: run 1 failed, run 2 passed cleanly. The failure is independent of task 115's completion-signal template fix. Task 115 ensured the dispatched worker was instructed to send a completion message; task 117 is about the FO deciding to stop waiting before that message arrives.
