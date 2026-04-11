@@ -25,6 +25,7 @@ def make_jsonl_fixture(
     tmp_path: Path,
     agent_name: str,
     usage: dict | None = None,
+    model: str | None = None,
 ) -> tuple[Path, Path]:
     """Create a fake subagent jsonl + meta.json pair.
 
@@ -43,9 +44,12 @@ def make_jsonl_fixture(
     lines.append(json.dumps({"type": "human", "message": {"role": "user", "content": "hello"}}))
     # An assistant entry with usage
     if usage is not None:
+        msg = {"role": "assistant", "usage": usage}
+        if model is not None:
+            msg["model"] = model
         lines.append(json.dumps({
             "type": "assistant",
-            "message": {"role": "assistant", "usage": usage},
+            "message": msg,
         }))
     jsonl_path.write_text("\n".join(lines) + "\n")
 
@@ -403,6 +407,96 @@ class TestMostRecentMatch:
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert data["resident_tokens"] == 99000
+
+
+class TestRuntimeModelDetection:
+    """Runtime model from jsonl overrides config-declared model."""
+
+    def test_config_1m_runtime_bare_uses_200k(self, tmp_path):
+        """Config says opus[1m] but runtime jsonl shows bare opus → 200k limit, drift warning."""
+        usage = {
+            "input_tokens": 85179,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
+        make_jsonl_fixture(tmp_path, "spacedock-ensign-foo-impl", usage, model="claude-opus-4-6")
+        make_team_config(tmp_path, "test-team", "spacedock-ensign-foo-impl", "opus[1m]")
+
+        result = run_context_budget(tmp_path, "spacedock-ensign-foo-impl")
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        data = json.loads(result.stdout)
+        assert data["model"] == "claude-opus-4-6"
+        assert data["context_limit"] == 200000
+        assert data["usage_pct"] == pytest.approx(42.6)
+        assert "config_drift_warning" in data
+        assert data["config_declared_model"] == "opus[1m]"
+
+    def test_config_1m_runtime_1m_uses_1m(self, tmp_path):
+        """Config says opus[1m] and runtime jsonl also shows [1m] → 1M limit, no drift."""
+        usage = {
+            "input_tokens": 85179,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
+        make_jsonl_fixture(tmp_path, "spacedock-ensign-foo-impl", usage, model="claude-opus-4-6[1m]")
+        make_team_config(tmp_path, "test-team", "spacedock-ensign-foo-impl", "opus[1m]")
+
+        result = run_context_budget(tmp_path, "spacedock-ensign-foo-impl")
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        data = json.loads(result.stdout)
+        assert data["model"] == "claude-opus-4-6[1m]"
+        assert data["context_limit"] == 1000000
+        assert data["usage_pct"] == pytest.approx(8.5)
+        assert "config_drift_warning" not in data
+
+    def test_mixed_models_uses_smallest_context(self, tmp_path):
+        """Jsonl has mixed models → use smallest context window, emit warning."""
+        projects_dir = tmp_path / ".claude" / "projects" / "test-project" / "session-1" / "subagents"
+        projects_dir.mkdir(parents=True, exist_ok=True)
+
+        meta_path = projects_dir / "agent-abc123.meta.json"
+        jsonl_path = projects_dir / "agent-abc123.jsonl"
+
+        meta_path.write_text(json.dumps({"agentType": "spacedock-ensign-foo-impl"}))
+
+        lines = [
+            json.dumps({"type": "assistant", "message": {
+                "role": "assistant",
+                "model": "claude-opus-4-6[1m]",
+                "usage": {"input_tokens": 10000, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
+            }}),
+            json.dumps({"type": "assistant", "message": {
+                "role": "assistant",
+                "model": "claude-opus-4-6",
+                "usage": {"input_tokens": 50000, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
+            }}),
+        ]
+        jsonl_path.write_text("\n".join(lines) + "\n")
+
+        make_team_config(tmp_path, "test-team", "spacedock-ensign-foo-impl", "opus[1m]")
+
+        result = run_context_budget(tmp_path, "spacedock-ensign-foo-impl")
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        data = json.loads(result.stdout)
+        assert data["context_limit"] == 200000
+        assert "mixed_models_warning" in data
+
+    def test_no_model_in_jsonl_falls_back_to_config(self, tmp_path):
+        """Jsonl assistant entries have no model field → fall back to config with warning."""
+        usage = {
+            "input_tokens": 5000,
+            "cache_creation_input_tokens": 3000,
+            "cache_read_input_tokens": 2000,
+        }
+        make_jsonl_fixture(tmp_path, "spacedock-ensign-foo-impl", usage)
+        make_team_config(tmp_path, "test-team", "spacedock-ensign-foo-impl", "opus[1m]")
+
+        result = run_context_budget(tmp_path, "spacedock-ensign-foo-impl")
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        data = json.loads(result.stdout)
+        assert data["model"] == "opus[1m]"
+        assert data["context_limit"] == 1000000
+        assert "config_fallback_warning" in data
 
 
 if __name__ == "__main__":
