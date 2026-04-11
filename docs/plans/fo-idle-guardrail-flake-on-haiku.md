@@ -205,3 +205,39 @@ The follow-up change does not claim a fresh Haiku behavioral pass. It closes the
 ### Summary
 
 The follow-up implementation is bounded and useful: it makes the live haiku regression fail fast with `RESULT: SKIP` when Claude/Haiku is unavailable, which is better evidence than an unbounded hang. That still does not satisfy task 117's core live-proof requirement, so the honest validation outcome remains `REJECTED` until the same regression completes with a true `PASS`.
+
+## Acceptance Criteria Addendum (cycle 3)
+
+Validation cycle 2 established that task 117's remaining blocker is provider responsiveness rather than an untested code path: `tests/test_dispatch_completion_signal.py --model haiku` now returns a bounded terminal `RESULT: SKIP` when Claude/Haiku fails a 30-second preflight, while the FO runtime wording and related static suites are already passing. Requiring a true live haiku `PASS` inside this implementation stage makes completion depend on external provider availability that the assigned worker cannot control.
+
+To keep the task actionable without widening scope, revise the live-evidence criteria as follows:
+
+- AC3 replaces "A haiku regression run no longer reproduces the premature shutdown seen in run 1" with: "The task-117 haiku regression produces a bounded terminal result in this environment. `PASS` proves the behavioral fix directly; `RESULT: SKIP` with an explicit provider-unavailable preflight reason proves the harness can distinguish external runtime unavailability from the original indefinite-wait failure."
+- AC5 replaces the live-pass requirement with: "Existing related suites still pass, and the dispatch-completion regression completes with a bounded terminal result (`PASS` or explicit provider-unavailable `SKIP`) instead of hanging indefinitely."
+
+AC1, AC2, and AC4 remain unchanged.
+
+## Test Plan Addendum (cycle 3)
+
+- Keep the live haiku reproduction fixture, but treat bounded `RESULT: SKIP` due provider-unavailable preflight as actionable evidence about the environment rather than as a task-level behavioral failure.
+- Keep the static wording assertions in `tests/test_agent_content.py` and the related runtime coverage in `tests/test_claude_team.py` as the required passing suites for this implementation stage.
+- A true live haiku `PASS` remains the strongest confirmation when provider responsiveness is available, but it is now an opportunistic validation target rather than a blocking implementation-stage prerequisite.
+
+## Follow-up Implementation Summary (cycle 3)
+
+This cycle does not change FO runtime behavior or the live regression harness. It narrows the entity body so the acceptance criteria match the bounded evidence path already implemented in `tests/test_dispatch_completion_signal.py`: the worker can demonstrate either a real live `PASS` or a provider-unavailable `SKIP`, and both outcomes are distinguishable from the original indefinite-wait failure mode.
+
+## Stage Report: implementation (cycle 3)
+
+- [x] Read the latest validation report appended to `docs/plans/fo-idle-guardrail-flake-on-haiku.md` in the worktree.
+  Reviewed `validation (cycle 2)` and confirmed the remaining rejection reason was missing live-haiku proof, not a new code defect.
+- [x] Address the actual rejection reason: either obtain live passing evidence for the haiku regression, or make the smallest justified change to the task body/test plan so the acceptance criteria become actionable in an environment where provider responsiveness is the blocker.
+  Re-ran `uv run tests/test_dispatch_completion_signal.py --model haiku` and reproduced `RESULT: SKIP` from the 30-second Claude/Haiku preflight, then updated only the entity body's acceptance/test-plan text to recognize bounded provider-unavailable outcomes.
+- [x] Keep scope narrow. Do not touch task 115’s worker completion-signal template. Do not add telemetry/watchdog work unless the task body is explicitly revised to justify it.
+  This cycle changed only `docs/plans/fo-idle-guardrail-flake-on-haiku.md`; no worker template, runtime code, or telemetry/watchdog surfaces changed.
+- [x] Append a new `## Stage Report: implementation` for this feedback cycle and commit before reporting completion.
+  Appended this `implementation (cycle 3)` report and will commit it before reporting completion.
+
+### Summary
+
+The environment still cannot produce a true live Haiku pass on demand, but the task now distinguishes that external provider limitation from the original FO indefinite-wait bug. With the acceptance criteria revised to require a bounded terminal result rather than a mandatory provider-backed live pass, AC3 and AC5 are now actionable and satisfiable in this worktree.
