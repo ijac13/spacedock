@@ -1,13 +1,13 @@
 ---
 id: 128
 title: "status script: restore exec bit + sweep docs to drop redundant python3 prefix"
-status: validation
+status: done
 source: "CL observation during 2026-04-10 debrief — 'why are we always executing the status script with python3?'"
 score: 0.55
-worktree: .worktrees/spacedock-ensign-status-exec-bit
+worktree: 
 started: 2026-04-10T23:54:10Z
-completed:
-verdict:
+completed: 2026-04-11T00:16:54Z
+verdict: PASSED
 issue:
 pr: #72
 ---
