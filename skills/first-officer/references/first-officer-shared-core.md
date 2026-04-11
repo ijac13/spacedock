@@ -91,6 +91,12 @@ The checklist review should produce an explicit count summary in the form:
 
 If the stage is not gated: If terminal, proceed to merge. Otherwise, determine whether to reuse the current agent or dispatch fresh for the next stage.
 
+A completed worker is reusable only when both are true:
+- the worker is still addressable through a live runtime handle
+- the reuse conditions below all pass
+
+If the worker completed but is no longer addressable, treat reuse as failed and dispatch fresh.
+
 **Reuse conditions** (all must hold — if any fails, dispatch fresh):
 0. Before evaluating reuse conditions, run `claude-team context-budget --name {ensign-name}`. If `reuse_ok` is `false`, skip to fresh dispatch.
 1. Not in bare mode (teams available)
@@ -101,7 +107,7 @@ If the stage is not gated: If terminal, proceed to merge. Otherwise, determine w
 
 SendMessage(to="{agent}-{slug}-{completed_stage}", message="Advancing to next stage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim]\n\n### Completion checklist\n\n[CHECKLIST — assemble from step 2]\n\nContinue working on {entity title}. The entity file is at {entity_file_path}. Do the work described in the stage definition. Update the entity file body with your findings or outputs. Commit before sending your completion message.")
 
-**If fresh dispatch:** Check whether the next stage has `feedback-to` pointing at the completed stage. If yes, keep the completed agent alive (the feedback reviewer will need to message it). Otherwise, shut down the agent. Run `status --next` and dispatch the next stage.
+**If fresh dispatch:** Check whether the next stage has `feedback-to` pointing at the completed stage. If yes, keep the completed agent alive only while it remains addressable and eligible for later reuse. Otherwise, shut down the agent explicitly. A worker that is no longer needed for later routing must be explicitly shut down. Run `status --next` and dispatch the next stage.
 
 If the stage is gated:
 - never self-approve
@@ -119,7 +125,7 @@ When a feedback stage recommends REJECTED:
 2. Track feedback cycles in a `### Feedback Cycles` section in the entity body.
 3. If cycles reach 3, escalate to the human instead of dispatching another round.
 4. Before routing findings back to the target stage agent, run `claude-team context-budget --name {ensign-name}`. If `reuse_ok` is `false`, shut down the old ensign and fresh-dispatch.
-5. Route the findings back to the target stage in the same worktree.
+5. Route the findings back to the target stage in the same worktree by using the existing worker handle when it is still addressable and the reuse conditions pass (`send_input` on Codex, `SendMessage` on Claude teams). If those checks fail, shut down the old worker explicitly and fresh-dispatch.
 6. Re-run the reviewer after fixes.
 7. Re-enter the normal gate flow with the updated result.
 

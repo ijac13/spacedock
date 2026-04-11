@@ -38,6 +38,7 @@ The intended lifecycle for Codex workers is:
 - `feedback-to` is routed to the original implementation worker when that worker is still reusable. The follow-up message should be delivered through `send_input`, not by spawning a brand-new worker just to carry the feedback.
 - A worker must be shut down explicitly when it is no longer needed for any later routing, when reuse is blocked, when the workflow is moving to a different worker that must not inherit the old thread, or when the entity reaches a terminal state.
 - "No longer needed" means the worker will not receive further feedback, advancement, or gate-related routing for the current entity. The runtime should not leave that decision implicit.
+- Operator-facing status updates and routed messages should identify workers with a human-readable structured role label such as `130-impl/Herschel` or an equivalent `{entity_id}-{stage_key}/{display}` convention, not only opaque runtime ids.
 
 In practice, this means the Codex path should support two distinct follow-up modes:
 
@@ -57,6 +58,7 @@ Keep the implementation bounded to the runtime contract and the tests that prove
 - `skills/first-officer/references/codex-first-officer-runtime.md`
   - replace the "completion is summary-only" drift with explicit reuse and shutdown semantics
   - describe `send_input` as the routing path for reused completion, advancement, or feedback messages
+  - define the Codex worker-label/reporting convention for operator clarity
   - keep the Codex-specific bounded-run guidance, but stop implying that a completed worker is unreachable
 - `tests/test_codex_packaged_agent_e2e.py`
   - add a live Codex exercise that proves a completed worker can receive routed advancement or feedback through `send_input`
@@ -80,8 +82,12 @@ Do not expand this into a broader Codex orchestration rewrite. The task is to al
 4. The same live Codex exercise proves that workers that are not needed anymore are explicitly shut down.
    - Test: assert the log includes the shutdown path for the worker that is being retired, or that the runtime emits the shutdown request before replacement dispatch.
 
-5. Existing reuse and packaged-agent regression coverage still passes.
-   - Test: rerun the current `tests/test_reuse_dispatch.py`, `tests/test_codex_packaged_agent_e2e.py`, and `tests/test_agent_content.py` coverage around the edited runtime contract.
+5. Codex first-officer runs report workers with a human-readable structured role label in status updates and routed follow-up.
+   - Test: static content assertion against `skills/first-officer/references/codex-first-officer-runtime.md` and live Codex log assertion in `tests/test_codex_packaged_agent_e2e.py`.
+
+6. Shared static tests and Codex live-path regression coverage pass for this task's bounded surfaces.
+   - Test: rerun `tests/test_agent_content.py` and `tests/test_codex_packaged_agent_e2e.py`.
+   - Claude-specific/runtime-specific tests are out of scope for task 130 and will be handled separately.
 
 ## Test Plan
 
@@ -91,6 +97,7 @@ Do not expand this into a broader Codex orchestration rewrite. The task is to al
 - Keep the live test bounded to one or two entity transitions; the point is to prove routing and shutdown semantics, not to run a full workflow marathon.
 - Cost/complexity is moderate: the live Codex run is slower than static checks, but the scope is narrow and the existing Codex harness already supports the path.
 - E2E coverage is required. Static wording checks alone do not prove that a completed worker remains addressable or that shutdown happens explicitly.
+- For task 130, the validation surface is intentionally limited to shared static checks plus Codex live-path checks. Claude-specific/runtime-specific tests are out of scope and should not block this implementation.
 
 The desired end state is consistent lifecycle behavior across shared core and Codex: reuse when the worker is still live and reusable, route feedback back to the original thread when possible, and shut down workers explicitly when they are done.
 
@@ -107,3 +114,30 @@ The desired end state is consistent lifecycle behavior across shared core and Co
 ### Summary
 
 This ideation pass turns the original observation into a concrete spec for Codex worker reuse and shutdown semantics. The task now names the mismatch, defines the desired lifecycle, and keeps the implementation bounded to the shared core, Codex runtime reference, and live Codex test coverage.
+
+## Implementation Summary
+
+Implementation aligned the shared first-officer core and the Codex runtime reference around three concrete Codex semantics: completed-worker reuse is allowed only when the worker is still addressable and the reuse conditions pass, routed advancement and `feedback-to` follow-up should use `send_input` on the existing handle when reuse is valid, and workers that are no longer needed must be shut down explicitly. The Codex runtime contract now also defines a human-readable worker-label convention for operator-facing status and routing messages.
+
+Test coverage was kept on the bounded surfaces from the approved ideation. Static assertions now pin the shared-core/Codex wording together, and the live packaged Codex path was reworked onto a keepalive-style fixture so the run actually creates a completed implementation worker, routes rejection follow-up back through `send_input`, and explicitly closes the retired handles. Per the captain's validation update, Claude-specific/runtime-specific tests are out of scope for task 130.
+
+## Stage Report: implementation
+
+- [x] Read the entity spec and kept the implementation bounded to the listed surfaces.
+  Only `skills/first-officer/references/*.md`, `scripts/test_lib.py`, `tests/test_agent_content.py`, and `tests/test_codex_packaged_agent_e2e.py` were changed.
+- [x] Implemented the shared-core and Codex runtime reference changes.
+  `first-officer-shared-core.md` now requires addressability plus reuse conditions and explicit shutdown; `codex-first-officer-runtime.md` now documents `send_input`, explicit shutdown, and structured worker labels.
+- [x] Added or updated static tests covering the new semantics.
+  `tests/test_agent_content.py` now asserts completed-worker/addressability wording, `send_input`/shutdown wording, and the human-readable worker-label contract.
+- [x] Added or updated live Codex-path tests covering reusable completed workers and explicit shutdown.
+  `tests/test_codex_packaged_agent_e2e.py` now uses a packaged keepalive fixture and checks routed follow-up via `send_input`, explicit worker shutdown, and structured worker labels.
+- [x] Ran the relevant tests and recorded concrete outcomes, including the live Codex exercise.
+  Passed: `uv run --with pytest python -m pytest tests/test_agent_content.py` (27 passed) and `uv run tests/test_codex_packaged_agent_e2e.py` (16 passed, live Codex path). Claude-specific/runtime-specific tests are out of scope for task 130 per captain update.
+- [x] Updated the entity body with an implementation summary and a complete implementation stage report.
+  This summary plus `## Stage Report: implementation` were appended here without touching frontmatter.
+- [x] Committed the implementation work in the worktree before reporting completion.
+  Commit recorded after the bounded code and test changes were finalized.
+
+### Summary
+
+Task 130 now tells the truth about reusable completed Codex workers: reuse depends on an addressable live handle plus the shared reuse conditions, routed follow-up goes through `send_input` when reuse is valid, and workers are explicitly closed when they are no longer needed. Validation for this task is intentionally bounded to shared static coverage and the live Codex packaged-worker path, with Claude-specific runtime coverage deferred to separate work.

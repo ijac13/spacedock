@@ -121,6 +121,28 @@ def test_codex_runtime_docs_cover_merge_hook_finalize_path():
     assert "{worker_key}/{slug}" in text
 
 
+def test_reuse_and_shutdown_wording_stays_aligned_between_shared_core_and_codex_runtime():
+    shared = read_text("skills/first-officer/references/first-officer-shared-core.md")
+    runtime = read_text("skills/first-officer/references/codex-first-officer-runtime.md")
+
+    assert re.search(r"completed worker.*addressable", shared, re.IGNORECASE | re.DOTALL)
+    assert re.search(r"reuse conditions.*all must hold", shared, re.IGNORECASE | re.DOTALL)
+    assert re.search(r"feedback-to.*send_input", shared, re.IGNORECASE | re.DOTALL)
+    assert re.search(r"explicitly shut down|shut down explicitly", shared, re.IGNORECASE)
+
+    assert re.search(r"completed worker.*send_input", runtime, re.IGNORECASE | re.DOTALL)
+    assert re.search(r"feedback|advancement.*send_input", runtime, re.IGNORECASE | re.DOTALL)
+    assert re.search(r"explicitly shut down|shutdown.*no longer needed", runtime, re.IGNORECASE)
+
+
+def test_codex_runtime_docs_define_human_readable_worker_labels():
+    text = read_text("skills/first-officer/references/codex-first-officer-runtime.md")
+
+    assert re.search(r"human-readable", text, re.IGNORECASE)
+    assert re.search(r"role key|worker label", text, re.IGNORECASE)
+    assert re.search(r"130-impl/Herschel|entity[- ]stage[- ]display", text, re.IGNORECASE)
+
+
 def test_pr_merge_mod_copies_share_rich_body_template():
     installed = read_text("docs/plans/_mods/pr-merge.md")
     canonical = read_text("mods/pr-merge.md")

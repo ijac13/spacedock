@@ -35,13 +35,16 @@ Split worker identity into:
 - `dispatch_agent_id`
 - `worker_key`
 
+For operator-facing status updates and routed follow-up messages, also keep a human-readable worker label. Use a stable `{entity_id}-{stage_key}/{display_name}` convention such as `130-impl/Herschel` or `130-validation/Herschel`. Report that label alongside the logical id or thread handle; do not rely on opaque agent ids or incidental nicknames alone.
+
 ## Dispatch Adapter
 
 Codex does not natively spawn packaged names like `spacedock:ensign`.
 
-Codex effectively operates in bare-mode dispatch:
+Codex effectively operates in direct-handle dispatch:
 - the first officer owns orchestration directly
-- worker results return through `spawn_agent` completion, not team messaging
+- fresh workers are created through `spawn_agent`
+- completed workers can still be reused later if their handle remains addressable and the shared reuse conditions still pass
 - if the run is bounded to a single entity or first meaningful outcome, terminate once that condition is satisfied
 
 Speed and boundedness matter on the Codex path. Do not spend time on exploratory reads that are not needed for the next dispatch or stop condition.
@@ -55,11 +58,27 @@ Avoid these wasteful actions unless a real blocker forces them:
 
 For each dispatch:
 1. Resolve the logical id into a safe `worker_key`.
-2. Create the worktree if required.
-3. Spawn a generic worker with `spawn_agent(..., fork_context=false)`.
-4. In the worker prompt:
+2. Derive and report the human-readable worker label for the stage assignment.
+3. Create the worktree if required.
+4. Spawn a generic worker with `spawn_agent(..., fork_context=false)`.
+5. In the worker prompt:
    - first instruct the worker to resolve its role definition from the logical id and read it before doing anything else
    - then pass the assignment fields
+
+When the worker reaches a completed state, keep its returned handle and worker label as long as later routing may still need that thread.
+
+For routed advancement or `feedback-to` follow-up:
+- if the completed worker is still addressable and the shared reuse conditions pass, deliver the next assignment through `send_input` on that existing worker handle
+- use `send_input` for same-thread advancement reuse and for feedback routed back to a completed implementation worker
+- do not spawn a replacement worker when reuse is valid
+
+Explicit shutdown is required when a worker is no longer needed:
+- after a fresh replacement takes over and the old worker will not receive later routing
+- after a routed follow-up is delivered and another kept-alive worker is no longer needed
+- when reuse is blocked and the old completed worker will not be reused
+- when the entity reaches a terminal state
+
+On the Codex path, "no longer needed" means no further advancement, feedback, or gate-related routing is expected for that worker. Do not leave shutdown implicit; call the runtime shutdown path explicitly before stopping.
 
 For bounded terminal-completion runs, continue through the shared merge-and-cleanup flow in this runtime.
 
@@ -78,6 +97,7 @@ wait_agent(...)
 ```
 
 Always preserve the logical packaged id in summaries and use only `worker_key` in branch/worktree/session names.
+When reusing a completed worker, the equivalent pattern is `send_input(<existing_handle>, message="<next assignment>")` followed by `wait_agent(...)` or bounded stop logic as needed.
 
 ## Codex Worker Assignment Fields
 

@@ -2,7 +2,7 @@
 # /// script
 # requires-python = ">=3.10"
 # ///
-# ABOUTME: Direct E2E proof for explicit packaged stage agent ids in the Codex Spacedock prototype.
+# ABOUTME: Direct E2E proof for reusable packaged workers and explicit shutdown in the Codex Spacedock prototype.
 
 from __future__ import annotations
 
@@ -18,28 +18,51 @@ from test_lib import CodexLogParser, TestRunner, create_test_project, git_add_co
 def main():
     t = TestRunner("Codex Packaged Agent E2E Test")
 
-    print("--- Phase 1: Set up explicit packaged-agent fixture ---")
+    print("--- Phase 1: Set up packaged keepalive fixture ---")
 
     create_test_project(t)
-    workflow_dir = setup_fixture(t, "rejection-flow-packaged-agent", "packaged-agent-pipeline")
-    git_add_commit(t.test_project_dir, "setup: codex packaged agent fixture")
+    workflow_dir = setup_fixture(t, "keepalive-pipeline", "packaged-agent-pipeline")
 
-    readme_text = (workflow_dir / "README.md").read_text()
+    readme_path = workflow_dir / "README.md"
+    readme_text = readme_path.read_text()
+    readme_text = readme_text.replace(
+        "    - name: implementation\n      worktree: true\n",
+        "    - name: implementation\n      worktree: true\n      agent: spacedock:ensign\n",
+    )
+    readme_text = readme_text.replace(
+        "    - name: validation\n      worktree: true\n      fresh: true\n      feedback-to: implementation\n      gate: true\n",
+        "    - name: validation\n      worktree: true\n      fresh: true\n      feedback-to: implementation\n      gate: true\n      agent: spacedock:ensign\n",
+    )
+    readme_path.write_text(readme_text)
+
+    git_add_commit(t.test_project_dir, "setup: codex packaged keepalive fixture")
+
     t.check("fixture explicitly declares spacedock packaged agent", "agent: spacedock:ensign" in readme_text)
     t.check_cmd(
         "status script runs without errors",
-        ["python3", "packaged-agent-pipeline/status"],
+        [
+            "python3",
+            str(t.repo_root / "skills" / "commission" / "bin" / "status"),
+            "--workflow-dir",
+            "packaged-agent-pipeline",
+        ],
         cwd=t.test_project_dir,
     )
 
     status_result = subprocess.run(
-        ["python3", "packaged-agent-pipeline/status", "--next"],
+        [
+            "python3",
+            str(t.repo_root / "skills" / "commission" / "bin" / "status"),
+            "--workflow-dir",
+            "packaged-agent-pipeline",
+            "--next",
+        ],
         capture_output=True,
         text=True,
         cwd=t.test_project_dir,
         check=True,
     )
-    t.check("status --next detects dispatchable entity", "buggy-add-task" in status_result.stdout)
+    t.check("status --next detects dispatchable entity", "keepalive-test-task" in status_result.stdout)
 
     print()
     print("--- Phase 2: Run Codex first officer ---")
@@ -48,15 +71,18 @@ def main():
         t,
         "packaged-agent-pipeline",
         run_goal=(
-            "Process only the entity `buggy-add-task`. "
-            "Dispatch the validation stage, wait for the validation worker to finish, "
-            "then summarize the outcome and stop. "
-            "Do not begin any follow-up dispatch after the validation result. "
-            "When you dispatch the worker, use the exact Codex pattern "
+            "Process only the entity `keepalive-test-task`. "
+            "Drive the packaged Codex path through implementation completion, validation rejection, and the first routed follow-up back to implementation. "
+            "If the completed implementation worker is still addressable and reuse conditions pass, route the follow-up through "
+            "`send_input` on the existing worker handle instead of spawning a replacement. "
+            "Once the routed follow-up is delivered, explicitly shut down any worker that is no longer needed before stopping. "
+            "Use a human-readable worker label in status updates and routed messages, such as `001-impl/Herschel` or equivalent "
+            "entity-stage-display convention. "
+            "When you dispatch a fresh worker, use the exact Codex pattern "
             "`spawn_agent(agent_type=\"worker\", fork_context=false, message=<fully self-contained prompt>)` "
             "followed by `wait_agent(...)`."
         ),
-        timeout_s=300,
+        timeout_s=420,
     )
     t.check("Codex launcher exited cleanly", fo_exit == 0)
 
@@ -73,10 +99,22 @@ def main():
         "FO keeps packaged logical id while dispatch stays on shared safe naming",
         "spacedock:ensign" in fo_text and "spacedock-ensign" in fo_text,
     )
-    t.check("FO spawned a worker for the packaged agent path", log.spawn_count() >= 1)
-    t.check("worker completed and returned a result", len(worker_messages) >= 1)
+    t.check("FO spawned workers for the packaged agent path", log.spawn_count() >= 2)
+    t.check("workers completed and returned results", len(worker_messages) >= 2)
+    t.check(
+        "completed implementation worker received routed follow-up through send_input",
+        bool(re.search(r"send_input", fo_text, re.IGNORECASE)),
+    )
+    t.check(
+        "Codex path explicitly shut down a no-longer-needed worker",
+        bool(re.search(r"shutdown", fo_text, re.IGNORECASE)),
+    )
+    t.check(
+        "Codex path reports a human-readable worker label",
+        bool(re.search(r"\b001-(impl|implementation|val|validation)/[A-Za-z0-9._-]+", fo_text)),
+    )
 
-    entity_text = (workflow_dir / "buggy-add-task.md").read_text()
+    entity_text = (workflow_dir / "keepalive-test-task.md").read_text()
     worktree_match = re.search(r"^worktree:\s*(.+)$", entity_text, re.MULTILINE)
     worktree_value = worktree_match.group(1).strip() if worktree_match else ""
     t.check("safe packaged worker key appears in worktree path", "spacedock-ensign" in worktree_value)

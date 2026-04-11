@@ -109,6 +109,11 @@ def build_codex_first_officer_invocation_prompt(
         `.worktrees/{{worker_key}}-{{slug}}` and branches use `{{worker_key}}/{{slug}}`.
         Never collapse it to bare `ensign`.
         Keep `dispatch_agent_id: spacedock:ensign` but use `role_asset_name: ensign` for the packaged skill asset.
+        Keep a human-readable worker label in status updates and routed messages using an entity-stage-display form such as
+        `001-impl/Herschel` or `001-validation/Herschel`.
+        If a completed worker is still addressable and reuse conditions pass, reuse it through `send_input` on the existing handle.
+        Route `feedback-to` follow-up and same-thread advancement through `send_input` when reuse is valid.
+        If a worker will not receive later advancement, feedback, or gate-related routing, shut it down explicitly before stopping.
         For bounded single-entity runs, treat the first completed worker summary as sufficient evidence for your final response unless it is missing the requested verdict or outcome.
         After `wait_agent(...)` returns the needed verdict or outcome, do not reread entity files, rerun `status`, or continue the loop. Respond once and stop immediately.
         Do not load reference docs unless you hit a real blocker.
