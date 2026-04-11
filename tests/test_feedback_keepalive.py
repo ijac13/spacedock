@@ -304,7 +304,7 @@ def main():
     print()
     print("[Static Template Checks]")
 
-    core = (REPO_ROOT / "references" / "first-officer-shared-core.md").read_text()
+    core = (REPO_ROOT / "skills" / "first-officer" / "references" / "first-officer-shared-core.md").read_text()
 
     t.check(
         "shared-core contains feedback-to keepalive rule for fresh dispatch",
