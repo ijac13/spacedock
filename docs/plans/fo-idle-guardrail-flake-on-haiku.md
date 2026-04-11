@@ -1,7 +1,7 @@
 ---
 id: 117
 title: FO DISPATCH IDLE GUARDRAIL flake on haiku — premature ensign shutdown in nested test
-status: implementation
+status: validation
 source: Validator observation during 115 validation (run 1 of test_dispatch_completion_signal.py)
 started: 2026-04-11T04:45:04Z
 completed:
@@ -97,6 +97,7 @@ Do not expand this task into:
 ### Feedback Cycles
 
 - Cycle 1 (2026-04-11): Validation REJECTED. Static/runtime checks passed, but the required live haiku regression (`tests/test_dispatch_completion_signal.py --model haiku`) did not complete within the bounded validation run, so AC3 and AC5 remain unproven. Route back to implementation to obtain completed haiku regression evidence or adjust the task/test plan if that live requirement is currently impractical.
+- Cycle 2 (2026-04-11): Validation REJECTED again. The bounded `RESULT: SKIP` behavior cleanly distinguishes provider/runtime unavailability from an indefinite hang, but it still does not satisfy the task's requirement for a true live haiku `PASS`. Route back to implementation to either obtain live passing evidence or revise the task's acceptance/test plan if the provider dependency makes that requirement non-actionable in this environment.
 
 ## Stage Report: ideation
 
