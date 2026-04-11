@@ -257,7 +257,7 @@ The environment still cannot produce a true live Haiku pass on demand, but the t
 - [x] Append a complete `## Stage Report: validation` with DONE, SKIPPED, or FAILED coverage for each checklist item and a PASSED/REJECTED recommendation.
   This `validation (cycle 3)` section covers all checklist items and recommends `REJECTED` because the branch still lacks the deterministic `task-129`/stale assertion required by the current validation focus.
 - [x] Commit the validation report before reporting completion.
-  This report is committed in `3330038`.
+  Initial validation report commit recorded in `3a273dd`; this note was updated immediately after to replace the placeholder hash with the actual commit id.
 
 ### Summary
 
