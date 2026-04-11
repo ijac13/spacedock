@@ -89,6 +89,29 @@ def extract_resident_tokens(jsonl_path: str) -> int | None:
     return None
 
 
+def extract_runtime_models(jsonl_path: str) -> set[str]:
+    """Extract distinct model strings from assistant entries in the jsonl."""
+    models = set()
+    with open(jsonl_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if entry.get("type") != "assistant":
+                continue
+            msg = entry.get("message", {})
+            if not isinstance(msg, dict):
+                continue
+            model = msg.get("model")
+            if model:
+                models.add(model)
+    return models
+
+
 def lookup_model(name: str) -> str | None:
     """Find the model for a team member by name.
 
@@ -137,12 +160,35 @@ def cmd_context_budget(args: argparse.Namespace) -> int:
         print(f"Error: no assistant entries with usage in {jsonl_path}", file=sys.stderr)
         return 1
 
-    model = lookup_model(name)
-    if model is None:
+    config_model = lookup_model(name)
+    if config_model is None:
         print(f"Error: no team config found for member '{name}'", file=sys.stderr)
         return 1
 
+    runtime_models = extract_runtime_models(jsonl_path)
+    warnings = {}
+
+    if len(runtime_models) > 1:
+        model = min(runtime_models, key=context_limit_for_model)
+        warnings["mixed_models_warning"] = (
+            f"multiple models seen in jsonl: {sorted(runtime_models)} — using smallest context window"
+        )
+    elif len(runtime_models) == 1:
+        model = next(iter(runtime_models))
+    else:
+        model = config_model
+        warnings["config_fallback_warning"] = (
+            "no model field in jsonl assistant entries — using config-declared model (provisional)"
+        )
+
     context_limit = context_limit_for_model(model)
+    config_limit = context_limit_for_model(config_model)
+
+    if runtime_models and config_limit != context_limit:
+        warnings["config_drift_warning"] = (
+            f"team config requested {config_model} but runtime is {model}"
+        )
+
     usage_pct = round(resident_tokens / context_limit * 100, 1)
     reuse_ok = usage_pct <= THRESHOLD_PCT
 
@@ -155,6 +201,9 @@ def cmd_context_budget(args: argparse.Namespace) -> int:
         "threshold_pct": THRESHOLD_PCT,
         "reuse_ok": reuse_ok,
     }
+    if runtime_models and config_limit != context_limit:
+        result["config_declared_model"] = config_model
+    result.update(warnings)
 
     print(json.dumps(result, indent=2))
     return 0
