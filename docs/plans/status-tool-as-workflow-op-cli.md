@@ -78,10 +78,13 @@ Terminology note: throughout this task "fields" means YAML frontmatter keys. "Co
 **Conflicting flags:**
 - `--fields` and `--all-fields` together → error (`--fields and --all-fields are mutually exclusive`).
 - `--fields` / `--all-fields` with `--next` → extras are appended to the `--next` table as well, same append semantics. The FO frequently wants `--next --fields pr` to see PR state alongside dispatchable entities.
+- `--fields` / `--all-fields` with `--archived` → **allowed, composes additively**. `--archived` extends the row set (active entities plus `_archive/*.md`) while `--fields` / `--all-fields` extends the column set; both apply to the default table without interaction. No new test required — the composition falls out of the existing scan-then-filter-then-print pipeline.
 - `--fields` / `--all-fields` with `--boot` → error (`--boot emits a fixed multi-section format and does not accept --fields`). `--boot`'s structure is contractual; do not perturb it.
 - `--fields` / `--all-fields` with `--set` → error (`--set does not produce a table`).
 
 **Column width handling:** the current default table uses fixed `%-6s %-30s %-20s %-30s %-8s %s` widths. Extra fields use a sensible fixed width (20 chars for general fields, truncating with `…` if longer, to match the existing truncation-free default). This avoids a reflow of the default columns and keeps the implementation simple. If a value is longer than the column width, it is truncated with a trailing `…`. Full-width rendering is out of scope.
+
+**Two printer functions, same append semantics.** `--fields` / `--all-fields` must touch **two** printer functions in `skills/commission/bin/status`: `print_status_table()` at lines 222-229 (default table with ID/SLUG/STATUS/TITLE/SCORE/SOURCE, fmt `%-6s %-30s %-20s %-30s %-8s %s`) and `print_next_table()` at lines 232-275 (dispatchable table with ID/SLUG/CURRENT/NEXT/WORKTREE, distinct fmt `%-6s %-30s %-20s %-20s %s`). Both have their own default column set and their own fmt string. The implementation must apply the append logic to both printers with the same semantics (extras appended after the printer's native columns, user-order for `--fields`, sorted for `--all-fields`, same truncation rules). The refactor target is a shared "append extra columns" helper that both printers call, rather than two hand-duplicated code paths.
 
 ### 3. `--archive` subcommand
 
@@ -142,20 +145,20 @@ Concrete implications for 123:
 Each criterion names a specific test hook that will verify it. Unit tests live in `tests/test_status_script.py` unless noted.
 
 **AC1 — `--where` accepts unspaced equality.** `status --where "status=watching"` returns the same result set as `status --where "status = watching"`, for both default (`status`) and custom (`last-outbound-at`) fields.
-- Test: `TestWhereOption::test_equality_no_spaces` — fixture with two entities, run both spacing forms, assert identical output.
-- Test: `TestWhereOption::test_equality_no_spaces_custom_field` — same but on a custom field.
+- Test: `TestWhereFilter::test_equality_no_spaces` — fixture with two entities, run both spacing forms, assert identical output.
+- Test: `TestWhereFilter::test_equality_no_spaces_custom_field` — same but on a custom field.
 
 **AC2 — `--where` accepts unspaced negation.** `status --where "status!=done"` returns the same result set as `status --where "status != done"`.
-- Test: `TestWhereOption::test_negation_no_spaces`.
+- Test: `TestWhereFilter::test_negation_no_spaces`.
 
 **AC3 — `--where` presence/absence still works.** `status --where "pr !="` returns entities with non-empty `pr`; `status --where "pr ="` returns entities with empty `pr`. Regression test — existing tests already cover this; no new test needed.
-- Test: existing `TestWhereOption::test_non_empty_filter`, `test_empty_filter`, `test_non_empty_pr_field` must remain green.
+- Test: existing `TestWhereFilter::test_non_empty_filter`, `test_empty_filter`, `test_non_empty_pr_field` must remain green.
 
 **AC4 — `--where` rejects bare field names loudly.** `status --where "completed"` exits non-zero with an error message naming the four valid forms.
-- Test: `TestWhereOption::test_bare_field_errors` — asserts non-zero exit, asserts stderr contains each of `field = value`, `field != value`, `field !=`, `field =`.
+- Test: `TestWhereFilter::test_bare_field_errors` — asserts non-zero exit, asserts stderr contains each of `field = value`, `field != value`, `field !=`, `field =`.
 
 **AC5 — `--where` rejects unknown operators.** `status --where "status ~ watching"` exits non-zero with an error.
-- Test: `TestWhereOption::test_unknown_operator_errors`.
+- Test: `TestWhereFilter::test_unknown_operator_errors`.
 
 **AC6 — `--fields` appends requested fields in order.** `status --fields pr,worktree` adds `PR` and `WORKTREE` columns after `SOURCE`, in that order, for each row. Fields not in the frontmatter render empty.
 - Test: `TestFieldsOption::test_fields_appends_in_order` — fixture with mixed entities, assert header contains the new columns after `SOURCE` in order.
@@ -198,21 +201,21 @@ Each criterion names a specific test hook that will verify it. Unit tests live i
 - Test: `TestArchiveOption::test_archive_does_not_commit` — fixture uses a `git init`'d tmpdir, asserts `git status --porcelain` shows the move as pending.
 
 **AC19 — Default behavior unchanged.** `status` with no new flags produces identical output to the pre-change version.
-- Test: the existing `TestDefaultStatus`, `TestNextOption`, `TestArchivedOption`, `TestSetOption`, `TestBootOption` test classes must all stay green without modification.
+- Test: the existing test classes in `tests/test_status_script.py` must all stay green without modification: `TestDefaultStatus` (line 112, includes the `--archived` regression at `test_archived_flag_includes_archive`, line 193), `TestNextOption` (line 215), `TestFrontmatterParsing` (line 416), `TestWhereFilter` (line 446, pre-existing tests untouched — new cases are additive), `TestBootOption` (line 611), `TestSetOption` (line 1077), `TestStatusScriptExecutable` (line 1307).
 
 **AC20 — Header docstring documents the new surface.** The `instruction:` block at the top of `skills/commission/bin/status` mentions `--where` syntax (with and without spaces), `--fields`, `--all-fields`, and `--archive`.
 - Test: `TestStatusDocstring::test_docstring_mentions_new_flags` — a static check that greps the script header for the four flag names and the phrase "with or without spaces". Low-cost correctness check that the implementer did not forget the docs.
 
 ## Test Plan
 
-**Harness:** extend `tests/test_status_script.py`. The existing file already substitutes template variables, runs the script as a subprocess in a temp workflow dir, and has one test class per flag. New tests add three classes:
+**Harness:** extend `tests/test_status_script.py`. The existing file already substitutes template variables, runs the script as a subprocess in a temp workflow dir, and has one test class per flag. New tests add cases to the existing `TestWhereFilter` class and introduce three new classes:
 
-- `TestWhereOption` — 2 new tests (unspaced equality, unspaced negation, bare-field error, unknown-operator error). Existing `TestWhereOption` tests stay as regression coverage.
-- `TestFieldsOption` — 10 new tests covering AC6-AC13.
-- `TestArchiveOption` — 5 new tests covering AC14-AC18.
-- `TestStatusDocstring` — 1 new test for AC20.
+- `TestWhereFilter` (existing, line 446) — 7 new tests: `test_equality_no_spaces` (AC1), `test_equality_no_spaces_custom_field` (AC1), `test_negation_no_spaces` (AC2), `test_bare_field_errors` (AC4), `test_unknown_operator_errors` (AC5), `test_value_with_spaces` (edge 1), `test_field_name_case_sensitive` (edge 3). Pre-existing `TestWhereFilter` tests stay as regression coverage.
+- `TestFieldsOption` (new) — 10 new tests covering AC6-AC13: `test_fields_appends_in_order`, `test_fields_missing_renders_empty`, `test_fields_custom_field_populated`, `test_fields_nonexistent_no_error`, `test_all_fields_sorted_dedup`, `test_fields_and_all_fields_conflict`, `test_fields_composes_with_next`, `test_fields_incompatible_with_boot`, `test_all_fields_incompatible_with_boot`, `test_fields_incompatible_with_set`.
+- `TestArchiveOption` (new) — 5 new tests covering AC14-AC18: `test_archive_moves_and_stamps`, `test_archive_missing_source_errors`, `test_archive_existing_destination_errors`, `test_archive_preserves_completed`, `test_archive_does_not_commit`.
+- `TestStatusDocstring` (new) — 1 new test for AC20: `test_docstring_mentions_new_flags`.
 
-**Estimated count:** ~18 new tests, all unit-level subprocess tests against fixture directories. Each test runs in <100ms (no git operations except the one `test_archive_does_not_commit` which does a local `git init` in a tmpdir). Full suite impact: negligible.
+**Estimated count:** ~23 new tests (7 + 10 + 5 + 1), all unit-level subprocess tests against fixture directories. Each test runs in <100ms (no git operations except the one `test_archive_does_not_commit` which does a local `git init` in a tmpdir). Full suite impact: negligible.
 
 **Cost/complexity:** low. The hardest piece is the `--where` parser refactor (maybe 30 lines changed), the easiest is the docstring check. No new dependencies, no fixtures beyond what tmpdir + small frontmatter strings already provide.
 
@@ -233,9 +236,9 @@ Each criterion names a specific test hook that will verify it. Unit tests live i
 
 Listed explicitly so the implementation stage has a checklist; most are deferred to the implementation's judgment if they are not in the ACs:
 
-1. **Values with spaces in `--where`.** `--where "title = My Task"` — the current parser uses `split(None, 1)` for the first token (field) and relies on remainder handling. The refined parser must carve out the operator from the joined string, then treat the remainder as the literal value (whitespace preserved). Implementation approach: find `!=` or `=` in the argument string, split on the first occurrence, strip both sides; the RHS may contain anything. Test `TestWhereOption::test_value_with_spaces`.
+1. **Values with spaces in `--where`.** `--where "title = My Task"` — the current parser uses `split(None, 1)` for the first token (field) and relies on remainder handling. The refined parser must carve out the operator from the joined string, then treat the remainder as the literal value (whitespace preserved). **Operator precedence is load-bearing:** the parser must check for `!=` **first**, and only fall back to `=` if `!=` is not present. Splitting on the first `=` in a string like `"worktree !="` would incorrectly cut the argument inside the `!=` operator (yielding field `worktree !` and an empty RHS), misclassifying negation as equality. The rule is "look for `!=` first; only if absent, look for `=`" — this is a precedence rule, not a "first occurrence of either" rule. Having located the operator, split on its first occurrence, strip both sides; the RHS may contain anything (including further `=` or `!=` characters). Test `TestWhereFilter::test_value_with_spaces`.
 2. **Values with `=` in them.** `--where "slug = my=weird=slug"` — split on first `=`, RHS can contain more `=`. Same applies for `!=`. Test: optional; defer unless the implementation finds real workflows with `=` in values.
-3. **Case sensitivity of field names.** YAML is case-sensitive. `--where` and `--fields` must match fields exactly as they appear in the frontmatter. `Status=watching` does NOT match `status: watching`. Documented in the `--where` error message and header docstring, no case-insensitive mode. Test: `TestWhereOption::test_field_name_case_sensitive`.
+3. **Case sensitivity of field names.** YAML is case-sensitive. `--where` and `--fields` must match fields exactly as they appear in the frontmatter. `Status=watching` does NOT match `status: watching`. Documented in the `--where` error message and header docstring, no case-insensitive mode. Test: `TestWhereFilter::test_field_name_case_sensitive`.
 4. **Case sensitivity of values.** `--where "status = Watching"` does NOT match `status: watching`. Same rationale. No new test required — falls out of the existing equality path.
 5. **Empty value on equality.** `--where "pr = "` — currently parses as absence (empty). The refined parser must preserve this. Test: existing `test_empty_filter` covers this; verify it still passes.
 6. **Nonexistent field in `--where`.** Already documented and tested (`test_where_on_nonexistent_field`). No change.
@@ -280,7 +283,7 @@ Listed explicitly so the implementation stage has a checklist; most are deferred
 
 7. **Refined acceptance criteria.** DONE. 20 ACs, each naming a specific test case by class and method name. No AC without a test hook.
 
-8. **Test plan.** DONE. ~18 new tests in `tests/test_status_script.py`, organized into three new test classes (`TestWhereOption` additions, `TestFieldsOption`, `TestArchiveOption`) plus one static docstring check (`TestStatusDocstring`). **E2E not needed, confirmed not overruled**, with four-bullet justification: pure tool behavior, existing subprocess-level harness is the right granularity, FO integration is protected by AC19 regression, `--archive` filesystem interaction is bounded to tmpdir `os.path.exists()` assertions.
+8. **Test plan.** DONE. ~23 new tests in `tests/test_status_script.py`: 7 additions to the existing `TestWhereFilter` class, 10 in a new `TestFieldsOption` class, 5 in a new `TestArchiveOption` class, and 1 static docstring check in a new `TestStatusDocstring` class. **E2E not needed, confirmed not overruled**, with four-bullet justification: pure tool behavior, existing subprocess-level harness is the right granularity, FO integration is protected by AC19 regression, `--archive` filesystem interaction is bounded to tmpdir `os.path.exists()` assertions.
 
 9. **Edge-case inventory.** DONE. 20 edge cases enumerated: values with spaces, values with `=`, case sensitivity of field names AND values (separately), empty values, nonexistent fields in both `--where` and `--fields`, conflicting flags, duplicate `--fields` entries, `--all-fields` deduping against defaults and handling empty workflows, long-value truncation, `--archive` on pre-archived fields, `EXDEV` cross-filesystem fallback, symlinks, slug collisions, concurrency, trailing whitespace, dash/underscore field names, empty `--fields` argument.
 
@@ -294,6 +297,24 @@ Listed explicitly so the implementation stage has a checklist; most are deferred
 
 ### Summary
 
-Three design decisions landed: (1) `--where` parser accepts both spaced and unspaced forms for `=` and `!=`, rejects bare field names loudly, works uniformly on custom fields (fix is parser-only, filter layer already generic); (2) `--fields` / `--all-fields` append (never replace) to the default columns, with `--fields` taking an explicit comma-separated list in user order and `--all-fields` taking every non-empty frontmatter key in sorted deduped order, both compose with `--next`, both error with `--boot` and `--set`; (3) `--archive <slug>` stamps `archived:` via the `update_frontmatter()` path and `os.rename()`s into `_archive/`, leaving `completed` alone and not running git. Task 122 is already closed so 123 lands independently, inheriting the insert-if-missing behavior 122 shipped. 20 acceptance criteria, each with a named test hook; ~18 new subprocess-level unit tests; E2E not needed and confirmed not overruled. Terminology directive applied: "fields" used consistently for the CLI mechanism, "column" used only for the visual table layout, and the prior flag name (`--` + `columns`) does not appear in the design sections. One item left explicitly open for the implementation stage: whether to dedupe duplicate `--fields` entries (AC doesn't require it; recommendation is to dedupe silently).
+Three design decisions landed: (1) `--where` parser accepts both spaced and unspaced forms for `=` and `!=`, rejects bare field names loudly, works uniformly on custom fields (fix is parser-only, filter layer already generic); (2) `--fields` / `--all-fields` append (never replace) to the default columns, with `--fields` taking an explicit comma-separated list in user order and `--all-fields` taking every non-empty frontmatter key in sorted deduped order, both compose with `--next`, both error with `--boot` and `--set`; (3) `--archive <slug>` stamps `archived:` via the `update_frontmatter()` path and `os.rename()`s into `_archive/`, leaving `completed` alone and not running git. Task 122 is already closed so 123 lands independently, inheriting the insert-if-missing behavior 122 shipped. 20 acceptance criteria, each with a named test hook; ~23 new subprocess-level unit tests; E2E not needed and confirmed not overruled. Terminology directive applied: "fields" used consistently for the CLI mechanism, "column" used only for the visual table layout, and the prior flag name (`--` + `columns`) does not appear in the design sections. One item left explicitly open for the implementation stage: whether to dedupe duplicate `--fields` entries (AC doesn't require it; recommendation is to dedupe silently).
 
 One flag for the first officer: the original seed says "fix `--where` filter returns zero rows for valid queries" as if the filter were broken. It is not — it is a UX bug where the parser accepts SQL-like syntax that users naturally type, silently misclassifies it, and produces wrong results. The refined ACs name the real behavior (`test_equality_no_spaces`) rather than the reported symptom. The GTM FO's `grep` workaround was correct defense, but the bug is a parser UX issue, not a correctness issue in the filter engine.
+
+### ideation patch — DONE
+
+Post-review polish from the captain + staff reviewer. All six fixes are text-level; no design changes.
+
+1. **Test class name drift for `--where`.** Renamed every `TestWhereOption` reference in ACs 1-5, the test plan harness list, the edge-case test hooks (edge 1 `test_value_with_spaces`, edge 3 `test_field_name_case_sensitive`), and the Stage Report checklist to `TestWhereFilter` (the actual existing class at `tests/test_status_script.py` line 446). New `--where` tests are added **to** the existing class, not a new one.
+
+2. **AC19 regression set.** Rewrote AC19's test hook to reference the actual test classes present in `tests/test_status_script.py`: `TestDefaultStatus` (line 112, with the `--archived` regression at `test_archived_flag_includes_archive` line 193), `TestNextOption` (215), `TestFrontmatterParsing` (416), `TestWhereFilter` (446), `TestBootOption` (611), `TestSetOption` (1077), `TestStatusScriptExecutable` (1307). The previous reference to a nonexistent `TestArchivedOption` is gone.
+
+3. **Test count sub-totals reconciled.** Recounted against the ACs + edge-case hooks: `TestWhereFilter` grows by **7** new tests (not 2), `TestFieldsOption` adds **10**, `TestArchiveOption` adds **5**, `TestStatusDocstring` adds **1**, for **~23 total** (not ~18). Updated the test plan harness list, the "Estimated count" line, checklist item 8, and the Summary paragraph to match.
+
+4. **`--next` + `--fields` touches two printers.** Added a "Two printer functions, same append semantics" paragraph to proposed approach §2 naming `print_status_table()` (lines 222-229, default table fmt `%-6s %-30s %-20s %-30s %-8s %s`) and `print_next_table()` (lines 232-275, distinct fmt `%-6s %-30s %-20s %-20s %s`). The implementation must touch both, and the recommended refactor is a shared append-extras helper rather than duplicated logic.
+
+5. **`--where` parser operator precedence.** Rewrote edge case 1's implementation hint to make the precedence rule explicit: **check for `!=` first; only if absent, check for `=`**. Called out the failure mode — splitting `"worktree !="` on the first `=` would slice inside the `!=` operator, yielding `field="worktree !"` and misclassifying the predicate. This is a precedence rule, not a "first occurrence of either" rule.
+
+6. **`--fields` + `--archived` composition.** Added a bullet to the "Conflicting flags" list in proposed approach §2 stating the combination is allowed and composes additively: `--archived` extends the row set, `--fields` / `--all-fields` extends the column set, both apply to the default table without interaction. No new test required (falls out of the existing scan-then-filter-then-print pipeline).
+
+**Commit:** `ideation-patch: status-tool-as-workflow-op-cli — reconcile test class names, test counts, parser precedence, fields+archived composition`. Frontmatter preserved. No files outside `docs/plans/status-tool-as-workflow-op-cli.md` touched.
