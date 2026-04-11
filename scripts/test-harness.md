@@ -106,7 +106,7 @@ Verify commission does NOT generate a workflow-local status script or agents:
 The status viewer ships with the plugin at `skills/commission/bin/status`:
 
 ```bash
-python3 $REPO_ROOT/skills/commission/bin/status --workflow-dir v0-test-1
+$REPO_ROOT/skills/commission/bin/status --workflow-dir v0-test-1
 ```
 
 Expected output: a table with header row showing ID, SLUG, STATUS, TITLE, SCORE, SOURCE columns, followed by three data rows. All three entities should show `status: ideation`.
@@ -185,7 +185,7 @@ Any match containing `{variable_name}` style text is a failure. Generated files 
 ## 4. What Good Looks Like
 
 - The generated README is complete enough to follow the workflow without the plugin installed
-- `python3 $REPO_ROOT/skills/commission/bin/status --workflow-dir v0-test-1` works on first run with no setup
+- `$REPO_ROOT/skills/commission/bin/status --workflow-dir v0-test-1` works on first run with no setup
 - Agents ship with the plugin — commission does not generate agent files
 - Entity frontmatter is valid YAML and stays valid through all transitions
 - No manual intervention is needed from commission through ensign completion
