@@ -71,12 +71,16 @@ For routed advancement or `feedback-to` follow-up:
 - if the completed worker is still addressable and the shared reuse conditions pass, deliver the next assignment through `send_input` on that existing worker handle
 - use `send_input` for same-thread advancement reuse and for feedback routed back to a completed implementation worker
 - do not spawn a replacement worker when reuse is valid
+- after `send_input`, treat that reused worker as active again rather than merely still addressable
+- if the reused worker's result is on the current critical path, call `wait_agent` on that same worker handle before proceeding
+- do not treat critical-path `send_input` as fire-and-forget background work
 
 Explicit shutdown is required when a worker is no longer needed:
 - after a fresh replacement takes over and the old worker will not receive later routing
 - after a routed follow-up is delivered and another kept-alive worker is no longer needed
 - when reuse is blocked and the old completed worker will not be reused
 - when the entity reaches a terminal state
+- after the reused cycle completes and no later advancement, feedback, or gate handling is expected for that worker
 
 On the Codex path, "no longer needed" means no further advancement, feedback, or gate-related routing is expected for that worker. Do not leave shutdown implicit; call the runtime shutdown path explicitly before stopping.
 
@@ -97,7 +101,7 @@ wait_agent(...)
 ```
 
 Always preserve the logical packaged id in summaries and use only `worker_key` in branch/worktree/session names.
-When reusing a completed worker, the equivalent pattern is `send_input(<existing_handle>, message="<next assignment>")` followed by `wait_agent(...)` or bounded stop logic as needed.
+When reusing a completed worker, the equivalent pattern is `send_input(<existing_handle>, message="<next assignment>")` followed by `wait_agent(...)` on that same handle when the reused result is part of the current critical path, then explicit shutdown once the reused cycle is complete and the worker is no longer needed.
 
 ## Codex Worker Assignment Fields
 

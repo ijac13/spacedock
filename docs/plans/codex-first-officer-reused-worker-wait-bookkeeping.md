@@ -78,3 +78,22 @@ This stays within the existing architecture. It does not require a new workflow 
 ### Summary
 
 This ideation pass turns the seed into a bounded runtime spec for Codex reused-worker bookkeeping. The task now focuses on making `send_input` imply an active-again worker state, ensuring critical-path follow-up uses `wait_agent`, and proving the whole cycle with live Codex E2E coverage.
+
+## Stage Report: implementation
+
+- [x] Read the entity spec and kept the implementation bounded to the listed surfaces.
+  Only `scripts/test_lib.py`, `skills/first-officer/references/codex-first-officer-runtime.md`, and the named Codex test files were changed.
+- [x] Implemented the runtime-contract and helper wording changes for active-again reused workers and critical-path `wait_agent` behavior.
+  The Codex runtime and invocation helper now state that `send_input` makes the reused worker active again, requires `wait_agent` on the same handle for critical-path results, and requires explicit shutdown after the reused cycle.
+- [x] Updated live Codex E2E coverage for reused-worker follow-up, active-again bookkeeping, explicit wait behavior, and explicit shutdown.
+  `tests/test_codex_packaged_agent_e2e.py` now asserts active-again wording, critical-path wait evidence, no replacement dispatch on reuse, and shutdown after the reused cycle.
+- [ ] FAIL: Ran the relevant verification and recorded concrete outcomes.
+  `uv run --with pytest python -m pytest tests/test_agent_content.py -k "active_again_wait or reuse_and_shutdown_wording"` and `uv run --with pytest python -m pytest tests/test_codex_packaged_agent_ids.py -k exec_harness_invokes_first_officer_skill_by_name` passed; `uv run --with pytest python tests/test_codex_packaged_agent_e2e.py` stalled with the FO log stuck at the first worker `wait` in `/var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmp2o0gqhyr/codex-fo-log.txt`.
+- [x] Appended a `## Stage Report: implementation` section to the entity file with every checklist item represented as DONE, SKIPPED, or FAILED.
+  This report is appended at the end of the entity file in the assigned worktree copy.
+- [x] Committed the work in the worktree before reporting completion.
+  The implementation commit includes the runtime wording, helper wording, test updates, and this stage report.
+
+### Summary
+
+The Codex first-officer runtime and helper prompt now treat reused `send_input` workers as active again, require same-handle waiting on critical-path reuse, and keep explicit shutdown semantics after the reused cycle. Static verification for the new contract passed, while the live Codex packaged-agent E2E coverage was updated but the run itself stalled at the first worker wait; that concrete outcome is recorded above.

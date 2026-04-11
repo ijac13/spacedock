@@ -112,8 +112,12 @@ def build_codex_first_officer_invocation_prompt(
         Keep a human-readable worker label in status updates and routed messages using an entity-stage-display form such as
         `001-impl/Herschel` or `001-validation/Herschel`.
         If a completed worker is still addressable and reuse conditions pass, reuse it through `send_input` on the existing handle.
+        After `send_input`, treat that reused worker as active again rather than merely reachable.
         Route `feedback-to` follow-up and same-thread advancement through `send_input` when reuse is valid.
+        If the reused worker's result is on the current critical path, call `wait_agent(...)` on that same worker handle before proceeding.
+        Do not treat critical-path reused follow-up as fire-and-forget background work.
         If a worker will not receive later advancement, feedback, or gate-related routing, shut it down explicitly before stopping.
+        After a reused cycle completes, explicitly shut it down if no further routing is expected for that worker.
         For bounded single-entity runs, treat the first completed worker summary as sufficient evidence for your final response unless it is missing the requested verdict or outcome.
         After `wait_agent(...)` returns the needed verdict or outcome, do not reread entity files, rerun `status`, or continue the loop. Respond once and stop immediately.
         Do not load reference docs unless you hit a real blocker.

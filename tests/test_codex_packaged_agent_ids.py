@@ -53,6 +53,10 @@ def test_exec_harness_invokes_first_officer_skill_by_name():
     assert "Never collapse it to bare `ensign`" in prompt
     assert "role_asset_name: ensign" in prompt
     assert "{worker_key}/{slug}" in prompt
+    assert "active again" in prompt
+    assert "critical path" in prompt
+    assert "wait_agent" in prompt
+    assert "shut it down explicitly" in prompt
 
 
 def test_exec_harness_can_target_a_custom_logical_agent_id():

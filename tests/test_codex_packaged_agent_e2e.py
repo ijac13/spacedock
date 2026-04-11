@@ -106,8 +106,25 @@ def main():
         bool(re.search(r"send_input", fo_text, re.IGNORECASE)),
     )
     t.check(
+        "reused worker is described as active again after follow-up",
+        bool(re.search(r"active again", fo_text, re.IGNORECASE)),
+    )
+    t.check(
+        "critical-path reused follow-up is explicitly awaited with wait_agent",
+        bool(re.search(r"critical path", fo_text, re.IGNORECASE))
+        and bool(re.search(r"wait_agent|wait", fo_text, re.IGNORECASE)),
+    )
+    t.check(
+        "reused-worker follow-up does not spawn a replacement worker",
+        not bool(re.search(r"replacement dispatch|spawning a replacement|spawn a replacement", fo_text, re.IGNORECASE)),
+    )
+    t.check(
         "Codex path explicitly shut down a no-longer-needed worker",
         bool(re.search(r"shutdown", fo_text, re.IGNORECASE)),
+    )
+    t.check(
+        "shutdown happens only after the reused cycle completes",
+        bool(re.search(r"reused cycle.*shutdown|follow-up.*shutdown|shutdown.*no longer needed", fo_text, re.IGNORECASE)),
     )
     t.check(
         "Codex path reports a human-readable worker label",

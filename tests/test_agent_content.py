@@ -135,6 +135,15 @@ def test_reuse_and_shutdown_wording_stays_aligned_between_shared_core_and_codex_
     assert re.search(r"explicitly shut down|shutdown.*no longer needed", runtime, re.IGNORECASE)
 
 
+def test_codex_runtime_docs_require_active_again_wait_and_shutdown_for_reused_workers():
+    text = read_text("skills/first-officer/references/codex-first-officer-runtime.md")
+
+    assert re.search(r"send_input.*active again|active again.*send_input", text, re.IGNORECASE | re.DOTALL)
+    assert re.search(r"critical path.*wait_agent|wait_agent.*critical path", text, re.IGNORECASE | re.DOTALL)
+    assert re.search(r"reused worker.*wait_agent|wait_agent.*same worker handle", text, re.IGNORECASE | re.DOTALL)
+    assert re.search(r"reused cycle.*shut.*down|shut.*down.*reused cycle", text, re.IGNORECASE | re.DOTALL)
+
+
 def test_codex_runtime_docs_define_human_readable_worker_labels():
     text = read_text("skills/first-officer/references/codex-first-officer-runtime.md")
 
