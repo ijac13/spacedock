@@ -607,6 +607,144 @@ class TestWhereFilter(unittest.TestCase):
             lines2 = result2.stdout.strip().split('\n')[2:]
             self.assertEqual(len(lines2), 1)
 
+    # AC1: --where accepts unspaced equality
+    def test_equality_no_spaces(self):
+        """--where 'status=backlog' matches the same rows as 'status = backlog'."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'in-backlog.md': entity('001', 'Backlog Task', 'backlog', '0.80'),
+                'in-ideation.md': entity('002', 'Ideation Task', 'ideation', '0.90'),
+            })
+            spaced = run_status(tmpdir, '--where', 'status = backlog', script_path=self.script_path)
+            unspaced = run_status(tmpdir, '--where', 'status=backlog', script_path=self.script_path)
+            self.assertEqual(spaced.returncode, 0, spaced.stderr)
+            self.assertEqual(unspaced.returncode, 0, unspaced.stderr)
+            self.assertEqual(spaced.stdout, unspaced.stdout)
+            self.assertIn('in-backlog', unspaced.stdout)
+            self.assertNotIn('in-ideation', unspaced.stdout)
+
+    # AC1: same on a custom field
+    def test_equality_no_spaces_custom_field(self):
+        """Unspaced equality works on custom frontmatter fields (e.g. last-outbound-at)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            custom_a = textwrap.dedent("""\
+                ---
+                id: 001
+                title: Outreach A
+                status: backlog
+                source:
+                started:
+                completed:
+                verdict:
+                score: 0.80
+                worktree:
+                pr:
+                last-outbound-at: 2026-04-01
+                ---
+
+                Description.
+                """)
+            custom_b = textwrap.dedent("""\
+                ---
+                id: 002
+                title: Outreach B
+                status: backlog
+                source:
+                started:
+                completed:
+                verdict:
+                score: 0.70
+                worktree:
+                pr:
+                last-outbound-at: 2026-04-02
+                ---
+
+                Description.
+                """)
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'outreach-a.md': custom_a,
+                'outreach-b.md': custom_b,
+            })
+            spaced = run_status(tmpdir, '--where', 'last-outbound-at = 2026-04-01',
+                                script_path=self.script_path)
+            unspaced = run_status(tmpdir, '--where', 'last-outbound-at=2026-04-01',
+                                  script_path=self.script_path)
+            self.assertEqual(spaced.returncode, 0, spaced.stderr)
+            self.assertEqual(unspaced.returncode, 0, unspaced.stderr)
+            self.assertEqual(spaced.stdout, unspaced.stdout)
+            self.assertIn('outreach-a', unspaced.stdout)
+            self.assertNotIn('outreach-b', unspaced.stdout)
+
+    # AC2: --where accepts unspaced negation
+    def test_negation_no_spaces(self):
+        """--where 'status!=done' matches the same rows as 'status != done'."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'active.md': entity('001', 'Active', 'backlog', '0.80'),
+                'finished.md': entity('002', 'Finished', 'done', '0.90'),
+            })
+            spaced = run_status(tmpdir, '--where', 'status != done', script_path=self.script_path)
+            unspaced = run_status(tmpdir, '--where', 'status!=done', script_path=self.script_path)
+            self.assertEqual(spaced.returncode, 0, spaced.stderr)
+            self.assertEqual(unspaced.returncode, 0, unspaced.stderr)
+            self.assertEqual(spaced.stdout, unspaced.stdout)
+            self.assertIn('active', unspaced.stdout)
+            self.assertNotIn('finished', unspaced.stdout)
+
+    # AC4: bare field name is rejected with a clear error listing the four valid forms
+    def test_bare_field_errors(self):
+        """--where 'completed' exits non-zero and error names the four valid forms."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--where', 'completed', script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('field = value', result.stderr)
+            self.assertIn('field != value', result.stderr)
+            self.assertIn("field !=", result.stderr)
+            self.assertIn("field =", result.stderr)
+
+    # AC5: unknown operators are rejected
+    def test_unknown_operator_errors(self):
+        """--where 'status ~ watching' exits non-zero with an error."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'watching', '0.80'),
+            })
+            result = run_status(tmpdir, '--where', 'status ~ watching', script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('--where', result.stderr)
+
+    # Edge case 1: values with spaces parse correctly
+    def test_value_with_spaces(self):
+        """--where 'title = My Task' matches a title containing spaces."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'a.md': entity('001', 'My Task', 'backlog', '0.80'),
+                'b.md': entity('002', 'Other', 'backlog', '0.70'),
+            })
+            result = run_status(tmpdir, '--where', 'title = My Task', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')[2:]
+            self.assertEqual(len(lines), 1)
+            self.assertIn('My Task', lines[0])
+            self.assertNotIn('Other', result.stdout.split('\n', 2)[-1])
+
+    # Edge case 3: field names are case-sensitive
+    def test_field_name_case_sensitive(self):
+        """--where 'Status = backlog' does NOT match 'status: backlog'."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task.md': entity('001', 'Task', 'backlog', '0.80'),
+            })
+            # Uppercase field name should not match a lowercase frontmatter key.
+            # Field lookup returns empty, so the equality filter yields zero rows.
+            result = run_status(tmpdir, '--where', 'Status = backlog', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')
+            self.assertEqual(len(lines), 2)  # header + separator only
+
 
 class TestBootOption(unittest.TestCase):
     """Test --boot startup data output."""
@@ -1313,6 +1451,394 @@ class TestStatusScriptExecutable(unittest.TestCase):
             os.access(TEMPLATE_PATH, os.X_OK),
             f"{TEMPLATE_PATH} is not executable",
         )
+
+
+def entity_with_custom(id, title, status, score='', **custom):
+    """Generate entity frontmatter with arbitrary extra fields."""
+    lines = [
+        '---',
+        f'id: {id}',
+        f'title: {title}',
+        f'status: {status}',
+        'source:',
+        'started:',
+        'completed:',
+        'verdict:',
+        f'score: {score}',
+        'worktree:',
+        'pr:',
+    ]
+    for key, val in custom.items():
+        lines.append(f'{key}: {val}')
+    lines.append('---')
+    lines.append('')
+    lines.append('Description.')
+    lines.append('')
+    return '\n'.join(lines)
+
+
+class TestFieldsOption(unittest.TestCase):
+    """Test --fields and --all-fields for appending extra frontmatter columns."""
+
+    def setUp(self):
+        self._script_dir = tempfile.mkdtemp()
+        self.script_path = build_status_script(self._script_dir)
+
+    def tearDown(self):
+        os.unlink(self.script_path)
+        os.rmdir(self._script_dir)
+
+    def _header(self, stdout):
+        return stdout.strip().split('\n')[0]
+
+    # AC6: --fields appends requested fields in user-specified order
+    def test_fields_appends_in_order(self):
+        """--fields pr,worktree adds PR and WORKTREE after SOURCE, in that order."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'a.md': entity('001', 'A', 'backlog', '0.80', pr='#10', worktree='.worktrees/a'),
+                'b.md': entity('002', 'B', 'backlog', '0.70'),
+            })
+            result = run_status(tmpdir, '--fields', 'pr,worktree', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            header = self._header(result.stdout)
+            # Default columns must still be present in order
+            self.assertIn('ID', header)
+            self.assertIn('SLUG', header)
+            self.assertIn('STATUS', header)
+            self.assertIn('TITLE', header)
+            self.assertIn('SCORE', header)
+            self.assertIn('SOURCE', header)
+            # Extras are after SOURCE in the requested order
+            source_idx = header.index('SOURCE')
+            pr_idx = header.index('PR', source_idx)
+            wt_idx = header.index('WORKTREE', source_idx)
+            self.assertGreater(pr_idx, source_idx)
+            self.assertGreater(wt_idx, pr_idx)
+            # Values appear in the data rows
+            self.assertIn('#10', result.stdout)
+            self.assertIn('.worktrees/a', result.stdout)
+
+    # AC6: missing fields render as empty in extra columns
+    def test_fields_missing_renders_empty(self):
+        """--fields pr on an entity without a PR still renders a column, empty for that row."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'has.md': entity('001', 'Has PR', 'backlog', '0.80', pr='#10'),
+                'none.md': entity('002', 'No PR', 'backlog', '0.70'),
+            })
+            result = run_status(tmpdir, '--fields', 'pr', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')[2:]
+            has_line = [l for l in lines if 'has' in l][0]
+            none_line = [l for l in lines if 'none' in l][0]
+            self.assertIn('#10', has_line)
+            # The 'none' row must not contain '#10' and must not inherit another
+            # row's PR value.
+            self.assertNotIn('#10', none_line)
+
+    # AC7: --fields works on custom frontmatter fields
+    def test_fields_custom_field_populated(self):
+        """--fields last-outbound-at includes the custom field as a populated column."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'a.md': entity_with_custom('001', 'A', 'backlog', '0.80',
+                                           **{'last-outbound-at': '2026-04-01'}),
+                'b.md': entity_with_custom('002', 'B', 'backlog', '0.70',
+                                           **{'last-outbound-at': '2026-04-02'}),
+            })
+            result = run_status(tmpdir, '--fields', 'last-outbound-at',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            header = self._header(result.stdout)
+            self.assertIn('LAST-OUTBOUND-AT', header)
+            self.assertIn('2026-04-01', result.stdout)
+            self.assertIn('2026-04-02', result.stdout)
+
+    # AC8: --fields on a nonexistent field does NOT error
+    def test_fields_nonexistent_no_error(self):
+        """--fields made-up-field adds an empty column; exits 0."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'a.md': entity('001', 'A', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--fields', 'made-up-field',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            header = self._header(result.stdout)
+            self.assertIn('MADE-UP-FIELD', header)
+
+    # AC9: --all-fields appends every non-empty custom field, sorted, deduped vs defaults
+    def test_all_fields_sorted_dedup(self):
+        """--all-fields collects custom fields across all entities in sorted order."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'a.md': entity_with_custom('001', 'A', 'backlog', '0.80',
+                                           **{'last-outbound-at': '2026-04-01'}),
+                'b.md': entity_with_custom('002', 'B', 'backlog', '0.70',
+                                           **{'nudge-count': '2'}),
+            })
+            result = run_status(tmpdir, '--all-fields', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            header = self._header(result.stdout)
+            # Default columns present
+            for col in ('ID', 'SLUG', 'STATUS', 'TITLE', 'SCORE', 'SOURCE'):
+                self.assertIn(col, header)
+            # Custom fields present and in sorted order (LAST-OUTBOUND-AT < NUDGE-COUNT)
+            source_idx = header.index('SOURCE')
+            last_idx = header.index('LAST-OUTBOUND-AT', source_idx)
+            nudge_idx = header.index('NUDGE-COUNT', source_idx)
+            self.assertGreater(last_idx, source_idx)
+            self.assertLess(last_idx, nudge_idx)
+            # Default columns must not be duplicated after the default block
+            # (check by counting occurrences of 'STATUS')
+            self.assertEqual(header.count('STATUS'), 1)
+            self.assertEqual(header.count('TITLE'), 1)
+
+    # AC10: --fields and --all-fields are mutually exclusive
+    def test_fields_and_all_fields_conflict(self):
+        """Passing both --fields and --all-fields exits non-zero with an error."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'a.md': entity('001', 'A', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--fields', 'pr', '--all-fields',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('mutually exclusive', result.stderr)
+
+    # AC11: --fields composes with --next
+    def test_fields_composes_with_next(self):
+        """--next --fields pr appends the pr column to the next-table output."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'ready.md': entity('001', 'Ready', 'backlog', '0.80', pr='#42'),
+            })
+            result = run_status(tmpdir, '--next', '--fields', 'pr',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            header = self._header(result.stdout)
+            # Default --next columns still present
+            self.assertIn('CURRENT', header)
+            self.assertIn('NEXT', header)
+            self.assertIn('WORKTREE', header)
+            # Extra PR column appended
+            self.assertIn('PR', header)
+            # Row contains the pr value
+            self.assertIn('#42', result.stdout)
+
+    # AC12: --fields with --boot errors
+    def test_fields_incompatible_with_boot(self):
+        """--boot --fields exits non-zero."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'a.md': entity('001', 'A', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--boot', '--fields', 'pr',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('--boot', result.stderr)
+
+    # AC12: --all-fields with --boot errors
+    def test_all_fields_incompatible_with_boot(self):
+        """--boot --all-fields exits non-zero."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'a.md': entity('001', 'A', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--boot', '--all-fields',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('--boot', result.stderr)
+
+    # AC13: --fields with --set errors
+    def test_fields_incompatible_with_set(self):
+        """--set ... --fields exits non-zero."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'a.md': entity('001', 'A', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--set', 'a', 'status=ideation',
+                                '--fields', 'pr', script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('--set', result.stderr)
+
+
+class TestArchiveOption(unittest.TestCase):
+    """Test --archive subcommand."""
+
+    def setUp(self):
+        self._script_dir = tempfile.mkdtemp()
+        self.script_path = build_status_script(self._script_dir)
+
+    def tearDown(self):
+        os.unlink(self.script_path)
+        os.rmdir(self._script_dir)
+
+    def _read_frontmatter(self, filepath):
+        fields = {}
+        in_fm = False
+        with open(filepath, 'r') as f:
+            for line in f:
+                line = line.rstrip('\n')
+                if line == '---':
+                    if in_fm:
+                        break
+                    in_fm = True
+                    continue
+                if in_fm and ':' in line:
+                    key, _, val = line.partition(':')
+                    fields[key.strip()] = val.strip()
+        return fields
+
+    # AC14: --archive moves the file and stamps archived:
+    def test_archive_moves_and_stamps(self):
+        """--archive moves {slug}.md to _archive/ and inserts an ISO-8601 archived: stamp."""
+        import re
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'done', '0.80'),
+            })
+            source = os.path.join(tmpdir, 'task-a.md')
+            dest = os.path.join(tmpdir, '_archive', 'task-a.md')
+            self.assertTrue(os.path.exists(source))
+            self.assertFalse(os.path.exists(dest))
+            result = run_status(tmpdir, '--archive', 'task-a', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(os.path.exists(source))
+            self.assertTrue(os.path.exists(dest))
+            self.assertTrue(os.path.isdir(os.path.join(tmpdir, '_archive')))
+            fields = self._read_frontmatter(dest)
+            self.assertIn('archived', fields)
+            self.assertRegex(fields['archived'], r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
+            self.assertIn('task-a', result.stdout)
+
+    # AC15: --archive errors on missing source
+    def test_archive_missing_source_errors(self):
+        """--archive on a nonexistent slug exits non-zero with 'entity not found'."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES)
+            result = run_status(tmpdir, '--archive', 'no-such-slug',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('entity not found', result.stderr)
+
+    # AC16: --archive errors if the destination already exists
+    def test_archive_existing_destination_errors(self):
+        """--archive refuses to clobber an existing file in _archive/."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(
+                tmpdir,
+                README_WITH_STAGES,
+                entities={'task-a.md': entity('001', 'Task A', 'done', '0.80')},
+                archived={'task-a.md': entity('001', 'Old Task A', 'done', '0.90')},
+            )
+            source = os.path.join(tmpdir, 'task-a.md')
+            dest = os.path.join(tmpdir, '_archive', 'task-a.md')
+            with open(source) as f:
+                source_before = f.read()
+            with open(dest) as f:
+                dest_before = f.read()
+            result = run_status(tmpdir, '--archive', 'task-a',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('already archived', result.stderr)
+            # Both files still present, unchanged
+            self.assertTrue(os.path.exists(source))
+            self.assertTrue(os.path.exists(dest))
+            with open(source) as f:
+                self.assertEqual(f.read(), source_before)
+            with open(dest) as f:
+                self.assertEqual(f.read(), dest_before)
+
+    # AC17: --archive does not touch `completed`
+    def test_archive_preserves_completed(self):
+        """Entity with a completed value keeps it, and one without does not gain one."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            prestamped = textwrap.dedent("""\
+                ---
+                id: 001
+                title: Task A
+                status: done
+                source:
+                started:
+                completed: 2026-01-01T00:00:00Z
+                verdict:
+                score: 0.80
+                worktree:
+                pr:
+                ---
+
+                Body.
+                """)
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': prestamped,
+                'task-b.md': entity('002', 'Task B', 'backlog', '0.70'),
+            })
+            r1 = run_status(tmpdir, '--archive', 'task-a', script_path=self.script_path)
+            self.assertEqual(r1.returncode, 0, r1.stderr)
+            fields_a = self._read_frontmatter(os.path.join(tmpdir, '_archive', 'task-a.md'))
+            self.assertEqual(fields_a['completed'], '2026-01-01T00:00:00Z')
+
+            r2 = run_status(tmpdir, '--archive', 'task-b', script_path=self.script_path)
+            self.assertEqual(r2.returncode, 0, r2.stderr)
+            fields_b = self._read_frontmatter(os.path.join(tmpdir, '_archive', 'task-b.md'))
+            # `completed` is an existing (but empty) frontmatter field in the
+            # entity() helper. The tool must not fill it in.
+            self.assertEqual(fields_b.get('completed', ''), '')
+
+    # AC18: --archive does not run git — changes are left pending
+    def test_archive_does_not_commit(self):
+        """git status reports the move as uncommitted after --archive."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'done', '0.80'),
+            })
+            # Initialize a local git repo in the tmpdir
+            subprocess.run(['git', 'init', '-q'], cwd=tmpdir, check=True)
+            subprocess.run(['git', 'config', 'user.email', 'test@example.com'], cwd=tmpdir, check=True)
+            subprocess.run(['git', 'config', 'user.name', 'Test'], cwd=tmpdir, check=True)
+            subprocess.run(['git', 'add', '.'], cwd=tmpdir, check=True)
+            subprocess.run(['git', 'commit', '-q', '-m', 'initial'], cwd=tmpdir, check=True)
+
+            result = run_status(tmpdir, '--archive', 'task-a', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            porcelain = subprocess.run(
+                ['git', 'status', '--porcelain'], cwd=tmpdir,
+                capture_output=True, text=True, check=True,
+            )
+            # Expect pending changes — the tool must not have committed for us.
+            self.assertNotEqual(porcelain.stdout.strip(), '',
+                                f'expected pending changes, got: {porcelain.stdout!r}')
+            # Confirm we did not run into a fresh commit
+            log = subprocess.run(
+                ['git', 'log', '--oneline'], cwd=tmpdir,
+                capture_output=True, text=True, check=True,
+            )
+            self.assertEqual(len(log.stdout.strip().split('\n')), 1,
+                             f'expected single initial commit, got: {log.stdout!r}')
+
+
+class TestStatusDocstring(unittest.TestCase):
+    """Static check: the status script header must document the new flags."""
+
+    def test_docstring_mentions_new_flags(self):
+        """Script header names --where (with or without spaces), --fields, --all-fields, --archive."""
+        with open(TEMPLATE_PATH, 'r') as f:
+            # Read header only — stop at the first non-comment, non-shebang line.
+            header_lines = []
+            for line in f:
+                if line.startswith('#') or line.strip() == '':
+                    header_lines.append(line)
+                else:
+                    break
+            header = ''.join(header_lines)
+        self.assertIn('--where', header)
+        self.assertIn('--fields', header)
+        self.assertIn('--all-fields', header)
+        self.assertIn('--archive', header)
+        self.assertIn('with or without spaces', header)
 
 
 if __name__ == '__main__':
