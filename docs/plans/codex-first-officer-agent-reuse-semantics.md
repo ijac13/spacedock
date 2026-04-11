@@ -141,3 +141,24 @@ Test coverage was kept on the bounded surfaces from the approved ideation. Stati
 ### Summary
 
 Task 130 now tells the truth about reusable completed Codex workers: reuse depends on an addressable live handle plus the shared reuse conditions, routed follow-up goes through `send_input` when reuse is valid, and workers are explicitly closed when they are no longer needed. Validation for this task is intentionally bounded to shared static coverage and the live Codex packaged-worker path, with Claude-specific runtime coverage deferred to separate work.
+
+## Stage Report: validation
+
+- [x] Read the entity body, including acceptance criteria, implementation summary, and bounded validation scope.
+  Verified this stage against the entity's Acceptance Criteria, Test Plan, and Implementation Summary before reviewing code or tests.
+- [x] Inspected the actual implementation diff and confirmed scope stayed bounded to the intended shared-core/runtime/test surfaces.
+  `git diff --stat HEAD~1..HEAD` showed changes only in `skills/first-officer/references/*.md`, `scripts/test_lib.py`, `tests/test_agent_content.py`, `tests/test_codex_packaged_agent_e2e.py`, plus this entity file.
+- [x] Ran the applicable required tests for this task and recorded concrete outcomes.
+  Passed: `uv run --with pytest python -m pytest tests/test_agent_content.py` (27 passed, 1 collection warning) and `uv run tests/test_codex_packaged_agent_e2e.py` (16 passed, 0 failed); Claude-specific/runtime-specific tests were intentionally not run because they are out of scope for task 130.
+- [x] Verified each acceptance criterion with evidence and marked each one PASS.
+  AC1 PASS: shared core now requires a completed worker to be both addressable and reuse-eligible at `skills/first-officer/references/first-officer-shared-core.md:95-101`; AC2 PASS: Codex runtime now requires routed reuse via `send_input` and explicit shutdown at `skills/first-officer/references/codex-first-officer-runtime.md:70-78`; AC3 PASS: live Codex E2E passed the `send_input` reuse check in `tests/test_codex_packaged_agent_e2e.py:104-107`; AC4 PASS: the same live E2E passed the explicit shutdown check at `tests/test_codex_packaged_agent_e2e.py:108-110`; AC5 PASS: worker-label contract is covered in runtime docs and tests at `skills/first-officer/references/codex-first-officer-runtime.md:38`, `tests/test_agent_content.py:138-143`, and `tests/test_codex_packaged_agent_e2e.py:111-114`; AC6 PASS: the bounded static and live Codex regression commands both passed in full.
+- [x] Confirmed the live Codex exercise covers both completed-worker reuse via `send_input` and explicit shutdown semantics.
+  The passing E2E run asserted both `completed implementation worker received routed follow-up through send_input` and `Codex path explicitly shut down a no-longer-needed worker`.
+- [x] Appended a complete validation stage report with DONE/SKIPPED/FAILED coverage and a recommendation.
+  This report covers all seven checklist items; recommendation: PASSED.
+- [x] Committed the validation report before signaling completion.
+  Validation commit created in the assigned worktree after appending this report.
+
+### Summary
+
+Validation passed on the bounded task-130 surface. The implementation stayed inside the intended shared-core/runtime/test files, the acceptance criteria are all satisfied with direct file and test evidence, and the required shared static plus live Codex-path regressions both passed. Recommendation: PASSED.
