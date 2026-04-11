@@ -241,3 +241,24 @@ This cycle does not change FO runtime behavior or the live regression harness. I
 ### Summary
 
 The environment still cannot produce a true live Haiku pass on demand, but the task now distinguishes that external provider limitation from the original FO indefinite-wait bug. With the acceptance criteria revised to require a bounded terminal result rather than a mandatory provider-backed live pass, AC3 and AC5 are now actionable and satisfiable in this worktree.
+
+## Stage Report: validation (cycle 3)
+
+- [x] Read the entity body, especially the acceptance criteria, feedback cycles, and latest implementation addendum.
+  Re-read the current task body through `implementation (cycle 3)`, including the cycle-3 acceptance/test-plan addenda that changed AC3 and AC5 to allow a bounded terminal result.
+- [x] Inspect the actual diff/changed files in the worktree and verify scope stayed bounded.
+  Task-owned commits from `827f897..119547e` touch only `skills/first-officer/references/claude-first-officer-runtime.md`, `tests/test_agent_content.py`, `tests/test_dispatch_completion_signal.py`, and this entity file, although the branch also carries unrelated plan-file drift versus `origin/main`.
+- [x] Run the applicable tests and report concrete outcomes.
+  `uv run --with pytest python -m pytest tests/test_agent_content.py` passed (`25 passed`), `uv run --with pytest python -m pytest tests/test_claude_team.py` passed (`20 passed`), and `uv run tests/test_dispatch_completion_signal.py --model haiku` completed as `RESULT: SKIP` with `live Claude runtime unavailable before FO dispatch` after the 30-second preflight.
+- [x] Verify each current acceptance criterion with evidence and state PASS/FAIL per criterion.
+  AC1 PASS: `skills/first-officer/references/claude-first-officer-runtime.md:53,114` explicitly says the FO keeps waiting for an explicit completion message; AC2 PASS: the same lines say idle notifications are normal and not a teardown reason; AC3 PASS under the cycle-3 addendum because the live regression reached a bounded terminal `RESULT: SKIP` with an explicit provider-unavailable reason; AC4 PASS: task-owned code changes stayed off task 115's worker template and telemetry/watchdog surfaces; AC5 PASS under the cycle-3 addendum because the related suites passed and the dispatch-completion regression terminated with a bounded result instead of hanging.
+- [ ] FAIL: Explicitly assess whether the cycle-3 criteria are coherent and actually satisfied by the current branch state.
+  The cycle-3 addendum is coherent for the bounded Haiku evidence it describes and that portion is satisfied, but it is incomplete against this validation assignment because the branch does not contain the deterministic stale task-129 assertion you called out in `tests/test_agent_content.py` (`rg -n "task-129|stale" tests/test_agent_content.py` returned no matches).
+- [x] Append a complete `## Stage Report: validation` with DONE, SKIPPED, or FAILED coverage for each checklist item and a PASSED/REJECTED recommendation.
+  This `validation (cycle 3)` section covers all checklist items and recommends `REJECTED` because the branch still lacks the deterministic `task-129`/stale assertion required by the current validation focus.
+- [x] Commit the validation report before reporting completion.
+  This report is committed in `3330038`.
+
+### Summary
+
+Under the revised cycle-3 acceptance criteria in the entity body, the bounded Haiku evidence path now passes: the static suites are green and the live regression finishes with an explicit provider-unavailable `RESULT: SKIP` instead of hanging. The branch is still not acceptable for this assignment because the current validation focus also requires a deterministic stale task-129 assertion in `tests/test_agent_content.py`, and that assertion is absent from the current branch state.
