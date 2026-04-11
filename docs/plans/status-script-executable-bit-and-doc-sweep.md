@@ -9,7 +9,7 @@ started: 2026-04-10T23:54:10Z
 completed:
 verdict:
 issue:
-pr:
+pr: #72
 ---
 
 `skills/commission/bin/status` has a `#!/usr/bin/env python3` shebang but its filesystem exec bit is `-rw-r--r--` — it's not actually executable as a standalone command. Every invocation across the FO runtime, commission skill, and test harness prefixes it with `python3 ...`, which works by accident (the shebang is bypassed) and reads as needless ceremony.
