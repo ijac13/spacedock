@@ -12,40 +12,100 @@ issue:
 pr:
 ---
 
-During validation of task 115, the validator ensign observed a flake in `tests/test_dispatch_completion_signal.py` when run on the haiku model: run 1 failed, run 2 passed cleanly. Investigation showed the failure is **not** caused by the 115 fix but by an independent FO behavior issue.
+During validation of task 115, the validator ensign observed a flake in `tests/test_dispatch_completion_signal.py` on the haiku model: run 1 failed, run 2 passed cleanly. The failure is independent of task 115's completion-signal template fix. Task 115 ensured the dispatched worker was instructed to send a completion message; task 117 is about the FO deciding to stop waiting before that message arrives.
 
-## What was observed
+## Problem Statement
 
-- **Run 1 (FAILED):** wallclock 72s, FO exited cleanly (exit 0), the dispatched ensign's prompt did carry the `SendMessage(to="team-lead", ...)` completion-signal instruction (verified via `agent-prompts.txt`), but at event ~65 in `fo-log.jsonl` the FO tore down the team without waiting for the ensign's SendMessage. The entity remained at `status: work`. The ensign had already written its deliverable to the worktree before being killed.
-- **Run 2 (PASSED):** wallclock 260s, exit 0, all 5 checks green, entity archived without manual captain intervention.
+The first officer sometimes tears down a dispatched team too early on haiku, even when the worker prompt already contains the completion-signal instruction and the runtime guardrail says to ignore idle notifications. In the failing run, the FO entered a wait posture, executed a few Bash/Read cycles, and then shut the team down before the ensign's `SendMessage(to="team-lead", ...)` completion signal arrived.
 
-## Why this matters
+That makes this a FO-side behavioral reliability issue, not a worker-template issue. The symptom only shows up in the nested haiku harness; the same workflow passed on a later retry without code changes, which points to model behavior or instruction robustness rather than a deterministic logic bug.
 
-The DISPATCH IDLE GUARDRAIL in `skills/first-officer/references/claude-first-officer-runtime.md` explicitly tells the FO to ignore idle notifications and wait for an explicit completion message. The validator confirmed the guardrail wording is correct. The failure mode is that **haiku does not reliably honor the guardrail** — after dispatching the ensign and going into "Standing by", the FO ran a few Bash/Read cycles and then decided to tear down the team early, despite no completion message having arrived.
+## Root Cause Framing
 
-This is orthogonal to 115's template fix. 115 was about "the ensign has no instruction to SendMessage on completion." 117 is about "the FO, on haiku, decides to give up waiting too early even when the guardrail says not to."
+The current `DISPATCH IDLE GUARDRAIL` in `skills/first-officer/references/claude-first-officer-runtime.md` is directionally correct, but haiku appears to treat repeated idle cycles as a cue to clean up instead of continuing to wait. The likely failure path is:
 
-## Hypotheses to explore in ideation
+1. FO dispatches an ensign and enters "Standing by."
+2. Idle or routine tool cycles continue while the ensign is still working.
+3. Haiku loses the "wait for explicit completion" invariant and treats the team as done or abandoned.
+4. FO tears down the team before the completion message arrives.
 
-1. **Guardrail wording is not strong enough for haiku.** The current wording might need tightening or explicit examples.
-2. **Haiku exhibits different idle-tolerance behavior than sonnet/opus.** The guardrail was likely authored with larger models in mind.
-3. **Idle notification frequency** may be high enough on haiku that the model loses the "don't react" invariant over many repeated events.
-4. **Tool-use cycles between dispatch and completion** (FO running Bash/Read while waiting) may be eroding the wait posture on haiku in a way it does not on larger models.
+The important distinction is that the fix surface is the FO's wait/teardown behavior, not the worker's completion instruction. This should not be broadened into a telemetry project or a general watchdog redesign unless the narrower instruction fix still flakes.
 
-## Why track separately from 115
+## Plausible Fix Surfaces
 
-- 115 is a narrow template fix; the PR should not be held up by a model-reliability investigation
-- The flake is reproducible only on haiku under the nested test harness; it does not affect interactive sessions on opus/sonnet where the captain watches the FO
-- The fix surface is likely different — probably FO runtime reference wording, possibly a hook, possibly an upstream Claude Code behavior issue
+1. Tighten the FO guardrail wording in the runtime reference, especially around dispatch-time waiting and teardown preconditions.
+   - This is the smallest and most likely fix surface.
+   - It should explicitly say that idle is normal, that the FO must wait for `SendMessage` completion, and that repeated idle cycles are not evidence of failure.
 
-## Scope for ideation
+2. Reinforce the rule closer to the dispatch path, not only in the standalone guardrail section.
+   - If the instruction is only in one long guardrail paragraph, haiku may underweight it after several turns.
+   - A short, repeated "wait until completion message" reminder near the dispatch adapter may be more robust.
 
-- Reproduce the flake deterministically (how often does it fire? what triggers it?)
-- Inspect the `fo-log.jsonl` from a failing run to understand the exact decision path that led to early teardown
-- Decide remediation: stronger guardrail wording, explicit "wait until SendMessage" instruction in the dispatch flow, a watchdog check before teardown, or an upstream Claude Code fix
-- Scope should NOT expand to the broader telemetry/watchdog idea — that is a separate direction
+3. Add a narrow runtime check before teardown.
+   - This would make the wait decision less dependent on model memory.
+   - It is a stronger behavioral change and should be treated as a fallback if wording alone is still flaky.
+
+4. Build broader telemetry or a watchdog around agent liveness.
+   - This could help diagnose the flake, but it is out of scope for task 117.
+   - It would add complexity without proving the minimal fix first.
+
+## Recommended Scope
+
+Use the smallest fix that directly addresses premature teardown:
+
+- Strengthen the FO runtime wording around dispatch-time waiting and teardown conditions.
+- If needed, repeat the same rule near the dispatch adapter so the model sees it at the point of action.
+- Keep the implementation bounded to the FO runtime reference and the regression test that proves the haiku flake no longer tears down early.
+
+Do not expand this task into:
+
+- completion-signal template work for the worker side, which is task 115
+- telemetry/watchdog instrumentation
+- generalized model-reliability research
+- upstream Claude Code bug tracking
+
+## Acceptance Criteria
+
+1. The FO runtime text explicitly states that, after dispatching an agent, the FO must keep waiting until an explicit completion message arrives.
+   - Test: static content check against `skills/first-officer/references/claude-first-officer-runtime.md` or the assembled FO agent content.
+
+2. The FO runtime text explicitly says idle notifications are normal between-turn state and are not a reason to tear down the team.
+   - Test: static content check for the idle-is-normal / do-not-shut-down language.
+
+3. A haiku regression run no longer reproduces the premature shutdown seen in run 1.
+   - Test: `tests/test_dispatch_completion_signal.py` or a task-117-specific regression test passes consistently across multiple runs, including the original failing scenario.
+
+4. The fix does not change task 115's worker completion-signal template or widen scope into telemetry/watchdog work.
+   - Test: diff review confirms the touched files stay limited to the FO runtime reference and the task-117 regression test.
+
+5. Existing related suites still pass.
+   - Test: rerun the dispatch-completion regression and the nearby FO guardrail suites that cover dispatch/wait behavior.
+
+## Test Plan
+
+- Reproduction: keep the original haiku workflow fixture that showed the flake, because the regression is about the FO's shutdown decision under the same conditions. Cost is moderate because it exercises a live model run.
+- Verification: add or reuse a regression test that inspects the FO log for premature teardown and checks that the entity only advances after the worker's completion signal. Cost is moderate, complexity is moderate.
+- Static checks: add a content assertion for the runtime wording so the guardrail cannot silently drift later. Cost is low.
+- E2E coverage: yes, because this is a behavioral timing bug. Static wording checks alone do not prove the FO will keep waiting on haiku.
+- Out-of-scope follow-up: telemetry or watchdog work can be explored later if the narrower runtime wording still flakes.
 
 ## Related
 
-- Task 115 `fo-dispatch-template-completion-signal` — the validator surfaced this while verifying 115. 115's fix is correct and complete; this is a sibling issue, not a prerequisite.
-- `skills/first-officer/references/claude-first-officer-runtime.md` — the DISPATCH IDLE GUARDRAIL section is the most likely fix surface.
+- Task 115 `fo-dispatch-template-completion-signal` keeps the worker-side completion instruction correct and should remain separate.
+- `skills/first-officer/references/claude-first-officer-runtime.md` is the primary fix surface for task 117.
+
+## Stage Report: ideation
+
+1. [DONE] Expanded the task body into a scoped ideation spec with a clearer problem statement, observed failure path, and root-cause framing. The write-up now distinguishes the FO-side premature teardown from task 115's worker completion-signal fix.
+
+2. [DONE] Evaluated plausible fix surfaces and recommended a bounded approach. The spec compares guardrail wording, dispatch-adapter reinforcement, narrow teardown checks, and broader telemetry, then recommends the smallest FO-runtime-only fix.
+
+3. [DONE] Added concrete acceptance criteria with test mapping. Each criterion now states how it will be tested, with static content checks for wording and E2E coverage for the behavioral flake.
+
+4. [DONE] Wrote a proportional test plan. The plan covers reproduction, verification, static checks, and confirms that E2E coverage is required because the bug is behavioral and timing-sensitive.
+
+5. [DONE] Kept scope bounded to task 117. The spec explicitly calls out task 115, telemetry/watchdog work, and upstream Claude Code investigation as out of scope.
+
+6. [DONE] Appended a complete ideation `## Stage Report` section at the end of the entity body with every checklist item marked DONE.
+
+7. [DONE] Committed the ideation work after updating the entity body.
