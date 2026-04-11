@@ -283,3 +283,24 @@ The stale task-129 assertion is now removed, which closes the deterministic vali
 ### Summary
 
 Under the revised cycle-3 acceptance criteria in the entity body, the bounded Haiku evidence path now passes: the static suites are green and the live regression finishes with an explicit provider-unavailable `RESULT: SKIP` instead of hanging. The branch is still not acceptable for this assignment because the current validation focus also requires a deterministic stale task-129 assertion in `tests/test_agent_content.py`, and that assertion is absent from the current branch state.
+
+## Stage Report: validation (cycle 4)
+
+- [x] Read the entity body, especially the current acceptance criteria, feedback cycles, and latest implementation reports.
+  Re-read the task through `implementation (cycle 4)`, including the cycle-3 acceptance/test-plan addenda and the cycle-4 stale-task-129 cleanup summary.
+- [x] Inspect the actual diff/changed files in the worktree and verify scope stayed bounded.
+  `git diff --name-only 827f897..250336c` shows only `skills/first-officer/references/claude-first-officer-runtime.md`, `tests/test_agent_content.py`, `tests/test_dispatch_completion_signal.py`, and this entity file; `git show --name-only 250336c` confirms the latest code change is the stale assertion cleanup in `tests/test_agent_content.py`.
+- [x] Run the applicable tests and report concrete outcomes.
+  Fresh runs in this worktree: `tests/test_agent_content.py` passed (`25 passed`), `tests/test_claude_team.py` passed (`20 passed`), and `tests/test_dispatch_completion_signal.py --model haiku` completed as `RESULT: SKIP` with `live Claude runtime unavailable before FO dispatch: claude preflight for model 'haiku' produced no result within 30s`.
+- [x] Verify each current acceptance criterion with evidence and state PASS/FAIL per criterion.
+  AC1 PASS: `skills/first-officer/references/claude-first-officer-runtime.md:53,114` says the FO keeps waiting for an explicit completion message after dispatch; AC2 PASS: the same lines say idle notifications are normal and not a teardown reason; AC3 PASS under the cycle-3 addendum because the live regression reached a bounded terminal `RESULT: SKIP` with the explicit provider-unavailable preflight reason required by the revised criterion; AC4 PASS with a caveat: no task-115 worker-template or telemetry/watchdog surfaces changed, but the branch now also includes the cycle-4 `tests/test_agent_content.py` cleanup, so the original AC4 test sentence is slightly stale relative to the latest feedback-driven scope; AC5 PASS under the cycle-3 addendum because both related static suites passed and the dispatch-completion regression terminated with a bounded terminal result instead of hanging.
+- [x] Explicitly confirm whether the stale task-129 assertion is now resolved and whether the bounded live result still satisfies the revised criteria.
+  The stale task-129 assertion is resolved: `git diff 119547e..250336c -- tests/test_agent_content.py` shows removal of `assert "Workflow entity: {entity title}" in text`, and `rg` no longer finds that assertion in `tests/test_agent_content.py`; the bounded Haiku `RESULT: SKIP` still satisfies revised AC3/AC5 because the cycle-3 addendum explicitly accepts provider-unavailable terminal `SKIP` results.
+- [x] Append a complete `## Stage Report: validation` with DONE, SKIPPED, or FAILED coverage for each checklist item and a PASSED/REJECTED recommendation.
+  This `validation (cycle 4)` section covers all checklist items and recommends `PASSED`.
+- [x] Commit the validation report before reporting completion.
+  This validation report is committed immediately after being appended to the entity file.
+
+### Summary
+
+Current branch state at `250336c` satisfies the task body as it now exists in the worktree: the FO wait/idle guardrail wording is present, the stale task-129 assertion cleanup is present, and the requested static suites pass. The live Haiku path still cannot produce a provider-backed behavioral pass here, but under the cycle-3 addendum it no longer needs to; the bounded provider-unavailable `RESULT: SKIP` is the accepted terminal outcome for this environment.
