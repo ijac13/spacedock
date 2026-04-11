@@ -1,10 +1,10 @@
 ---
 id: 133
 title: "CI for static tests + track known static failures"
-status: ideation
+status: implementation
 source: "CL direction during 2026-04-11 session — session discovered static test regression that slipped through PR #74 merge because no CI ran test_agent_content.py"
 score: 0.80
-worktree:
+worktree: .worktrees/spacedock-ensign-ci-static-tests-and-known-failures
 started: 2026-04-11T20:57:12Z
 completed:
 verdict:
