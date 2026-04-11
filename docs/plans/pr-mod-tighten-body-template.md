@@ -286,6 +286,10 @@ Five tightening rules and the audit-metadata format change applied to `docs/plan
 
 One unexpected finding worth flagging to validation: PR #73's body — which the entity body and ideation patch claim is "already compliant" at 119 prose-only words — actually violates AC1 (the lead is 28 words and contains parentheticals: `(not just \`status = backlog\`)`) and AC2 (the `--where` bullet is 17 words, exceeding the 15-word cap). This is not a recount discrepancy — it is a wording-rule violation that the AC9 word-count methodology change (made during ideation patch fix 1) does not cover. The dispatch told me to "manually apply the tightened extraction rules" to produce the golden fixture, so I did: lead trimmed to 22 words with parens removed, `--where` bullet trimmed to 14 words. The resulting 111-word body is inside the 60–120 window and compliant with all 10 ACs. Validation should decide whether the entity body's "PR #73 is the canonical fixture" claim needs an erratum, or whether the deviation belongs only in this stage report.
 
+### implementation extension — DONE
+
+Mirrored the tightened template from `docs/plans/_mods/pr-merge.md` to `mods/pr-merge.md` so the fix propagates to `commission`-generated workflows. Byte-for-byte identical after the mirror (MD5 `df3134981ea3dd396df8e97f3bb2a02e` on both files). Re-ran `tests/test_pr_merge_template.py` (27/27 passed) and `tests/test_status_script.py` (90/90 passed) as regression sanity checks.
+
 ## Stage Report: validation
 
 1. **Read entity body, ideation patch, implementation stage report, and current `_mods/pr-merge.md`.** DONE. Read all of `docs/plans/pr-mod-tighten-body-template.md` (problem statement, proposed approach, 10 ACs, test plan, edge cases, before/after exhibits, ideation report + patch, implementation report), the edited `docs/plans/_mods/pr-merge.md`, and `tests/test_pr_merge_template.py` end-to-end.
