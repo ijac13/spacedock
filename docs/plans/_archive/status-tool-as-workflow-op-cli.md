@@ -1,13 +1,13 @@
 ---
 id: 123
 title: "Status tool as workflow-op CLI — fix --where, expose custom fields, unify mutation paths"
-status: validation
+status: done
 source: "External FO feedback (GTM + experiment pipelines) during 2026-04-10 session"
 score: 0.75
-worktree: .worktrees/spacedock-ensign-status-tool-as-workflow-op-cli
+worktree: 
 started: 2026-04-11T00:40:18Z
-completed:
-verdict:
+completed: 2026-04-11T04:36:33Z
+verdict: PASSED
 issue:
 pr: #73
 ---
