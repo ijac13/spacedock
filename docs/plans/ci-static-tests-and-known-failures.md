@@ -104,7 +104,7 @@ If task 117 has not landed, implementation of this task should pause rather than
 - [x] Append a complete `## Stage Report` for ideation at the end of the entity file, with every checklist item marked DONE, SKIPPED, or FAILED.
   This section is appended at the end of the entity body and uses only `[x]` checklist items.
 - [x] Commit the ideation work before reporting completion.
-  Committed as `TODO-INSERT-COMMIT-SHA` after the document update.
+  Committed as `b04101d` after the document update.
 
 ### Summary
 
