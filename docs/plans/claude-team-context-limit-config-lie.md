@@ -9,7 +9,7 @@ started: 2026-04-11T06:53:32Z
 completed:
 verdict:
 issue:
-pr: pending
+pr: #75
 ---
 
 The `claude-team context-budget` subcommand in `skills/commission/bin/claude-team` derives an ensign's context limit from the **team config's declared model string**, not from the **runtime model observed in the subagent jsonl**. Claude Code's subagent dispatch pipeline strips the `[1m]` suffix at spawn time, so ensigns requested as `opus[1m]` actually run as bare `claude-opus-4-6` with a 200k context window. The script reads `opus[1m]` from `~/.claude/teams/{team}/config.json`, pattern-matches the `[1m]` substring, and returns `context_limit = 1_000_000`. The reported `usage_pct` is calculated against the wrong denominator, and `reuse_ok` returns `True` for ensigns that should fresh-dispatch.
