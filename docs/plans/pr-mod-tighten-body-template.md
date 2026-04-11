@@ -1,7 +1,7 @@
 ---
 id: 129
 title: "PR merge mod: tighten body template — shorter lead, crisper bullets, less rationale"
-status: implementation
+status: validation
 source: "CL observation during task 123 merge, 2026-04-11"
 score: 0.60
 worktree: .worktrees/spacedock-ensign-pr-mod-tighten-body-template
