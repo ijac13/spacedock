@@ -1,11 +1,11 @@
 ---
 id: 123
 title: "Status tool as workflow-op CLI — fix --where, expose custom fields, unify mutation paths"
-status: backlog
+status: ideation
 source: "External FO feedback (GTM + experiment pipelines) during 2026-04-10 session"
 score: 0.75
 worktree:
-started:
+started: 2026-04-11T00:40:18Z
 completed:
 verdict:
 issue:
