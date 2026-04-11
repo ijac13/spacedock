@@ -138,3 +138,24 @@ Regression coverage was tightened in `tests/test_agent_content.py` so the assemb
 ### Summary
 
 The fix stayed on the approved surface: the Claude FO runtime now states more directly that dispatch means wait for an explicit completion message, and that idle notifications are normal rather than evidence to tear the team down. Static regression coverage was updated and passes; the model-backed FO wait regressions were attempted here but remained inconclusive due long-running live harness execution, so they should be rerun during independent verification.
+
+## Stage Report: validation
+
+- [x] Read the entity body, including the acceptance criteria and implementation summary/report.
+  Reviewed `docs/plans/fo-idle-guardrail-flake-on-haiku.md` in the assigned worktree; validation used the ideation acceptance criteria plus the implementation summary from commit `4b3043c`.
+- [x] Inspect the actual diff/changed files in the worktree and verify scope stayed bounded.
+  `git diff --name-only 827f897..8e27fdd` shows only `skills/first-officer/references/claude-first-officer-runtime.md`, `tests/test_agent_content.py`, and this entity report; implementation commit `4b3043c` touched only the FO runtime reference and static regression test, so task 115's worker template and telemetry/watchdog surfaces were not modified.
+- [ ] FAIL: Run the applicable tests and report concrete outcomes.
+  `uv run --with pytest python -m pytest tests/test_agent_content.py` passed (`25 passed`); `uv run --with pytest python -m pytest tests/test_claude_team.py` passed (`20 passed`); `uv run tests/test_dispatch_completion_signal.py --model haiku` did not produce a result within a bounded multi-minute spot-check, so the key live regression remains unverified in this session.
+- [x] Verify each acceptance criterion with evidence and state PASS/FAIL per criterion.
+  AC1 PASS: runtime line 53 says the FO "keeps waiting for that explicit completion message"; AC2 PASS: runtime lines 53 and 114 say idle notifications are normal and "not a reason to tear down the team"; AC3 FAIL: the required haiku regression run did not complete, so there is no evidence that run 1's premature shutdown no longer reproduces; AC4 PASS: implementation diff `827f897..4b3043c` stayed limited to the FO runtime reference and `tests/test_agent_content.py`; AC5 FAIL: static related suites passed, but the live dispatch-completion regression required by the test plan did not complete.
+- [x] Pay special attention to the unresolved live haiku regression runs and state the result explicitly.
+  The unresolved live haiku regression is still unresolved here: the bounded spot-check of `tests/test_dispatch_completion_signal.py --model haiku` did not finish, so validation cannot claim the premature-shutdown behavior is fixed.
+- [x] Append a complete `## Stage Report: validation` with checklist coverage and a recommendation.
+  This section records all seven checklist items with DONE/FAIL coverage and recommends rejection pending a completed live haiku regression result.
+- [x] Commit the validation report before reporting completion.
+  Validation report committed in `87efb5c`.
+
+### Summary
+
+The implementation is narrowly scoped and the static contract checks pass: the FO runtime now explicitly says it waits for an explicit completion message after dispatch and that idle notifications are normal. That is not enough to satisfy this task's acceptance criteria, because the live haiku regression remained unresolved during validation. Recommendation: `REJECTED` until `tests/test_dispatch_completion_signal.py --model haiku` completes successfully and demonstrates the original premature shutdown no longer reproduces.
