@@ -1,13 +1,13 @@
 ---
 id: 131
 title: "claude-team context-budget lies — reads [1m] from team config, runtime strips it"
-status: implementation
+status: done
 source: "CL observation on a parallel session, 2026-04-11 — ensign at 85k resident tokens on bare claude-opus-4-6 reported as 7.4% of 1M when actual usage is 42.6% of 200k"
 score: 0.80
-worktree: .worktrees/spacedock-ensign-claude-team-context-limit-config-lie
+worktree:
 started: 2026-04-11T06:53:32Z
-completed:
-verdict:
+completed: 2026-04-11T20:55:00Z
+verdict: PASSED
 issue:
 pr: #75
 ---
