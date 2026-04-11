@@ -160,16 +160,16 @@ Guardrails live in reference files, not the agent file. Use `assembled_agent_con
 
 ```bash
 # Gate self-approval prohibition
-grep -c "self-approve" $REPO_ROOT/references/first-officer-shared-core.md
+grep -c "self-approve" $REPO_ROOT/skills/first-officer/references/first-officer-shared-core.md
 
 # Dispatch mechanism
-grep -c "Agent(" $REPO_ROOT/references/claude-first-officer-runtime.md
+grep -c "Agent(" $REPO_ROOT/skills/first-officer/references/claude-first-officer-runtime.md
 
 # Report-once
-grep -c "Report.*once\|ONCE" $REPO_ROOT/references/first-officer-shared-core.md
+grep -c "Report.*once\|ONCE" $REPO_ROOT/skills/first-officer/references/first-officer-shared-core.md
 
 # Scaffolding protection
-grep -c "scaffolding" $REPO_ROOT/references/first-officer-shared-core.md
+grep -c "scaffolding" $REPO_ROOT/skills/first-officer/references/first-officer-shared-core.md
 ```
 
 ### No leaked template variables
