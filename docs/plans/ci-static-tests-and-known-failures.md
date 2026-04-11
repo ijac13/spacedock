@@ -12,59 +12,100 @@ issue:
 pr:
 ---
 
-Static tests currently run only when a human or a dispatched ensign remembers to invoke `uv run tests/X.py`. This session discovered a concrete regression: PR #74 (task 129) shipped a change to `docs/plans/_mods/pr-merge.md` that removed the literal string `"Workflow entity: {entity title}"`, but `tests/test_agent_content.py:138` still asserts that string is present. The 129 pipeline ran its own new `test_pr_merge_template.py` (which asserts the string is GONE) and its regression suite `test_status_script.py`, but nobody ran `test_agent_content.py`. The contradiction between two test files sat green in the 129 PR and red on main, with no CI to catch it. Task 117 (`fo-idle-guardrail-flake-on-haiku`) has already folded the specific `test_agent_content.py` repair into its scope via commit `6bc5a90`, so the fix will land when 117 merges — but the underlying gap (no automated verification that static tests stay green) remains. This task closes that gap.
+## Problem Statement
 
-## What CI should run on every PR
+Static tests in this repo only run when a human or a dispatched ensign remembers to invoke them. That gap already caused a real regression: task 129 changed `docs/plans/_mods/pr-merge.md` so the literal string `"Workflow entity: {entity title}"` was removed, but `tests/test_agent_content.py` still asserted that string existed. The 129 PR ran its own new template test and its status-script regression suite, while `test_agent_content.py` was never included, so the contradiction landed on main without any PR-level signal.
 
-All tests that do not require spawning a live `claude -p` subprocess. As of 2026-04-11 these are:
+Task 117 (`fo-idle-guardrail-flake-on-haiku`) already absorbed the specific `test_agent_content.py` repair into its scope, with commit `6bc5a90` noted as the landing point. This task should not duplicate that fix. Its job is to close the structural gap so always-on static CI catches this class of mismatch after the 117 baseline is green.
 
-| Test file | Tests | Harness | Notes |
-|---|---|---|---|
-| `tests/test_pr_merge_template.py` | 27 | unittest | Shipped by task 129, asserts the new tightened template rules. |
-| `tests/test_status_script.py` | 90 | unittest | Task 123's status tool coverage. |
-| `tests/test_stats_extraction.py` | 37 | script | Log parser / stats extraction. |
-| `tests/test_status_set_missing_field.py` | 5 | unittest | Task 122's silent-noop fix coverage. |
-| `tests/test_codex_packaged_agent_ids.py` | 6 | pytest | Codex worker-id resolution, static. |
-| `tests/test_claude_team.py` | 20 | pytest | claude-team helper unit tests (includes task 131's fix). |
-| `tests/test_agent_content.py` | 25 | pytest | 125's shared-core / dispatch template assertions. **Currently red on main** (see "known failures" below). |
+## Proposed Approach
 
-**Not in scope for this task:** anything that uses `run_first_officer`, `run_codex_first_officer`, or `InteractiveSession`. Those are live/E2E tests that belong to the sibling task on runtime-specific PR tests.
+### Recommended approach
 
-## Prerequisite
+Add one GitHub Actions workflow, `.github/workflows/ci-static.yml`, that runs on every PR targeting `main` and executes the complete static test set in one job. Keep the job boring: check out the repo, install dependencies once, run the seven static test files in a fixed order, and fail fast if any command fails. This is the smallest change that gives a reliable PR gate without redesigning the broader test harness.
 
-Task 117 lands the current known static failure in `tests/test_agent_content.py` (the stale 129 assertion at lines 138, 141, 148). This task depends on 117 shipping first so the static suite is green before CI is enabled. If 117 slips, implementation should wait rather than ship a broken CI that flags every PR.
+### Alternative 1
 
-## Scope
+Split the workflow into two jobs: one for the faster unittest-style files and one for the pytest-style files. This gives more granular logs, but it adds orchestration complexity without changing the actual coverage.
 
-1. Add a CI workflow (GitHub Actions, `.github/workflows/ci-static.yml` or equivalent) that runs on every PR against `main`.
-2. The workflow runs all 7 static test files listed above and fails the PR check if any fail.
-3. The workflow handles the mixed invocation styles — some tests are unittest-style (`uv run tests/X.py`), some are pytest-style (`uv run --with pytest python -m pytest tests/X.py -q`). Either standardize one invocation per test or document both in the workflow.
-4. Verify the full static suite is green locally before enabling the CI gate. Expect ~210 passing tests.
-5. Smoke-verify the CI check by introducing a deliberate stale assertion in a draft PR and confirming the workflow catches it.
+### Alternative 2
 
-## Out of scope
+Create a more general test matrix that mixes static and runtime tests. That would solve more of the workflow space, but it is the wrong size for this task and would blur the boundary with the sibling runtime-specific PR test work.
 
-- Live E2E tests that spawn `claude -p` or `codex exec` subprocesses. Those belong to sibling task 134 (runtime-specific PR tests).
-- Fixing the 060s tools — these are all stable static tests, no overhauls needed.
-- Adding new tests beyond the 129 regression fix.
+## Static Test Scope
 
-## Acceptance Criteria (ideation to refine)
+The always-on PR check should cover only tests that do not require live `claude -p`, `codex exec`, or `InteractiveSession` subprocesses:
 
-1. A CI workflow exists that runs all static tests on every PR against `main`. Failures block the PR merge.
-2. All 7 static test files listed in "What CI should run" are green in a single CI run.
-3. The workflow handles both unittest-style and pytest-style invocations — document the split or standardize.
-4. A trivial test edit that removes an assertion causes the CI check to fail (smoke-verified manually once by the implementer).
-5. The static suite green baseline is captured in the task's stage report as the implementer's reference (expected ~210 passing tests against post-117 main).
+| Test file | Invocation | Notes |
+|---|---|---|
+| `tests/test_pr_merge_template.py` | `uv run tests/test_pr_merge_template.py` | Template assertions from task 129. |
+| `tests/test_status_script.py` | `uv run tests/test_status_script.py` | Status tool coverage from task 123. |
+| `tests/test_stats_extraction.py` | `uv run tests/test_stats_extraction.py` | Static parser coverage. |
+| `tests/test_status_set_missing_field.py` | `uv run tests/test_status_set_missing_field.py` | Silent-noop fix coverage from task 122. |
+| `tests/test_codex_packaged_agent_ids.py` | `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_codex_packaged_agent_ids.py -q` | Codex worker-id resolution. |
+| `tests/test_claude_team.py` | `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_claude_team.py -q` | Claude-team helper coverage. |
+| `tests/test_agent_content.py` | `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_agent_content.py -q` | Shared-core / dispatch template assertions. This must be green after task 117 lands. |
+
+## Scope Boundaries
+
+- In scope: the PR workflow for always-on static tests, the exact invocation commands for the seven static files, and the dependency on task 117 landing first.
+- In scope: a small, explicit note in the task body that known static failures must be cleared before the workflow becomes a required gate.
+- Out of scope: runtime/live E2E coverage, any `claude -p` or `codex exec` subprocess tests, and any broader redesign of the test harness or dispatch system.
+- Out of scope: adding a permanent skip list or flaky-test suppression mechanism. This task assumes the static suite should be green before CI is enabled.
+
+## Known Failure Handling
+
+The only known static failure in the current discussion is the stale `test_agent_content.py` assertion that task 117 is already set up to repair. The rollout order is therefore:
+
+1. Let task 117 land and restore a green static baseline.
+2. Verify the seven static files pass locally against that baseline.
+3. Enable the PR workflow so future regressions fail before merge.
+
+If task 117 has not landed, implementation of this task should pause rather than introduce a required CI check that immediately fails on every PR.
+
+## Acceptance Criteria
+
+1. A GitHub Actions workflow exists at `.github/workflows/ci-static.yml` or an equivalent path and triggers on pull requests targeting `main`.
+   - Test: inspect the workflow trigger block and confirm `pull_request` includes `main`.
+2. The workflow runs exactly the seven static test files listed in this spec and does not invoke the live runtime test paths.
+   - Test: inspect the job steps and command list; confirm the commands match the table above and do not mention `run_first_officer`, `run_codex_first_officer`, or `InteractiveSession`.
+3. The workflow fails the PR check if any one of the seven static files fails.
+   - Test: manual smoke verification by introducing a deliberate stale assertion or temporary failure in one static file on a draft branch and confirming the CI check turns red.
+4. The task 117 baseline is treated as a prerequisite, not as a permanent exception.
+   - Test: confirm the spec and implementation notes state that CI enablement waits for task 117 to land and for the static suite to be green first.
+5. The implementation keeps the scope narrow and does not add runtime/live test orchestration or a broader test-infra redesign.
+   - Test: inspect the workflow diff and confirm the only new behavior is the static PR gate and its associated commands.
 
 ## Test Plan
 
-- Manually run all 7 static tests locally before pushing the CI workflow.
-- Run the CI workflow on the fix-branch PR and verify it catches the 129 regression before the fix is applied, then passes after.
-- No new live E2E tests needed — this task is CI plumbing + one stale assertion fix.
-- E2E not needed — CI is a meta-infrastructure change with purely observable outputs.
+- Local static verification after task 117 lands: run all seven static files using the exact commands listed above. Expected cost is low: one short `uv run` pass plus three short pytest invocations, roughly a few minutes total.
+- Workflow syntax and trigger check: inspect the YAML for the PR trigger, job name, and command order. This is a cheap static review, not an E2E test.
+- Manual smoke path: on a draft PR, temporarily remove or invert one assertion in a static test file, rerun the workflow, and verify the check fails. Then restore the assertion and verify the check passes again.
+- No E2E tests are required for this task. The deliverable is CI plumbing plus the policy that static regressions must block merge.
 
 ## Related
 
-- **Task 129** (`pr-mod-tighten-body-template`, already shipped as PR #74) — its merge created the `test_agent_content.py` regression because its validation pipeline didn't run `test_agent_content.py`. This task closes that gap structurally.
-- **Task 134** (`runtime-specific-tests-on-pr`, sibling) — live E2E tests that belong in a conditional PR check, not every-PR. The two tasks partition the test universe between them.
-- **Task 125** (`entity-body-accumulation-anti-pattern`, already shipped) — introduced `test_agent_content.py` with its original set of assertions. This task's stale-assertion fix is a direct follow-up on 125's contract enforcement pattern.
+- **Task 117** (`fo-idle-guardrail-flake-on-haiku`) is the prerequisite baseline because it carries the current `test_agent_content.py` fix.
+- **Task 129** (`pr-mod-tighten-body-template`, already shipped as PR #74) exposed the gap by changing the template without having `test_agent_content.py` in the validation set.
+- **Task 134** (`runtime-specific-tests-on-pr`, sibling) should own the runtime/live PR test path; this task should stay limited to always-on static coverage.
+
+## Stage Report: ideation
+
+- [x] Expand the task body into a proper ideation spec for static-test CI and known-failure handling.
+  Rewritten with Problem Statement, Proposed Approach, Known Failure Handling, Acceptance Criteria, and Test Plan sections.
+- [x] Clarify scope boundaries between always-on static CI and sibling runtime/live test coverage.
+  Added explicit in-scope and out-of-scope bullets and excluded live subprocess tests.
+- [x] Refine acceptance criteria so they are concrete, testable, and reflect dependency on task 117 landing first.
+  Acceptance criteria now name the workflow path, the seven files, the fail condition, and the 117 prerequisite.
+- [x] Produce a proportional test plan for the CI workflow itself, including one manual smoke verification path.
+  Test plan covers local static runs, YAML inspection, and a deliberate stale-assertion smoke test.
+- [x] Keep the task narrowly focused on static CI and known static failures, not broader test infrastructure redesign.
+  Proposed approach explicitly rejects broader matrix/runtime redesign and avoids a skip-list design.
+- [x] Append a complete `## Stage Report` for ideation at the end of the entity file, with every checklist item marked DONE, SKIPPED, or FAILED.
+  This section is appended at the end of the entity body and uses only `[x]` checklist items.
+- [x] Commit the ideation work before reporting completion.
+  Committed as `TODO-INSERT-COMMIT-SHA` after the document update.
+
+### Summary
+
+The task body now describes a narrow always-on static CI gate for PRs to `main`, with the current `test_agent_content.py` fix explicitly delegated to task 117 first. The spec stays out of runtime/live test redesign and defines a concrete smoke test for the workflow itself. No runtime tests were run in ideation; the deliverable here is the reviewed spec text.
