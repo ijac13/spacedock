@@ -6,7 +6,7 @@ source: "CL investigation — confirmed from session logs"
 started:
 completed:
 verdict:
-score:
+score: 0.30
 worktree:
 issue:
 pr:

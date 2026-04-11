@@ -6,7 +6,7 @@ source: CL observation — Codex startup uses raw rg for discovery
 started:
 completed:
 verdict:
-score:
+score: 0.60
 worktree:
 issue:
 pr:

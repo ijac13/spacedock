@@ -6,7 +6,7 @@ source: CL — design discussion during 111 ideation, 2026-04-09
 started:
 completed:
 verdict:
-score:
+score: 0.45
 worktree:
 issue:
 pr:

@@ -6,7 +6,7 @@ source: Validator observation during 115 validation (run 1 of test_dispatch_comp
 started:
 completed:
 verdict:
-score:
+score: 0.70
 worktree:
 issue:
 pr:

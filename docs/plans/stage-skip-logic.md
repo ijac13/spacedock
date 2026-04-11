@@ -6,7 +6,7 @@ source: oh-my-codex analysis
 started:
 completed:
 verdict:
-score:
+score: 0.40
 worktree:
 issue:
 pr:
