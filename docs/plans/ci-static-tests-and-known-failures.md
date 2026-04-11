@@ -1,10 +1,10 @@
 ---
 id: 133
 title: "CI for static tests + track known static failures"
-status: implementation
+status: validation
 source: "CL direction during 2026-04-11 session — session discovered static test regression that slipped through PR #74 merge because no CI ran test_agent_content.py"
 score: 0.80
-worktree: .worktrees/spacedock-ensign-ci-static-tests-and-known-failures
+worktree:
 started: 2026-04-11T20:57:12Z
 completed:
 verdict:
@@ -22,7 +22,7 @@ Task 117 (`fo-idle-guardrail-flake-on-haiku`) already absorbed the specific `tes
 
 ### Recommended approach
 
-Add one GitHub Actions workflow, `.github/workflows/ci-static.yml`, that runs on every PR targeting `main` and executes the complete static test set in one job. Keep the job boring: check out the repo, install dependencies once, run the seven static test files in a fixed order, and fail fast if any command fails. This is the smallest change that gives a reliable PR gate without redesigning the broader test harness.
+Add one GitHub Actions workflow, `.github/workflows/ci-static.yml`, that runs on every PR targeting `main` and executes the repo's documented offline static suite entry point in one job: `uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q`. Keep the job boring: check out the repo, install Python and `uv`, run that single stable command, and fail the PR if it returns non-zero. This is the smallest change that gives a reliable PR gate without redesigning the broader test harness or hard-coding a fragile file list in CI.
 
 ### Alternative 1
 
@@ -34,17 +34,13 @@ Create a more general test matrix that mixes static and runtime tests. That woul
 
 ## Static Test Scope
 
-The always-on PR check should cover only tests that do not require live `claude -p`, `codex exec`, or `InteractiveSession` subprocesses:
+The always-on PR check should cover only tests that do not require live `claude -p`, `codex exec`, or `InteractiveSession` subprocesses. The stable repo-level entry point for that scope is the offline suite documented in `scripts/test-harness.md`:
 
-| Test file | Invocation | Notes |
-|---|---|---|
-| `tests/test_pr_merge_template.py` | `uv run tests/test_pr_merge_template.py` | Template assertions from task 129. |
-| `tests/test_status_script.py` | `uv run tests/test_status_script.py` | Status tool coverage from task 123. |
-| `tests/test_stats_extraction.py` | `uv run tests/test_stats_extraction.py` | Static parser coverage. |
-| `tests/test_status_set_missing_field.py` | `uv run tests/test_status_set_missing_field.py` | Silent-noop fix coverage from task 122. |
-| `tests/test_codex_packaged_agent_ids.py` | `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_codex_packaged_agent_ids.py -q` | Codex worker-id resolution. |
-| `tests/test_claude_team.py` | `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_claude_team.py -q` | Claude-team helper coverage. |
-| `tests/test_agent_content.py` | `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_agent_content.py -q` | Shared-core / dispatch template assertions. This must be green after task 117 lands. |
+```bash
+uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q
+```
+
+This task should rely on that documented entry point rather than freezing today's set of collected files into workflow YAML. Validation can still spot-check representative offline coverage such as `tests/test_pr_merge_template.py`, `tests/test_status_script.py`, `tests/test_stats_extraction.py`, `tests/test_status_set_missing_field.py`, `tests/test_codex_packaged_agent_ids.py`, `tests/test_claude_team.py`, and `tests/test_agent_content.py`, but the CI contract should stay at the repo-entry-point level.
 
 ## Scope Boundaries
 
@@ -55,32 +51,33 @@ The always-on PR check should cover only tests that do not require live `claude 
 
 ## Known Failure Handling
 
-The only known static failure in the current discussion is the stale `test_agent_content.py` assertion that task 117 is already set up to repair. The rollout order is therefore:
+"Known failures" are rollout policy only for this task, not an allowlist or suppression mechanism. The stale `test_agent_content.py` assertion discussed in ideation was already absorbed by task 117 and landed with merge commit `bbc3b1e` (PR #78), after scope note `6bc5a90` folded that repair into 117. The rollout order is therefore:
 
-1. Let task 117 land and restore a green static baseline.
-2. Verify the seven static files pass locally against that baseline.
-3. Enable the PR workflow so future regressions fail before merge.
+1. Confirm the 117 baseline is on the branch and the offline static suite is green locally.
+2. Enable the PR workflow with the documented offline suite command.
+3. Treat any future offline-suite failure as a blocking CI failure until fixed.
 
-If task 117 has not landed, implementation of this task should pause rather than introduce a required CI check that immediately fails on every PR.
+If the 117 baseline were absent on a target branch, the correct action would be to delay rollout rather than add a permanent exception.
 
 ## Acceptance Criteria
 
 1. A GitHub Actions workflow exists at `.github/workflows/ci-static.yml` or an equivalent path and triggers on pull requests targeting `main`.
    - Test: inspect the workflow trigger block and confirm `pull_request` includes `main`.
-2. The workflow runs exactly the seven static test files listed in this spec and does not invoke the live runtime test paths.
-   - Test: inspect the job steps and command list; confirm the commands match the table above and do not mention `run_first_officer`, `run_codex_first_officer`, or `InteractiveSession`.
-3. The workflow fails the PR check if any one of the seven static files fails.
-   - Test: manual smoke verification by introducing a deliberate stale assertion or temporary failure in one static file on a draft branch and confirming the CI check turns red.
-4. The task 117 baseline is treated as a prerequisite, not as a permanent exception.
-   - Test: confirm the spec and implementation notes state that CI enablement waits for task 117 to land and for the static suite to be green first.
-5. The implementation keeps the scope narrow and does not add runtime/live test orchestration or a broader test-infra redesign.
-   - Test: inspect the workflow diff and confirm the only new behavior is the static PR gate and its associated commands.
+2. The workflow runs the documented repo-level offline suite entry point `uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q` and does not invoke live runtime test paths.
+   - Test: inspect the workflow command and confirm it does not mention `run_first_officer`, `run_codex_first_officer`, or `InteractiveSession`.
+3. The workflow is blocking: if the offline suite returns non-zero, the PR job fails.
+   - Test: inspect the workflow and confirm there is no `continue-on-error` or non-blocking exception mechanism around the offline suite step.
+4. The task 117 baseline is treated as a prerequisite rollout condition, not as a permanent exception.
+   - Test: confirm the spec and implementation notes state that CI enablement depends on the 117 baseline being present and the static suite being green first.
+5. The implementation keeps scope narrow and does not add runtime/live test orchestration, a file allowlist, or a broader test-infra redesign.
+   - Test: inspect the workflow diff and confirm the only new behavior is the static PR gate and its associated command.
 
 ## Test Plan
 
-- Local static verification after task 117 lands: run all seven static files using the exact commands listed above. Expected cost is low: one short `uv run` pass plus three short pytest invocations, roughly a few minutes total.
-- Workflow syntax and trigger check: inspect the YAML for the PR trigger, job name, and command order. This is a cheap static review, not an E2E test.
-- Manual smoke path: on a draft PR, temporarily remove or invert one assertion in a static test file, rerun the workflow, and verify the check fails. Then restore the assertion and verify the check passes again.
+- Local static verification: run `uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q` on the implementation branch and confirm the offline suite is green.
+- Focused red/green verification: add an offline test that fails when `.github/workflows/ci-static.yml` is missing or wired to the wrong command, then rerun it after the workflow exists.
+- Workflow syntax and trigger check: inspect the YAML for the PR trigger, job name, and command. This is a cheap static review, not an E2E test.
+- Manual smoke path: optional follow-up on a draft PR by temporarily breaking an offline test and confirming the CI job turns red, then restoring it.
 - No E2E tests are required for this task. The deliverable is CI plumbing plus the policy that static regressions must block merge.
 
 ## Related
@@ -109,3 +106,42 @@ If task 117 has not landed, implementation of this task should pause rather than
 ### Summary
 
 The task body now describes a narrow always-on static CI gate for PRs to `main`, with the current `test_agent_content.py` fix explicitly delegated to task 117 first. The spec stays out of runtime/live test redesign and defines a concrete smoke test for the workflow itself. No runtime tests were run in ideation; the deliverable here is the reviewed spec text.
+
+## Stage Report: implementation
+
+- DONE: Implement the narrow CI change for static/offline tests in the assigned worktree.
+  Added `.github/workflows/ci-static.yml` to run on `pull_request` to `main` and execute the documented offline suite command in one blocking job.
+- DONE: Align the entity body/report with the captain-approved interpretation above so validation has the right target.
+  Rewrote the implementation target around the stable repo-level offline suite entry point, removed the stale seven-file CI framing, and clarified that "known failures" are rollout policy only.
+- DONE: Use the stable offline-suite entry point if it is the correct repo-level command; if you discover a better stable entry point, justify it in the report.
+  Used `uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q` exactly as documented in `scripts/test-harness.md`. I did not find a better repo-level entry point.
+- DONE: Keep scope narrow: no live runtime tests, no allowlist/suppression system, no unrelated refactors.
+  The workflow runs one offline command only. The only supporting code changes were to make the documented offline suite itself green: refresh the stale PR-template assertion in `tests/test_agent_content.py` and stop pytest from auto-collecting the live PTY proof-of-concept path in `tests/test_interactive_poc.py`.
+- DONE: Run the relevant local verification for the implementation and report concrete results.
+  Red phase: `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_ci_static_workflow.py -q` failed with 3 failures because `.github/workflows/ci-static.yml` did not exist.
+  Green phase: the same focused command passed with `3 passed in 0.01s`.
+  Focused regression rerun: `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_agent_content.py tests/test_interactive_poc.py tests/test_ci_static_workflow.py -q` passed with `31 passed, 1 warning in 0.05s`.
+  Full offline suite: `unset CLAUDECODE && uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q` passed with `179 passed, 19 warnings in 3.87s`.
+- DONE: Append a `## Stage Report: implementation` section to the entity file with every checklist item represented as DONE, SKIPPED, or FAILED.
+  This section is appended at the end of the entity file.
+- DONE: Commit your work in the worktree before reporting completion.
+  Worktree changes were committed before the completion message for this stage.
+
+## Stage Report: validation
+
+- [x] Read the entity body, including acceptance criteria and implementation report.
+  Reviewed this entity's Problem Statement, Acceptance Criteria, Test Plan, and implementation report in the assigned worktree before validating.
+- [x] Inspect the actual implementation diff and confirm scope stayed narrow.
+  `git show --stat a42ac0f` and diff inspection showed the implementation commit touches only `.github/workflows/ci-static.yml`, `tests/test_ci_static_workflow.py`, `tests/test_agent_content.py`, `tests/test_interactive_poc.py`, and this entity file; no runtime/live orchestration was added.
+- [x] Run the applicable validation commands for this task and record concrete outcomes.
+  Spot-check: `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_ci_static_workflow.py -q` -> `3 passed in 0.01s`; focused support checks: `... pytest tests/test_agent_content.py tests/test_interactive_poc.py tests/test_ci_static_workflow.py -q` -> `31 passed, 1 warning in 0.04s`; full offline suite: `... pytest tests/ --ignore=tests/fixtures -q` -> `179 passed, 19 warnings in 3.79s`.
+- [x] Verify each acceptance criterion with evidence and give a PASSED or REJECTED recommendation.
+  AC1-3 pass because `.github/workflows/ci-static.yml` triggers on `pull_request` to `main`, runs `uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q`, and contains no `continue-on-error`; AC4 passes because the entity body treats task 117 / merge `bbc3b1e` as a prerequisite baseline and `git merge-base --is-ancestor bbc3b1e HEAD` returned `yes`; AC5 passes because the workflow adds only the static PR gate and the two supporting test-file changes are limited to making the offline suite green. Recommendation: PASSED.
+- [x] Append a `## Stage Report: validation` section to the entity file with every checklist item represented as DONE, SKIPPED, or FAILED.
+  This validation section is appended at the end of the entity body in the assigned worktree.
+- [x] Commit the validation report in the worktree before reporting completion.
+  The validation report commit follows this file update in the assigned worktree.
+
+### Summary
+
+Validation was performed against the assigned worktree only. The implementation satisfies the documented acceptance criteria, the scope stayed limited to a blocking offline static PR gate plus minimal offline-suite fixes, and the relevant offline test commands all passed locally. Verdict: PASSED.
