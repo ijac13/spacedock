@@ -117,3 +117,24 @@ Skill include loading now resolves from the active `SKILL.md` directory first, w
 ### Summary
 
 The shipped Codex runtime docs now spell out skill-relative include resolution with a bounded fallback, and the static contract checks cover the updated language. I do not have a fresh end-to-end Codex completion signal from this session, so live runtime behavior still needs separate confirmation.
+
+## Stage Report: validation
+
+- DONE - Verify the implementation is shipped as runtime contract/doc changes, not just harness code.
+  Evidence: commit `1ac0fd4` changes `skills/first-officer/references/codex-first-officer-runtime.md` and `skills/ensign/references/codex-ensign-runtime.md` in addition to the supporting tests.
+- DONE - Verify the shipped Codex runtime docs express skill-relative include resolution and bounded fallback.
+  Evidence: `skills/first-officer/references/codex-first-officer-runtime.md` adds `## Skill Bootstrap Resolution` with `SKILL.md`-relative include loading, a bounded fallback, and no repo-wide search; `skills/ensign/references/codex-ensign-runtime.md` names the packaged skill path as `~/.agents/skills/{namespace}/ensign/SKILL.md`.
+- DONE - Verify the supporting tests cover the shipped contract.
+  Evidence: `tests/test_agent_content.py` checks the runtime-doc wording and packaged-worker contract; `tests/test_codex_packaged_agent_ids.py` verifies `spacedock:ensign -> worker_key: spacedock-ensign` and the bootstrap prompt's skill-loading instructions.
+- DONE - Re-run proportional static validation.
+  Evidence: `unset CLAUDECODE && uv run --with pytest pytest tests/test_agent_content.py tests/test_codex_packaged_agent_ids.py -q` passed with `34 passed in 0.06s`.
+- DONE - Confirm the work is not test-harness-only.
+  Evidence: the branch has shipped-doc changes in `skills/first-officer/references/codex-first-officer-runtime.md` and `skills/ensign/references/codex-ensign-runtime.md`, with tests reinforcing the contract.
+
+Recommendation: PASSED
+
+Assessment:
+1. The static evidence is sufficient for the shipped Codex runtime contract in this task. The docs and tests now agree on skill-relative bootstrap resolution, bounded fallback, and packaged-worker identity handling.
+2. The one thing not proven in this session is a fresh live Codex boot completion. That is a runtime verification gap, not a contradiction in the shipped artifact, so it does not block the recommendation here.
+
+Counts: 5 done, 0 skipped, 0 failed
