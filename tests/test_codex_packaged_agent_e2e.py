@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -75,7 +76,14 @@ def main():
             "Drive the packaged Codex path through implementation completion, validation rejection, and the first routed follow-up back to implementation. "
             "If the completed implementation worker is still addressable and reuse conditions pass, route the follow-up through "
             "`send_input` on the existing worker handle instead of spawning a replacement. "
-            "Once the routed follow-up is delivered, explicitly shut down any worker that is no longer needed before stopping. "
+            "That reused implementation follow-up is on the critical path for this run, so do not stop after delivery alone: "
+            "you must wait for the reused worker's next completion and use that post-`send_input` `wait_agent(...)` result as the only valid completion evidence for the reused cycle. "
+            "Do not treat the immediate `send_input` tool result as proof that the follow-up already completed, because it may only echo the worker's earlier completed state. "
+            "The routed follow-up itself must carry the concrete implementation fix work on that same thread, not an acknowledgment-only ping. "
+            "The reused worker's post-`send_input` completion must report the actual fix and a new implementation commit. "
+            "For this run, route delivery alone is not a sufficient bounded outcome. "
+            "The bounded outcome is satisfied only after `wait_agent(...)` returns the reused worker's real follow-up completion evidence. "
+            "After the reused implementation worker finishes the routed fix, explicitly shut down any worker that is no longer needed before stopping. "
             "Use a human-readable worker label in status updates and routed messages, such as `001-impl/Herschel` or equivalent "
             "entity-stage-display convention. "
             "When you dispatch a fresh worker, use the exact Codex pattern "
@@ -114,6 +122,38 @@ def main():
         bool(re.search(r"critical path", fo_text, re.IGNORECASE))
         and bool(re.search(r"wait_agent|wait", fo_text, re.IGNORECASE)),
     )
+    send_input_target = ""
+    reused_wait_target = ""
+    reused_wait_message = ""
+    follow_up_commit = ""
+    follow_up_wait_after_send = False
+    for raw_line in log.raw_lines:
+        try:
+            entry = json.loads(raw_line)
+        except json.JSONDecodeError:
+            continue
+        item = entry.get("item", {})
+        if not isinstance(item, dict) or item.get("type") != "collab_tool_call":
+            continue
+        tool = item.get("tool")
+        receiver_ids = item.get("receiver_thread_ids") or []
+        if tool == "send_input" and receiver_ids:
+            send_input_target = receiver_ids[0]
+            continue
+        if tool == "wait" and send_input_target and receiver_ids and receiver_ids[0] == send_input_target:
+            follow_up_wait_after_send = True
+            reused_wait_target = receiver_ids[0]
+            reused_wait_message = (
+                (item.get("agents_states") or {}).get(reused_wait_target, {}).get("message") or ""
+            )
+            match = re.search(r"committed .* at `([0-9a-f]{7,40})`", reused_wait_message)
+            if match:
+                follow_up_commit = match.group(1)
+
+    t.check("reused worker is awaited after send_input on the same handle", follow_up_wait_after_send)
+    t.check("reused wait stays on the send_input target handle", reused_wait_target == send_input_target and bool(send_input_target))
+    t.check("reused wait returns new completion evidence rather than the stale implementation summary", "Still needs attention: nothing." not in reused_wait_message)
+    t.check("reused completion reports a new follow-up commit", bool(follow_up_commit and follow_up_commit != "9e941a7"))
     t.check(
         "reused-worker follow-up does not spawn a replacement worker",
         not bool(re.search(r"replacement dispatch|spawning a replacement|spawn a replacement", fo_text, re.IGNORECASE)),
@@ -146,6 +186,10 @@ def main():
     ).stdout
     t.check("safe packaged worker key appears in branch names", "spacedock-ensign/" in branches)
     t.check("raw packaged worker id does not leak into branch names", "spacedock:ensign" not in branches)
+
+    worktree_path = t.test_project_dir / worktree_value
+    greeting_text = (worktree_path / "greeting.txt").read_text()
+    t.check("reused implementation follow-up applied the validator-requested fix", greeting_text == "Goodbye, World!")
 
     t.results()
 
