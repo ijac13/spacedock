@@ -1,13 +1,20 @@
 ---
 id: 131
 title: Codex first officer: wait bookkeeping for reused worker threads after send_input
+<<<<<<< HEAD:docs/plans/codex-first-officer-reused-worker-wait-bookkeeping.md
 status: validation
 source: FO observation during task 117 feedback routing on 2026-04-11
 started: 2026-04-11T19:19:27Z
 completed:
+=======
+status: done
+source: FO observation during task 117 feedback routing on 2026-04-11
+started: 2026-04-11T19:19:27Z
+completed: 2026-04-12T18:02:28Z
+>>>>>>> 2f8c1a2 (merge: codex-first-officer-reused-worker-wait-bookkeeping):docs/plans/_archive/codex-first-officer-reused-worker-wait-bookkeeping.md
 verdict: PASSED
 score: 0.68
-worktree: .worktrees/spacedock-ensign-codex-first-officer-reused-worker-wait-bookkeeping
+worktree: 
 issue:
 pr: "#80"
 ---
