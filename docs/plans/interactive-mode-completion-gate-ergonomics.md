@@ -1,7 +1,7 @@
 ---
 id: 140
 title: Codex interactive-mode completion and gate ergonomics
-status: validation
+status: implementation
 source: FO observation during task 136 completion handling on 2026-04-12
 score: 0.64
 started: 2026-04-12T18:25:22Z
