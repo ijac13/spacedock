@@ -18,6 +18,8 @@ This task should make skill include resolution deterministic for packaged skills
 
 The change should stay focused on boot-time reference loading and operator clarity. We want Codex to stay centered on skills as the execution surface, not on `agents/*.md` files as a secondary indirection layer.
 
+Validation note: this task is now scoped to the shipped runtime-contract guidance and the tests that describe that contract. It does not require a fresh live Codex startup proof in this entity; that proof is a separate runtime-validation concern.
+
 ## Proposed Approach
 
 ### Resolver behavior
@@ -38,16 +40,16 @@ Keep the implementation close to the existing boot loader so the resolution rule
 
 ## Acceptance Criteria
 
-1. Relative includes in a skill resolve from the directory containing that `SKILL.md`
-   - Test: boot a packaged skill whose include lives under `skills/<skill>/references/` and verify the include loads without any repo-wide search.
-2. The success path does not need repo-wide search
-   - Test: inspect boot logs for the first-officer startup and confirm the loader reports the direct skill-relative path, not a repository scan.
-3. Missing skill-relative includes use a bounded fallback and expose the resolved path
-   - Test: boot with one intentionally missing include and verify the fallback path is reported explicitly in boot output.
-4. Boot fails loudly when no bounded candidate resolves the include
-   - Test: simulate an include that exists nowhere in the bounded search set and verify the error names the missing include and the owning skill.
-5. The fix stays centered on skills as the execution surface
-   - Test: verify there are no changes to `agents/*.md` as a workaround path and no behavior that depends on agent wrappers for resolution.
+1. The shipped Codex runtime docs explicitly state that skill includes resolve relative to the active `SKILL.md`.
+   - Test: verify `skills/first-officer/references/codex-first-officer-runtime.md` and `skills/ensign/references/codex-ensign-runtime.md` each describe `SKILL.md`-relative loading.
+2. The shipped Codex runtime docs define bounded fallback and operator-visible resolution reporting.
+   - Test: verify the Codex runtime docs mention bounded fallback and the final resolved path, and do not describe a repo-wide search.
+3. The supporting tests exercise the shipped Codex contract rather than only the harness helper.
+   - Test: verify `tests/test_agent_content.py` checks the shipped Codex runtime docs and the assembled Codex ensign contract.
+4. The change stays centered on skills as the execution surface.
+   - Test: verify no `agents/*.md` workaround was introduced and the shipped guidance still points workers back to `spacedock:ensign`.
+5. Fresh live Codex startup proof is out of scope for this task body.
+   - Test: no live-boot claim is required in this entity; runtime behavior remains separately verifiable from the shipped guidance.
 
 ## Test Plan
 
@@ -56,10 +58,7 @@ Static checks are cheap and should cover the path semantics directly:
 - Verify the boot output includes the resolved path on both direct-hit and fallback paths.
 - Verify no new repo-wide search is introduced on the success path.
 
-End-to-end coverage is warranted because the bug was observed during live boot:
-- Run a packaged Codex first-officer boot with the known nested `skills/first-officer/references/...` layout and confirm boot succeeds without a repository search.
-- Run one negative boot case with a missing include to confirm the bounded fallback and explicit error behavior.
-- Cost/complexity: low to moderate. This is a boot-path change, so the E2E coverage is worth it, but it should stay focused on a small number of boot scenarios rather than a broad suite.
+End-to-end coverage is optional in this entity. If run, it should be treated as runtime validation of the shipped contract rather than as a required acceptance criterion for this task. The implementation work in this entity is complete once the shipped docs and their direct tests match the contract above.
 
 No dedicated UI or multi-stage E2E coverage is needed; the risk is isolated to boot-time resolution.
 
@@ -117,6 +116,23 @@ Skill include loading now resolves from the active `SKILL.md` directory first, w
 ### Summary
 
 The shipped Codex runtime docs now spell out skill-relative include resolution with a bounded fallback, and the static contract checks cover the updated language. I do not have a fresh end-to-end Codex completion signal from this session, so live runtime behavior still needs separate confirmation.
+
+## Stage Report: implementation (cycle 3)
+
+- [x] Narrowed the task scope to shipped runtime-contract guidance.
+  The body now says this entity is about the shipped Codex runtime docs and their direct tests, and that fresh live startup proof is out of scope here.
+- [x] Rewrote the acceptance criteria to match the narrowed scope.
+  The criteria now require explicit guidance in `codex-first-officer-runtime.md` and `codex-ensign-runtime.md`, plus matching tests, rather than a fresh live-boot proof.
+- [x] Preserved the shipped runtime guidance already added.
+  The `Skill Bootstrap Resolution` sections remain in both Codex runtime docs.
+- [x] Re-ran proportional verification after the scope correction.
+  `unset CLAUDECODE && uv run --with pytest pytest tests/test_agent_content.py tests/test_codex_packaged_agent_ids.py -q` passed with `40 passed in 0.04s`.
+- [ ] SKIP: Fresh live Codex first-try boot proof.
+  The session evidence did not provide an honest first-try include-resolution proof, so the task was narrowed instead of overstating runtime behavior.
+
+### Summary
+
+The task text now matches what this branch actually proves: shipped runtime-contract guidance and the tests that describe it. That removes the implication that a fresh live Codex boot proof was already obtained, while keeping the runtime docs and verification artifacts intact.
 
 ## Stage Report: validation
 
