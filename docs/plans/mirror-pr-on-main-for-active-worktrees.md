@@ -21,6 +21,7 @@ Task 131 established the ownership rule for active worktree-backed entities: onc
 - startup/idle handling needs `pr:` visibility on `main` even when other active state remains worktree-owned
 
 This task should therefore be read as a general ownership clarification for active worktree-backed state, with `pr:` as the narrow mirrored exception on `main`.
+In concrete terms, transitions like `implementation -> validation` for a worktree-backed entity should update the worktree copy rather than committing that active-stage change on `main`.
 
 ## Proposed Approach
 
@@ -38,7 +39,7 @@ This task should therefore be read as a general ownership clarification for acti
 2. `status --set {slug} pr=#NN` updates `main` for a worktree-backed entity without shifting the rest of the active state off the worktree copy.
    Test: targeted status-script regression using a main entity plus active worktree copy.
 3. Ordinary active-state updates for worktree-backed entities still resolve to the worktree copy and do not land on `main`.
-   Test: existing active-worktree status regression remains green, plus a focused no-main-write assertion for a non-`pr` field.
+   Test: existing active-worktree status regression remains green, plus a focused no-main-write assertion for a non-`pr` field such as a stage/status transition to `validation`.
 4. Startup/idle discovery can rely on `main` for `pr:` visibility without reintroducing general active-state collisions on `main`.
    Test: `status --boot` / `PR_STATE` behavior stays correct with mirrored `pr:` and worktree-owned stage state.
 
