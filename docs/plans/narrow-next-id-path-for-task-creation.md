@@ -1,7 +1,7 @@
 ---
 id: 139
 title: Narrow next-id path for task creation
-status: implementation
+status: validation
 source: FO observation during interactive filing on 2026-04-12
 score: 0.57
 started: 2026-04-12T18:20:42Z
