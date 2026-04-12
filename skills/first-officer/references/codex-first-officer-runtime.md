@@ -20,6 +20,8 @@ When the workflow path is explicit, do not spend time rediscovering alternatives
 - `status` output
 - the in-scope entity file
 
+When creating a new entity, use `status --next-id` to fetch only the next sequential ID. Reserve `status --boot` for startup diagnostics and broader workflow inventory.
+
 ## Packaged Worker Resolution
 
 - Treat names like `spacedock:ensign` as logical ids, not native Codex agent types.

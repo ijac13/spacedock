@@ -74,3 +74,20 @@ Estimated cost is low to moderate. The command logic is small, the shared id sca
 ### Summary
 
 The task is now scoped as a narrow CLI addition plus aligned first-officer guidance updates. The body describes the current overuse of `--boot`, the proposed `--next-id` path, the non-goals, and a test plan that stays proportional to the change.
+
+## Stage Report: implementation
+
+- [x] Implement a narrow `status --next-id` path that prints only the next sequential id.
+  `status --next-id` now exits before table rendering; verified with a fixture containing active and archived ids (`010` output only).
+- [x] Preserve `--boot` behavior and NEXT_ID reporting.
+  `python3 /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-narrow-next-id-path-for-task-creation/tests/test_status_script.py` passed 91 tests, including the existing `--boot` NEXT_ID and section-order coverage.
+- [x] Update FO/shared/runtime guidance to use `--next-id` for task creation instead of `--boot`.
+  Updated `skills/first-officer/references/first-officer-shared-core.md`, `skills/first-officer/references/claude-first-officer-runtime.md`, and `skills/first-officer/references/codex-first-officer-runtime.md` in the worktree.
+- [x] Add targeted tests for `--next-id` output/behavior and guidance references.
+  Added `TestNextIdOption` in `tests/test_status_script.py` plus content assertions in `tests/test_agent_content.py`.
+- [x] Run the relevant verification and record concrete evidence.
+  Verified with `python3 /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-narrow-next-id-path-for-task-creation/tests/test_status_script.py` and `uv run --with pytest pytest /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-narrow-next-id-path-for-task-creation/tests/test_agent_content.py -k 'next_id_for_task_creation or covers_all_behavioral_sections'`, both passing.
+
+### Summary
+
+Implemented a dedicated `--next-id` CLI mode that reuses the existing id scan but suppresses all other output. The broader `--boot` flow remains intact, and the first-officer guidance now points task creation at the narrow command instead of the startup scan.

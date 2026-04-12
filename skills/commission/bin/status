@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # commissioned-by: spacedock@{spacedock_version}
 # ABOUTME: Workflow status viewer — shows entity overview from YAML frontmatter.
-# ABOUTME: Supports default table, --archived, --next, and --boot (FO startup data).
+# ABOUTME: Supports default table, --archived, --next, --next-id, and --boot (FO startup data).
 #
 # goal: Show one-line-per-{entity_label} workflow overview from YAML frontmatter.
 #
@@ -11,6 +11,7 @@
 #   Sorted by stage order ascending, then score descending.
 #   Default: scan only $DIR/*.md. With --archived, also scan $DIR/_archive/*.md.
 #   With --next, read stage metadata from README frontmatter and output dispatchable entities.
+#   With --next-id, print only the next sequential ID across active and archived entities.
 #
 # --where filters: Supply one or more --where clauses to filter the output.
 #   Accepted forms (operators `=` and `!=` only, with or without spaces around the operator):
@@ -408,6 +409,12 @@ def compute_next_id(active_entities, archive_dir):
             except ValueError:
                 pass
     return '%03d' % (max_id + 1)
+
+
+def print_next_id(entities, workflow_dir):
+    """Print only the next sequential ID."""
+    archive_dir = os.path.join(workflow_dir, '_archive')
+    print(compute_next_id(entities, archive_dir))
 
 
 def scan_orphans(entities, git_root):
@@ -920,13 +927,17 @@ def main():
 
     include_archive = '--archived' in args
     show_next = '--next' in args
+    show_next_id = '--next-id' in args
     show_boot = '--boot' in args
     has_fields_flag = explicit_fields is not None or all_fields_flag
 
-    # --boot is incompatible with --next, --archived, --where, --fields, --all-fields
+    # --boot is incompatible with --next, --next-id, --archived, --where, --fields, --all-fields
     if show_boot:
         if show_next:
             print('Error: --boot is incompatible with --next', file=sys.stderr)
+            sys.exit(1)
+        if show_next_id:
+            print('Error: --boot is incompatible with --next-id', file=sys.stderr)
             sys.exit(1)
         if include_archive:
             print('Error: --boot is incompatible with --archived', file=sys.stderr)
@@ -945,6 +956,31 @@ def main():
         print('Error: --boot is incompatible with --where', file=sys.stderr)
         sys.exit(1)
 
+    if show_next_id:
+        incompatible = []
+        if show_next:
+            incompatible.append('--next')
+        if include_archive:
+            incompatible.append('--archived')
+        if show_boot:
+            incompatible.append('--boot')
+        if where_filters:
+            incompatible.append('--where')
+        if has_fields_flag:
+            incompatible.append('--fields/--all-fields')
+        if archive_slug is not None:
+            incompatible.append('--archive')
+        if set_result is not None:
+            incompatible.append('--set')
+        if incompatible:
+            print(f'Error: --next-id cannot be combined with {", ".join(incompatible)}',
+                  file=sys.stderr)
+            sys.exit(1)
+
+        entities = scan_entities(pipeline_dir)
+        print_next_id(entities, pipeline_dir)
+        sys.exit(0)
+
     if archive_slug is not None:
         incompatible = []
         if show_next:
@@ -953,6 +989,8 @@ def main():
             incompatible.append('--archived')
         if show_boot:
             incompatible.append('--boot')
+        if show_next_id:
+            incompatible.append('--next-id')
         if where_filters:
             incompatible.append('--where')
         if has_fields_flag:
@@ -976,6 +1014,8 @@ def main():
             incompatible.append('--archived')
         if show_boot:
             incompatible.append('--boot')
+        if show_next_id:
+            incompatible.append('--next-id')
         if where_filters:
             incompatible.append('--where')
         if has_fields_flag:

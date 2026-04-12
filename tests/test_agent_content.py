@@ -91,6 +91,8 @@ def test_first_officer_shared_core_covers_all_behavioral_sections():
 
     assert "Output Format" in text
     assert "feedback-to" in text
+    assert "--next-id" in text
+    assert "status --boot" in text
 
 
 def test_ensign_shared_core_keeps_stage_report_protocol():
@@ -383,6 +385,17 @@ def test_fo_completion_reads_last_stage_report():
     assert "last" in completion_section.lower(), (
         "Completion and Gates must reference reading the last stage report"
     )
+
+
+def test_first_officer_runtime_docs_use_next_id_for_task_creation():
+    shared = read_text("skills/first-officer/references/first-officer-shared-core.md")
+    claude_runtime = read_text("skills/first-officer/references/claude-first-officer-runtime.md")
+    codex_runtime = read_text("skills/first-officer/references/codex-first-officer-runtime.md")
+
+    assert "status --next-id" in shared
+    assert "status --boot" in shared
+    assert "status --next-id" in claude_runtime
+    assert "status --next-id" in codex_runtime
 
 
 def test_assembled_codex_ensign_has_completion_summary_contract():

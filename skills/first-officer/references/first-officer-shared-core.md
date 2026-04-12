@@ -11,7 +11,7 @@ This file captures the shared first-officer semantics. Keep it aligned with `age
    - entity labels
    - stage ordering and defaults from `stages.defaults` / `stages.states`
    - stage properties such as `initial`, `terminal`, `gate`, `worktree`, `concurrency`, `feedback-to`, and `agent`
-4. Run `status --boot` to gather all startup information in one call. Parse the output sections:
+4. Run `status --boot` to gather all startup information in one call. When creating a new entity, use `status --next-id` instead of `--boot` to fetch only the next sequential ID. Parse the output sections:
    - **MODS** — registered mod hooks grouped by lifecycle point (startup, idle, merge). Run startup hooks before normal dispatch.
    - **NEXT_ID** — next available sequential entity ID.
    - **ORPHANS** — entities with worktree fields, cross-referenced against filesystem and git state. Report anomalies rather than auto-redispatching.
@@ -24,10 +24,10 @@ The status viewer ships with the plugin at `skills/commission/bin/status`. Resol
 
 Invoke it as:
 ```
-{spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {workflow_dir} [--next|--archived|--where ...|--boot]
+{spacedock_plugin_dir}/skills/commission/bin/status --workflow-dir {workflow_dir} [--next-id|--next|--archived|--where ...|--boot]
 ```
 
-Use `--boot` at startup to gather mods, next ID, orphans, PR state, and dispatchable entities in a single call. Use `--next`, `--where "pr !="`, etc. for targeted queries during the event loop. `--boot` is incompatible with `--next`, `--archived`, and `--where`.
+Use `--boot` at startup to gather mods, next ID, orphans, PR state, and dispatchable entities in a single call. Use `--next-id` when filing a new task so you only fetch the next sequential ID. Use `--next`, `--where "pr !="`, etc. for targeted queries during the event loop. `--boot` is incompatible with `--next`, `--next-id`, `--archived`, and `--where`.
 
 The `--set` flag updates entity frontmatter fields:
 - `--set {slug} field=value` sets a field
