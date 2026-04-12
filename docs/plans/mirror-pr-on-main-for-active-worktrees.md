@@ -9,7 +9,7 @@ verdict:
 score: 0.72
 worktree: .worktrees/spacedock-ensign-mirror-pr-on-main-for-active-worktrees
 issue:
-pr:
+pr: #83
 ---
 
 ## Problem Statement
