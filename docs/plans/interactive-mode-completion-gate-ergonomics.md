@@ -103,3 +103,17 @@ This ideation pass tightens the task around two Codex runtime gaps: completion e
 ### Summary
 
 This implementation tightens Codex interactive behavior so completed gated stages are foregrounded instead of drifting behind unrelated conversation, and stage dispatch follows the workflow metadata instead of assuming a worktree by default. The rejection flow now explicitly routes `REJECTED` results with `feedback-to` immediately when the worker remains addressable. Supporting regression tests were updated to match the explicit workflow-target prompt wording, and the Codex prompt/content checks still pass.
+
+## Stage Report: validation
+
+- DONE - Verified the branch is not docs-only or harness-only. The diff includes the shipped Codex runtime guidance in `skills/first-officer/references/codex-first-officer-runtime.md` and the worker runtime in `skills/ensign/references/codex-ensign-runtime.md`, with supporting changes in `scripts/test_lib.py` and focused tests.
+- DONE - Confirmed the runtime guidance change is present in the primary implementation artifact: dispatch now stays on main unless `worktree: true`, gated completions are foregrounded as the next required action, and `REJECTED` + `feedback-to` reroutes immediately in interactive Codex mode.
+- DONE - Ran proportional static validation: `uv run --with pytest python -m pytest tests/test_codex_completion_gate_ergonomics.py tests/test_codex_packaged_agent_ids.py tests/test_agent_content.py` and `git diff --check`.
+- DONE - Observed the static test slice pass: `38 passed`.
+- DONE - Verified the working tree diff includes six files total, with the runtime guidance files as the core change and tests as supporting coverage.
+- BLOCKED - No live interactive Codex session was run here, so the event-ordering behavior in an actual interactive conversation remains unproven by this validation pass.
+- REJECTED - The implementation is present and the static checks pass, but the acceptance criteria about interactive foregrounding and immediate reroute need a live Codex run to prove end-to-end behavior.
+
+### Summary
+
+This branch has the intended runtime instruction edits and supporting tests, and the static slice passed cleanly. I am still recommending `REJECTED` because the key acceptance criteria are interactive Codex behaviors that were not exercised in a live session, so the branch is not fully proven yet.
