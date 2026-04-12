@@ -90,3 +90,22 @@ The task is now scoped as a Codex-only runtime guidance change: interactive sess
 ### Summary
 
 Interactive Codex first-officer guidance now keeps spawned workers in the background by default and only foregrounds `wait_agent` when the next step is blocked or the captain explicitly requests waiting. The bounded and single-entity paths still permit immediate waiting, and the new tests pin both the runtime wording and the generated invocation prompt to that split.
+
+## Stage Report: validation
+
+- [x] DONE: Re-ran the currently available targeted tests.
+  `uv run --with pytest python tests/test_agent_content.py -q` passed (28/28), and `uv run --with pytest python tests/test_codex_packaged_agent_ids.py -q` passed (6/6).
+- [x] DONE: Verified the Codex-specific scope remained local.
+  The touched runtime guidance is still confined to `skills/first-officer/references/codex-first-officer-runtime.md` and Codex harness helpers/tests; the shared first-officer contract was not expanded.
+- [x] FAILED: Verify each acceptance criterion with evidence.
+  The implementation does not provide a test that drives an actual Codex interactive dispatch and proves `spawn_agent` stays in the background until a dependency block or explicit wait request occurs. The bounded/single-entity immediate-wait behavior is also not exercised directly. Current coverage is limited to static content checks and prompt-shape assertions.
+- [x] FAILED: Assess interactive-mode policy coverage intent.
+  The added tests document wording and naming conventions, but they do not clearly test the runtime policy split between interactive and bounded sessions. No test here demonstrates the next orchestration step blocking on worker output or the captain explicitly requesting a wait.
+- [x] SKIPPED: Add or update interactive behavioral regression coverage.
+  This validation pass does not produce implementation changes; the missing interactive/bounded wait regression needs to be added by implementation if the policy claims are meant to be validated.
+
+### Summary
+
+The available tests pass, but they only prove text-level contract and ID-resolution behavior. They do not prove the acceptance criteria that depend on actual interactive dispatch timing, dependency-blocked waiting, explicit-wait handling, or bounded immediate waiting. Because the requested behavior is not yet covered by a deterministic behavioral test, the validation outcome is `REJECTED`.
+
+Recommendation: REJECTED
