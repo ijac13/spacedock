@@ -74,3 +74,41 @@ Estimated cost is low to moderate. The command logic is small, the shared id sca
 ### Summary
 
 The task is now scoped as a narrow CLI addition plus aligned first-officer guidance updates. The body describes the current overuse of `--boot`, the proposed `--next-id` path, the non-goals, and a test plan that stays proportional to the change.
+
+## Stage Report: implementation
+
+- [x] Implement a narrow `status --next-id` path that prints only the next sequential id.
+  `status --next-id` now exits before table rendering; verified with a fixture containing active and archived ids (`010` output only).
+- [x] Preserve `--boot` behavior and NEXT_ID reporting.
+  `python3 /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-narrow-next-id-path-for-task-creation/tests/test_status_script.py` passed 91 tests, including the existing `--boot` NEXT_ID and section-order coverage.
+- [x] Update FO/shared/runtime guidance to use `--next-id` for task creation instead of `--boot`.
+  Updated `skills/first-officer/references/first-officer-shared-core.md`, `skills/first-officer/references/claude-first-officer-runtime.md`, and `skills/first-officer/references/codex-first-officer-runtime.md` in the worktree.
+- [x] Add targeted tests for `--next-id` output/behavior and guidance references.
+  Added `TestNextIdOption` in `tests/test_status_script.py` plus content assertions in `tests/test_agent_content.py`.
+- [x] Run the relevant verification and record concrete evidence.
+  Verified with `python3 /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-narrow-next-id-path-for-task-creation/tests/test_status_script.py` and `uv run --with pytest pytest /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-narrow-next-id-path-for-task-creation/tests/test_agent_content.py -k 'next_id_for_task_creation or covers_all_behavioral_sections'`, both passing.
+
+### Summary
+
+Implemented a dedicated `--next-id` CLI mode that reuses the existing id scan but suppresses all other output. The broader `--boot` flow remains intact, and the first-officer guidance now points task creation at the narrow command instead of the startup scan.
+
+## Stage Report: validation
+
+- [x] Verify the implementation against the acceptance criteria with concrete evidence.
+  `skills/commission/bin/status` now has a standalone `--next-id` branch, and the tests assert the narrow output shape plus archive-aware ID calculation. The guidance checks also confirm the first-officer docs point task creation at `status --next-id`.
+- [x] Re-run the relevant tests and record actual outcomes.
+  `python3 /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-narrow-next-id-path-for-task-creation/tests/test_status_script.py` passed `91` tests. `uv run --with pytest pytest /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-narrow-next-id-path-for-task-creation/tests/test_agent_content.py -k 'next_id_for_task_creation or covers_all_behavioral_sections'` passed `2` tests.
+- [x] Confirm the new `--next-id` path and the guidance updates are both covered by tests with clear purpose.
+  `tests/test_status_script.py:416-438` covers `--next-id` output and archived IDs. `tests/test_status_script.py:880-896` covers `--boot` NEXT_ID parity. `tests/test_agent_content.py:377-385` covers the shared-core and runtime guidance updates.
+- [x] Recommend PASSED or REJECTED with precise evidence.
+  PASSED. The narrow CLI path works, the archive-inclusive ID scan is verified, `--boot` still reports `NEXT_ID`, and the runtime guidance now prefers `status --next-id` for new task creation.
+- [x] Commit your validation work in the assigned worktree before reporting completion.
+  Commit will be created after this report is written.
+
+### Summary
+
+Validation passed. The worktree contains the intended narrow `--next-id` path, the broader `--boot` flow still behaves as before, and the guidance tests explicitly cover the new task-creation instruction. The evidence is localized and sufficient for acceptance.
+
+### Recommendation
+
+PASSED

@@ -414,6 +414,31 @@ class TestNextOption(unittest.TestCase):
             self.assertIn('042', data_lines[0])
 
 
+class TestNextIdOption(unittest.TestCase):
+    """Test the narrow --next-id output path."""
+
+    def setUp(self):
+        self._script_dir = tempfile.mkdtemp()
+        self.script_path = build_status_script(self._script_dir)
+
+    def tearDown(self):
+        os.unlink(self.script_path)
+        os.rmdir(self._script_dir)
+
+    def test_next_id_prints_only_value(self):
+        """--next-id prints just the next sequential ID, with archived ids included."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(
+                tmpdir,
+                README_WITH_STAGES,
+                entities={'active.md': entity('001', 'Active', 'backlog', '0.50')},
+                archived={'archived.md': entity('009', 'Archived', 'done', '0.80')},
+            )
+            result = run_status(tmpdir, '--next-id', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, '010\n')
+
+
 class TestFrontmatterParsing(unittest.TestCase):
     """Test edge cases in YAML frontmatter parsing."""
 
