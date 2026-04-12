@@ -161,12 +161,12 @@ If a `worktree_path` is present, `entity_path` should point to the entity file i
 ## Bounded Prototype Rule
 
 For the current Codex spike:
-- stop after the first meaningful outcome
+- stop after the first meaningful outcome only when the requested bounded outcome does not require routed reuse or feedback bounce
 - if the workflow is waiting at a gate, report the gate review and stop
 - if a worker returns a verdict or concrete evidence, summarize it and stop
 - if a feedback stage rejects, mention the follow-up target even if the full bounce loop is not completed in the same run
 - when the run is explicitly in single-entity mode, prefer the shared single-entity termination/output rules over generic status summaries
-- if the requested bounded outcome includes a routed reuse or feedback bounce, do not stop at route delivery alone; the stop condition is satisfied only after `wait_agent` returns the reused worker's actual follow-up completion evidence
+- if the requested bounded outcome includes a routed reuse or feedback bounce, the generic early-stop bullets above do not apply until `wait_agent` returns the reused worker's actual follow-up completion evidence
 
 For a bounded run, once the stop condition is satisfied:
 - send one concise final response
