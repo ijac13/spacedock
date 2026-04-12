@@ -71,25 +71,7 @@ def main():
     fo_exit = run_codex_first_officer(
         t,
         "packaged-agent-pipeline",
-        run_goal=(
-            "Process only the entity `keepalive-test-task`. "
-            "Drive the packaged Codex path through implementation completion, validation rejection, and the first routed follow-up back to implementation. "
-            "If the completed implementation worker is still addressable and reuse conditions pass, route the follow-up through "
-            "`send_input` on the existing worker handle instead of spawning a replacement. "
-            "That reused implementation follow-up is on the critical path for this run, so do not stop after delivery alone: "
-            "you must wait for the reused worker's next completion and use that post-`send_input` `wait_agent(...)` result as the only valid completion evidence for the reused cycle. "
-            "Do not treat the immediate `send_input` tool result as proof that the follow-up already completed, because it may only echo the worker's earlier completed state. "
-            "The routed follow-up itself must carry the concrete implementation fix work on that same thread, not an acknowledgment-only ping. "
-            "The reused worker's post-`send_input` completion must report the actual fix and a new implementation commit. "
-            "For this run, route delivery alone is not a sufficient bounded outcome. "
-            "The bounded outcome is satisfied only after `wait_agent(...)` returns the reused worker's real follow-up completion evidence. "
-            "After the reused implementation worker finishes the routed fix, explicitly shut down any worker that is no longer needed before stopping. "
-            "Use a human-readable worker label in status updates and routed messages, such as `001-impl/Herschel` or equivalent "
-            "entity-stage-display convention. "
-            "When you dispatch a fresh worker, use the exact Codex pattern "
-            "`spawn_agent(agent_type=\"worker\", fork_context=false, message=<fully self-contained prompt>)` "
-            "followed by `wait_agent(...)`."
-        ),
+        run_goal="Process only the entity `keepalive-test-task`.",
         timeout_s=420,
     )
     t.check("Codex launcher exited cleanly", fo_exit == 0)
