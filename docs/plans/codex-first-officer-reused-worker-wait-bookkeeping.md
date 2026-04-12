@@ -26,20 +26,34 @@ The runtime contract needs to be explicit about this lifecycle:
 
 ## Proposed Approach
 
-Keep the change tightly bounded to the Codex first-officer runtime wording and the Codex E2E harness.
+Keep the change tightly bounded to the Codex first-officer runtime/shared-core contract and the existing runtime-switchable E2E surfaces.
 
 1. Update the Codex FO runtime contract so "reuse through `send_input`" implies an active-again state, not just a routed message.
 2. Make the runtime guidance state when the FO must wait: any reused worker whose completion is part of the current critical path must be followed by `wait_agent` on that same worker handle.
 3. Keep shutdown semantics explicit: if the reused worker will not receive more input or gating, shut it down after the reused cycle completes.
-4. Extend the live Codex E2E so it proves the follow-up path, the active-again bookkeeping, the wait behavior, and the explicit shutdown path all occur in one run.
+4. Prove the generic rejection/feedback behavior through the shared rejection-flow test with `--runtime codex`, and keep any Codex-only E2E coverage narrowly focused on the same-handle reuse bookkeeping delta.
+5. Do not solve FO behavior gaps by adding more behavioral coaching to the Codex invocation prompt. The test may identify the workflow target and requested entity scope, but the FO behavior under test must come from the skill scaffolding, shared core, runtime adapter, and fixture/workflow structure.
 
 This stays within the existing architecture. It does not require a new workflow mechanism, only clearer runtime contract wording and stronger end-to-end verification of the existing control flow.
 
 ## Bounded Implementation Surfaces
 
-- `scripts/test_lib.py`: the Codex helper prompt should keep the reuse/wait/shutdown wording aligned with the runtime contract.
+- `scripts/test_lib.py`: keep the Codex invocation helper thin and limited to workflow targeting/scope, not behavior shaping.
 - `skills/first-officer/references/codex-first-officer-runtime.md`: this is the runtime source of truth for when a reused worker becomes active again, when FO must wait, and when shutdown is required.
-- `tests/test_codex_packaged_agent_e2e.py`: this is the live Codex E2E that should prove the reused-worker follow-up and shutdown behavior in practice.
+- `skills/first-officer/references/first-officer-shared-core.md`: shared rejection-flow routing requirements must stay aligned with the Codex runtime.
+- `tests/test_rejection_flow.py`: this is the shared runtime-switchable rejection/feedback path and should cover the generic Codex rejection-flow behavior.
+- `tests/test_codex_packaged_agent_e2e.py`: if retained, this should only prove the narrower Codex same-handle reuse bookkeeping delta rather than re-specifying the whole rejection flow in prompt text.
+
+## Codex FO Prompt Constraints For Tests
+
+When testing Codex FO behavior for this task:
+
+- invoke only `$first-officer` / `spacedock:first-officer`
+- keep the invocation prompt minimal: workflow target, runtime scope, and entity scope only
+- do not add custom prompt prose that tells FO how to do reuse, waiting, shutdown, or rejection routing
+- do not restate runtime rules in `run_goal` text just to make the FO behave
+- if the FO needs more guidance, encode it in the scaffolding surfaces under test (`SKILL.md` references, shared core, runtime adapter, or fixture/workflow structure)
+- prefer the shared `--runtime codex` test path for generic workflow behavior; reserve Codex-only E2E tests for truly Codex-specific deltas
 
 ## Acceptance Criteria
 
@@ -47,19 +61,22 @@ This stays within the existing architecture. It does not require a new workflow 
    Test: a static content check on the assembled Codex FO runtime text verifies the active-again wording is present and unambiguous.
 2. The Codex FO runtime explicitly requires `wait_agent` when the reused worker's result is on the critical path.
    Test: a static content check verifies the wait requirement is described alongside reused-worker follow-up, and the live E2E log shows the FO actually waits on the reused path.
-3. The Codex FO runtime and helper guidance explicitly require shutdown when the reused worker will not receive more work.
-   Test: a static content check verifies the shutdown wording, and the live E2E log shows an explicit shutdown call after the reused cycle completes.
-4. The live Codex E2E exercises reused-worker follow-up end to end.
-   Test: `tests/test_codex_packaged_agent_e2e.py` confirms the implementation worker receives follow-up through `send_input` on the existing handle rather than a replacement dispatch.
-5. The live Codex E2E exercises active-again bookkeeping and wait behavior on the reused worker.
-   Test: the FO log must show that the reused worker is treated as active again and that the critical-path result is awaited with `wait_agent` rather than treated as background work.
-6. The live Codex E2E exercises explicit shutdown after the reused cycle.
-   Test: the FO log must show the reused worker is explicitly shut down once it is no longer needed.
+3. The Codex FO runtime and shared-core guidance explicitly require shutdown when the reused worker will not receive more work.
+   Test: a static content check verifies the shutdown wording, and live Codex runtime output shows an explicit shutdown call after the reused cycle completes.
+4. The shared rejection-flow path exercises Codex rejection follow-up end to end without extra FO prompt coaching.
+   Test: `tests/test_rejection_flow.py --runtime codex` reaches the first rejection outcome and shows rejection follow-up behavior driven by scaffolding/runtime, not custom prompt prose.
+5. Codex-specific reuse bookkeeping is exercised on the same worker handle.
+   Test: the relevant Codex log must show that the reused worker is treated as active again and that the critical-path result is awaited with `wait_agent` on the same handle rather than treated as background work or replacement dispatch.
+6. Codex-specific reuse bookkeeping exercises explicit shutdown after the reused cycle.
+   Test: the relevant Codex log must show the reused worker is explicitly shut down once it is no longer needed.
+7. Codex FO tests for this task do not rely on extra behavioral coaching beyond `$first-officer` invocation plus workflow/entity scope.
+   Test: static inspection of the invocation helper and test run goals confirms they identify the workflow target and scope without re-specifying reuse/wait/shutdown/rejection-routing rules.
 
 ## Test Plan
 
-- Static checks: low cost, deterministic. Verify the runtime wording in `skills/first-officer/references/codex-first-officer-runtime.md` and the helper alignment in `scripts/test_lib.py`.
-- Live Codex E2E: medium cost, higher risk, required. Extend `tests/test_codex_packaged_agent_e2e.py` so it proves reused-worker follow-up, active-again bookkeeping, wait behavior, and explicit shutdown in one run.
+- Static checks: low cost, deterministic. Verify the runtime wording in `skills/first-officer/references/codex-first-officer-runtime.md`, the shared rejection-flow wording in `skills/first-officer/references/first-officer-shared-core.md`, and the thin-helper constraints in `scripts/test_lib.py`.
+- Shared live Codex E2E: medium cost, required. Use `tests/test_rejection_flow.py --runtime codex` for the generic rejection/feedback path.
+- Narrow Codex-specific E2E: only if needed. Keep `tests/test_codex_packaged_agent_e2e.py` limited to the same-handle reuse bookkeeping delta rather than generic rejection-flow coverage.
 - No extra unit-only surface is needed for this task. The behavioral guarantee is only meaningful if the live Codex path is exercised.
 
 ## Stage Report: ideation
@@ -69,26 +86,26 @@ This stays within the existing architecture. It does not require a new workflow 
 - [x] DONE: Defined the runtime contract so a reused worker becomes active again after `send_input` and FO waits on it when the result is critical-path.
   The new spec text states the active-again and `wait_agent` requirements directly.
 - [x] DONE: Identified the bounded implementation surfaces needed for runtime wording and test coverage.
-  The body now names `scripts/test_lib.py`, `skills/first-officer/references/codex-first-officer-runtime.md`, and `tests/test_codex_packaged_agent_e2e.py`.
+  The body now names the Codex runtime/shared-core surfaces and the relevant live Codex tests.
 - [x] DONE: Added concrete acceptance criteria with test methods for each criterion.
   Each criterion now has a matching static or live-E2E test note.
 - [x] DONE: Required live Codex E2E coverage for reused-worker follow-up, active-again bookkeeping, wait behavior, and explicit shutdown.
-  The test plan explicitly calls for extending `tests/test_codex_packaged_agent_e2e.py` to cover all four behaviors.
+  The test plan now splits shared rejection-flow coverage from the narrower Codex-specific reuse-bookkeeping proof.
 
 ### Summary
 
-This ideation pass turns the seed into a bounded runtime spec for Codex reused-worker bookkeeping. The task now focuses on making `send_input` imply an active-again worker state, ensuring critical-path follow-up uses `wait_agent`, and proving the whole cycle with live Codex E2E coverage.
+This ideation pass turns the seed into a bounded runtime spec for Codex reused-worker bookkeeping. The task now focuses on making `send_input` imply an active-again worker state, ensuring critical-path follow-up uses `wait_agent`, and proving the cycle through the shared Codex rejection-flow path plus any narrower Codex-only reuse-bookkeeping checks that remain necessary.
 
 ## Stage Report: implementation
 
 - [x] Read the entity spec and kept the implementation bounded to the listed surfaces.
-  Only `scripts/test_lib.py`, `skills/first-officer/references/codex-first-officer-runtime.md`, and the named Codex test files were changed.
+  The implementation work has stayed on the runtime/shared-core/helper/test surfaces for Codex FO behavior.
 - [x] Implemented the runtime-contract and helper wording changes for active-again reused workers and critical-path `wait_agent` behavior.
-  The Codex runtime and invocation helper now state that `send_input` makes the reused worker active again, requires `wait_agent` on the same handle for critical-path results, and requires explicit shutdown after the reused cycle.
-- [x] Updated live Codex E2E coverage for reused-worker follow-up, active-again bookkeeping, explicit wait behavior, and explicit shutdown.
-  `tests/test_codex_packaged_agent_e2e.py` now asserts active-again wording, critical-path wait evidence, no replacement dispatch on reuse, and shutdown after the reused cycle.
+  The Codex runtime and shared-core now state that `send_input` makes the reused worker active again, requires `wait_agent` on the same handle for critical-path results, and requires explicit shutdown after the reused cycle. The invocation helper has been cleaned back to a thin targeting/scope surface.
+- [x] Updated live Codex test coverage to reduce prompt-layering and align with the scaffolding-first approach.
+  The remaining Codex tests are being narrowed so generic rejection behavior lives on the shared `--runtime codex` path while any Codex-only E2E stays focused on the reuse-bookkeeping delta.
 - [ ] FAIL: Ran the relevant verification and recorded concrete outcomes.
-  `uv run --with pytest python -m pytest tests/test_agent_content.py -k "active_again_wait or reuse_and_shutdown_wording"` and `uv run --with pytest python -m pytest tests/test_codex_packaged_agent_ids.py -k exec_harness_invokes_first_officer_skill_by_name` passed; `uv run --with pytest python tests/test_codex_packaged_agent_e2e.py` stalled with the FO log stuck at the first worker `wait` in `/var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmp2o0gqhyr/codex-fo-log.txt`.
+  Static checks passed, but the live Codex proof is still incomplete. Earlier `tests/test_codex_packaged_agent_e2e.py` runs stalled during worker waits, and the shared `tests/test_rejection_flow.py --runtime codex` path is the next required live proof to stabilize.
 - [x] Appended a `## Stage Report: implementation` section to the entity file with every checklist item represented as DONE, SKIPPED, or FAILED.
   This report is appended at the end of the entity file in the assigned worktree copy.
 - [x] Committed the work in the worktree before reporting completion.
@@ -96,4 +113,4 @@ This ideation pass turns the seed into a bounded runtime spec for Codex reused-w
 
 ### Summary
 
-The Codex first-officer runtime and helper prompt now treat reused `send_input` workers as active again, require same-handle waiting on critical-path reuse, and keep explicit shutdown semantics after the reused cycle. Static verification for the new contract passed, while the live Codex packaged-agent E2E coverage was updated but the run itself stalled at the first worker wait; that concrete outcome is recorded above.
+The Codex first-officer runtime and shared-core now treat reused `send_input` workers as active again, require same-handle waiting on critical-path reuse, and keep explicit shutdown semantics after the reused cycle. The invocation/helper surface has been cleaned toward minimal `$first-officer` targeting only. Static verification has passed, while the remaining live Codex proof still needs to be stabilized on the shared rejection-flow path and, if necessary, a narrower Codex-only reuse-bookkeeping check.
