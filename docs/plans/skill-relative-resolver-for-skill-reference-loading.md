@@ -102,3 +102,18 @@ The boot bug is caused by resolving skill includes against the wrong base path a
 ### Summary
 
 Skill include loading now resolves from the active `SKILL.md` directory first, with a bounded fallback and explicit path reporting for operators. The static harness and live Codex packaged-agent path both pass, and the work stayed scoped to the skill execution surface rather than introducing agent-wrapper workarounds.
+
+## Stage Report: implementation (cycle 2)
+
+- [x] Updated the shipped Codex runtime adapters to state the active-`SKILL.md` include rule.
+  `skills/first-officer/references/codex-first-officer-runtime.md` and `skills/ensign/references/codex-ensign-runtime.md` now each have a `Skill Bootstrap Resolution` section.
+- [x] Added tests that exercise the shipped Codex skill contract, not just the helper.
+  `tests/test_agent_content.py` now checks both Codex runtime docs and the assembled Codex ensign contract for the new skill-relative language.
+- [x] Verified the updated content with focused static tests.
+  `unset CLAUDECODE && uv run --with pytest pytest tests/test_agent_content.py tests/test_codex_packaged_agent_ids.py -q` passed with `40 passed in 0.06s`.
+- [ ] SKIP: Fresh Codex packaged-agent E2E proof.
+  The Codex E2E run was started, but it did not return a completion signal in the available window, so live runtime confirmation of the shipped-path wording remains unproven here.
+
+### Summary
+
+The shipped Codex runtime docs now spell out skill-relative include resolution with a bounded fallback, and the static contract checks cover the updated language. I do not have a fresh end-to-end Codex completion signal from this session, so live runtime behavior still needs separate confirmation.

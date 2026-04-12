@@ -33,6 +33,14 @@ When creating a new entity, use `status --next-id` to fetch only the next sequen
 - Use `worker_key` for worktree paths as `.worktrees/{worker_key}-{slug}` and branch names as `{worker_key}/{slug}`.
 - Never collapse a packaged logical id to bare `ensign` for worktree, branch, or session naming.
 
+## Skill Bootstrap Resolution
+
+When the packaged skill contract loads, resolve each `@...` include relative to
+the directory containing the active `SKILL.md`. Prefer the direct skill-local
+path first. If that file is missing, use only a bounded fallback that ships with
+the packaged skill namespace, and surface the final resolved path in the boot
+output. Do not expand resolution into a repository-wide search.
+
 Split worker identity into:
 - `dispatch_agent_id`
 - `worker_key`

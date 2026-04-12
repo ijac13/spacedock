@@ -121,6 +121,23 @@ def test_codex_runtime_docs_cover_merge_hook_finalize_path():
     assert "Never collapse a packaged logical id" in text
     assert "role_asset_name: ensign" in text
     assert "{worker_key}/{slug}" in text
+    assert "active `SKILL.md`" in text
+    assert "repository-wide search" in text
+
+
+def test_codex_ensign_runtime_doc_mentions_skill_relative_bootstrap_resolution():
+    text = read_text("skills/ensign/references/codex-ensign-runtime.md")
+    assert "active `SKILL.md`" in text
+    assert "bounded fallback" in text
+    assert "searching the repository" in text
+
+
+def test_assembled_codex_skill_contract_uses_skill_relative_bootstrap_language():
+    t = TestRunner("agent content", keep_test_dir=False)
+    text = assembled_agent_content(t, "ensign", runtime="codex")
+    assert "Skill Bootstrap Resolution" in text
+    assert "active `SKILL.md`" in text
+    assert "bounded fallback" in text
 
 
 def test_reuse_and_shutdown_wording_stays_aligned_between_shared_core_and_codex_runtime():
