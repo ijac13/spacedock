@@ -128,3 +128,32 @@ Recommendation: REJECTED
 ### Summary
 
 This feedback cycle corrects the overclaim: the implementation now says exactly what the current harness proves, namely Codex runtime guidance and prompt assembly for interactive, blocked, explicit-wait, and bounded paths. The tests now state their coverage intent plainly so the report no longer overstates live interactive behavioral proof.
+
+## Stage Report: validation (cycle 2)
+
+- [x] DONE: Read the current entity body and validate against the current acceptance criteria.
+  Compared the cycle-2 implementation claims with the unchanged AC1-AC5 in this worktree before judging evidence.
+- [x] DONE: Identify the substantive deliverable under review.
+  The behavior under review lives in `skills/first-officer/references/codex-first-officer-runtime.md`, `scripts/test_lib.py`, `tests/test_agent_content.py`, and `tests/test_codex_packaged_agent_ids.py`.
+- [x] DONE: Run proportional verification commands and record results.
+  `python3 -m py_compile scripts/test_lib.py tests/test_agent_content.py tests/test_codex_packaged_agent_ids.py` passed; `uv run --with pytest python tests/test_codex_packaged_agent_ids.py -q` passed (6/6); `uv run --with pytest python tests/test_agent_content.py -q` passed (31/31); `uv run tests/test_gate_guardrail.py --runtime codex` passed (6/6).
+- [ ] FAILED: Verify AC1 interactive dispatch stays background by default.
+  No Codex interactive PTY test exists in `tests/`, so this branch still has only runtime-doc and prompt-shape checks for AC1 rather than a live interactive Codex proof.
+- [ ] FAILED: Verify AC2 foreground waiting happens only when the next orchestration step is blocked on the worker result.
+  A preserved bounded Codex spot-check shows a blocked path does wait (`/var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmps411n4mp/codex-fo-log.txt` lines 34-38), but the generic shared Codex proof path is broken: `KEEP_TEST_DIR=1 uv run tests/test_rejection_flow.py --runtime codex` fails immediately with `TypeError: run_codex_first_officer() got an unexpected keyword argument 'stop_checker'`.
+- [ ] FAILED: Verify AC3 explicit captain wait requests trigger foreground waiting.
+  No test or live harness run in this worktree drives a Codex interactive session with an explicit captain "wait" request, so AC3 remains unproven.
+- [x] DONE: Verify AC4 bounded or single-entity runs can still wait immediately after dispatch.
+  The preserved packaged-agent Codex log shows bounded single-entity behavior explicitly: line 34 states the FO will wait because the run is bounded, `spawn_agent` completes at line 36, and `wait` on the same handle completes at line 38.
+- [x] DONE: Verify AC5 the change stays Codex-specific.
+  The changed wait-policy text is confined to Codex runtime guidance and Codex-specific helpers/tests; the shared first-officer core was not expanded for this policy.
+- [ ] FAILED: Evaluate the prompt-discipline concern and route the fix request.
+  `tests/README.md` requires minimal Codex FO invocation prompts and forbids behavioral coaching, but `scripts/test_lib.py` still encodes wait/reuse/shutdown rules into `build_codex_first_officer_invocation_prompt()` and `tests/test_codex_packaged_agent_ids.py` asserts on that wording. Route this back to implementation: remove behavioral coaching from the invocation prompt helper, stop treating prompt wording as proof of FO policy, repair shared `--runtime codex` live coverage for generic blocked/bounded behavior starting with `tests/test_rejection_flow.py`, and leave AC1/AC3 unproven until a real Codex interactive harness exists or the criteria are narrowed.
+
+Counts: 5 done, 0 skipped, 4 failed
+
+### Summary
+
+Cycle 2 correctly narrows the written claim to contract-level coverage, but the current acceptance criteria still ask for behavioral proof the branch does not yet provide. AC4 now has live bounded evidence and AC5 passes, but AC1 and AC3 remain unproven, AC2 lacks a compliant shared Codex behavioral test, and the current prompt-shape tests conflict with `tests/README` prompt-discipline guidance.
+
+Recommendation: REJECTED
