@@ -1,13 +1,13 @@
 ---
 id: 139
 title: Narrow next-id path for task creation
-status: validation
+status: done
 source: FO observation during interactive filing on 2026-04-12
 score: 0.57
 started: 2026-04-12T18:20:42Z
-completed:
-verdict:
-worktree: .worktrees/spacedock-ensign-narrow-next-id-path-for-task-creation
+completed: 2026-04-12T18:58:34Z
+verdict: PASSED
+worktree: 
 issue:
 pr:
 ---
