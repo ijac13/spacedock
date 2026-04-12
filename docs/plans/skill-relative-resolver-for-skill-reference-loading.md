@@ -1,7 +1,7 @@
 ---
 id: 136
 title: Skill-relative resolver for skill reference loading
-status: validation
+status: implementation
 source: FO observation during Codex first-officer boot on 2026-04-12
 score: 0.61
 started: 2026-04-12T18:11:17Z
