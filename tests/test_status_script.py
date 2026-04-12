@@ -758,24 +758,35 @@ class TestBootOption(unittest.TestCase):
         os.rmdir(self._script_dir)
 
 
-    def _make_fake_git(self, tmpdir, worktree_output=''):
-        """Create a fake git script that returns canned worktree list output."""
-        fake_bin = os.path.join(tmpdir, '_fake_bin')
-        os.makedirs(fake_bin, exist_ok=True)
-        git_script = os.path.join(fake_bin, 'git')
-        with open(git_script, 'w') as f:
-            f.write('#!/bin/sh\n')
-            f.write('if [ "$1" = "worktree" ] && [ "$2" = "list" ]; then\n')
-            f.write('  while IFS= read -r line; do\n')
-            f.write('    printf "%s\\n" "$line"\n')
-            f.write('  done <<\'GITEOF\'\n')
-            f.write(worktree_output)
-            f.write('GITEOF\n')
-            f.write('  exit 0\n')
-            f.write('fi\n')
-            f.write('exit 1\n')
-        os.chmod(git_script, 0o755)
-        return fake_bin
+    def _init_git_repo(self, tmpdir):
+        """Initialize a real git repo for worktree integration tests."""
+        subprocess.run(['git', 'init', '-b', 'main'], cwd=tmpdir, check=True,
+                       capture_output=True, text=True)
+        subprocess.run(['git', 'config', 'user.name', 'Test User'], cwd=tmpdir, check=True,
+                       capture_output=True, text=True)
+        subprocess.run(['git', 'config', 'user.email', 'test@example.com'], cwd=tmpdir, check=True,
+                       capture_output=True, text=True)
+        subprocess.run(['git', 'add', 'README.md'], cwd=tmpdir, check=True,
+                       capture_output=True, text=True)
+        for name in os.listdir(tmpdir):
+            if name.endswith('.md') and name != 'README.md':
+                subprocess.run(['git', 'add', name], cwd=tmpdir, check=True,
+                               capture_output=True, text=True)
+        subprocess.run(['git', 'commit', '-m', 'init'], cwd=tmpdir, check=True,
+                       capture_output=True, text=True)
+
+    def _add_real_worktree(self, tmpdir, worktree_name, branch_name):
+        """Create a real worktree and branch under the test pipeline repo."""
+        worktree_dir = os.path.join(tmpdir, '.worktrees', worktree_name)
+        os.makedirs(os.path.dirname(worktree_dir), exist_ok=True)
+        subprocess.run(
+            ['git', 'worktree', 'add', '-b', branch_name, worktree_dir],
+            cwd=tmpdir,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return worktree_dir
 
     def _make_fake_gh(self, tmpdir, pr_states=None):
         """Create a fake gh script that returns canned PR states.
@@ -884,28 +895,14 @@ class TestBootOption(unittest.TestCase):
     def test_orphans_with_existence_checks(self):
         """ORPHANS section shows entities with worktree field and existence columns."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            wt_path = os.path.join(tmpdir, '.worktrees', 'ensign-task-a')
-            os.makedirs(wt_path)
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'task-a.md': entity('001', 'Task A', 'implementation', worktree='.worktrees/ensign-task-a'),
                 'task-b.md': entity('002', 'Task B', 'implementation', worktree='.worktrees/ensign-task-b'),
             })
-            # Create fake git that reports ensign-task-a as a branch
-            worktree_output = (
-                'worktree /main\n'
-                'HEAD abc123\n'
-                'branch refs/heads/main\n'
-                '\n'
-                'worktree %s\n'
-                'HEAD def456\n'
-                'branch refs/heads/ensign-task-a\n'
-                '\n'
-            ) % wt_path
-            fake_bin = self._make_fake_git(tmpdir, worktree_output)
-            # Put fake git first, but exclude real gh
-            path = fake_bin + os.pathsep + self._path_without_gh()
+            self._init_git_repo(tmpdir)
+            self._add_real_worktree(tmpdir, 'ensign-task-a', 'ensign-task-a')
             result = run_status(tmpdir, '--boot', script_path=self.script_path,
-                               extra_env={'PATH': path})
+                               extra_env={'PATH': self._path_without_gh()})
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = result.stdout.split('\n')
             # Find ORPHANS section
@@ -927,26 +924,14 @@ class TestBootOption(unittest.TestCase):
     def test_orphans_namespaced_branch_detected(self):
         """Branch with / in name is correctly detected via worktree path lookup."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            wt_path = os.path.join(tmpdir, '.worktrees', 'ensign-feature-name')
-            os.makedirs(wt_path)
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'feature-name.md': entity('001', 'Feature', 'implementation',
                                           worktree='.worktrees/ensign-feature-name'),
             })
-            worktree_output = (
-                'worktree /main\n'
-                'HEAD abc123\n'
-                'branch refs/heads/main\n'
-                '\n'
-                'worktree %s\n'
-                'HEAD def456\n'
-                'branch refs/heads/ensign/feature-name\n'
-                '\n'
-            ) % wt_path
-            fake_bin = self._make_fake_git(tmpdir, worktree_output)
-            path = fake_bin + os.pathsep + self._path_without_gh()
+            self._init_git_repo(tmpdir)
+            self._add_real_worktree(tmpdir, 'ensign-feature-name', 'ensign/feature-name')
             result = run_status(tmpdir, '--boot', script_path=self.script_path,
-                               extra_env={'PATH': path})
+                               extra_env={'PATH': self._path_without_gh()})
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = result.stdout.split('\n')
             feature_line = [l for l in lines if 'feature-name' in l and '001' in l][0]
@@ -958,21 +943,13 @@ class TestBootOption(unittest.TestCase):
     def test_orphans_missing_worktree_detected(self):
         """Entity whose worktree path is not in git worktree list reports BRANCH_EXISTS: no."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Don't create the worktree directory either
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'ghost.md': entity('002', 'Ghost', 'implementation',
                                    worktree='.worktrees/ensign-ghost'),
             })
-            worktree_output = (
-                'worktree /main\n'
-                'HEAD abc123\n'
-                'branch refs/heads/main\n'
-                '\n'
-            )
-            fake_bin = self._make_fake_git(tmpdir, worktree_output)
-            path = fake_bin + os.pathsep + self._path_without_gh()
+            self._init_git_repo(tmpdir)
             result = run_status(tmpdir, '--boot', script_path=self.script_path,
-                               extra_env={'PATH': path})
+                               extra_env={'PATH': self._path_without_gh()})
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = result.stdout.split('\n')
             ghost_line = [l for l in lines if 'ghost' in l and '002' in l][0]
@@ -983,26 +960,14 @@ class TestBootOption(unittest.TestCase):
     def test_orphans_simple_branch_still_works(self):
         """Branch without / in name is still correctly detected (no regression)."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            wt_path = os.path.join(tmpdir, '.worktrees', 'remove-codex-dispatcher')
-            os.makedirs(wt_path)
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'codex.md': entity('003', 'Codex', 'implementation',
                                    worktree='.worktrees/remove-codex-dispatcher'),
             })
-            worktree_output = (
-                'worktree /main\n'
-                'HEAD abc123\n'
-                'branch refs/heads/main\n'
-                '\n'
-                'worktree %s\n'
-                'HEAD def456\n'
-                'branch refs/heads/remove-codex-dispatcher\n'
-                '\n'
-            ) % wt_path
-            fake_bin = self._make_fake_git(tmpdir, worktree_output)
-            path = fake_bin + os.pathsep + self._path_without_gh()
+            self._init_git_repo(tmpdir)
+            self._add_real_worktree(tmpdir, 'remove-codex-dispatcher', 'remove-codex-dispatcher')
             result = run_status(tmpdir, '--boot', script_path=self.script_path,
-                               extra_env={'PATH': path})
+                               extra_env={'PATH': self._path_without_gh()})
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = result.stdout.split('\n')
             codex_line = [l for l in lines if 'codex' in l and '003' in l][0]
