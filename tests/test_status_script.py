@@ -1435,7 +1435,7 @@ class TestSetOption(unittest.TestCase):
             self.assertEqual(fields['status'], 'done')
 
     def test_set_updates_active_worktree_copy_not_main(self):
-        """Active worktree entities are updated through their worktree copy."""
+        """Active worktree entities keep ordinary stage transitions off main."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = os.path.join(tmpdir, 'repo')
             pipeline_dir = os.path.join(repo_root, 'docs', 'plans')
@@ -1459,7 +1459,7 @@ class TestSetOption(unittest.TestCase):
 
             result = subprocess.run(
                 ['python3', self.script_path, '--workflow-dir', pipeline_dir,
-                 '--set', 'task-a', 'status=done'],
+                 '--set', 'task-a', 'status=validation'],
                 capture_output=True, text=True,
             )
 
@@ -1467,7 +1467,44 @@ class TestSetOption(unittest.TestCase):
             main_fields = self._read_frontmatter(main_entity_path)
             worktree_fields = self._read_frontmatter(worktree_entity_path)
             self.assertEqual(main_fields['status'], 'implementation')
-            self.assertEqual(worktree_fields['status'], 'done')
+            self.assertEqual(worktree_fields['status'], 'validation')
+
+    def test_set_mirrors_pr_to_main_and_worktree_copy(self):
+        """Worktree-backed PR metadata is mirrored on main and kept in the worktree copy."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = os.path.join(tmpdir, 'repo')
+            pipeline_dir = os.path.join(repo_root, 'docs', 'plans')
+            os.makedirs(pipeline_dir, exist_ok=True)
+            main_entity_path = os.path.join(pipeline_dir, 'task-a.md')
+            worktree_dir = os.path.join(repo_root, '.worktrees', 'ensign-task-a', 'docs', 'plans')
+            os.makedirs(worktree_dir, exist_ok=True)
+            worktree_entity_path = os.path.join(worktree_dir, 'task-a.md')
+
+            Path(os.path.join(repo_root, '.git')).write_text('gitdir: /tmp/fake-gitdir\n')
+            make_pipeline(pipeline_dir, README_WITH_STAGES, {
+                'task-a.md': entity(
+                    '001', 'Task A', 'implementation', '0.80',
+                    worktree='.worktrees/ensign-task-a/docs/plans'
+                ),
+            })
+            Path(worktree_entity_path).write_text(entity(
+                '001', 'Task A', 'validation', '0.80',
+                worktree='.worktrees/ensign-task-a/docs/plans'
+            ))
+
+            result = subprocess.run(
+                ['python3', self.script_path, '--workflow-dir', pipeline_dir,
+                 '--set', 'task-a', 'pr=#42'],
+                capture_output=True, text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            main_fields = self._read_frontmatter(main_entity_path)
+            worktree_fields = self._read_frontmatter(worktree_entity_path)
+            self.assertEqual(main_fields['pr'], '#42')
+            self.assertEqual(worktree_fields['pr'], '#42')
+            self.assertEqual(main_fields['status'], 'implementation')
+            self.assertEqual(worktree_fields['status'], 'validation')
 
 
 class TestStatusScriptExecutable(unittest.TestCase):

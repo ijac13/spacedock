@@ -151,6 +151,12 @@ When an entity reaches its terminal stage:
 - Assign sequential IDs by scanning both the active workflow directory and `_archive/`.
 - Commit state changes at dispatch and merge boundaries.
 
+## Worktree Ownership
+
+- For worktree-backed entities, active stage/status/report/body state lives in the worktree copy.
+- `pr:` is mirrored on `main` for startup/discovery.
+- Ordinary active-state writes like `implementation -> validation` do not land on `main`.
+
 ## FO Write Scope
 
 The first officer may write these on main — nothing else:
