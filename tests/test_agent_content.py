@@ -83,6 +83,7 @@ def test_first_officer_shared_core_covers_all_behavioral_sections():
         "## Feedback Rejection Flow",
         "## Merge and Cleanup",
         "## State Management",
+        "## Worktree Ownership",
         "## Mod Hook Convention",
         "## Clarification and Communication",
         "## Issue Filing",
@@ -93,6 +94,15 @@ def test_first_officer_shared_core_covers_all_behavioral_sections():
     assert "feedback-to" in text
     assert "--next-id" in text
     assert "status --boot" in text
+
+
+def test_first_officer_shared_core_documents_worktree_ownership_rule():
+    text = read_text("skills/first-officer/references/first-officer-shared-core.md")
+
+    assert "worktree-backed entities" in text
+    assert "active stage/status/report/body state lives in the worktree copy" in text
+    assert "`pr:` is mirrored on `main`" in text
+    assert "Ordinary active-state writes like `implementation -> validation` do not land on `main`" in text
 
 
 def test_ensign_shared_core_keeps_stage_report_protocol():

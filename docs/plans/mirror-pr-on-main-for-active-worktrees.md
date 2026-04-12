@@ -20,12 +20,12 @@ Task 131 established the ownership rule for active worktree-backed entities: onc
 - worktrees are local and ephemeral, while a PR is durable remote state
 - startup/idle handling needs `pr:` visibility on `main` even when other active state remains worktree-owned
 
-This task should therefore be read as a general ownership clarification for active worktree-backed state, with `pr:` as the narrow mirrored exception on `main`.
+This task should therefore be read as a general ownership clarification for active worktree-backed state, with the first-officer/shared workflow contract as the target surface and `pr:` as the narrow mirrored exception on `main`.
 In concrete terms, transitions like `implementation -> validation` for a worktree-backed entity should update the worktree copy rather than committing that active-stage change on `main`.
 
 ## Proposed Approach
 
-1. Define the ownership rule in the FO/shared workflow contract:
+1. Define the ownership rule in the first-officer/shared workflow contract:
    - for worktree-backed entities, stage/status/report/body updates stay in the worktree copy
    - `pr:` remains visible on `main` as the one mirrored field needed for startup/discovery
 2. Update `status` routing so ordinary active-state writes continue to resolve to the worktree copy, while `--set {slug} pr=...` mirrors onto `main` without moving the rest of the active state.
@@ -47,14 +47,14 @@ In concrete terms, transitions like `implementation -> validation` for a worktre
 
 - `skills/first-officer/references/first-officer-shared-core.md`
 - `skills/commission/bin/status`
-- `docs/plans/README.md`
 - `tests/test_status_script.py`
+- `tests/test_agent_content.py`
 
 ## Test Plan
 
 - targeted `tests/test_status_script.py` regression for mirrored `pr:` versus non-`pr` active-state routing
+- a static-content assertion in `tests/test_agent_content.py` that the first-officer/shared contract carries the ownership rule
 - the relevant existing active-worktree status regression suite, to prove no broad `main`-side writes regress
-- a narrow startup/PR-state smoke check if `status --boot` needs explicit coverage for `PR_STATE`
 
 ## Stage Report: ideation
 
@@ -85,3 +85,18 @@ Task 135 is now framed as the active worktree ownership rule: active stage/statu
 ### Summary
 
 Worktree-backed entities now keep ordinary active-state writes in the worktree copy, while `pr:` is mirrored back to `main` for startup/discovery. The shared-core contract and the status script both reflect that split, and the regression tests cover the validation transition plus the mirrored PR write.
+
+## Stage Report: implementation (cycle 2)
+
+- [x] Clarified the task body to target the first-officer shared workflow contract and removed `docs/plans/README.md` from the bounded implementation surfaces
+  Updated `docs/plans/mirror-pr-on-main-for-active-worktrees.md` so AC1 and the test plan point at `skills/first-officer/references/first-officer-shared-core.md` plus `tests/test_agent_content.py`.
+- [x] Added the ownership rule to the first-officer shared core
+  `## Worktree Ownership` now states that worktree-backed active stage/status/report/body state lives in the worktree copy, `pr:` is mirrored on `main`, and `implementation -> validation` does not land on `main`.
+- [x] Updated static-content coverage for the FO/shared-core wording
+  `tests/test_agent_content.py` now checks the new `## Worktree Ownership` section and the exact ownership-rule phrasing required by AC1.
+- [x] Verified the requested test set in the worktree
+  `unset CLAUDECODE && uv run --with pytest pytest tests/test_agent_content.py tests/test_status_script.py -q` => `124 passed in 3.40s`.
+
+### Summary
+
+The task body, first-officer shared-core contract, and static-content tests now align with the clarified AC: worktree-backed active state stays in the worktree copy, and `pr:` is the mirrored exception on `main`. The requested pytest run passed cleanly in the worktree.
