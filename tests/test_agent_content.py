@@ -158,6 +158,17 @@ def test_assembled_codex_skill_contract_uses_skill_relative_bootstrap_language()
     assert "bounded fallback" in text
 
 
+def test_codex_runtime_docs_keep_interactive_workers_background_by_default():
+    t = TestRunner("agent content", keep_test_dir=False)
+    text = assembled_agent_content(t, "first-officer", runtime="codex")
+
+    assert "interactive sessions" in text.lower()
+    assert "do not foreground `wait_agent` immediately after `spawn_agent`" in text
+    assert "explicitly asks to wait" in text
+    assert "bounded single-entity runs" in text
+    assert "wait immediately after dispatch" in text
+
+
 def test_reuse_and_shutdown_wording_stays_aligned_between_shared_core_and_codex_runtime():
     shared = read_text("skills/first-officer/references/first-officer-shared-core.md")
     runtime = read_text("skills/first-officer/references/codex-first-officer-runtime.md")
