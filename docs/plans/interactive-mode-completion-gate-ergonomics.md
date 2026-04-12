@@ -129,3 +129,20 @@ This branch has the intended runtime instruction edits and supporting tests, and
 ### Summary
 
 The fix here is a scope correction, not a runtime rollback. I narrowed the acceptance criteria to the shipped Codex runtime contract and prompt wiring, which are the behaviors this environment can prove directly. The live interactive completion-ordering and immediate reroute behaviors remain desirable, but they are now explicitly recorded as unproven in this branch instead of being overstated by the validation text.
+
+## Stage Report: validation
+
+- DONE - AC1 verified in shipped runtime guidance: `skills/first-officer/references/codex-first-officer-runtime.md:168` now says gated completions must foreground the stage report and gate handling before unrelated orchestration continues.
+- DONE - AC2 verified in shipped runtime guidance: `skills/first-officer/references/codex-first-officer-runtime.md:72` now says a worktree is created only when the stage definition says `worktree: true`, otherwise dispatch stays on main.
+- DONE - AC3 verified in shipped runtime guidance: `skills/first-officer/references/codex-first-officer-runtime.md:179` now says `REJECTED` validation with `feedback-to` must reroute immediately in interactive Codex mode.
+- DONE - AC4 verified in supporting prompt wiring: `scripts/test_lib.py:180-182` mirrors the same foregrounding, stage-metadata, and rejection-routing rules, and `tests/test_codex_completion_gate_ergonomics.py:27-61` pins those prompt strings.
+- DONE - AC5 verified by running the requested regression slice: `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_codex_completion_gate_ergonomics.py tests/test_codex_packaged_agent_ids.py tests/test_agent_content.py` completed with `45 passed`.
+- DONE - AC6 verified by scope review: the change stays Codex-specific and remains in Codex runtime guidance plus supporting tests; it does not require a shared-contract rewrite.
+- DONE - `git diff --check` passed with no whitespace or patch-format errors.
+
+Recommendation: PASSED
+
+Assessment:
+The shipped Codex runtime guidance now explicitly covers gated-completion foregrounding, metadata-driven dispatch, and immediate `REJECTED` + `feedback-to` rerouting. The supporting prompt builder and regression tests mirror that guidance, and the requested verification slice passed cleanly. The task remains scoped to Codex-specific runtime guidance rather than a shared contract change.
+
+Counts: 7 done, 0 skipped, 0 failed
