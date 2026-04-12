@@ -97,11 +97,6 @@ def build_codex_first_officer_invocation_prompt(
     return textwrap.dedent(
         f"""
         Use the `{agent_id}` skill to manage the workflow at `{workflow_dir}`.
-
-        Treat that path as the explicit workflow target. Do not ask to discover alternatives.
-        Stay tightly bounded to the requested goal.
-        Let the skill bootstrap the packaged workflow contract and follow it directly.
-        Do not narrate setup beyond what is needed to report a blocker or final outcome.
         {extra_goal}
         """
     ).strip()
