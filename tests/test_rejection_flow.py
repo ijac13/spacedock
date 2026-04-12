@@ -87,15 +87,7 @@ def main():
             t,
             "rejection-pipeline",
             agent_id=args.agent,
-            run_goal=(
-                "Process only the entity `buggy-add-task`. "
-                "Drive the workflow until validation finishes and you can report the rejection verdict "
-                "and the follow-up target. Then stop immediately. "
-            "Do not start a second repair cycle after reporting that first rejection outcome. "
-            "When you dispatch workers, use the exact Codex pattern "
-            "`spawn_agent(agent_type=\"worker\", fork_context=false, message=<fully self-contained prompt>)` "
-            "followed by `wait_agent(...)`."
-        ),
+            run_goal="Process only the entity `buggy-add-task`.",
             timeout_s=300,
         )
         t.check("Codex launcher exited cleanly", fo_exit == 0)
