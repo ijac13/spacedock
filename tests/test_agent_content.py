@@ -103,6 +103,14 @@ def test_ensign_shared_core_keeps_stage_report_protocol():
     assert "Do NOT modify YAML frontmatter" in text
 
 
+def test_ensign_shared_core_documents_worktree_owned_active_state_and_pr_mirror():
+    text = read_text("skills/ensign/references/ensign-shared-core.md")
+    assert "worktree-backed" in text.lower()
+    assert "active stage/status/report/body state" in text
+    assert "pr:" in text
+    assert "mirrored" in text.lower()
+
+
 def test_code_project_guardrails_cover_worktrees_and_scaffolding():
     text = read_text("skills/first-officer/references/code-project-guardrails.md")
     assert ".worktrees/" in text

@@ -19,6 +19,12 @@ Read the assignment context provided by the first officer. It defines:
 4. Update the entity file body, not the frontmatter.
 5. Commit your work before signaling completion.
 
+## Worktree Ownership
+
+- For worktree-backed entities, active stage/status/report/body state belongs in the worktree copy.
+- `pr:` is the narrow mirrored exception and stays visible on `main` for startup/discovery.
+- Ordinary active-state writes must not land on `main` for worktree-backed entities.
+
 ## Rules
 
 - Do NOT modify YAML frontmatter in entity files.

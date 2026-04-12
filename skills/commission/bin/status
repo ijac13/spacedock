@@ -226,6 +226,24 @@ def resolve_active_entity_path(entity_path, git_root):
     return entity_path
 
 
+def load_active_entity_fields(entity_path, git_root):
+    """Load entity fields from the active worktree copy, overlaying main metadata."""
+    fields = parse_frontmatter(entity_path)
+    worktree = fields.get('worktree', '').strip()
+    if not worktree:
+        return fields
+
+    filename = os.path.basename(entity_path)
+    worktree_entity_path = os.path.join(git_root, worktree, filename)
+    if not os.path.exists(worktree_entity_path):
+        return fields
+
+    active_fields = parse_frontmatter(worktree_entity_path)
+    merged = dict(fields)
+    merged.update(active_fields)
+    return merged
+
+
 def scan_entities_active(directory, git_root):
     """Scan entities, reading active worktree-backed entities from their worktree copy."""
     entities = []
@@ -234,8 +252,7 @@ def scan_entities_active(directory, git_root):
         if os.path.basename(filepath) == 'README.md':
             continue
         slug = os.path.splitext(os.path.basename(filepath))[0]
-        active_path = resolve_active_entity_path(filepath, git_root)
-        fields = parse_frontmatter(active_path)
+        fields = load_active_entity_fields(filepath, git_root)
         entity = {k: v for k, v in fields.items()}
         entity['slug'] = slug
         for key in ('id', 'status', 'title', 'score', 'source', 'worktree'):
@@ -1035,6 +1052,12 @@ def main():
 
         try:
             resolved = update_frontmatter(entity_path, updates)
+            # Mirror PR metadata back to main for discovery, but keep all
+            # other active-state updates on the worktree copy.
+            if entity_path != main_entity_path:
+                pr_updates = [(field, value) for field, value in updates if field == 'pr']
+                if pr_updates:
+                    update_frontmatter(main_entity_path, pr_updates)
         except ValueError as e:
             print('Error: ' + str(e), file=sys.stderr)
             sys.exit(1)

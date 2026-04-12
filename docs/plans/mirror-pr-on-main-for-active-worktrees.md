@@ -70,3 +70,18 @@ In concrete terms, transitions like `implementation -> validation` for a worktre
 ### Summary
 
 Task 135 is now framed as the active worktree ownership rule: active stage/status/report/body state belongs in the worktree copy, and `pr:` is the only mirrored field on `main` for discovery. The acceptance criteria and test plan now distinguish `pr:` mirroring from ordinary active-state routing so the operator intent is explicit and measurable.
+
+## Stage Report: implementation
+
+- [x] Updated the shared ensign contract for worktree-owned active state with the `pr:` mirror exception
+  Verified in `skills/ensign/references/ensign-shared-core.md` under `## Worktree Ownership`.
+- [x] Routed `status --set` so ordinary active-state writes stay on the worktree copy while `pr:` mirrors to `main`
+  Implemented in `skills/commission/bin/status` with separate main mirroring for `pr`.
+- [x] Added regression coverage for validation-stage routing and `pr:` mirroring
+  `tests/test_status_script.py` now covers `status=validation` staying off `main` and `pr=#42` landing on both copies.
+- [x] Verified the behavior and contract text in the worktree checkout
+  `tests/test_status_script.py`: 92/92 passed; `tests/test_agent_content.py`: 29/29 passed.
+
+### Summary
+
+Worktree-backed entities now keep ordinary active-state writes in the worktree copy, while `pr:` is mirrored back to `main` for startup/discovery. The shared-core contract and the status script both reflect that split, and the regression tests cover the validation transition plus the mirrored PR write.
