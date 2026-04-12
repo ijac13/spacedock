@@ -9,7 +9,7 @@ completed:
 verdict: 
 worktree: .worktrees/spacedock-ensign-narrow-next-id-path-for-task-creation
 issue:
-pr:
+pr: #81
 ---
 
 The first officer currently reaches for `skills/commission/bin/status --boot` to learn the next available sequential entity id before filing a new task. That works, but it is broader than necessary: `--boot` also gathers mods, orphan worktrees, PR state, and dispatchable entities. In an interactive session this adds avoidable output and encourages the FO to use a startup-oriented command for ordinary task creation.
