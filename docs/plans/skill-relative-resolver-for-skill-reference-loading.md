@@ -9,7 +9,7 @@ completed:
 verdict:
 worktree: .worktrees/spacedock-ensign-skill-relative-resolver-for-skill-reference-loading
 issue:
-pr:
+pr: #82
 ---
 
 Boot-time skill reference loading is currently ambiguous about what relative paths mean. During a `spacedock:first-officer` startup run on Codex, the first-officer skill referenced support documents as `references/...`, but those files lived under `skills/first-officer/references/`. Because the boot path did not resolve includes relative to the current `SKILL.md`, the runtime had to recover by searching the repo for matching files before it could continue.
