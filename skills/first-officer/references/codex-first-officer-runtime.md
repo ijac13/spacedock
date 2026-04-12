@@ -75,7 +75,7 @@ flowchart TD
     B -- No --> C[Fresh dispatch or explicit shutdown]
     B -- Yes --> D[send_input with full next-stage work]
     D --> E[Mark worker active again]
-    E --> F{Reused result on critical path?}
+    E --> F{Reused result on this entity's critical path?}
     F -- No --> G[Keep alive or background route]
     F -- Yes --> H[wait_agent on same handle]
     H --> I[Use only post-wait completion as evidence]
@@ -92,7 +92,9 @@ For routed advancement or `feedback-to` follow-up:
 - do not spawn a replacement worker when reuse is valid
 - routed follow-up must carry the concrete next-stage work to perform in that thread, not an acknowledgment-only ping
 - after `send_input`, treat that reused worker as active again rather than merely still addressable
-- if the reused worker's result is on the current critical path, call `wait_agent` on that same worker handle before proceeding
+- if the reused worker's result is on that entity's current critical path, call `wait_agent` on that same worker handle before advancing that entity
+- do not treat an entity with a reused in-flight worker as idle just because the handle was previously completed
+- this is entity-scoped bookkeeping, not a whole-FO stop-the-world rule; unrelated ready entities may still be dispatched or advanced
 - do not treat critical-path `send_input` as fire-and-forget background work
 - do not treat the immediate `send_input` tool result as proof that the reused cycle is complete; it can still reflect the worker's prior completed state until `wait_agent` observes the new completion
 - after critical-path reuse, the next completion evidence must come from `wait_agent` on that same handle, not from the stale completion echoed by `send_input`
@@ -124,7 +126,7 @@ wait_agent(...)
 ```
 
 Always preserve the logical packaged id in summaries and use only `worker_key` in branch/worktree/session names.
-When reusing a completed worker, the equivalent pattern is `send_input(<existing_handle>, message="<next assignment>")` followed by `wait_agent(...)` on that same handle when the reused result is part of the current critical path, then explicit shutdown once the reused cycle is complete and the worker is no longer needed.
+When reusing a completed worker, the equivalent pattern is `send_input(<existing_handle>, message="<next assignment>")` followed by `wait_agent(...)` on that same handle when the reused result is part of that entity's current critical path, then explicit shutdown once the reused cycle is complete and the worker is no longer needed. This wait blocks advancement of that entity, not unrelated ready entities.
 
 ## Codex Worker Assignment Fields
 
