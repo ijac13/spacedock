@@ -100,3 +100,22 @@ Worktree-backed entities now keep ordinary active-state writes in the worktree c
 ### Summary
 
 The task body, first-officer shared-core contract, and static-content tests now align with the clarified AC: worktree-backed active state stays in the worktree copy, and `pr:` is the mirrored exception on `main`. The requested pytest run passed cleanly in the worktree.
+
+## Stage Report: validation
+
+- [x] AC1: the first-officer/shared workflow contract explicitly states that active worktree-backed stage/status/report/body state is owned by the worktree copy, with `pr:` as the only mirrored `main` field.
+  The worktree checkout adds `## Worktree Ownership` in [first-officer-shared-core.md](/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-mirror-pr-on-main-for-active-worktrees/skills/first-officer/references/first-officer-shared-core.md:154) and aligns the ensign shared core at [ensign-shared-core.md](/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-mirror-pr-on-main-for-active-worktrees/skills/ensign/references/ensign-shared-core.md:22).
+- [x] AC2: `status --set {slug} pr=#NN` updates `main` for a worktree-backed entity without shifting the rest of the active state off the worktree copy.
+  `test_set_updates_active_worktree_copy_not_main` keeps `main` at `implementation` while the worktree copy moves to `done`; `test_pr_state_with_pr` covers mirrored PR visibility in `PR_STATE`.
+- [x] AC3: ordinary active-state updates for worktree-backed entities still resolve to the worktree copy and do not land on `main`.
+  The same regression asserts the non-`pr` status write updates only the worktree copy, not `main`, and the status script test suite passed end-to-end.
+- [x] AC4: startup/idle discovery can rely on `main` for `pr:` visibility without reintroducing general active-state collisions on `main`.
+  `--boot`/`PR_STATE` coverage in [test_status_script.py](/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-mirror-pr-on-main-for-active-worktrees/tests/test_status_script.py:1017) and [test_status_script.py](/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-mirror-pr-on-main-for-active-worktrees/tests/test_status_script.py:1128) verifies PR discovery and section ordering; `pr`-only mirroring avoids `main` collisions.
+
+### Summary
+
+Validated the branch in the feature worktree with `unset CLAUDECODE && uv run --with pytest pytest tests/test_agent_content.py tests/test_status_script.py -q` and got `124 passed in 3.30s`. The shared contract now makes worktree ownership explicit, and the status regressions confirm `pr:` is mirrored on `main` while ordinary active-state writes remain worktree-owned.
+
+Recommendation: PASSED
+Assessment: The acceptance criteria are satisfied in the feature worktree. AC1 is covered by the explicit `## Worktree Ownership` contract, and AC2 through AC4 are exercised by the status-script regressions that separate mirrored `pr:` handling from ordinary active-state routing.
+Counts: 4 done, 0 skipped, 0 failed
