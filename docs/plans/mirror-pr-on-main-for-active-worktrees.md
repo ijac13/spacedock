@@ -1,9 +1,9 @@
 ---
 id: 135
 title: Mirror PR metadata on main for active worktree entities
-status: backlog
+status: ideation
 source: FO observation during task 131 PR handling on 2026-04-12
-started:
+started: 2026-04-12T20:25:00Z
 completed:
 verdict:
 score: 0.72
