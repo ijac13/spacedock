@@ -16,4 +16,6 @@ The current Codex first-officer runtime guidance is clear about what to do when 
 
 Single-entity mode already captures part of the desired behavior because it is outcome-driven and stops on the entity's meaningful result. Interactive Codex mode needs an equivalent event-handling rule: a worker completion notification for a gated or critical-path stage should immediately become the first officer's next required action. The first officer should process the stage report, present the gate if needed, and only then return to unrelated orchestration.
 
+The same interactive-path looseness also contributed to a second runtime mistake during follow-on task filing: ideation-stage tasks were treated as if they needed isolated worktrees even though the workflow's `ideation` stage is not marked `worktree: true`. That points to another Codex-runtime ergonomics gap: dispatch behavior should stay tightly coupled to stage metadata so non-worktree stages stay on main and worktree creation does not become an accidental default.
+
 This task should improve the Codex runtime guidance for interactive sessions so worker completions foreground the next operator action instead of becoming easy-to-ignore background chatter. Changes to the shared first-officer contract are out of scope unless the Codex-specific rule proves it needs to be generalized later.
