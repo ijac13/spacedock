@@ -3,6 +3,9 @@
 # requires-python = ">=3.10"
 # ///
 # ABOUTME: Static content checks for shared Claude/Codex agent contracts and guardrails.
+#
+# NOTE: The Codex wait-policy checks in this file validate contract wording and
+# prompt assembly only. They do not execute a live interactive Codex session.
 
 from __future__ import annotations
 
@@ -159,6 +162,7 @@ def test_assembled_codex_skill_contract_uses_skill_relative_bootstrap_language()
 
 
 def test_codex_runtime_docs_keep_interactive_workers_background_by_default():
+    """Contract-level check: the runtime text describes the interactive wait policy."""
     t = TestRunner("agent content", keep_test_dir=False)
     text = assembled_agent_content(t, "first-officer", runtime="codex")
 
@@ -167,6 +171,16 @@ def test_codex_runtime_docs_keep_interactive_workers_background_by_default():
     assert "explicitly asks to wait" in text
     assert "bounded single-entity runs" in text
     assert "wait immediately after dispatch" in text
+
+
+def test_codex_runtime_docs_state_coverage_limits_in_plain_language():
+    """Contract-level check: the docs stay honest about what the harness can prove."""
+    text = read_text("skills/first-officer/references/codex-first-officer-runtime.md")
+
+    assert "interactive sessions" in text.lower()
+    assert "background" in text.lower()
+    assert "bounded single-entity runs" in text.lower()
+    assert "wait_agent" in text
 
 
 def test_reuse_and_shutdown_wording_stays_aligned_between_shared_core_and_codex_runtime():

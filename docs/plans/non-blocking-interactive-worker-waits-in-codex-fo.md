@@ -109,3 +109,22 @@ Interactive Codex first-officer guidance now keeps spawned workers in the backgr
 The available tests pass, but they only prove text-level contract and ID-resolution behavior. They do not prove the acceptance criteria that depend on actual interactive dispatch timing, dependency-blocked waiting, explicit-wait handling, or bounded immediate waiting. Because the requested behavior is not yet covered by a deterministic behavioral test, the validation outcome is `REJECTED`.
 
 Recommendation: REJECTED
+
+## Stage Report: implementation (cycle 2)
+
+- [x] DONE: Tighten the wait-policy claim to match the actual harness guarantee.
+  The Codex wait-policy checks are now labeled as contract/prompt-assembly coverage instead of implying live interactive timing proof.
+- [x] DONE: Make each added test's purpose and coverage intention explicit.
+  Added module-level notes and test docstrings in `tests/test_agent_content.py` and `tests/test_codex_packaged_agent_ids.py` describing the checks as contract-level, not live interactive session coverage.
+- [x] DONE: Preserve the bounded and explicit-wait policy wording.
+  The Codex runtime text and prompt assembly still describe interactive background behavior, explicit captain wait requests, and bounded single-entity immediate waiting.
+- [x] DONE: Re-run targeted verification.
+  `python3 -m py_compile scripts/test_lib.py tests/test_agent_content.py tests/test_codex_packaged_agent_ids.py` passed; `uv run --with pytest python tests/test_codex_packaged_agent_ids.py` passed (6/6); `uv run --with pytest python tests/test_agent_content.py` passed (29/29).
+- [x] DONE: Commit the feedback-cycle update in the assigned worktree.
+  This cycle's code and report updates were committed in the worktree after verification.
+- [ ] SKIP: Prove actual live interactive wait timing in Codex.
+  The current harness can validate prompt-level contract text and ID resolution, but it does not expose a deterministic live interactive Codex session that can observe internal wait scheduling.
+
+### Summary
+
+This feedback cycle corrects the overclaim: the implementation now says exactly what the current harness proves, namely Codex runtime guidance and prompt assembly for interactive, blocked, explicit-wait, and bounded paths. The tests now state their coverage intent plainly so the report no longer overstates live interactive behavioral proof.
