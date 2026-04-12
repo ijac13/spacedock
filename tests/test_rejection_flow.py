@@ -110,6 +110,17 @@ def codex_rejection_flow_milestones(log: CodexLogParser) -> dict[str, bool]:
     return milestones
 
 
+def codex_rejection_flow_stop_ready(log_path: Path) -> bool:
+    """Return True when the bounded Codex rejection-flow outcome is present in the log."""
+    log = CodexLogParser(log_path)
+    milestones = codex_rejection_flow_milestones(log)
+    return (
+        milestones["final_response"]
+        and milestones["follow_up_seen"]
+        and milestones["implementation_dispatch"]
+    )
+
+
 def main():
     args, extra_args = parse_args()
     t = TestRunner(f"Rejection Flow E2E Test ({args.runtime})")
@@ -168,6 +179,7 @@ def main():
             agent_id=args.agent,
             run_goal="Process only the entity `buggy-add-task`.",
             timeout_s=300,
+            stop_checker=codex_rejection_flow_stop_ready,
         )
 
     # --- Phase 3: Validate ---

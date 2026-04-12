@@ -9,7 +9,7 @@ If this skill is invoked directly in a non-interactive run and the prompt names 
 - follow the shared single-entity rules from the operating contract and any runtime-specific bounded-stop rules
 - keep running until the shared/runtime-specific stop condition for the requested bounded outcome is satisfied
 - do not treat an initial rejection as terminal when the workflow's feedback flow expects a routed follow-up
-- once the bounded stop condition is satisfied, send one concise final response and stop
+- once the bounded stop condition is satisfied, send one concise final response and exit immediately
 
 ## Operating contract
 

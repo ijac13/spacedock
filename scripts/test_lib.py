@@ -8,13 +8,16 @@ import atexit
 import json
 import os
 import re
+import select
 import shutil
 import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 
 def _codex_skill_namespace_root(home_dir: Path) -> Path:
@@ -410,6 +413,7 @@ def run_codex_first_officer(
     extra_args: list[str] | None = None,
     log_name: str = "codex-fo-log.txt",
     timeout_s: int = 120,
+    stop_checker: Callable[[Path], bool] | None = None,
 ) -> int:
     """Run the Codex first-officer skill via codex exec. Returns exit code."""
     log_path = runner.log_dir / log_name
@@ -438,21 +442,91 @@ def run_codex_first_officer(
         cmd.extend(extra_args)
     cmd.append("-")
 
+    idle_after_agent_message_s = 5.0
+    process_start = time.monotonic()
+    active_item_ids: set[str] = set()
+    last_output_at = process_start
+    last_completed_agent_message_at: float | None = None
+    saw_turn_completed = False
+    saw_workflow_activity = False
+
     with open(log_path, "w") as log_file:
-        try:
-            result = subprocess.run(
-                cmd,
-                input=prompt,
-                text=True,
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                cwd=runner.test_project_dir,
-                timeout=timeout_s,
-                env=env,
-            )
-        except subprocess.TimeoutExpired:
-            print(f"\n  TIMEOUT: codex first officer exceeded {timeout_s}s limit")
-            return 124
+        proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            cwd=runner.test_project_dir,
+            env=env,
+        )
+        assert proc.stdin is not None
+        assert proc.stdout is not None
+        proc.stdin.write(prompt)
+        proc.stdin.close()
+
+        while True:
+            if time.monotonic() - process_start > timeout_s:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+                print(f"\n  TIMEOUT: codex first officer exceeded {timeout_s}s limit")
+                return 124
+
+            ready, _, _ = select.select([proc.stdout], [], [], 0.5)
+            if ready:
+                line = proc.stdout.readline()
+                if line:
+                    log_file.write(line)
+                    log_file.flush()
+                    last_output_at = time.monotonic()
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        entry = None
+                    if isinstance(entry, dict):
+                        entry_type = entry.get("type")
+                        if entry_type == "turn.completed":
+                            saw_turn_completed = True
+                        item = entry.get("item", {})
+                        if isinstance(item, dict):
+                            item_id = item.get("id")
+                            if entry_type == "item.started" and item_id:
+                                active_item_ids.add(str(item_id))
+                            elif entry_type == "item.completed":
+                                if item_id:
+                                    active_item_ids.discard(str(item_id))
+                                if item.get("type") == "collab_tool_call":
+                                    saw_workflow_activity = True
+                                if item.get("type") == "agent_message":
+                                    last_completed_agent_message_at = time.monotonic()
+                elif proc.poll() is not None:
+                    break
+            elif proc.poll() is not None:
+                break
+
+            idle_long_enough = time.monotonic() - last_output_at >= idle_after_agent_message_s
+            if (
+                last_completed_agent_message_at is not None
+                and idle_long_enough
+                and not active_item_ids
+                and saw_workflow_activity
+                and proc.poll() is None
+                and (stop_checker(log_path) if stop_checker is not None else saw_turn_completed)
+            ):
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+                return 0
+
+        result = subprocess.CompletedProcess(cmd, proc.returncode or 0)
 
     print()
     if result.returncode != 0:
