@@ -126,6 +126,9 @@ When a feedback stage recommends REJECTED:
 3. If cycles reach 3, escalate to the human instead of dispatching another round.
 4. Before routing findings back to the target stage agent, run `claude-team context-budget --name {ensign-name}`. If `reuse_ok` is `false`, shut down the old ensign and fresh-dispatch.
 5. Route the findings back to the target stage in the same worktree by using the existing worker handle when it is still addressable and the reuse conditions pass (`send_input` on Codex, `SendMessage` on Claude teams). If those checks fail, shut down the old worker explicitly and fresh-dispatch.
+   The routed message must contain the concrete next-stage assignment and requested fix work, not just an acknowledgment request.
+   On Codex, do not treat the immediate `send_input` response as the new completion result for the feedback cycle. If that routed follow-up is on that entity's critical path, the FO must wait for the reused worker's next completion before advancing that entity or shutting it down.
+   This wait is entity-scoped bookkeeping, not a global scheduling stop: other ready entities may still be dispatched or advanced while this entity is waiting on its reused worker.
 6. Re-run the reviewer after fixes.
 7. Re-enter the normal gate flow with the updated result.
 
@@ -185,6 +188,8 @@ Ask the human before dispatch when:
 - requirements are materially ambiguous
 - a design choice would change output meaningfully
 - scope is too unclear to turn into concrete criteria
+
+Do not ask the human whether to take a next step that is already allowed by this operating contract and does not require explicit human approval. In those cases, proceed.
 
 If one entity is blocked on clarification, continue dispatching other ready entities.
 

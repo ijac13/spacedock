@@ -211,6 +211,38 @@ def scan_entities(directory):
     return entities
 
 
+def resolve_active_entity_path(entity_path, git_root):
+    """Resolve to the active worktree copy when an entity is worktree-backed."""
+    fields = parse_frontmatter(entity_path)
+    worktree = fields.get('worktree', '').strip()
+    if not worktree:
+        return entity_path
+
+    filename = os.path.basename(entity_path)
+    worktree_entity_path = os.path.join(git_root, worktree, filename)
+    if os.path.exists(worktree_entity_path):
+        return worktree_entity_path
+    return entity_path
+
+
+def scan_entities_active(directory, git_root):
+    """Scan entities, reading active worktree-backed entities from their worktree copy."""
+    entities = []
+    pattern = os.path.join(directory, '*.md')
+    for filepath in sorted(glob.glob(pattern)):
+        if os.path.basename(filepath) == 'README.md':
+            continue
+        slug = os.path.splitext(os.path.basename(filepath))[0]
+        active_path = resolve_active_entity_path(filepath, git_root)
+        fields = parse_frontmatter(active_path)
+        entity = {k: v for k, v in fields.items()}
+        entity['slug'] = slug
+        for key in ('id', 'status', 'title', 'score', 'source', 'worktree'):
+            entity.setdefault(key, '')
+        entities.append(entity)
+    return entities
+
+
 def stage_order(status, stages):
     """Map status to numeric order based on stages list. Unknown = 99."""
     if stages:
@@ -954,10 +986,12 @@ def main():
             sys.exit(1)
 
         slug, updates = set_result
-        entity_path = os.path.join(pipeline_dir, slug + '.md')
-        if not os.path.exists(entity_path):
+        main_entity_path = os.path.join(pipeline_dir, slug + '.md')
+        if not os.path.exists(main_entity_path):
             print(f'Error: entity not found: {slug}.md', file=sys.stderr)
             sys.exit(1)
+        git_root = find_git_root(pipeline_dir)
+        entity_path = resolve_active_entity_path(main_entity_path, git_root)
 
         try:
             resolved = update_frontmatter(entity_path, updates)
@@ -982,7 +1016,8 @@ def main():
         print('Error: README.md has no stages block. --boot requires stage metadata.', file=sys.stderr)
         sys.exit(1)
 
-    entities = scan_entities(pipeline_dir)
+    git_root = find_git_root(pipeline_dir)
+    entities = scan_entities_active(pipeline_dir, git_root)
     if include_archive:
         archive_dir = os.path.join(pipeline_dir, '_archive')
         if os.path.isdir(archive_dir):
@@ -991,7 +1026,6 @@ def main():
     entities = apply_filters(entities, where_filters)
 
     if show_boot:
-        git_root = find_git_root(pipeline_dir)
         print_boot(entities, stages, pipeline_dir, git_root)
     elif show_next:
         extras = resolve_extra_fields(entities, explicit_fields, all_fields_flag, DEFAULT_NEXT_FIELDS)

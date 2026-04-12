@@ -8,13 +8,16 @@ import atexit
 import json
 import os
 import re
+import select
 import shutil
 import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 
 def _codex_skill_namespace_root(home_dir: Path) -> Path:
@@ -97,31 +100,6 @@ def build_codex_first_officer_invocation_prompt(
     return textwrap.dedent(
         f"""
         Use the `{agent_id}` skill to manage the workflow at `{workflow_dir}`.
-
-        Treat that path as the explicit workflow target. Do not ask to discover alternatives.
-        Stay tightly bounded to the requested goal.
-        Let the skill bootstrap the packaged workflow contract and follow it directly.
-        Use the shared first-officer runtime directly for bounded dispatch and completion steps.
-        Any worker you spawn in this run MUST use `fork_context=false` with a fully self-contained prompt.
-        For packaged workers, keep the logical id in reporting and use the safe key for naming.
-        When the packaged worker is `spacedock:ensign`, the worker key is `spacedock-ensign` and
-        must be used for worktree, branch, and session names. Worktree paths use
-        `.worktrees/{{worker_key}}-{{slug}}` and branches use `{{worker_key}}/{{slug}}`.
-        Never collapse it to bare `ensign`.
-        Keep `dispatch_agent_id: spacedock:ensign` but use `role_asset_name: ensign` for the packaged skill asset.
-        Keep a human-readable worker label in status updates and routed messages using an entity-stage-display form such as
-        `001-impl/Herschel` or `001-validation/Herschel`.
-        If a completed worker is still addressable and reuse conditions pass, reuse it through `send_input` on the existing handle.
-        Route `feedback-to` follow-up and same-thread advancement through `send_input` when reuse is valid.
-        If a worker will not receive later advancement, feedback, or gate-related routing, shut it down explicitly before stopping.
-        For bounded single-entity runs, treat the first completed worker summary as sufficient evidence for your final response unless it is missing the requested verdict or outcome.
-        After `wait_agent(...)` returns the needed verdict or outcome, do not reread entity files, rerun `status`, or continue the loop. Respond once and stop immediately.
-        Do not load reference docs unless you hit a real blocker.
-        Do not reread your own skill files, inspect packaged worker skill assets before dispatch requires them, or open the `status` script source unless a blocker requires it.
-        Run the workflow `status` script directly or with `python3` if needed. Never invoke it with `zsh`.
-        Do not narrate setup beyond what is needed to report a blocker or final outcome.
-        Once you have enough context to dispatch the first worker, dispatch immediately.
-        Stop immediately once the requested bounded outcome is satisfied and send one final response.
         {extra_goal}
         """
     ).strip()
@@ -194,6 +172,7 @@ def _clean_env() -> dict[str, str]:
 
 class TestRunner:
     """Test framework with pass/fail counters, check helpers, and results summary."""
+    __test__ = False
 
     __test__ = False
 
@@ -434,6 +413,7 @@ def run_codex_first_officer(
     extra_args: list[str] | None = None,
     log_name: str = "codex-fo-log.txt",
     timeout_s: int = 120,
+    stop_checker: Callable[[Path], bool] | None = None,
 ) -> int:
     """Run the Codex first-officer skill via codex exec. Returns exit code."""
     log_path = runner.log_dir / log_name
@@ -462,21 +442,91 @@ def run_codex_first_officer(
         cmd.extend(extra_args)
     cmd.append("-")
 
+    idle_after_agent_message_s = 5.0
+    process_start = time.monotonic()
+    active_item_ids: set[str] = set()
+    last_output_at = process_start
+    last_completed_agent_message_at: float | None = None
+    saw_turn_completed = False
+    saw_workflow_activity = False
+
     with open(log_path, "w") as log_file:
-        try:
-            result = subprocess.run(
-                cmd,
-                input=prompt,
-                text=True,
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                cwd=runner.test_project_dir,
-                timeout=timeout_s,
-                env=env,
-            )
-        except subprocess.TimeoutExpired:
-            print(f"\n  TIMEOUT: codex first officer exceeded {timeout_s}s limit")
-            return 124
+        proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            cwd=runner.test_project_dir,
+            env=env,
+        )
+        assert proc.stdin is not None
+        assert proc.stdout is not None
+        proc.stdin.write(prompt)
+        proc.stdin.close()
+
+        while True:
+            if time.monotonic() - process_start > timeout_s:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+                print(f"\n  TIMEOUT: codex first officer exceeded {timeout_s}s limit")
+                return 124
+
+            ready, _, _ = select.select([proc.stdout], [], [], 0.5)
+            if ready:
+                line = proc.stdout.readline()
+                if line:
+                    log_file.write(line)
+                    log_file.flush()
+                    last_output_at = time.monotonic()
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        entry = None
+                    if isinstance(entry, dict):
+                        entry_type = entry.get("type")
+                        if entry_type == "turn.completed":
+                            saw_turn_completed = True
+                        item = entry.get("item", {})
+                        if isinstance(item, dict):
+                            item_id = item.get("id")
+                            if entry_type == "item.started" and item_id:
+                                active_item_ids.add(str(item_id))
+                            elif entry_type == "item.completed":
+                                if item_id:
+                                    active_item_ids.discard(str(item_id))
+                                if item.get("type") == "collab_tool_call":
+                                    saw_workflow_activity = True
+                                if item.get("type") == "agent_message":
+                                    last_completed_agent_message_at = time.monotonic()
+                elif proc.poll() is not None:
+                    break
+            elif proc.poll() is not None:
+                break
+
+            idle_long_enough = time.monotonic() - last_output_at >= idle_after_agent_message_s
+            if (
+                last_completed_agent_message_at is not None
+                and idle_long_enough
+                and not active_item_ids
+                and saw_workflow_activity
+                and proc.poll() is None
+                and (stop_checker(log_path) if stop_checker is not None else saw_turn_completed)
+            ):
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+                return 0
+
+        result = subprocess.CompletedProcess(cmd, proc.returncode or 0)
 
     print()
     if result.returncode != 0:

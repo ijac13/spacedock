@@ -92,6 +92,16 @@ Use for testing FO/ensign behavior that runs to completion in pipe mode. The tes
 
 Examples: `test_gate_guardrail.py`, `test_rejection_flow.py`, `test_single_entity_team_skip.py`.
 
+### Codex FO Prompt Discipline
+
+When a test exercises Codex first-officer behavior:
+
+- Invoke only `$first-officer` / `spacedock:first-officer`.
+- Keep the invocation prompt minimal: identify the workflow target, runtime, and entity scope only.
+- Do not add behavioral coaching in the test prompt for reuse, wait semantics, shutdown, rejection routing, or other FO operating rules.
+- If Codex FO behavior needs to change, encode that in the scaffolding under test: `SKILL.md` references, shared core, runtime adapter, or fixture/workflow structure.
+- Prefer shared runtime-switchable tests such as `test_rejection_flow.py --runtime codex` for generic workflow behavior. Use Codex-only E2E tests only for truly Codex-specific deltas that cannot be covered by the shared path.
+
 ### Interactive PTY (`test_lib_interactive.py` + `InteractiveSession`)
 
 Use only when the behavior under test requires an interactive session — multi-turn conversation, skill invocations, team member switching, or behavior that differs between interactive and pipe mode.

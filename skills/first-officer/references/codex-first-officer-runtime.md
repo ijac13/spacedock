@@ -67,16 +67,45 @@ For each dispatch:
 
 When the worker reaches a completed state, keep its returned handle and worker label as long as later routing may still need that thread.
 
+Reuse flow:
+
+```mermaid
+flowchart TD
+    A[Completed worker] --> B{Addressable and reuse conditions pass?}
+    B -- No --> C[Fresh dispatch or explicit shutdown]
+    B -- Yes --> D[send_input with full next-stage work]
+    D --> E[Mark worker active again]
+    E --> F{Reused result on this entity's critical path?}
+    F -- No --> G[Keep alive or background route]
+    F -- Yes --> H[wait_agent on same handle]
+    H --> I[Use only post-wait completion as evidence]
+    I --> J{More routing expected?}
+    J -- Yes --> K[Keep handle alive]
+    J -- No --> L[Explicit shutdown]
+```
+
+The immediate `send_input` tool result is not completion evidence for the reused cycle; it can still echo the worker's prior completed state.
+
 For routed advancement or `feedback-to` follow-up:
 - if the completed worker is still addressable and the shared reuse conditions pass, deliver the next assignment through `send_input` on that existing worker handle
 - use `send_input` for same-thread advancement reuse and for feedback routed back to a completed implementation worker
 - do not spawn a replacement worker when reuse is valid
+- routed follow-up must carry the concrete next-stage work to perform in that thread, not an acknowledgment-only ping
+- after `send_input`, treat that reused worker as active again rather than merely still addressable
+- if the reused worker's result is on that entity's current critical path, call `wait_agent` on that same worker handle before advancing that entity
+- do not treat an entity with a reused in-flight worker as idle just because the handle was previously completed
+- this is entity-scoped bookkeeping, not a whole-FO stop-the-world rule; unrelated ready entities may still be dispatched or advanced
+- do not treat critical-path `send_input` as fire-and-forget background work
+- do not treat the immediate `send_input` tool result as proof that the reused cycle is complete; it can still reflect the worker's prior completed state until `wait_agent` observes the new completion
+- after critical-path reuse, the next completion evidence must come from `wait_agent` on that same handle, not from the stale completion echoed by `send_input`
+- for `feedback-to` reuse, that next completion evidence should describe the actual follow-up fix or report update, including any new commit, not just receipt of the rejection
 
 Explicit shutdown is required when a worker is no longer needed:
 - after a fresh replacement takes over and the old worker will not receive later routing
 - after a routed follow-up is delivered and another kept-alive worker is no longer needed
 - when reuse is blocked and the old completed worker will not be reused
 - when the entity reaches a terminal state
+- after the reused cycle completes and no later advancement, feedback, or gate handling is expected for that worker
 
 On the Codex path, "no longer needed" means no further advancement, feedback, or gate-related routing is expected for that worker. Do not leave shutdown implicit; call the runtime shutdown path explicitly before stopping.
 
@@ -97,7 +126,7 @@ wait_agent(...)
 ```
 
 Always preserve the logical packaged id in summaries and use only `worker_key` in branch/worktree/session names.
-When reusing a completed worker, the equivalent pattern is `send_input(<existing_handle>, message="<next assignment>")` followed by `wait_agent(...)` or bounded stop logic as needed.
+When reusing a completed worker, the equivalent pattern is `send_input(<existing_handle>, message="<next assignment>")` followed by `wait_agent(...)` on that same handle when the reused result is part of that entity's current critical path, then explicit shutdown once the reused cycle is complete and the worker is no longer needed. This wait blocks advancement of that entity, not unrelated ready entities.
 
 ## Codex Worker Assignment Fields
 
@@ -132,11 +161,12 @@ If a `worktree_path` is present, `entity_path` should point to the entity file i
 ## Bounded Prototype Rule
 
 For the current Codex spike:
-- stop after the first meaningful outcome
+- stop after the first meaningful outcome only when the requested bounded outcome does not require routed reuse or feedback bounce
 - if the workflow is waiting at a gate, report the gate review and stop
 - if a worker returns a verdict or concrete evidence, summarize it and stop
 - if a feedback stage rejects, mention the follow-up target even if the full bounce loop is not completed in the same run
 - when the run is explicitly in single-entity mode, prefer the shared single-entity termination/output rules over generic status summaries
+- if the requested bounded outcome includes a routed reuse or feedback bounce, the generic early-stop bullets above do not apply until `wait_agent` returns the reused worker's actual follow-up completion evidence
 
 For a bounded run, once the stop condition is satisfied:
 - send one concise final response
