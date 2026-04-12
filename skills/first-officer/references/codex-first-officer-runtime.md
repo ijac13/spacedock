@@ -69,7 +69,7 @@ Avoid these wasteful actions unless a real blocker forces them:
 For each dispatch:
 1. Resolve the logical id into a safe `worker_key`.
 2. Derive and report the human-readable worker label for the stage assignment.
-3. Create the worktree if required.
+3. Create the worktree only when the stage definition says `worktree: true`. If the stage is not marked for a worktree, stay on the main branch.
 4. Spawn a generic worker with `spawn_agent(..., fork_context=false)`.
 5. In the worker prompt:
    - first instruct the worker to resolve its role definition from the logical id and read it before doing anything else
@@ -165,6 +165,7 @@ If a `worktree_path` is present, `entity_path` should point to the entity file i
 - Workers report completion by returning a concise final response.
 - The first officer treats the entity file and stage report as the source of truth.
 - The first officer waits for the worker result before continuing.
+- In interactive Codex mode, a completion for a gated stage becomes the next required action: foreground the stage report and gate handling before any unrelated orchestration continues.
 - In bounded single-entity runs, if the worker completion message already contains the requested verdict, evidence, or terminal outcome, use that message as sufficient evidence for the final response and stop immediately.
 - Only reread the entity file or rerun `status` after `wait_agent(...)` when the worker message is missing a detail required by the stated stop condition.
 
@@ -175,6 +176,7 @@ For the current Codex spike:
 - if the workflow is waiting at a gate, report the gate review and stop
 - if a worker returns a verdict or concrete evidence, summarize it and stop
 - if a feedback stage rejects, mention the follow-up target even if the full bounce loop is not completed in the same run
+- if a validation result is `REJECTED` and the stage defines `feedback-to`, route the reroute immediately in interactive Codex mode through the existing worker handle when it is still addressable; do not leave the rejection sitting behind unrelated conversation
 - when the run is explicitly in single-entity mode, prefer the shared single-entity termination/output rules over generic status summaries
 - if the requested bounded outcome includes a routed reuse or feedback bounce, the generic early-stop bullets above do not apply until `wait_agent` returns the reused worker's actual follow-up completion evidence
 

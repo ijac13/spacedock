@@ -160,6 +160,34 @@ def build_codex_first_officer_invocation_prompt(
     return textwrap.dedent(
         f"""
         Use the `{agent_id}` skill to manage the workflow at `{workflow_dir}`.
+
+        Treat that path as the explicit workflow target. Do not ask to discover alternatives.
+        Stay tightly bounded to the requested goal.
+        Let the skill bootstrap the packaged workflow contract and follow it directly.
+        Use the shared first-officer runtime directly for bounded dispatch and completion steps.
+        Any worker you spawn in this run MUST use `fork_context=false` with a fully self-contained prompt.
+        For packaged workers, keep the logical id in reporting and use the safe key for naming.
+        When the packaged worker is `spacedock:ensign`, the worker key is `spacedock-ensign` and
+        must be used for worktree, branch, and session names. Worktree paths use
+        `.worktrees/{{worker_key}}-{{slug}}` and branches use `{{worker_key}}/{{slug}}`.
+        Never collapse it to bare `ensign`.
+        Keep `dispatch_agent_id: spacedock:ensign` but use `role_asset_name: ensign` for the packaged skill asset.
+        Keep a human-readable worker label in status updates and routed messages using an entity-stage-display form such as
+        `001-impl/Herschel` or `001-validation/Herschel`.
+        If a completed worker is still addressable and reuse conditions pass, reuse it through `send_input` on the existing handle.
+        Route `feedback-to` follow-up and same-thread advancement through `send_input` when reuse is valid.
+        If a worker will not receive later advancement, feedback, or gate-related routing, shut it down explicitly before stopping.
+        In interactive Codex mode, a completed gated stage is the next required action: foreground the stage report and gate handling before any unrelated conversation continues.
+        Stage metadata is authoritative for dispatch mode: only create a worktree when the stage definition says `worktree: true`; if it is absent or false, dispatch on main.
+        If validation returns `REJECTED` and the stage defines `feedback-to`, route the rejection immediately through the existing worker handle when it is still addressable and reuse remains valid.
+        For bounded single-entity runs, treat the first completed worker summary as sufficient evidence for your final response unless it is missing the requested verdict or outcome.
+        After `wait_agent(...)` returns the needed verdict or outcome, do not reread entity files, rerun `status`, or continue the loop. Respond once and stop immediately.
+        Do not load reference docs unless you hit a real blocker.
+        Do not reread your own skill files, inspect packaged worker skill assets before dispatch requires them, or open the `status` script source unless a blocker requires it.
+        Run the workflow `status` script directly or with `python3` if needed. Never invoke it with `zsh`.
+        Do not narrate setup beyond what is needed to report a blocker or final outcome.
+        Once you have enough context to dispatch the first worker, dispatch immediately.
+        Stop immediately once the requested bounded outcome is satisfied and send one final response.
         {extra_goal}
         """
     ).strip()

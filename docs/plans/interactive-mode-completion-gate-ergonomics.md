@@ -87,3 +87,18 @@ This task needs interactive tests. Static checks alone are not enough because th
 ### Summary
 
 This ideation pass tightens the task around two Codex runtime gaps: completion events that fail to stay foregrounded in interactive sessions, and dispatch behavior that should follow stage metadata instead of defaulting non-worktree stages into worktrees. The proposed change is intentionally narrow, stays Codex-specific, and is testable with new interactive coverage plus regression checks for the existing shared `--runtime` harness.
+
+## Stage Report: implementation
+
+- DONE - Implemented Codex-specific ergonomics updates in `skills/first-officer/references/codex-first-officer-runtime.md`, including foregrounding gated completions, honoring stage `worktree: true` explicitly, and auto-routing `REJECTED` + `feedback-to` results immediately in interactive Codex mode.
+- DONE - Updated `scripts/test_lib.py` so the Codex first-officer invocation prompt now carries the same completion, stage-metadata, and rejection-routing rules used by the runtime guidance.
+- DONE - Added `tests/test_codex_completion_gate_ergonomics.py` with four focused regression tests, each documented with a purpose statement and coverage intention for the gated-completion, metadata-driven dispatch, rejection reroute, and worker worktree-path cases.
+- DONE - Kept the worker-side Codex contract aligned by updating `skills/ensign/references/codex-ensign-runtime.md` to require an explicit worktree path and to foreground gated completion handling.
+- DONE - Ran targeted verification: `uv run --with pytest python tests/test_codex_completion_gate_ergonomics.py` (4 passed), `uv run --with pytest python tests/test_codex_packaged_agent_ids.py` (6 passed), and `uv run --with pytest python tests/test_agent_content.py` (27 passed).
+- DONE - Kept the scope Codex-specific; no shared first-officer contract rewrite or non-Codex behavior change was introduced.
+- DONE - Appended this `## Stage Report: implementation` section to the entity file.
+- DONE - Committed the worktree changes after verification.
+
+### Summary
+
+This implementation tightens Codex interactive behavior so completed gated stages are foregrounded instead of drifting behind unrelated conversation, and stage dispatch follows the workflow metadata instead of assuming a worktree by default. The rejection flow now explicitly routes `REJECTED` results with `feedback-to` immediately when the worker remains addressable. Coverage was added with purpose-specific tests and the existing Codex prompt/content checks still pass.
