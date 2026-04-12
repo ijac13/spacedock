@@ -7,7 +7,7 @@ score: 0.57
 started: 2026-04-12T18:20:42Z
 completed:
 verdict:
-worktree: .worktrees/spacedock-ensign-narrow-next-id-path-for-task-creation
+worktree: 
 issue:
 pr:
 ---

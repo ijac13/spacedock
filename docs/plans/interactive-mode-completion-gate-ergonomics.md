@@ -7,7 +7,7 @@ score: 0.64
 started: 2026-04-12T18:25:22Z
 completed:
 verdict:
-worktree: .worktrees/spacedock-ensign-interactive-mode-completion-gate-ergonomics
+worktree: 
 issue:
 pr:
 ---
