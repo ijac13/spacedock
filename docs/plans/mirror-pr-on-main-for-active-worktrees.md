@@ -7,7 +7,7 @@ started:
 completed:
 verdict:
 score: 0.72
-worktree:
+worktree: .worktrees/spacedock-ensign-mirror-pr-on-main-for-active-worktrees
 issue:
 pr:
 ---
