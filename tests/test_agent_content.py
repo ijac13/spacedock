@@ -437,5 +437,14 @@ def test_assembled_claude_first_officer_runtime_has_context_budget_section():
     assert "uncommitted" in text.lower()
 
 
+def test_assembled_skill_contract_exposes_resolved_include_paths():
+    t = TestRunner("agent content", keep_test_dir=False)
+    text = assembled_agent_content(t, "first-officer")
+
+    assert "skill include resolution" in text
+    assert "first-officer-shared-core.md" in text
+    assert "code-project-guardrails.md" in text
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__]))
