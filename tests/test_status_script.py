@@ -766,7 +766,9 @@ class TestBootOption(unittest.TestCase):
         with open(git_script, 'w') as f:
             f.write('#!/bin/sh\n')
             f.write('if [ "$1" = "worktree" ] && [ "$2" = "list" ]; then\n')
-            f.write('  cat <<\'GITEOF\'\n')
+            f.write('  while IFS= read -r line; do\n')
+            f.write('    printf "%s\\n" "$line"\n')
+            f.write('  done <<\'GITEOF\'\n')
             f.write(worktree_output)
             f.write('GITEOF\n')
             f.write('  exit 0\n')
