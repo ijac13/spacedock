@@ -902,7 +902,7 @@ class TestBootOption(unittest.TestCase):
             self._init_git_repo(tmpdir)
             self._add_real_worktree(tmpdir, 'ensign-task-a', 'ensign-task-a')
             result = run_status(tmpdir, '--boot', script_path=self.script_path,
-                               extra_env={'PATH': self._path_without_gh()})
+                               extra_env={'PATH': os.environ.get('PATH', '')})
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = result.stdout.split('\n')
             # Find ORPHANS section
@@ -931,7 +931,7 @@ class TestBootOption(unittest.TestCase):
             self._init_git_repo(tmpdir)
             self._add_real_worktree(tmpdir, 'ensign-feature-name', 'ensign/feature-name')
             result = run_status(tmpdir, '--boot', script_path=self.script_path,
-                               extra_env={'PATH': self._path_without_gh()})
+                               extra_env={'PATH': os.environ.get('PATH', '')})
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = result.stdout.split('\n')
             feature_line = [l for l in lines if 'feature-name' in l and '001' in l][0]
@@ -949,7 +949,7 @@ class TestBootOption(unittest.TestCase):
             })
             self._init_git_repo(tmpdir)
             result = run_status(tmpdir, '--boot', script_path=self.script_path,
-                               extra_env={'PATH': self._path_without_gh()})
+                               extra_env={'PATH': os.environ.get('PATH', '')})
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = result.stdout.split('\n')
             ghost_line = [l for l in lines if 'ghost' in l and '002' in l][0]
@@ -967,7 +967,7 @@ class TestBootOption(unittest.TestCase):
             self._init_git_repo(tmpdir)
             self._add_real_worktree(tmpdir, 'remove-codex-dispatcher', 'remove-codex-dispatcher')
             result = run_status(tmpdir, '--boot', script_path=self.script_path,
-                               extra_env={'PATH': self._path_without_gh()})
+                               extra_env={'PATH': os.environ.get('PATH', '')})
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = result.stdout.split('\n')
             codex_line = [l for l in lines if 'codex' in l and '003' in l][0]
