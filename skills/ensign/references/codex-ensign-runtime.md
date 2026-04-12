@@ -8,6 +8,14 @@ The packaged worker role asset is the `spacedock:ensign` skill.
 When the worker resolves that logical id itself, it should use the skill convention:
 `~/.agents/skills/{namespace}/ensign/SKILL.md`.
 
+## Skill Bootstrap Resolution
+
+Treat the directory containing the active `SKILL.md` as the base for any skill
+includes. Resolve `@...` includes from that file's directory first. If the
+skill-local target is missing, use only a bounded fallback that ships with the
+packaged skill namespace, and report the final resolved path instead of
+searching the repository.
+
 ## Codex-Specific Rules
 
 - The first-officer dispatch prompt is authoritative for assignment fields.

@@ -88,6 +88,66 @@ def resolve_codex_worker(agent_id: str, repo_root: Path | None = None) -> dict[s
     }
 
 
+def _extract_skill_includes(skill_text: str) -> list[str]:
+    includes: list[str] = []
+    for line in skill_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("@") and len(stripped) > 1:
+            includes.append(stripped[1:])
+    return includes
+
+
+def resolve_skill_include(
+    skill_path: Path,
+    include: str,
+    repo_root: Path,
+) -> tuple[Path, str]:
+    """Resolve one skill include relative to the active SKILL.md directory.
+
+    The direct hit is the directory containing the active SKILL.md. If that
+    lookup fails, fall back to the repo-level references directory only.
+    """
+    skill_path = Path(skill_path)
+    include_path = Path(include)
+    skill_dir = skill_path.parent
+
+    direct_candidate = (skill_dir / include_path).resolve()
+    if direct_candidate.is_file():
+        return direct_candidate, "skill-relative"
+
+    fallback_candidate = (repo_root / "references" / include_path.name).resolve()
+    if fallback_candidate.is_file():
+        return fallback_candidate, "bounded-fallback"
+
+    raise FileNotFoundError(
+        f"Missing skill include {include!r} requested by {skill_path}"
+    )
+
+
+def _assemble_skill_contract(
+    skill_path: Path,
+    repo_root: Path,
+    seen: set[Path] | None = None,
+) -> tuple[list[str], list[str]]:
+    skill_path = Path(skill_path).resolve()
+    if seen is None:
+        seen = set()
+    if skill_path in seen:
+        return [], []
+    seen.add(skill_path)
+
+    text = skill_path.read_text()
+    parts = [text]
+    trace: list[str] = []
+    for include in _extract_skill_includes(text):
+        resolved_path, resolution_kind = resolve_skill_include(skill_path, include, repo_root)
+        trace.append(f"{include} -> {resolved_path} ({resolution_kind})")
+        child_parts, child_trace = _assemble_skill_contract(resolved_path, repo_root, seen)
+        parts.extend(child_parts)
+        trace.extend(child_trace)
+    return parts, trace
+
+
 def build_codex_first_officer_invocation_prompt(
     workflow_dir: str | Path,
     agent_id: str = "spacedock:first-officer",
@@ -126,6 +186,7 @@ def build_codex_worker_bootstrap_prompt(
             f"worker_key: {resolved_worker['worker_key']}",
             f"role_asset_kind: {resolved_worker['asset_kind']}",
             f"role_asset_name: {resolved_worker['asset_name']}",
+            f"role_asset_path: {resolved_worker['asset_path']}",
             f"workflow_dir: {workflow_dir}",
             f"entity_path: {entity_path}",
             f"stage_name: {stage_name}",
@@ -303,27 +364,27 @@ def assembled_agent_content(runner: TestRunner, agent_name: str, runtime: str = 
     """
     if runtime not in {"claude", "codex"}:
         raise ValueError(f"Unknown runtime: {runtime}")
-    fo_refs = runner.repo_root / "skills" / "first-officer" / "references"
-    ensign_refs = runner.repo_root / "skills" / "ensign" / "references"
+    skill_root = runner.repo_root / "skills"
     if agent_name == "first-officer":
-        ref_paths = [
-            fo_refs / "first-officer-shared-core.md",
-            fo_refs / "code-project-guardrails.md",
-            fo_refs / f"{runtime}-first-officer-runtime.md",
-        ]
+        skill_path = skill_root / "first-officer" / "SKILL.md"
+        runtime_path = skill_root / "first-officer" / "references" / f"{runtime}-first-officer-runtime.md"
     elif agent_name == "ensign":
-        ref_paths = [
-            ensign_refs / "ensign-shared-core.md",
-            fo_refs / "code-project-guardrails.md",
-            ensign_refs / f"{runtime}-ensign-runtime.md",
-        ]
+        skill_path = skill_root / "ensign" / "SKILL.md"
+        runtime_path = skill_root / "ensign" / "references" / f"{runtime}-ensign-runtime.md"
     else:
-        ref_paths = []
+        skill_path = None
+        runtime_path = None
 
     parts = [(runner.repo_root / "agents" / f"{agent_name}.md").read_text()]
-    for ref_path in ref_paths:
-        if ref_path.exists():
-            parts.append(ref_path.read_text())
+    if skill_path is not None and skill_path.exists():
+        skill_parts, resolution_trace = _assemble_skill_contract(skill_path, runner.repo_root)
+        parts.extend(skill_parts)
+        if runtime_path is not None and runtime_path.exists():
+            parts.append(runtime_path.read_text())
+        if resolution_trace:
+            trace_lines = ["<!-- skill include resolution -->"]
+            trace_lines.extend(f"<!-- {line} -->" for line in resolution_trace)
+            parts.append("\n".join(trace_lines))
     return "\n\n".join(parts)
 
 

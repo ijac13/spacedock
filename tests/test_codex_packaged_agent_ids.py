@@ -16,6 +16,7 @@ from test_lib import (
     build_codex_first_officer_invocation_prompt,
     build_codex_worker_bootstrap_prompt,
     resolve_codex_worker,
+    resolve_skill_include,
 )
 
 
@@ -89,8 +90,57 @@ def test_packaged_worker_bootstrap_tells_worker_to_load_skill_contract():
     assert "~/.agents/skills/{namespace}/agents/{name}.md" not in prompt
     assert "role_asset_kind: skill" in prompt
     assert "role_asset_name: ensign" in prompt
+    assert "role_asset_path:" in prompt
     assert "spacedock:ensign" in prompt
     assert "worker_key: spacedock-ensign" in prompt
+
+
+def test_skill_include_resolves_from_active_skill_directory_first(tmp_path):
+    repo_root = tmp_path / "repo"
+    skill_dir = repo_root / "skills" / "demo"
+    refs_dir = skill_dir / "references"
+    refs_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("@references/direct.md\n")
+    (refs_dir / "direct.md").write_text("skill-local\n")
+    repo_refs = repo_root / "references"
+    repo_refs.mkdir(parents=True)
+    (repo_refs / "direct.md").write_text("repo-root\n")
+
+    resolved_path, source = resolve_skill_include(skill_dir / "SKILL.md", "references/direct.md", repo_root)
+
+    assert resolved_path == refs_dir / "direct.md"
+    assert source == "skill-relative"
+    assert resolved_path.read_text() == "skill-local\n"
+
+
+def test_skill_include_uses_bounded_repo_references_fallback(tmp_path):
+    repo_root = tmp_path / "repo"
+    skill_dir = repo_root / "skills" / "demo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("@references/fallback.md\n")
+    repo_refs = repo_root / "references"
+    repo_refs.mkdir(parents=True)
+    (repo_refs / "fallback.md").write_text("repo-root\n")
+
+    resolved_path, source = resolve_skill_include(skill_dir / "SKILL.md", "references/fallback.md", repo_root)
+
+    assert resolved_path == repo_refs / "fallback.md"
+    assert source == "bounded-fallback"
+    assert resolved_path.read_text() == "repo-root\n"
+
+
+def test_skill_include_errors_when_missing_everywhere(tmp_path):
+    repo_root = tmp_path / "repo"
+    skill_dir = repo_root / "skills" / "demo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("@references/missing.md\n")
+
+    with pytest.raises(FileNotFoundError) as excinfo:
+        resolve_skill_include(skill_dir / "SKILL.md", "references/missing.md", repo_root)
+
+    message = str(excinfo.value)
+    assert "references/missing.md" in message
+    assert "SKILL.md" in message
 
 
 if __name__ == "__main__":
