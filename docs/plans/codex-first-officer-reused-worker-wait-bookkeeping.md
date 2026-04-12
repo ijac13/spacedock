@@ -9,7 +9,7 @@ verdict: PASSED
 score: 0.68
 worktree: .worktrees/spacedock-ensign-codex-first-officer-reused-worker-wait-bookkeeping
 issue:
-pr:
+pr: "#80"
 ---
 
 ## Problem Statement
