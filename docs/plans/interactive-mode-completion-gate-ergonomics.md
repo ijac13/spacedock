@@ -1,13 +1,13 @@
 ---
 id: 140
 title: Codex interactive-mode completion and gate ergonomics
-status: ideation
+status: implementation
 source: FO observation during task 136 completion handling on 2026-04-12
 score: 0.64
 started: 2026-04-12T18:25:22Z
 completed:
 verdict:
-worktree: 
+worktree: .worktrees/spacedock-ensign-interactive-mode-completion-gate-ergonomics
 issue:
 pr:
 ---
@@ -17,6 +17,8 @@ The current Codex interactive runtime is functionally correct but too easy to dr
 There is a second, related problem in the same flow. During follow-on dispatch, ideation-stage work was treated as if it should default to an isolated worktree even though the workflow metadata does not mark `ideation` as `worktree: true`. That is the wrong default. Stage metadata must control dispatch behavior, and non-worktree stages must stay on the main branch unless the metadata says otherwise.
 
 Single-entity mode already behaves more like the desired end state because it is outcome-driven and naturally stops on the entity result. Interactive Codex mode needs an equivalent event rule: a worker completion for a gated or critical-path stage should immediately become the first officer's next required action. The completion notification should foreground the stage report, force gate handling if a gate is pending, and only then allow unrelated orchestration to continue.
+
+The same rule should apply to validation-stage rejections that already have a deterministic next step. When a validator recommends `REJECTED` and the stage defines `feedback-to`, the first officer should not leave that result sitting at a pseudo-gate waiting for another reminder. In interactive Codex mode, the completion should be foregrounded and the rejection should auto-route into the `feedback-to` stage immediately, while still surfacing the reroute and findings clearly to the captain.
 
 This task stays Codex-specific. The goal is not to redesign the shared first-officer contract for every environment, but to make Codex interactive sessions treat completion events and stage metadata as first-class runtime signals.
 
@@ -54,7 +56,8 @@ This task needs interactive tests. Static checks alone are not enough because th
 1. `test_codex_completion_foregrounds_gate` - verify that a completion notification for a gated stage becomes the next operator action instead of being buried behind unrelated conversation. Purpose: prove the FO interrupt ordering. Coverage intention: interactive Codex path only.
 2. `test_codex_dispatch_respects_stage_worktree_metadata` - verify that a stage without `worktree: true` dispatches on main and does not default into worktree creation. Purpose: prevent the regression that treated ideation as a worktree-backed stage. Coverage intention: metadata-driven dispatch behavior.
 3. `test_codex_interactive_gate_after_completion` - verify that when a worker finishes a gated stage, the gate is presented before any unrelated follow-up orchestration continues. Purpose: prove the gate is foregrounded, not deferred. Coverage intention: interactive event handling.
-4. `test_shared_runtime_regression` - keep the existing live `--runtime` harness scenarios passing unchanged. Purpose: guard against breaking the shared workflow runtime while tightening Codex behavior. Coverage intention: existing shared harness only.
+4. `test_codex_validation_rejection_autoroutes_feedback` - verify that an interactive validation `REJECTED` result with `feedback-to` immediately reroutes to the implementation worker instead of waiting for a second prompt. Purpose: prove deterministic rejection handling is foregrounded as the next action. Coverage intention: interactive Codex rejection flow only.
+5. `test_shared_runtime_regression` - keep the existing live `--runtime` harness scenarios passing unchanged. Purpose: guard against breaking the shared workflow runtime while tightening Codex behavior. Coverage intention: existing shared harness only.
 
 ## Acceptance Criteria
 
@@ -64,9 +67,11 @@ This task needs interactive tests. Static checks alone are not enough because th
    Test method: run the dispatch metadata test and assert that a stage without `worktree: true` is launched on main.
 3. Gated stages are handled immediately after completion, not deferred behind other orchestration.
    Test method: run the gate foregrounding test and verify the gate prompt is emitted before any unrelated follow-up instruction.
-4. Existing shared live `--runtime` coverage continues to pass.
+4. Validation-stage `REJECTED` results with `feedback-to` auto-route immediately in interactive Codex sessions.
+   Test method: run the rejection autoroute test and verify the implementation stage receives the findings without waiting for a second captain prompt.
+5. Existing shared live `--runtime` coverage continues to pass.
    Test method: run the current shared harness tests and confirm no regressions in the existing runtime behavior.
-5. The task remains Codex-specific and does not require a shared-contract rewrite to validate the fix.
+6. The task remains Codex-specific and does not require a shared-contract rewrite to validate the fix.
    Test method: review the changed scope and confirm the implementation and tests only touch Codex interactive runtime guidance plus the relevant dispatch path.
 
 ## Stage Report: ideation
