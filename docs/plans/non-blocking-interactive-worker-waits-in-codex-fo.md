@@ -1,7 +1,7 @@
 ---
 id: 138
 title: Non-blocking interactive worker waits in Codex first officer
-status: ideation
+status: implementation
 source: FO observation during task 136 dispatch on 2026-04-12
 score: 0.66
 started: 2026-04-12T18:17:59Z
