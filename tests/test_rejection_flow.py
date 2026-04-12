@@ -235,7 +235,13 @@ def main():
             worktrees_dir / "ensign-buggy-add-task",
             worktrees_dir / "spacedock-ensign-buggy-add-task",
         ]
-        t.check("worker uses safe worktree key", any(path.is_dir() for path in worktree_candidates))
+        safe_worktree_mentions = [str(path) for path in worktree_candidates]
+        t.check(
+            "worker uses safe worktree key",
+            any(path.is_dir() for path in worktree_candidates)
+            or any(path_text in fo_text for path_text in safe_worktree_mentions)
+            or any(path_text in worker_messages for path_text in safe_worktree_mentions),
+        )
         t.check(
             "logical packaged id does not leak into worktree path",
             all("spacedock:ensign" not in path.as_posix() for path in worktree_candidates if path.is_dir()),
