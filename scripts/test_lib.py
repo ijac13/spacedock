@@ -195,6 +195,8 @@ def _clean_env() -> dict[str, str]:
 class TestRunner:
     """Test framework with pass/fail counters, check helpers, and results summary."""
 
+    __test__ = False
+
     def __init__(self, test_name: str, keep_test_dir: bool = False):
         self.test_name = test_name
         self.passes = 0

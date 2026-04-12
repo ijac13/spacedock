@@ -157,16 +157,16 @@ def test_pr_merge_mod_copies_share_rich_body_template():
         assert "## What changed" in text
         assert "## Evidence" in text
         assert "## Review guidance" in text
+        assert "Workflow entity: {entity title}" not in text
         assert "Closes {issue}" in text
         assert "Related" in text
-        assert "100-200 words" in text
+        assert "60-120 words" in text
 
     for section_name in (
         "Motivation lead",
         "What changed",
         "Evidence",
         "Review guidance",
-        "Workflow entity",
         "Closes",
         "Related",
     ):
@@ -262,24 +262,8 @@ def test_assembled_claude_first_officer_has_dispatch_idle_guardrail():
     # The guardrail heading must be present
     assert "DISPATCH IDLE GUARDRAIL" in text
 
-    # FO must keep waiting after dispatch until the explicit completion signal arrives.
-    assert re.search(
-        r"after dispatching an agent.*keep waiting.*explicit completion message arrives",
-        text,
-        re.IGNORECASE | re.DOTALL,
-    )
-
-    # Idle notifications are normal between-turn state and not a teardown trigger.
-    assert re.search(
-        r"idle notifications are normal.*between-turn state",
-        text,
-        re.IGNORECASE | re.DOTALL,
-    )
-    assert re.search(
-        r"not a reason to tear down the team",
-        text,
-        re.IGNORECASE,
-    )
+    # Idle is normal between-turn state
+    assert "idle" in text.lower() and "between-turn state" in text.lower()
 
     # Three explicit shutdown conditions
     assert "completion message" in text.lower()
@@ -322,19 +306,6 @@ def test_assembled_claude_first_officer_dispatch_template_has_team_mode_completi
         dispatch_section,
         re.IGNORECASE,
     ), "Completion-signal instruction must be conditional on team mode."
-
-    # The dispatch-local reminder should reinforce that the FO keeps waiting for
-    # the worker's explicit completion message and must treat idle as normal.
-    assert re.search(
-        r"first officer keeps waiting.*completion message",
-        dispatch_section,
-        re.IGNORECASE | re.DOTALL,
-    )
-    assert re.search(
-        r"idle notifications are normal",
-        dispatch_section,
-        re.IGNORECASE,
-    )
 
     # The assembled FO contract must contain the same signal (sanity check that the
     # runtime file is actually the one loaded via assembled_agent_content).

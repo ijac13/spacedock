@@ -56,7 +56,7 @@ def test_offline():
     print()
 
 
-def test_multi_turn():
+def run_multi_turn():
     """Live multi-turn test with PTY-driven claude session."""
     print("--- Live Multi-Turn Test ---")
 
@@ -124,7 +124,7 @@ def main():
 
     # Run live tests if --live flag is passed (requires claude CLI)
     if "--live" in sys.argv:
-        success = test_multi_turn()
+        success = run_multi_turn()
         if not success:
             sys.exit(1)
     else:
