@@ -1,7 +1,7 @@
 ---
 id: 140
 title: Codex interactive-mode completion and gate ergonomics
-status: validation
+status: implementation
 source: FO observation during task 136 completion handling on 2026-04-12
 score: 0.64
 started: 2026-04-12T18:25:22Z
@@ -42,37 +42,36 @@ The implementation should stay in the Codex-specific runtime guidance and dispat
 
 ## Test Plan
 
-The current shared live `--runtime` harness covers general first-officer behavior, dispatch shape, and stage transitions. What it does not cover well today is the interactive Codex path where completion notifications arrive while the conversation is still live. That missing coverage is the core risk here, and it means this task can only prove the shipped runtime guidance and prompt wiring unless a separate live Codex session is run.
+The primary proof surface for this task should be live Codex `--runtime` behavior, not prompt text. The bug is about what the first officer does when a worker completes or rejects inside a Codex run, so the core coverage needs to come from the shared runtime harness exercising those events.
 
 The test plan should therefore split into two buckets:
 
-1. Shared `--runtime` coverage that already exists and should continue to pass.
-2. Missing Codex interactive coverage that must be added for this task because the bug only appears when completion events arrive asynchronously during an interactive session.
+1. Live Codex `--runtime` coverage that proves gate handling, stage-metadata dispatch, and rejection routing behavior in real runs.
+2. Lightweight offline checks that keep the Codex harness prompt minimal and keep the shipped runtime docs aligned with the behavior under test.
 
-This task can still include static regression tests, but their honest purpose is to pin the shipped instructions and prompt wiring. A live Codex session is still required to prove the ordering behavior end to end.
+Static tests are still useful here, but only for guardrails: they should prevent the harness from smuggling first-officer operating rules into the prompt and should keep the shipped Codex runtime text present. They must not claim to prove the runtime behavior by asserting the same text they injected.
 
 ### Proposed new tests
 
-1. `test_codex_completion_foregrounds_gate` - verify that the shipped Codex first-officer prompt contains the foregrounding instructions for gated completions. Purpose: pin the runtime guidance. Coverage intention: static prompt wiring only.
-2. `test_codex_dispatch_respects_stage_worktree_metadata` - verify that the shipped Codex first-officer prompt contains the metadata-driven dispatch rule. Purpose: pin the runtime guidance. Coverage intention: static prompt wiring only.
-3. `test_codex_interactive_gate_after_completion` - verify that the shipped Codex runtime text instructs the FO to foreground gate handling after completion. Purpose: pin the runtime guidance. Coverage intention: static runtime text only.
-4. `test_codex_validation_rejection_autoroutes_feedback` - verify that the shipped Codex runtime text instructs immediate reroute for `REJECTED` + `feedback-to`. Purpose: pin the runtime guidance. Coverage intention: static runtime text only.
-5. `test_shared_runtime_regression` - keep the existing live `--runtime` harness scenarios passing unchanged. Purpose: guard against breaking the shared workflow runtime while tightening Codex behavior. Coverage intention: existing shared harness only.
+1. `tests/test_gate_guardrail.py --runtime codex` - verify that Codex surfaces a gate review and waiting-for-approval result for a completed gated stage without advancing the entity or creating a git worktree when the stage metadata does not ask for one.
+2. `tests/test_rejection_flow.py --runtime codex` - verify that a `REJECTED` validation with `feedback-to` produces visible follow-up implementation activity only after the rejection is observed in the Codex run.
+3. `tests/test_codex_packaged_agent_ids.py` - verify that the Codex harness prompt stays minimal and does not inject first-officer operating rules into the invocation text.
+4. `tests/test_agent_content.py` - keep the shipped Codex runtime guidance aligned with the intended behavior without treating the doc text itself as end-to-end proof.
 
 ## Acceptance Criteria
 
-1. The shipped Codex runtime guidance now explicitly instructs the FO to foreground gated completions and gate handling before unrelated conversation.
-   Test method: inspect `skills/first-officer/references/codex-first-officer-runtime.md` and confirm the foregrounding language is present.
-2. The shipped Codex runtime guidance now explicitly instructs stage metadata to control dispatch mode.
-   Test method: inspect `skills/first-officer/references/codex-first-officer-runtime.md` and confirm the `worktree: true` rule is present.
-3. The shipped Codex runtime guidance now explicitly instructs immediate reroute for `REJECTED` validation results with `feedback-to`.
-   Test method: inspect `skills/first-officer/references/codex-first-officer-runtime.md` and confirm the reroute language is present.
-4. The supporting prompt wiring mirrors the same Codex runtime guidance.
-   Test method: inspect `scripts/test_lib.py` and the Codex regression tests to confirm the prompt text is pinned.
-5. Existing shared live `--runtime` coverage continues to pass.
-   Test method: run the current shared harness tests and confirm no regressions in the existing runtime behavior.
+1. In a Codex run, a completed gated stage is surfaced to the captain as a gate review and waiting-for-approval result before the entity advances.
+   Test method: run `tests/test_gate_guardrail.py --runtime codex` and confirm the final Codex output reports the gate review while the entity remains active.
+2. In a Codex run, stage metadata controls dispatch mode: a stage without `worktree: true` stays on main and does not create a git worktree.
+   Test method: run `tests/test_gate_guardrail.py --runtime codex` and confirm the entity `worktree:` field stays empty and no `.worktrees/` directory is created for the fixture.
+3. In a Codex run, a `REJECTED` validation result with `feedback-to` triggers follow-up implementation activity after the rejection is observed.
+   Test method: run `tests/test_rejection_flow.py --runtime codex` and confirm the log shows rejection evidence before the follow-up implementation activity.
+4. The Codex harness prompt stays minimal and does not encode first-officer operating behavior.
+   Test method: run `tests/test_codex_packaged_agent_ids.py` and confirm the invocation prompt names the workflow target without carrying behavioral coaching.
+5. Supporting Codex runtime-content checks continue to pass.
+   Test method: run `tests/test_agent_content.py` and confirm the shipped runtime references still contain the intended guidance.
 6. The task remains Codex-specific and does not require a shared-contract rewrite to validate the fix.
-   Test method: review the changed scope and confirm the implementation and tests only touch Codex interactive runtime guidance plus the relevant dispatch path.
+   Test method: review the changed scope and confirm the implementation and tests stay inside Codex runtime guidance, harness behavior, and Codex-targeted tests.
 
 ## Stage Report: ideation
 
@@ -146,3 +145,19 @@ Assessment:
 The shipped Codex runtime guidance now explicitly covers gated-completion foregrounding, metadata-driven dispatch, and immediate `REJECTED` + `feedback-to` rerouting. The supporting prompt builder and regression tests mirror that guidance, and the requested verification slice passed cleanly. The task remains scoped to Codex-specific runtime guidance rather than a shared contract change.
 
 Counts: 7 done, 0 skipped, 0 failed
+
+## Stage Report: implementation
+
+- DONE - Accepted captain review that the previous Codex prompt changes violated `tests/README` prompt discipline by injecting first-officer operating rules into the harness prompt and then asserting that same text.
+- DONE - Restored `scripts/test_lib.py` to the minimal Codex first-officer invocation prompt so the harness names the workflow target without carrying behavioral coaching.
+- DONE - Removed the prompt-tautology file `tests/test_codex_completion_gate_ergonomics.py` and kept `tests/test_codex_packaged_agent_ids.py` only as a minimal-prompt guardrail.
+- DONE - Reworked Codex behavior coverage to use live runtime evidence instead: `tests/test_gate_guardrail.py --runtime codex` now checks gate review, waiting-for-approval output, and non-worktree dispatch behavior; `tests/test_rejection_flow.py --runtime codex` keeps the rejection-follow-up ordering check.
+- DONE - Rewrote the task test plan and acceptance criteria so the proof target is runtime behavior plus prompt-discipline guardrails, not prompt text tautologies.
+- DONE - Re-ran lightweight verification after the correction: `unset CLAUDECODE && uv run --with pytest pytest tests/test_codex_packaged_agent_ids.py tests/test_agent_content.py -q` completed with `41 passed in 0.04s`.
+- DONE - Re-ran live Codex gate coverage after the correction: `unset CLAUDECODE && uv run tests/test_gate_guardrail.py --runtime codex` completed with `9 passed, 0 failed`.
+- DONE - Preserved behavior evidence for rejection reroute from the current implementation cycle: `unset CLAUDECODE && uv run tests/test_rejection_flow.py --runtime codex` previously completed with `15 passed, 0 failed`, including the `rejection follow-up happens after rejection is observed` check.
+- DONE - `git diff --check` passes on the corrected branch.
+
+### Summary
+
+The previous validation was not trustworthy because it proved the harness prompt text rather than Codex runtime behavior. This implementation cycle removes that coaching from the prompt, replaces the tautology tests with behavior-level Codex coverage, and rewrites the task contract so the next validation can judge the actual runtime behavior instead of the injected instructions.
