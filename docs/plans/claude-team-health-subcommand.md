@@ -24,7 +24,19 @@ The asymmetry has two costs:
 
 This task folds health-check into the existing helper: add `claude-team health --name {team_name}` as a sibling to `context-budget`. The subcommand should return exit 0 (healthy) / 1 (unhealthy) with JSON payload describing the failure mode when unhealthy. Update the runtime adapter and `test_team_health_check.py` to use the new helper instead of `test -f`.
 
+## Also in scope — green `test_team_health_check.py`
+
+This task must leave `test_team_health_check.py` passing. As of 2026-04-13 the test FAILs on one assertion on **both haiku and opus/low** (i.e., a static-text regression, not a model flake):
+
+- **`recovery sequence documented`** (`tests/test_team_health_check.py:134`): the regex `r"TeamDelete.*its own message.*TeamCreate.*its own message"` does not match the actual prose in `skills/first-officer/references/claude-first-officer-runtime.md:16`, which says `Call TeamDelete in its own message ... Then call TeamCreate in a subsequent message.` The two halves are asymmetric — only TeamDelete says "in its own message."
+
+Fix direction (resolve during ideation):
+
+1. If `claude-team health` replaces the `test -f` pattern entirely, then the health-check paragraph in the runtime adapter will be rewritten anyway. Make sure the rewrite either preserves the symmetric "in its own message" wording that the existing test expects, or updates the test regex alongside the prose.
+2. The other six assertions in `test_team_health_check.py` (AC1–AC5 + bare-mode fallback + single-entity skip) currently pass. Do not regress them when swapping in the new subcommand.
+
+Reproduction: `unset CLAUDECODE && uv run tests/test_team_health_check.py --runtime claude --model {haiku|opus} --effort low`. Logs from the 2026-04-13 run are in `/tmp/spacedock-e2e-logs/test_team_health_check*.log`.
+
 Related:
 
-- `test_team_health_check.py` currently FAILs on its "recovery sequence documented" assertion due to wording drift in the runtime adapter (`TeamDelete.*its own message.*TeamCreate.*its own message`) — that fix belongs to this task or task #134, TBD during ideation.
-- Task #134 (runtime-specific-tests-on-pr) is already tracking live-E2E greening. This task is the upstream fix for one of the failures listed there.
+- Task #134 (runtime-specific-tests-on-pr) is already tracking live-E2E greening. This task is the upstream fix for `test_team_health_check.py`'s recovery-sequence failure (failure B in the 2026-04-13 green-up list).
