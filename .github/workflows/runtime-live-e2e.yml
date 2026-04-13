@@ -1,6 +1,7 @@
 name: Runtime Live E2E
 
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       pr_number:
@@ -15,9 +16,12 @@ permissions:
 jobs:
   claude-live:
     runs-on: ubuntu-latest
+    environment: CI-E2E
     env:
       DISABLE_AUTOUPDATER: "1"
-      PR_NUMBER: ${{ inputs.pr_number }}
+      TRIGGER_SOURCE: ${{ github.event_name }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - name: Check required secret
@@ -31,9 +35,21 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = Number(process.env.PR_NUMBER);
+            const triggerSource = process.env.TRIGGER_SOURCE;
+            let rawPrNumber;
+
+            if (triggerSource === "pull_request") {
+              rawPrNumber = process.env.PR_NUMBER;
+            } else if (triggerSource === "workflow_dispatch") {
+              rawPrNumber = process.env.DISPATCH_PR_NUMBER;
+            } else {
+              core.setFailed(`Unsupported trigger source: ${JSON.stringify(triggerSource)}`);
+              return;
+            }
+
+            const prNumber = Number(rawPrNumber);
             if (!Number.isInteger(prNumber) || prNumber <= 0) {
-              core.setFailed(`workflow_dispatch input pr_number must be a positive integer, got ${JSON.stringify(process.env.PR_NUMBER)}`);
+              core.setFailed(`${triggerSource} PR number must be a positive integer, got ${JSON.stringify(rawPrNumber)}`);
               return;
             }
 
@@ -59,6 +75,7 @@ jobs:
 
             await core.summary
               .addHeading("Runtime Live E2E Provenance")
+              .addRaw(`- Trigger source: ${triggerSource}\n`)
               .addRaw(`- PR number: #${prNumber}\n`)
               .addRaw(`- Tested workflow SHA: \`${context.sha}\`\n`)
               .addRaw(`- Current PR head SHA: \`${pull.head.sha}\`\n`)
@@ -107,8 +124,11 @@ jobs:
 
   codex-live:
     runs-on: ubuntu-latest
+    environment: CI-E2E
     env:
-      PR_NUMBER: ${{ inputs.pr_number }}
+      TRIGGER_SOURCE: ${{ github.event_name }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Check required secret
@@ -122,9 +142,21 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = Number(process.env.PR_NUMBER);
+            const triggerSource = process.env.TRIGGER_SOURCE;
+            let rawPrNumber;
+
+            if (triggerSource === "pull_request") {
+              rawPrNumber = process.env.PR_NUMBER;
+            } else if (triggerSource === "workflow_dispatch") {
+              rawPrNumber = process.env.DISPATCH_PR_NUMBER;
+            } else {
+              core.setFailed(`Unsupported trigger source: ${JSON.stringify(triggerSource)}`);
+              return;
+            }
+
+            const prNumber = Number(rawPrNumber);
             if (!Number.isInteger(prNumber) || prNumber <= 0) {
-              core.setFailed(`workflow_dispatch input pr_number must be a positive integer, got ${JSON.stringify(process.env.PR_NUMBER)}`);
+              core.setFailed(`${triggerSource} PR number must be a positive integer, got ${JSON.stringify(rawPrNumber)}`);
               return;
             }
 
@@ -150,6 +182,7 @@ jobs:
 
             await core.summary
               .addHeading("Runtime Live E2E Provenance")
+              .addRaw(`- Trigger source: ${triggerSource}\n`)
               .addRaw(`- PR number: #${prNumber}\n`)
               .addRaw(`- Tested workflow SHA: \`${context.sha}\`\n`)
               .addRaw(`- Current PR head SHA: \`${pull.head.sha}\`\n`)

@@ -68,3 +68,22 @@ The summary output should continue to show:
 - Workflow-structure inspection: verify trigger block, environment fields, and provenance logic for both event types. Cost/complexity: low. No E2E required.
 - Focused offline tests: update/add static tests for the PR-trigger and `CI-E2E` environment wiring. Cost/complexity: low-medium. No E2E required.
 - Optional GitHub smoke after merge: open or reuse a PR and confirm the runtime workflow appears on the PR and waits for `CI-E2E` approval before the live jobs run. Cost/complexity: medium. E2E required: yes, but not required to finish implementation in this cycle.
+
+## Stage Report: implementation
+
+- [x] Add `pull_request` triggering while keeping `workflow_dispatch`.
+  `.github/workflows/runtime-live-e2e.yml` now includes both triggers, with `workflow_dispatch` retained for targeted reruns.
+- [x] Add `environment: CI-E2E` to both live jobs.
+  Both `claude-live` and `codex-live` declare the `CI-E2E` environment, which is the approval gate for the live runtime checks.
+- [x] Resolve PR provenance correctly for both trigger paths.
+  The provenance step branches on `github.event_name` and uses `github.event.pull_request.number` for PR runs or `inputs.pr_number` for manual dispatch runs.
+- [x] Update the operator docs for the new PR-native flow and rerun path.
+  `tests/README.md` now explains the pending `CI-E2E` approval flow, the environment-scoped secrets, and the retained manual rerun command.
+- [x] Update offline coverage for the trigger/environment behavior.
+  `tests/test_runtime_live_e2e_workflow.py` now checks the trigger block, job environments, provenance fields, and the README wording.
+- [x] Run focused verification for the edited workflow/docs/test files.
+  `unset CLAUDECODE && uv run tests/test_runtime_live_e2e_workflow.py` is the targeted static check for this change set.
+
+### Summary
+
+Implemented the PR-native live E2E workflow shape with `CI-E2E` approval gating while keeping manual dispatch available for reruns. The workflow now carries event-specific provenance, the operator docs explain the approval flow, and the offline test coverage matches the new wiring.

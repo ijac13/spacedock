@@ -2,8 +2,8 @@
 # /// script
 # requires-python = ">=3.10"
 # ///
-# ABOUTME: Static checks for the manual runtime live E2E workflow and its operator docs.
-# ABOUTME: Verifies the workflow stays manual, split into exactly two runtime jobs, and documents provenance/secrets.
+# ABOUTME: Static checks for the runtime live E2E workflow and its operator docs.
+# ABOUTME: Verifies PR/manual triggers, CI-E2E approval gating, and the two runtime jobs.
 
 from __future__ import annotations
 
@@ -34,20 +34,24 @@ def section(text: str, heading: str) -> str:
     return "\n".join(lines)
 
 
-def test_runtime_live_e2e_workflow_exists_and_is_manual_only():
+def test_runtime_live_e2e_workflow_supports_pr_and_manual_triggers():
     text = read_workflow()
 
     assert "workflow_dispatch:" in text
-    assert "pull_request:" not in text
+    assert "pull_request:" in text
     assert "pr_number:" in text
     assert "required: true" in text
 
 
 def test_runtime_live_e2e_workflow_has_exactly_two_runtime_jobs():
     text = read_workflow()
+    claude_section = section(text, "  claude-live")
+    codex_section = section(text, "  codex-live")
 
     assert "\n  claude-live:\n" in text
     assert "\n  codex-live:\n" in text
+    assert "environment: CI-E2E" in claude_section
+    assert "environment: CI-E2E" in codex_section
     assert "path classifier" not in text.lower()
     assert "shard" not in text.lower()
     assert "matrix:" not in text
@@ -91,9 +95,14 @@ def test_runtime_live_e2e_workflow_lists_the_expected_commands_and_provenance_fi
         "same-repo",
         "fork",
         "Approval context",
+        "Trigger source",
     ):
         assert field in text
 
+    assert "github.event.pull_request.number" in text
+    assert "inputs.pr_number" in text
+    assert "TRIGGER_SOURCE" in text
+    assert "DISPATCH_PR_NUMBER" in text
     assert "set -euo pipefail" in text
     assert "continue-on-error" not in text
     assert "|| true" not in text
@@ -104,7 +113,8 @@ def test_tests_readme_documents_runtime_live_e2e_workflow():
 
     assert "runtime-live-e2e.yml" in text
     assert "workflow_dispatch" in text
-    assert "after the PR has been approved" in text
+    assert "pull_request" in text
+    assert "CI-E2E" in text
     assert "claude-live" in text
     assert "codex-live" in text
     assert "ANTHROPIC_API_KEY" in text
@@ -114,4 +124,6 @@ def test_tests_readme_documents_runtime_live_e2e_workflow():
     assert "Current PR head SHA" in text
     assert "same-repo vs fork" in text
     assert "approval/reviewer context" in text
+    assert "Trigger source" in text
     assert "job stays red" in text
+    assert "pending `CI-E2E` deployment" in text
