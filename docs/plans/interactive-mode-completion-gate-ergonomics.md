@@ -1,7 +1,7 @@
 ---
 id: 140
 title: Codex interactive-mode completion and gate ergonomics
-status: implementation
+status: validation
 source: FO observation during task 136 completion handling on 2026-04-12
 score: 0.64
 started: 2026-04-12T18:25:22Z
@@ -161,3 +161,21 @@ Counts: 7 done, 0 skipped, 0 failed
 ### Summary
 
 The previous validation was not trustworthy because it proved the harness prompt text rather than Codex runtime behavior. This implementation cycle removes that coaching from the prompt, replaces the tautology tests with behavior-level Codex coverage, and rewrites the task contract so the next validation can judge the actual runtime behavior instead of the injected instructions.
+
+## Stage Report: validation
+
+- DONE - Superseded the earlier prompt-text validation. The previous `PASSED` report is no longer the governing evidence because it relied on injected prompt coaching and tautology tests rather than runtime behavior.
+- DONE - AC1 verified with live Codex runtime behavior: `unset CLAUDECODE && uv run tests/test_gate_guardrail.py --runtime codex` completed with `9 passed, 0 failed`, and the final Codex output explicitly surfaced both `Gate Review` and `Waiting For Approval` while the entity remained active.
+- DONE - AC2 verified with the same live gate run: the gated fixture kept `worktree:` empty and created no `.worktrees/` directory for the non-worktree stage.
+- DONE - AC3 verified with live Codex rejection-flow behavior: `unset CLAUDECODE && uv run tests/test_rejection_flow.py --runtime codex` completed with `15 passed, 0 failed`, including `rejection follow-up happens after rejection is observed`.
+- DONE - AC4 verified by prompt-discipline guardrail checks: `unset CLAUDECODE && uv run --with pytest pytest tests/test_codex_packaged_agent_ids.py tests/test_agent_content.py -q` completed with `41 passed in 0.04s`, and the packaged-agent-id assertions now require the behavioral coaching strings to be absent from the invocation prompt.
+- DONE - AC5 verified by the same offline slice: `tests/test_agent_content.py` passed and still checks the shipped Codex runtime references for the intended guidance.
+- DONE - AC6 verified by scope review: the corrected branch removes prompt coaching from the harness, keeps the work inside Codex runtime guidance and Codex-targeted tests, and does not require a shared-contract rewrite.
+- DONE - `git diff --check` passes on the validated branch.
+
+Recommendation: PASSED
+
+Assessment:
+This corrected branch now has the right proof surface. The live Codex gate test shows gated completion is surfaced and held correctly, the live rejection-flow test shows follow-up routing only after rejection is observed, and the offline checks now guard prompt discipline instead of proving the behavior by restating injected instructions. Under the revised acceptance criteria, the branch should pass validation.
+
+Counts: 8 done, 0 skipped, 0 failed
