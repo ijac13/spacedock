@@ -9,7 +9,7 @@ started: 2026-04-13T18:01:05Z
 completed:
 verdict:
 issue:
-pr:
+pr: #86
 ---
 
 ## Problem Statement
