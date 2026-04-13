@@ -1,15 +1,16 @@
 ---
 id: 134
 title: "Runtime-specific tests on PR when necessary"
-status: validation
+status: done
 source: "CL direction during 2026-04-11 session — need a way to run live/E2E tests on PRs that change FO behavior, without burning API time on every PR"
 score: 0.75
-worktree: .worktrees/spacedock-ensign-runtime-specific-tests-on-pr
+worktree: 
 started: 2026-04-13T18:01:05Z
-completed:
-verdict:
+completed: 2026-04-13T22:14:24Z
+verdict: PASSED
 issue:
 pr: #86
+archived: 2026-04-13T22:14:26Z
 ---
 
 ## Problem Statement
