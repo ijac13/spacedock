@@ -9,7 +9,7 @@ completed:
 verdict:
 worktree: .worktrees/spacedock-ensign-interactive-mode-completion-gate-ergonomics
 issue:
-pr:
+pr: #84
 ---
 
 The current Codex interactive runtime is functionally correct but too easy to drift away from the real next action. A worker can complete in the background, write a valid stage report, and notify the first officer, but the interactive session can keep talking about unrelated topics while the completed entity sits unprocessed. That is what happened in task 136: ideation finished, but the gate was not foregrounded until the captain explicitly asked for it.
