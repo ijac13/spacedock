@@ -110,6 +110,27 @@ The available tests pass, but they only prove text-level contract and ID-resolut
 
 Recommendation: REJECTED
 
+## Stage Report: implementation (cycle 3)
+
+- [x] DONE: Reproduce the broken shared Codex path and identify the real `stop_checker` mismatch.
+  `KEEP_TEST_DIR=1 uv run tests/test_rejection_flow.py --runtime codex` failed immediately with `TypeError: run_codex_first_officer() got an unexpected keyword argument 'stop_checker'`; `git show 20ba861 -- scripts/test_lib.py` showed that cycle 1/2 had dropped the earlier `stop_checker` support while re-expanding the Codex invocation prompt.
+- [x] DONE: Remove prompt coaching from the Codex FO invocation helper and stop treating prompt wording as wait-policy proof.
+  `scripts/test_lib.py` now emits only a minimal Codex invocation prompt (workflow target plus optional run goal), and `tests/test_codex_packaged_agent_ids.py` now checks prompt discipline by asserting the old coaching text is absent.
+- [x] DONE: Repair the shared Codex bounded/blocked harness path without changing the shared contract.
+  Restored optional streaming `stop_checker` support in `run_codex_first_officer()`, fixed the rejection-flow milestone parser to recognize fresh implementation bounce-after-rejection as follow-up, and stopped counting never-completed `todo_list` items as active work so the bounded stop condition can terminate the Codex run.
+- [x] DONE: Preserve bounded safe-naming behavior and keep the change Codex-specific.
+  The Codex runtime docs remain the only source of wait-policy behavior, the shared first-officer contract was not widened, and the preserved shared Codex rejection-flow logs still show `validation_dispatch`, `validation_wait`, `implementation_dispatch`, `implementation_wait`, and safe `spacedock-ensign` worktree naming.
+- [x] DONE: Re-run proportional verification and record the exact evidence.
+  `python3 -m py_compile scripts/test_lib.py tests/test_rejection_flow.py tests/test_codex_packaged_agent_ids.py tests/test_agent_content.py` passed; `uv run --with pytest python tests/test_codex_packaged_agent_ids.py` passed (6/6); `uv run --with pytest python tests/test_agent_content.py` passed (31/31); `python3 - <<'PY' ... codex_rejection_flow_stop_ready(...) ... PY` returned `stop_ready=True` with all rejection-flow milestones true for `/var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmp0tsfugxm/codex-fo-log.txt` and `/var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmpa5x8bv06/codex-fo-log.txt`.
+- [x] DONE: Append the required cycle-3 implementation report in the assigned worktree copy.
+  This report is appended in `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-non-blocking-interactive-worker-waits-in-codex-fo/docs/plans/non-blocking-interactive-worker-waits-in-codex-fo.md` and leaves main-orchestrator state ownership untouched.
+- [ ] SKIP: Prove AC1 and AC3 with a real Codex interactive PTY harness.
+  No Codex interactive PTY test exists under `tests/`, so interactive background-by-default waiting and explicit captain wait requests remain unproven rather than being overclaimed by prompt-shape tests.
+
+### Summary
+
+Cycle 3 removes the prompt-coached Codex test shape, restores the shared Codex rejection-flow harness path, and moves the bounded/blocked proof back onto shared live Codex logs instead of invocation wording. AC2 and AC4 now have shared Codex live-log evidence through `test_rejection_flow` milestones, AC5 remains local to Codex surfaces, and AC1/AC3 are still explicitly unproven until a real interactive Codex harness exists.
+
 ## Stage Report: implementation (cycle 2)
 
 - [x] DONE: Tighten the wait-policy claim to match the actual harness guarantee.

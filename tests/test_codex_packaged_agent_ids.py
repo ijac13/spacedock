@@ -4,8 +4,8 @@
 # ///
 # ABOUTME: Unit-style coverage for Codex packaged logical worker ids in the Spacedock prototype.
 #
-# NOTE: The wait-policy assertions here are prompt-assembly checks, not live
-# interactive Codex session proofs.
+# NOTE: Prompt checks in this file cover only Codex harness prompt discipline.
+# Behavioral wait-policy proof belongs in live Codex E2E coverage.
 
 from __future__ import annotations
 
@@ -47,20 +47,19 @@ def test_custom_non_spacedock_agent_id_falls_back_to_generic_worker():
     assert resolved["asset_name"] == "generic-worker"
 
 
-def test_exec_harness_invokes_first_officer_skill_by_name():
-    """Contract-level check: the generated invocation prompt carries the wait policy guidance."""
+def test_exec_harness_invokes_first_officer_skill_by_name_with_minimal_prompt():
     prompt = build_codex_first_officer_invocation_prompt("/tmp/example-workflow")
 
     assert "spacedock:first-officer" in prompt
+    assert "/tmp/example-workflow" in prompt
     assert "workflow" in prompt
     assert "codex-first-officer-prompt.md" not in prompt
-    assert "spacedock-ensign" in prompt
-    assert "Never collapse it to bare `ensign`" in prompt
-    assert "role_asset_name: ensign" in prompt
-    assert "{worker_key}/{slug}" in prompt
-    assert "do not foreground `wait_agent` immediately after dispatch" in prompt.lower()
-    assert "bounded single-entity runs" in prompt.lower()
-    assert "explicitly asks to wait" in prompt.lower()
+    assert "Treat that path as the explicit workflow target." not in prompt
+    assert "wait_agent" not in prompt
+    assert "spacedock-ensign" not in prompt
+    assert "role_asset_name" not in prompt
+    assert "fork_context=false" not in prompt
+    assert "send_input" not in prompt
 
 
 def test_exec_harness_can_target_a_custom_logical_agent_id():
@@ -71,6 +70,8 @@ def test_exec_harness_can_target_a_custom_logical_agent_id():
 
     assert "acme:first-officer" in prompt
     assert "spacedock:first-officer" not in prompt
+    assert "wait_agent" not in prompt
+    assert "spacedock-ensign" not in prompt
 
 
 def test_packaged_worker_bootstrap_tells_worker_to_load_skill_contract():

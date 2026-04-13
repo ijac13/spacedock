@@ -65,6 +65,8 @@ def codex_rejection_flow_milestones(log: CodexLogParser) -> dict[str, bool]:
                 milestones["boot_status"] = True
             if "status=implementation" in command or "entering implementation" in command:
                 milestones["implementation_dispatch"] = True
+                if milestones["rejection_seen"]:
+                    milestones["follow_up_seen"] = True
             if "status=validation" in command or "entering validation" in command:
                 milestones["validation_dispatch"] = True
             if re.search(r"REJECTED|recommend reject|failing test|Expected 5, got -1", output, re.IGNORECASE):
@@ -79,6 +81,8 @@ def codex_rejection_flow_milestones(log: CodexLogParser) -> dict[str, bool]:
             if tool == "spawn_agent":
                 if "stage_name: `implementation`" in prompt or "stage_name: implementation" in prompt:
                     milestones["implementation_dispatch"] = True
+                    if milestones["rejection_seen"]:
+                        milestones["follow_up_seen"] = True
                 if "stage_name: `validation`" in prompt or "stage_name: validation" in prompt:
                     milestones["validation_dispatch"] = True
             elif tool == "wait":
@@ -86,10 +90,13 @@ def codex_rejection_flow_milestones(log: CodexLogParser) -> dict[str, bool]:
                     milestones["implementation_wait"] = True
                 if re.search(r"validation", prompt, re.IGNORECASE) or re.search(r"validation", state_text, re.IGNORECASE):
                     milestones["validation_wait"] = True
-                if re.search(r"status\":\"completed", state_text):
-                    if re.search(r"implementation", state_text, re.IGNORECASE):
+                for state in agent_states.values():
+                    if not isinstance(state, dict) or state.get("status") != "completed":
+                        continue
+                    message = str(state.get("message") or "")
+                    if re.search(r"implementation", message, re.IGNORECASE):
                         milestones["implementation_completed"] = True
-                    if re.search(r"validation", state_text, re.IGNORECASE):
+                    if re.search(r"validation", message, re.IGNORECASE):
                         milestones["validation_completed"] = True
                 if re.search(r"REJECTED|recommend reject|failing test|Expected 5, got -1", state_text, re.IGNORECASE):
                     milestones["rejection_seen"] = True
@@ -100,7 +107,7 @@ def codex_rejection_flow_milestones(log: CodexLogParser) -> dict[str, bool]:
             text = item.get("text") or ""
             if re.search(r"REJECTED|recommend reject|failing test|Expected 5, got -1", text, re.IGNORECASE):
                 milestones["rejection_seen"] = True
-            if re.search(r"follow-up|feedback-to|route findings|fix", text, re.IGNORECASE):
+            if re.search(r"follow-up|feedback-to|feedback route|route findings|fix", text, re.IGNORECASE):
                 milestones["follow_up_seen"] = True
 
     assistant_messages = log.completed_agent_messages()
@@ -226,7 +233,7 @@ def main():
             "rejection-pipeline",
             agent_id=args.agent,
             run_goal="Process only the entity `buggy-add-task`.",
-            timeout_s=300,
+            timeout_s=420,
             stop_checker=codex_rejection_flow_stop_ready,
         )
 
@@ -286,6 +293,10 @@ def main():
         t.check(
             "multiple worker dispatches occurred",
             spawn_count >= 2 or bool(re.search(r"validation|implementation", worker_messages, re.IGNORECASE)),
+        )
+        t.check(
+            "bounded Codex run waits for the validation result before gate handling",
+            milestones["validation_dispatch"] and milestones["validation_wait"] and milestones["validation_completed"],
         )
         t.check(
             "follow-up work after rejection was observable",

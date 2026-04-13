@@ -4,8 +4,8 @@
 # ///
 # ABOUTME: Static content checks for shared Claude/Codex agent contracts and guardrails.
 #
-# NOTE: The Codex wait-policy checks in this file validate contract wording and
-# prompt assembly only. They do not execute a live interactive Codex session.
+# NOTE: The Codex wait-policy checks in this file validate contract wording
+# only. They do not execute a live interactive Codex session.
 
 from __future__ import annotations
 
