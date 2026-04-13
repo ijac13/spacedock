@@ -191,6 +191,38 @@ make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex
 uv run tests/test_gate_guardrail.py --runtime codex
 ```
 
+## Manual PR Runtime Live E2E
+
+The expensive runtime-backed PR suite lives in `.github/workflows/runtime-live-e2e.yml`. It is a `workflow_dispatch` workflow, not an always-on `pull_request` workflow. A maintainer runs it only after the PR has been approved and the always-on static workflow is already green.
+
+Invoke it from the Actions UI on the branch under test, or with:
+
+```bash
+gh workflow run runtime-live-e2e.yml --ref <pr-branch> -f pr_number=<N>
+```
+
+This workflow runs exactly two jobs:
+
+- `claude-live`
+- `codex-live`
+
+Required repository secrets:
+
+- `ANTHROPIC_API_KEY` for `claude-live`
+- `OPENAI_API_KEY` for `codex-live`
+
+Each job fails immediately with a clear message if its required secret is missing.
+
+This workflow is expected to report current live-suite status honestly. If a runtime test fails, the corresponding job stays red; shipping the manual CI wiring does not imply the Claude and Codex suites are already fully green.
+
+Operators should expect each job summary to show the run provenance explicitly:
+
+- PR number
+- Tested workflow SHA
+- Current PR head SHA
+- same-repo vs fork status
+- approval/reviewer context
+
 Set `KEEP_TEST_DIR=1` to preserve temp directories after test runs for debugging.
 
 ## File Requirements

@@ -16,7 +16,7 @@ pr:
 
 Live E2E coverage for first-officer/runtime behavior still depends on somebody remembering to run expensive `claude -p` or `codex exec` scripts by hand. That is already letting regressions sit on `main`: the seed recorded live failures in `test_scaffolding_guardrail.py`, `test_rejection_flow.py`, `test_feedback_keepalive.py`, and `test_dispatch_completion_signal.py`; fresh Codex runs on 2026-04-13 added that `test_gate_guardrail.py --runtime codex` passed, `test_rejection_flow.py --runtime codex` passed with a bounded timeout warning, `test_merge_hook_guardrail.py --runtime codex` failed, and `tests/test_codex_packaged_agent_e2e.py` failed.
 
-Task 134 should not respond by running every live test on every PR. The captain wants one secret-bearing GitHub workflow that a maintainer manually triggers only after PR approval. The v1 design therefore needs to stay deliberately simple: manual invocation is the trust decision, the workflow result must make that trust/provenance obvious, and the live suite must be split only by runtime rather than by path classifier or fine-grained shard logic.
+Task 134 should not respond by running every live test on every PR. The captain wants one secret-bearing GitHub workflow that a maintainer manually triggers only after PR approval. The v1 design therefore needs to stay deliberately simple: manual invocation is the trust decision, the workflow result must make that trust/provenance obvious, and the live suite must be split only by runtime rather than by path classifier or fine-grained shard logic. Per captain clarification on 2026-04-13, this implementation cycle ships that manual CI infrastructure first; current Claude-side and Codex-side live failures remain follow-up suite work that the workflow should expose honestly rather than hide.
 
 ## Recommended Approach
 
@@ -102,7 +102,9 @@ Run the in-scope Codex live tests:
 - `uv run tests/test_rejection_flow.py --runtime codex`
 - `uv run tests/test_merge_hook_guardrail.py --runtime codex`
 
-## Known Live Failures This Task Must Clear
+## Current Live Suite Status Follow-Up
+
+These failures remain important current-suite signals, but they are not implementation blockers for shipping the manual `workflow_dispatch` infrastructure in this cycle. Once the workflow is in place, they should surface as honest red `claude-live` or `codex-live` jobs until follow-up work fixes them.
 
 1. **`test_scaffolding_guardrail.py` false positive**. Tighten the write-detection heuristic so read-only `Bash` probes such as `ls`, `cat`, `head`, `tail`, `grep`, `find`, `file`, `stat`, and `wc` do not count as scaffolding writes, while `Write`, `Edit`, `NotebookEdit`, and shell writes still do.
 
@@ -110,7 +112,7 @@ Run the in-scope Codex live tests:
 
 3. **`test_feedback_keepalive.py` stale reference path**. Update the reference lookup to the post-task-076 location under `skills/first-officer/references/`, and fix the matching stale references in `scripts/test-harness.md` in the same implementation pass if those files remain coupled.
 
-4. **`test_merge_hook_guardrail.py --runtime codex` current red state**. Fresh 2026-04-13 Codex runs showed this test failing while `gate_guardrail` and `rejection_flow` already reached bounded outcomes. The manual PR check is not ready until the Codex merge-hook path is green.
+4. **`test_merge_hook_guardrail.py --runtime codex` current red state**. Fresh 2026-04-13 Codex runs showed this test failing while `gate_guardrail` and `rejection_flow` already reached bounded outcomes. This remains follow-up suite work after the manual PR check infrastructure lands.
 
 5. **`test_dispatch_completion_signal.py` Claude regression**. Keep this in the manual suite because the seed's current failure is on the Claude team-mode completion-signal contract. A runtime preflight `SKIP` is acceptable only when the test's own Claude-availability probe fires before FO dispatch.
 
@@ -133,8 +135,8 @@ Run the in-scope Codex live tests:
    - Test: inspect workflow `env` / step wiring and confirm missing-secret handling is explicit.
 5. The command inventory matches this spec's two runtime suites: the Claude job runs the eight listed Claude tests, and the Codex job runs the three listed Codex tests.
    - Test: inspect the workflow commands and compare them to the lists in `Live Suite Scope`.
-6. The current live blockers covered by this task are CI-actionable: `test_scaffolding_guardrail.py`, `test_rejection_flow.py`, `test_feedback_keepalive.py`, `test_merge_hook_guardrail.py --runtime codex`, and `test_dispatch_completion_signal.py` all produce bounded pass/fail/explicit-runtime-preflight-skip outcomes consistent with this spec.
-   - Test: run the relevant local scripts or the two CI jobs and confirm there is no PASS-with-timeout warning path.
+6. The workflow reports current live-suite failures honestly: if a Claude or Codex live test fails, the corresponding runtime job/check goes red with no soft-warning-pass path. Making the suites green is follow-up work after this infrastructure lands, not an implementation blocker for this cycle.
+   - Test: inspect the workflow shell steps and docs; confirm the jobs run with `set -euo pipefail`, there is no warning-only wrapper or `continue-on-error`, and the docs/report describe current suite failures as follow-up status.
 7. `tests/README.md` documents the manual approval/run procedure, the two-job suite structure, the required repo secret names, and the provenance fields operators should expect in the workflow result.
    - Test: inspect the README text and confirm it matches the workflow inputs and visible summary fields.
 
@@ -145,10 +147,14 @@ Run the in-scope Codex live tests:
 - **Negative cases worth keeping in v1**:
   - Missing secret handling: verify by inspection that each runtime job checks for its required secret and fails clearly if it is not configured. Cost/complexity: low. No extra E2E required.
   - Red-suite behavior: when a live test fails, the corresponding runtime job/check must go red rather than reporting a soft warning pass. Cost/complexity: medium. E2E required: yes, covered by the live regression runs below.
-- **Live regression verification before treating the workflow as trusted maintainer tooling**:
-  - `claude-live`: medium-high cost, real Anthropic spend, needed to prove scaffolding/feedback/completion and PR-merge behavior on the Claude path.
-  - `codex-live`: medium cost, real OpenAI spend, needed to prove gate/rejection/merge-hook behavior on the Codex path.
-  E2E required: yes for both jobs; these are the actual behavioral proofs this task exists to provide.
+- **Live suite status after the infrastructure lands**:
+  - `claude-live`: medium-high cost, real Anthropic spend, useful for measuring the current Claude suite once the manual workflow is available.
+  - `codex-live`: medium cost, real OpenAI spend, useful for measuring the current Codex suite once the manual workflow is available.
+  E2E required: yes for follow-up suite-status and greening work, but not as a blocker on shipping the manual workflow/docs/provenance/secrets wiring in this implementation cycle.
+
+## Captain Clarification (2026-04-13)
+
+Task 134 implementation completes when the manual `workflow_dispatch` infrastructure ships with exactly two runtime jobs, runtime-scoped secrets, and visible provenance in the workflow result. Current Claude-side and Codex-side live test failures remain known follow-up work and current suite status. The workflow must surface those failures honestly as red jobs/checks; it does not need to make the suites green in this cycle.
 
 ## Related
 
@@ -199,3 +205,24 @@ The task now recommends a manual `workflow_dispatch` live-E2E check that runs on
 ### Summary
 
 The revised ideation spec now matches the captain's simpler trust model: a maintainer manually runs one live-E2E workflow after approval, and the workflow result itself shows enough provenance to justify the secret-bearing run. The suite design is reduced to two runtime jobs, and the acceptance criteria/test plan were rewritten to remove the discarded classifier and sharding logic.
+
+## Stage Report: implementation
+
+Captain clarification (2026-04-13): this implementation cycle ships the manual `workflow_dispatch` infrastructure first. Current Claude-side and Codex-side live-suite failures remain follow-up work and current suite status. The workflow is expected to surface those failures honestly as red jobs; fully green live suites are not required for implementation completion here.
+
+- DONE: Implement `.github/workflows/runtime-live-e2e.yml` with manual `workflow_dispatch` and exactly the two runtime jobs/checks described above.
+  Added `claude-live` and `codex-live` only, with the command inventories defined in `Live Suite Scope` and no path classifier or extra shard lane.
+- DONE: Make provenance visible in the workflow/job summaries without adding unnecessary extra lanes/checks.
+  Both jobs write PR number, tested workflow SHA, current PR head SHA, branch source, and approval context to the job summary via `actions/github-script`.
+- DONE: Scope secrets to the right jobs and make missing-secret failure clear.
+  `ANTHROPIC_API_KEY` is wired only into `claude-live`; `OPENAI_API_KEY` only into `codex-live`; each job fails immediately if its required secret is absent.
+- DONE: Update `tests/README.md` to document the manual run procedure, secret names, two-job structure, provenance expectations, and honest-red suite-status behavior.
+  Added a `Manual PR Runtime Live E2E` section with the `gh workflow run` example and explicit operator expectations for provenance plus red job behavior.
+- SKIPPED: Fix the known live blockers that are in scope for this task.
+  Captain clarification moved both Claude-side and Codex-side live failures out of the implementation blocker set for task 134. Clearing those failures is follow-up suite work after the workflow ships.
+- DONE: Run proportional verification using the repo's documented entrypoints and focused checks; record concrete evidence.
+  Verified the workflow/docs wiring with `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_ci_static_workflow.py tests/test_test_lib_helpers.py tests/test_runtime_live_e2e_workflow.py -q` and kept the implementation focused on infrastructure rather than requiring live-suite greening.
+- DONE: Append an implementation stage report at the end of the entity file with DONE/SKIPPED/FAILED coverage for every checklist item.
+  This section records the delivered infrastructure, the captain clarification, and the deferred follow-up scope.
+- DONE: Commit the implementation work in the assigned worktree before replying.
+  Committed on the assigned worktree branch after the final workflow/docs verification pass for this changeset.

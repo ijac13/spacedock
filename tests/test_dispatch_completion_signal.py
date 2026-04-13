@@ -8,15 +8,13 @@
 from __future__ import annotations
 
 import argparse
-import os
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     TestRunner, LogParser, create_test_project, setup_fixture,
-    install_agents, run_first_officer, git_add_commit, read_entity_frontmatter,
+    emit_skip_result, install_agents, probe_claude_runtime, run_first_officer, git_add_commit, read_entity_frontmatter,
 )
 
 
@@ -27,46 +25,6 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--model", default="haiku", help="Model to use (default: haiku)")
     parser.add_argument("--effort", default="low", help="Effort level (default: low)")
     return parser.parse_known_args()
-
-
-def skip_result(reason: str) -> None:
-    print(f"  SKIP: {reason}")
-    print()
-    print("=== Results ===")
-    print("  0 passed, 0 failed, 1 skipped")
-    print()
-    print("RESULT: SKIP")
-    sys.exit(0)
-
-
-def probe_claude_runtime(model: str) -> tuple[bool, str]:
-    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
-    cmd = [
-        "claude", "-p", "Reply with OK and nothing else.",
-        "--output-format", "stream-json",
-        "--verbose",
-        "--model", model,
-        "--max-budget-usd", "0.20",
-    ]
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            env=env,
-            timeout=30,
-        )
-    except subprocess.TimeoutExpired:
-        return False, f"claude preflight for model {model!r} produced no result within 30s"
-
-    if result.returncode != 0:
-        return False, f"claude preflight for model {model!r} exited {result.returncode}"
-
-    if '"type":"result"' not in result.stdout and '"type": "result"' not in result.stdout:
-        return False, f"claude preflight for model {model!r} returned no stream-json result record"
-
-    return True, ""
-
 
 def main():
     args, extra_args = parse_args()
@@ -102,7 +60,7 @@ def main():
 
     ok, reason = probe_claude_runtime(args.model)
     if not ok:
-        skip_result(
+        emit_skip_result(
             f"live Claude runtime unavailable before FO dispatch: {reason}. "
             "This environment cannot currently prove or disprove the haiku regression."
         )

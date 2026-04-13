@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     CodexLogParser, TestRunner, LogParser, create_test_project, setup_fixture,
     install_agents, run_codex_first_officer, run_first_officer, git_add_commit,
-    rejection_follow_up_observed, rejection_signal_present,
+    emit_skip_result, probe_claude_runtime, rejection_follow_up_observed, rejection_signal_present,
 )
 
 
@@ -203,6 +203,13 @@ def main():
     print(f"--- Phase 2: Run first officer ({args.runtime}) ---")
 
     if args.runtime == "claude":
+        ok, reason = probe_claude_runtime(args.model)
+        if not ok:
+            emit_skip_result(
+                f"live Claude runtime unavailable before FO dispatch: {reason}. "
+                "This environment cannot currently prove or disprove the rejection-flow path."
+            )
+
         abs_workflow = t.test_project_dir / "rejection-pipeline"
         fo_exit = run_first_officer(
             t,
