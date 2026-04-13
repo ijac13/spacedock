@@ -247,3 +247,62 @@ The `--discover` flag is additive. It is incompatible with all existing flags, s
 8. DONE — Test plan with harness, assertions, and cost for each test
 9. DONE — Scope boundary with explicit in/out decisions
 10. DONE — Risk register with 4 risks and mitigations
+
+## Stage Report — implementation
+
+### Deliverables
+
+**Status script** (`skills/commission/bin/status`):
+- Added `DISCOVER_IGNORE_DIRS` constant and `discover_workflows(root)` function with full docstring documenting the ignore list, matching rule (bare `spacedock@` accepted), and symlink return-path behavior.
+- Added `--discover` flag handling in `main()` with `--root` optional argument, incompatibility checks against all other flags, git-toplevel default with cwd fallback, and one-path-per-line output.
+- Symlinks followed with `followlinks=True`, deduplicated via `os.path.realpath`, cycle-safe via visited-set tracking. Canonical resolved path returned, not symlink path.
+
+**Shared core** (`skills/first-officer/references/first-officer-shared-core.md`):
+- Startup step 2 now reads: run `{spacedock_plugin_dir}/skills/commission/bin/status --discover` and use the result. Old "search for `README.md` files" prose removed.
+
+**Codex runtime** (`skills/first-officer/references/codex-first-officer-runtime.md`):
+- Workflow Target section now reads: run `status --discover` to find candidate workflows, with cardinality handling. Old "discover candidate workflows from the current repository" prose removed.
+
+**Tests** (`tests/test_status_script.py`):
+- 11 new tests in `TestDiscover` class covering all acceptance criteria.
+
+### Staff-Review Notes Resolution
+
+1. **`spacedock@` matching tolerance** — Bare `spacedock@` (no version suffix) matches. `discover_workflows()` docstring documents the rule. `test_discover_skips_non_spacedock_readme` includes a `spacedock@` bare-version case asserting it is discovered.
+2. **Prose replacement, not supplementation** — `test_discover_prose_shared_core` asserts `status --discover` present AND `search for \`README.md\` files` absent. `test_discover_prose_codex_runtime` asserts `status --discover` present AND `discover candidate workflows from the current repository` absent.
+3. **`discover_workflows()` docstring** — Documents the canonical ignore list, matching rule, and symlink behavior. Single source of truth; the ignore list is the `DISCOVER_IGNORE_DIRS` constant referenced by the function.
+4. **`spacedock@` bare-version boundary case** — Covered in `test_discover_skips_non_spacedock_readme` with a `commissioned-by: spacedock@` README that is asserted to match.
+5. **Symlink return path** — `test_discover_deduplicates_symlinks` asserts that when both a symlink and its target match, only one result is returned, and it is the canonical `os.path.realpath` path. Documented in the docstring.
+
+### Test Output
+
+```
+tests/test_status_script.py::TestDiscover::test_discover_bad_root PASSED
+tests/test_status_script.py::TestDiscover::test_discover_deduplicates_symlinks PASSED
+tests/test_status_script.py::TestDiscover::test_discover_default_root PASSED
+tests/test_status_script.py::TestDiscover::test_discover_ignores_excluded_dirs PASSED
+tests/test_status_script.py::TestDiscover::test_discover_incompatible_flags PASSED
+tests/test_status_script.py::TestDiscover::test_discover_multiple_workflows PASSED
+tests/test_status_script.py::TestDiscover::test_discover_no_workflows PASSED
+tests/test_status_script.py::TestDiscover::test_discover_prose_codex_runtime PASSED
+tests/test_status_script.py::TestDiscover::test_discover_prose_shared_core PASSED
+tests/test_status_script.py::TestDiscover::test_discover_single_workflow PASSED
+tests/test_status_script.py::TestDiscover::test_discover_skips_non_spacedock_readme PASSED
+11 passed, 10 subtests passed in 0.52s
+```
+
+`make test-static`: 207 passed, 10 subtests passed in 4.63s — no regressions.
+
+### Checklist
+
+1. DONE — `--discover` flag with optional `--root`, one absolute path per line, sorted, exit 0 for any cardinality, exit 1 for errors, incompatible with all other flags.
+2. DONE — `discover_workflows(root)` function with staff-review docstring covering ignore list, matching rule, and symlink return-path.
+3. DONE — Ignore list: `.git`, `.worktrees`, `node_modules`, `vendor`, `dist`, `build`, `__pycache__`, `tests`.
+4. DONE — Default `--root` to `git rev-parse --show-toplevel` with cwd fallback; `--root <path>` overrides.
+5. DONE — Symlinks followed, deduplicated via `os.path.realpath`, canonical resolved path returned.
+6. DONE — `first-officer-shared-core.md` step 2 updated: old grep prose removed, `status --discover` invocation added.
+7. DONE — `codex-first-officer-runtime.md` Workflow Target updated: old "discover candidate workflows" prose removed, `status --discover` invocation added.
+8. DONE — 11 acceptance-criteria tests added to `tests/test_status_script.py`.
+9. DONE — All 11 new tests pass locally (0.52s).
+10. DONE — `make test-static` passes: 207 passed, 0 failed.
+11. DONE — Committed on branch `spacedock-ensign/status-workflow-discovery` as `d928f0f`.
