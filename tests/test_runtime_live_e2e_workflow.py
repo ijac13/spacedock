@@ -50,8 +50,12 @@ def test_runtime_live_e2e_workflow_has_exactly_two_runtime_jobs():
 
     assert "\n  claude-live:\n" in text
     assert "\n  codex-live:\n" in text
-    assert "environment: CI-E2E" in claude_section
-    assert "environment: CI-E2E" in codex_section
+    assert "environment:" in claude_section
+    assert "name: CI-E2E" in claude_section
+    assert "deployment: false" in claude_section
+    assert "environment:" in codex_section
+    assert "name: CI-E2E" in codex_section
+    assert "deployment: false" in codex_section
     assert "path classifier" not in text.lower()
     assert "shard" not in text.lower()
     assert "matrix:" not in text

@@ -54,7 +54,10 @@ def prepare_codex_skill_home(test_root: Path, repo_root: Path) -> Path:
     codex_home_link = home_dir / ".codex"
     if codex_home_link.exists() or codex_home_link.is_symlink():
         codex_home_link.unlink()
-    codex_home_link.symlink_to(real_codex_home, target_is_directory=True)
+    if real_codex_home.exists():
+        codex_home_link.symlink_to(real_codex_home, target_is_directory=True)
+    else:
+        codex_home_link.mkdir(parents=True, exist_ok=True)
 
     return home_dir
 

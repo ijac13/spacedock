@@ -16,7 +16,9 @@ permissions:
 jobs:
   claude-live:
     runs-on: ubuntu-latest
-    environment: CI-E2E
+    environment:
+      name: CI-E2E
+      deployment: false
     env:
       DISABLE_AUTOUPDATER: "1"
       KEEP_TEST_DIR: "1"
@@ -138,7 +140,9 @@ jobs:
 
   codex-live:
     runs-on: ubuntu-latest
-    environment: CI-E2E
+    environment:
+      name: CI-E2E
+      deployment: false
     env:
       KEEP_TEST_DIR: "1"
       TRIGGER_SOURCE: ${{ github.event_name }}

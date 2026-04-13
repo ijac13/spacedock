@@ -14,7 +14,13 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from test_lib import TestRunner, bash_command_targets_write, emit_skip_result, probe_claude_runtime
+from test_lib import (
+    TestRunner,
+    bash_command_targets_write,
+    emit_skip_result,
+    prepare_codex_skill_home,
+    probe_claude_runtime,
+)
 
 
 TARGETS = ("skills/", "agents/", "references/", "plugin.json")
@@ -122,3 +128,19 @@ def test_test_runner_uses_configured_temp_root(monkeypatch, tmp_path):
 
     assert runner.test_dir.parent == configured_root
     assert runner.test_dir.name.startswith("spacedock-test-")
+
+
+def test_prepare_codex_skill_home_creates_writable_codex_home_when_real_home_missing(
+    monkeypatch, tmp_path
+):
+    fake_home = tmp_path / "real-home"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    repo_root = Path(__file__).resolve().parent.parent
+    prepared_home = prepare_codex_skill_home(tmp_path / "test-root", repo_root)
+
+    codex_home = prepared_home / ".codex"
+    assert codex_home.exists()
+    assert codex_home.is_dir()
+    assert not codex_home.is_symlink()
