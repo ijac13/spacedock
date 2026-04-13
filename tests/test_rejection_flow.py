@@ -110,6 +110,47 @@ def codex_rejection_flow_milestones(log: CodexLogParser) -> dict[str, bool]:
     return milestones
 
 
+def codex_rejection_follow_up_order(log: CodexLogParser) -> tuple[int | None, int | None]:
+    """Return the first log position of rejection evidence and routed follow-up activity."""
+    rejection_index: int | None = None
+    follow_up_index: int | None = None
+
+    rejection_pattern = r"REJECTED|recommend reject|failing test|Expected 5, got -1"
+
+    for idx, raw_line in enumerate(log.raw_lines):
+        try:
+            entry = json.loads(raw_line)
+        except json.JSONDecodeError:
+            continue
+
+        item = entry.get("item", {})
+        if not isinstance(item, dict):
+            continue
+
+        item_type = item.get("type")
+        item_text = json.dumps(item)
+
+        if rejection_index is None and re.search(rejection_pattern, item_text, re.IGNORECASE):
+            rejection_index = idx
+
+        if follow_up_index is not None:
+            continue
+
+        if item_type == "collab_tool_call":
+            tool = item.get("tool")
+            prompt = item.get("prompt") or ""
+            if tool == "send_input":
+                follow_up_index = idx
+            elif tool in {"spawn", "spawn_agent"} and re.search(r"stage_name:\s*implementation", prompt, re.IGNORECASE):
+                follow_up_index = idx
+        elif item_type == "agent_message":
+            text = item.get("text") or ""
+            if re.search(r"follow-up|feedback-to|route findings|fix", text, re.IGNORECASE):
+                follow_up_index = idx
+
+    return rejection_index, follow_up_index
+
+
 def codex_rejection_flow_stop_ready(log_path: Path) -> bool:
     """Return True when the bounded Codex rejection-flow outcome is present in the log."""
     log = CodexLogParser(log_path)
@@ -242,6 +283,13 @@ def main():
         t.check(
             "follow-up work after rejection was observable",
             rejection_follow_up_observed("rejection-pipeline", "buggy-add-task", worktrees_dir, worker_messages, fo_text),
+        )
+        rejection_index, follow_up_index = codex_rejection_follow_up_order(log)
+        t.check(
+            "rejection follow-up happens after rejection is observed",
+            rejection_index is not None
+            and follow_up_index is not None
+            and follow_up_index > rejection_index,
         )
         worktree_candidates = [
             worktrees_dir / "ensign-buggy-add-task",

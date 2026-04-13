@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     CodexLogParser, TestRunner, LogParser, create_test_project, setup_fixture,
     install_agents, run_codex_first_officer, run_first_officer,
-    check_gate_hold_behavior, git_add_commit,
+    check_gate_hold_behavior, git_add_commit, read_entity_frontmatter,
 )
 
 
@@ -114,7 +114,24 @@ def main():
             t.pass_("first officer did NOT self-approve")
     else:
         worktrees_dir = t.test_project_dir / ".spacedock" / "worktrees"
-        t.check("Codex run created a worktree or reported no worktree output", worktrees_dir.exists() or bool(fo_text_output))
+        entity_path = t.test_project_dir / "gated-pipeline" / "gate-test-entity.md"
+        frontmatter = read_entity_frontmatter(entity_path)
+        t.check(
+            "non-worktree gated stage leaves worktree field empty",
+            frontmatter.get("worktree", "") == "",
+        )
+        t.check(
+            "non-worktree gated stage does not create a git worktree",
+            not (t.test_project_dir / ".worktrees").exists(),
+        )
+        t.check(
+            "gate review is explicitly surfaced in final codex output",
+            bool(re.search(r"gate review", fo_text_output, re.IGNORECASE)),
+        )
+        t.check(
+            "waiting-for-approval result is explicitly surfaced",
+            bool(re.search(r"waiting for approval", fo_text_output, re.IGNORECASE)),
+        )
 
     # --- Results ---
     t.results()

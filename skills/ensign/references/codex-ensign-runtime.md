@@ -19,7 +19,9 @@ searching the repository.
 ## Codex-Specific Rules
 
 - The first-officer dispatch prompt is authoritative for assignment fields.
+- If no worktree path is provided, stay on the main branch; do not infer a worktree from the stage name alone.
 - If a worktree path is provided, keep all reads, writes, tests, and commits under that worktree.
+- In interactive Codex mode, treat a gated completion as the next required action and surface the stage report before anything unrelated.
 - Do not attempt to manage other entities or take over first-officer responsibilities.
 - Return a concise completion summary instead of using a team messaging primitive.
 
