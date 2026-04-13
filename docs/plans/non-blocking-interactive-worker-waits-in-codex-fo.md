@@ -178,3 +178,28 @@ Counts: 5 done, 0 skipped, 4 failed
 Cycle 2 correctly narrows the written claim to contract-level coverage, but the current acceptance criteria still ask for behavioral proof the branch does not yet provide. AC4 now has live bounded evidence and AC5 passes, but AC1 and AC3 remain unproven, AC2 lacks a compliant shared Codex behavioral test, and the current prompt-shape tests conflict with `tests/README` prompt-discipline guidance.
 
 Recommendation: REJECTED
+
+## Stage Report: validation (cycle 3)
+
+- [x] DONE: Read the current entity body and inspect the reviewed implementation surfaces.
+  Validated cycle-3 claims against AC1-AC5 after reading this entity plus `scripts/test_lib.py`, `tests/test_rejection_flow.py`, `tests/test_codex_packaged_agent_ids.py`, `tests/test_agent_content.py`, `tests/README.md`, and `skills/first-officer/references/codex-first-officer-runtime.md`.
+- [x] DONE: Re-run the proportional static checks.
+  `python3 -m py_compile scripts/test_lib.py tests/test_rejection_flow.py tests/test_codex_packaged_agent_ids.py tests/test_agent_content.py` passed; `uv run --with pytest python tests/test_codex_packaged_agent_ids.py -q` passed (6/6); `uv run --with pytest python tests/test_agent_content.py -q` passed (31/31).
+- [x] DONE: Verify the `tests/README.md` prompt-discipline violation is fixed.
+  `tests/README.md` lines 95-103 require a minimal Codex FO prompt; `scripts/test_lib.py` lines 91-100 now emit only skill + workflow target + optional run goal, `tests/test_codex_packaged_agent_ids.py` lines 49-73 assert the old coaching text is absent, and the live rerun preserved `/var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmp7n5o4mbt/codex-fo-invocation.txt` with only the workflow path plus `Process only the entity \`buggy-add-task\`.`.
+- [x] DONE: Verify bounded/blocked waiting still works on the shared `--runtime codex` path.
+  `KEEP_TEST_DIR=1 uv run tests/test_rejection_flow.py --runtime codex` no longer fails with the old `stop_checker` `TypeError`; the preserved live log at `/var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmp7n5o4mbt/codex-fo-log.txt` shows the FO saying the single-entity run is blocked on the validation verdict (line 32), then issuing `wait` on the validation worker (lines 35-36). I treated that preserved log as the evidence source instead of overclaiming the coarse milestone helper.
+- [x] DONE: Verify AC5 remains Codex-specific.
+  The wait-policy text remains local to `skills/first-officer/references/codex-first-officer-runtime.md` lines 133-134, and no shared-contract file was changed for this behavior.
+- [ ] FAILED: Verify AC1 interactive Codex dispatch stays background by default.
+  No Codex interactive PTY harness exists under `tests/`; `tests/README.md` lines 105-109 describe only the Claude `InteractiveSession` path, and `tests/test_agent_content.py` lines 7-8 and 129-138 explicitly describe contract-wording checks rather than a live interactive Codex session.
+- [ ] FAILED: Verify AC3 explicit captain wait requests trigger foreground waiting.
+  No current test or preserved live run drives a Codex interactive session where the captain explicitly asks to wait, so AC3 remains unproven in this branch.
+
+Counts: 5 done, 0 skipped, 2 failed
+
+### Summary
+
+Cycle 3 fixes the prior prompt-coaching problem and restores fresh shared Codex evidence for bounded blocked waiting: the live rerun now reaches the validation wait path and the invocation prompt is compliant with `tests/README.md`. The branch still does not satisfy the unchanged interactive acceptance criteria, though, because there is still no interactive Codex harness for AC1 or AC3, so the recommendation remains `REJECTED`.
+
+Recommendation: REJECTED
