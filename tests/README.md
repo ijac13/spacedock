@@ -226,7 +226,12 @@ Operators should expect each job summary to show the run provenance explicitly:
 - same-repo vs fork status
 - approval/reviewer context
 
-Set `KEEP_TEST_DIR=1` to preserve temp directories after test runs for debugging.
+The live workflow sets `KEEP_TEST_DIR=1` automatically and uploads each job's preserved temp dirs as GitHub Actions artifacts:
+
+- `runtime-live-e2e-claude-live`
+- `runtime-live-e2e-codex-live`
+
+For local debugging, set `KEEP_TEST_DIR=1` to preserve temp directories after test runs. Set `SPACEDOCK_TEST_TMP_ROOT=/path/to/root` to force `TestRunner` to create preserved dirs under a predictable parent directory.
 
 ## File Requirements
 

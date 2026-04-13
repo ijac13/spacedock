@@ -19,6 +19,8 @@ jobs:
     environment: CI-E2E
     env:
       DISABLE_AUTOUPDATER: "1"
+      KEEP_TEST_DIR: "1"
+      SPACEDOCK_TEST_TMP_ROOT: ${{ runner.temp }}/spacedock-live/${{ github.job }}
       TRIGGER_SOURCE: ${{ github.event_name }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
@@ -122,10 +124,20 @@ jobs:
           unset CLAUDECODE && uv run tests/test_push_main_before_pr.py
           unset CLAUDECODE && uv run tests/test_rebase_branch_before_push.py
 
+      - name: Upload Claude live artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-live-e2e-claude-live
+          path: ${{ env.SPACEDOCK_TEST_TMP_ROOT }}
+          if-no-files-found: warn
+
   codex-live:
     runs-on: ubuntu-latest
     environment: CI-E2E
     env:
+      KEEP_TEST_DIR: "1"
+      SPACEDOCK_TEST_TMP_ROOT: ${{ runner.temp }}/spacedock-live/${{ github.job }}
       TRIGGER_SOURCE: ${{ github.event_name }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
@@ -221,3 +233,11 @@ jobs:
           uv run tests/test_gate_guardrail.py --runtime codex
           uv run tests/test_rejection_flow.py --runtime codex
           uv run tests/test_merge_hook_guardrail.py --runtime codex
+
+      - name: Upload Codex live artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-live-e2e-codex-live
+          path: ${{ env.SPACEDOCK_TEST_TMP_ROOT }}
+          if-no-files-found: warn

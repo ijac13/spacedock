@@ -57,6 +57,24 @@ def test_runtime_live_e2e_workflow_has_exactly_two_runtime_jobs():
     assert "matrix:" not in text
 
 
+def test_runtime_live_e2e_workflow_preserves_and_uploads_live_test_dirs():
+    text = read_workflow()
+    claude_section = section(text, "  claude-live")
+    codex_section = section(text, "  codex-live")
+
+    for job_section, artifact_name in (
+        (claude_section, "runtime-live-e2e-claude-live"),
+        (codex_section, "runtime-live-e2e-codex-live"),
+    ):
+        assert 'KEEP_TEST_DIR: "1"' in job_section
+        assert "SPACEDOCK_TEST_TMP_ROOT:" in job_section
+        assert "${{ runner.temp }}/spacedock-live/${{ github.job }}" in job_section
+        assert "uses: actions/upload-artifact@v4" in job_section
+        assert "if: always()" in job_section
+        assert f"name: {artifact_name}" in job_section
+        assert "path: ${{ env.SPACEDOCK_TEST_TMP_ROOT }}" in job_section
+
+
 def test_runtime_live_e2e_workflow_scopes_secrets_to_the_matching_job():
     text = read_workflow()
     claude_section = section(text, "  claude-live")

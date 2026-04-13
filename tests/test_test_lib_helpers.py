@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from test_lib import bash_command_targets_write, emit_skip_result, probe_claude_runtime
+from test_lib import TestRunner, bash_command_targets_write, emit_skip_result, probe_claude_runtime
 
 
 TARGETS = ("skills/", "agents/", "references/", "plugin.json")
@@ -112,3 +112,13 @@ def test_emit_skip_result_prints_standardized_skip_output(capsys):
     assert "SKIP: runtime unavailable" in captured
     assert "RESULT: SKIP" in captured
     assert excinfo.value.code == 0
+
+
+def test_test_runner_uses_configured_temp_root(monkeypatch, tmp_path):
+    configured_root = tmp_path / "live-artifacts"
+    monkeypatch.setenv("SPACEDOCK_TEST_TMP_ROOT", str(configured_root))
+
+    runner = TestRunner("helper temp root", keep_test_dir=True)
+
+    assert runner.test_dir.parent == configured_root
+    assert runner.test_dir.name.startswith("spacedock-test-")

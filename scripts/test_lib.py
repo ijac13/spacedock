@@ -385,7 +385,15 @@ class TestRunner:
         self.passes = 0
         self.failures = 0
         self.repo_root = Path(__file__).resolve().parent.parent
-        self.test_dir = Path(tempfile.mkdtemp())
+        temp_root = os.environ.get("SPACEDOCK_TEST_TMP_ROOT")
+        if temp_root:
+            temp_root_path = Path(temp_root)
+            temp_root_path.mkdir(parents=True, exist_ok=True)
+            self.test_dir = Path(
+                tempfile.mkdtemp(prefix="spacedock-test-", dir=str(temp_root_path))
+            )
+        else:
+            self.test_dir = Path(tempfile.mkdtemp())
         self.log_dir = self.test_dir
         self.keep_test_dir = keep_test_dir or bool(os.environ.get("KEEP_TEST_DIR"))
         self.test_project_dir: Path | None = None
