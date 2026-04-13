@@ -9,7 +9,7 @@ completed:
 verdict:
 worktree: .worktrees/spacedock-ensign-runtime-live-e2e-pr-trigger-and-environment-gate
 issue:
-pr:
+pr: #88
 ---
 
 ## Problem Statement
