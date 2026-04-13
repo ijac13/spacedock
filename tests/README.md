@@ -155,9 +155,21 @@ unset CLAUDECODE && uv run tests/test_agent_content.py
 
 This works from any context: your terminal, the FO session, a dispatched ensign's Bash tool call, or a CI runner. The spawned `claude -p` subprocess gets its own isolated home directory with the project's OAuth token, so authentication is handled automatically.
 
+Stable repo-level entrypoints:
+
+```bash
+make test-static
+make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex
+```
+
+- `make test-static` is the canonical offline repo suite. It runs `pytest tests/ --ignore=tests/fixtures` because `tests/fixtures/` contains runnable fixture payloads for harness tests, not repo-level suite modules.
+- `make test-e2e` is the canonical live harness entrypoint. Override `TEST=...` to choose the E2E script and `RUNTIME=claude|codex` to select the runtime.
+- Do not use bare repo-wide `pytest tests/` as the suite entrypoint unless you intentionally want pytest to recurse into `tests/fixtures/`.
+
 Static tests (no live session needed):
 
 ```bash
+make test-static
 uv run tests/test_agent_content.py
 uv run tests/test_codex_packaged_agent_ids.py
 uv run tests/test_stats_extraction.py
@@ -167,6 +179,7 @@ uv run tests/test_status_script.py
 E2E tests (require live claude, cost varies):
 
 ```bash
+make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=claude
 unset CLAUDECODE && uv run tests/test_gate_guardrail.py --model haiku
 unset CLAUDECODE && uv run tests/test_single_entity_mode.py --model haiku
 ```
@@ -174,6 +187,7 @@ unset CLAUDECODE && uv run tests/test_single_entity_mode.py --model haiku
 With Codex runtime:
 
 ```bash
+make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex
 uv run tests/test_gate_guardrail.py --runtime codex
 ```
 
