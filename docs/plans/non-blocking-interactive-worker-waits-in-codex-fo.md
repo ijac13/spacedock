@@ -221,3 +221,20 @@ Counts: 5 done, 0 skipped, 2 failed
 Cycle 3 fixes the prior prompt-coaching problem and restores fresh shared Codex evidence for bounded blocked waiting: the live rerun now reaches the validation wait path and the invocation prompt is compliant with `tests/README.md`. The branch still does not satisfy the unchanged interactive acceptance criteria, though, because there is still no interactive Codex harness for AC1 or AC3, so the recommendation remains `REJECTED`.
 
 Recommendation: REJECTED
+
+## Stage Report: validation (cycle 4)
+
+- [x] DONE: Verify the Codex runtime contract describes background-by-default interactive waiting.
+  `skills/first-officer/references/codex-first-officer-runtime.md` says interactive sessions keep workers in the background unless the next step is blocked, while bounded single-entity runs may wait immediately; `uv run --with pytest python tests/test_agent_content.py -q` passed (36/36) with the Codex contract wording checks included.
+- [x] DONE: Verify the shared `--runtime codex` path still foregrounds `wait_agent` when the next step is blocked.
+  `KEEP_TEST_DIR=1 uv run tests/test_rejection_flow.py --runtime codex` passed (16/16); the preserved live log at `/var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmp0vftdfqu/codex-fo-log.txt` shows the FO saying it will wait because the verdict is on the critical path, then completing the validation `wait` before routing the rejection follow-up.
+- [x] DONE: Verify bounded or single-entity Codex runs can still wait immediately after dispatch.
+  The preserved invocation prompt at `/var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmp0vftdfqu/codex-fo-invocation.txt` scopes the run to `Process only the entity \`buggy-add-task\`.`, and the same shared live Codex run dispatches validation and waits on that handle before any unrelated orchestration.
+- [x] DONE: Verify Codex FO prompts stay minimal and do not encode wait-policy coaching.
+  `tests/README.md` requires minimal Codex FO prompts; `uv run --with pytest python tests/test_codex_packaged_agent_ids.py -q` passed (9/9) while checking that the invocation prompt omits behavioral coaching text.
+- [x] DONE: Verify the behavior stays Codex-specific and does not require a shared-contract change.
+  The touched wait-policy behavior remains confined to `skills/first-officer/references/codex-first-officer-runtime.md`, `scripts/test_lib.py`, `tests/test_agent_content.py`, and `tests/test_codex_packaged_agent_ids.py`; no shared first-officer contract file was widened for this policy.
+
+### Summary
+
+The narrowed task is satisfied. The repo now proves the Codex-local pre-completion wait policy with contract wording, shared live `--runtime codex` blocked-wait evidence, bounded single-entity immediate-wait evidence, and prompt-discipline checks aligned with `tests/README.md`. Recommendation: PASSED
