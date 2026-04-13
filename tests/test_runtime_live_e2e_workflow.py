@@ -67,12 +67,13 @@ def test_runtime_live_e2e_workflow_preserves_and_uploads_live_test_dirs():
         (codex_section, "runtime-live-e2e-codex-live"),
     ):
         assert 'KEEP_TEST_DIR: "1"' in job_section
-        assert "SPACEDOCK_TEST_TMP_ROOT:" in job_section
-        assert "${{ runner.temp }}/spacedock-live/${{ github.job }}" in job_section
+        assert "SPACEDOCK_TEST_TMP_ROOT:" not in job_section
+        assert 'echo "SPACEDOCK_TEST_TMP_ROOT=$RUNNER_TEMP/spacedock-live/$GITHUB_JOB" >> "$GITHUB_ENV"' in job_section
+        assert 'mkdir -p "$RUNNER_TEMP/spacedock-live/$GITHUB_JOB"' in job_section
         assert "uses: actions/upload-artifact@v4" in job_section
         assert "if: always()" in job_section
         assert f"name: {artifact_name}" in job_section
-        assert "path: ${{ env.SPACEDOCK_TEST_TMP_ROOT }}" in job_section
+        assert "path: ${{ runner.temp }}/spacedock-live/${{ github.job }}" in job_section
 
 
 def test_runtime_live_e2e_workflow_scopes_secrets_to_the_matching_job():

@@ -20,7 +20,6 @@ jobs:
     env:
       DISABLE_AUTOUPDATER: "1"
       KEEP_TEST_DIR: "1"
-      SPACEDOCK_TEST_TMP_ROOT: ${{ runner.temp }}/spacedock-live/${{ github.job }}
       TRIGGER_SOURCE: ${{ github.event_name }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
@@ -97,6 +96,11 @@ jobs:
 
       - uses: astral-sh/setup-uv@v6
 
+      - name: Prepare live artifact root
+        run: |
+          mkdir -p "$RUNNER_TEMP/spacedock-live/$GITHUB_JOB"
+          echo "SPACEDOCK_TEST_TMP_ROOT=$RUNNER_TEMP/spacedock-live/$GITHUB_JOB" >> "$GITHUB_ENV"
+
       - name: Install Claude Code
         run: |
           curl -fsSL https://claude.ai/install.sh | bash
@@ -129,7 +133,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: runtime-live-e2e-claude-live
-          path: ${{ env.SPACEDOCK_TEST_TMP_ROOT }}
+          path: ${{ runner.temp }}/spacedock-live/${{ github.job }}
           if-no-files-found: warn
 
   codex-live:
@@ -137,7 +141,6 @@ jobs:
     environment: CI-E2E
     env:
       KEEP_TEST_DIR: "1"
-      SPACEDOCK_TEST_TMP_ROOT: ${{ runner.temp }}/spacedock-live/${{ github.job }}
       TRIGGER_SOURCE: ${{ github.event_name }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
@@ -214,6 +217,11 @@ jobs:
 
       - uses: astral-sh/setup-uv@v6
 
+      - name: Prepare live artifact root
+        run: |
+          mkdir -p "$RUNNER_TEMP/spacedock-live/$GITHUB_JOB"
+          echo "SPACEDOCK_TEST_TMP_ROOT=$RUNNER_TEMP/spacedock-live/$GITHUB_JOB" >> "$GITHUB_ENV"
+
       - name: Install Codex CLI
         run: npm install --global @openai/codex
 
@@ -239,5 +247,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: runtime-live-e2e-codex-live
-          path: ${{ env.SPACEDOCK_TEST_TMP_ROOT }}
+          path: ${{ runner.temp }}/spacedock-live/${{ github.job }}
           if-no-files-found: warn
