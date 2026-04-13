@@ -1,12 +1,51 @@
 ---
 id: 120
 title: build_dispatch helper — structured dispatch assembly (Phase 2 of issue #63)
-status: backlog
+status: ideation
 source: anthropics/claude-code (local) issue #63 — fuzzy prose dispatch template causes silent failures
 score: 0.70
+started: 2026-04-13T21:19:53Z
 ---
 
-Replace the prose-wearing-code `Agent()` dispatch template in the Claude first-officer runtime adapter with a structured helper at `skills/commission/bin/build_dispatch`. The helper owns deterministic scaffolding (name derivation, team_name wiring, stage definition extraction, guardrail paragraphs, completion rubric), the FO supplies judgment fragments (checklist, feedback context, scope notes) as JSON on stdin, and the helper emits a validated dispatch JSON object that the FO forwards to `Agent()` verbatim. This is Phase 2 of local issue #63.
+Replace the prose-wearing-code `Agent()` dispatch template in the Claude first-officer runtime adapter with a structured helper. The helper owns deterministic scaffolding (name derivation, team_name wiring, stage definition extraction, guardrail paragraphs, completion rubric); the FO supplies judgment fragments (checklist, feedback context, scope notes) as JSON on stdin; the helper emits a validated dispatch JSON object that the FO forwards to `Agent()` verbatim. This is Phase 2 of local issue #63.
+
+## Packaging — `claude-team build` subcommand (2026-04-13 decision)
+
+The helper ships as a new subcommand on the existing `skills/commission/bin/claude-team` script, not as a standalone `build_dispatch` binary. Rationale:
+
+- Every other planned team-dispatch helper already lives under `claude-team` (`context-budget` today; `verify-member` from #119; `health` from #143). A single `claude-team --help` surface for all dispatch-adjacent helpers.
+- Plugin install paths reference `skills/commission/bin/` as-is; adding one new sibling binary requires a scaffolding-reference update, adding a subcommand does not.
+- Future codex equivalents (e.g., a `codex-team build` or `codex-agent build` sibling) get the same shape for free.
+
+### Code sharing with `status` via `importlib`
+
+The helper needs workflow-file parsing primitives that already exist in `skills/commission/bin/status`:
+
+- `parse_frontmatter(filepath)` — status:73
+- `parse_stages_block(filepath)` — status:97
+- `load_active_entity_fields(path, git_root)` — status:229 (worktree-aware reads)
+- `find_git_root(start_dir)` — status:904
+
+Do NOT extract these into a new `skills/commission/lib/` package — the project relies on the current skills/bin layout for reference/install stability, and fewer directories is the stated preference. Instead, `claude-team` should import them sideways from `status` using `importlib.util.spec_from_file_location`. This works because `status` has an `if __name__ == '__main__': main()` guard at line 1207 — importing as a module skips the CLI path.
+
+Reference shape (ideation to finalize):
+
+```python
+import importlib.util
+from pathlib import Path
+
+_here = Path(__file__).resolve().parent
+_spec = importlib.util.spec_from_file_location("_status_lib", _here / "status")
+_status = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_status)
+# _status.parse_frontmatter(...) etc.
+```
+
+Caveats the ideation must resolve:
+
+1. The import contract between `claude-team` and `status` becomes a runtime-only API. A small pytest should exercise each borrowed function via the sibling-import path so signature drift fails a static test, not a live dispatch.
+2. Document the borrowed surface (which `status` functions are "public" for `claude-team`) in a comment at the top of `claude-team` or in a short section of the script's own help text. Otherwise a future edit to `status` may break `claude-team` silently.
+3. The same `importlib` pattern is fine for future consumers (e.g., codex-side helpers) but past 2–3 consumers the argument for a proper library module gets stronger; revisit if that happens.
 
 ## Why
 
@@ -54,7 +93,7 @@ The ideation stage must resolve these before implementation:
 
 ## Acceptance Criteria (placeholder — ideation to refine)
 
-1. New helper at `skills/commission/bin/build_dispatch` (Python, follows the pattern of `skills/commission/bin/status`).
+1. New `build` subcommand on `skills/commission/bin/claude-team` (Python, follows the pattern of the existing `context-budget` subcommand). No new sibling binary, no `lib/` directory.
 2. Helper reads entity file, workflow README, LLM JSON from stdin; emits validated dispatch JSON to stdout; exit code 0 on success, non-zero on validation failure.
 3. Unit tests covering: normal dispatch, team-mode dispatch, worktree-stage dispatch, feedback-stage dispatch, each validation failure mode.
 4. Runtime adapter `skills/first-officer/references/claude-first-officer-runtime.md` updated to instruct the FO to pipe judgment fragments into the helper and forward the emitted fields to `Agent()`.
