@@ -1,11 +1,11 @@
 ---
 id: 134
 title: "Runtime-specific tests on PR when necessary"
-status: backlog
+status: ideation
 source: "CL direction during 2026-04-11 session — need a way to run live/E2E tests on PRs that change FO behavior, without burning API time on every PR"
 score: 0.75
 worktree:
-started:
+started: 2026-04-13T18:01:05Z
 completed:
 verdict:
 issue:
