@@ -9,7 +9,7 @@ completed:
 verdict:
 worktree: .worktrees/spacedock-ensign-non-blocking-interactive-worker-waits-in-codex-fo
 issue:
-pr:
+pr: #87
 ---
 
 The current Codex first-officer runtime guidance encourages `spawn_agent(...); wait_agent(...)` as the normal dispatch pattern. That works for bounded or single-entity runs, but in an interactive captain conversation it blocks the foreground while a worker is running. During task 136 dispatch, that meant the captain had to interrupt the session just to continue discussing another workflow improvement while the ideation worker was still in flight.
