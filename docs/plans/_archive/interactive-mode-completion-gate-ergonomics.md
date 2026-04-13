@@ -1,13 +1,13 @@
 ---
 id: 140
 title: Codex interactive-mode completion and gate ergonomics
-status: validation
+status: done
 source: FO observation during task 136 completion handling on 2026-04-12
 score: 0.64
 started: 2026-04-12T18:25:22Z
-completed:
-verdict:
-worktree: .worktrees/spacedock-ensign-interactive-mode-completion-gate-ergonomics
+completed: 2026-04-13T01:12:50Z
+verdict: PASSED
+worktree: 
 issue:
 pr: #84
 ---
