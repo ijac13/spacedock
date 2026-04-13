@@ -1,9 +1,9 @@
 ---
 id: 100
 title: "status tool: add workflow directory discovery"
-status: backlog
+status: ideation
 source: CL observation — Codex startup uses raw rg for discovery
-started:
+started: 2026-04-13T15:57:56Z
 completed:
 verdict:
 score: 0.60
