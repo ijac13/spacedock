@@ -12,11 +12,13 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     TestRunner, LogParser, create_test_project, setup_fixture,
-    check_merge_outcome, install_agents, run_codex_first_officer, run_first_officer, git_add_commit,
+    check_merge_outcome, install_agents, read_entity_frontmatter,
+    run_codex_first_officer, run_first_officer, git_add_commit,
 )
 
 
@@ -38,6 +40,7 @@ def run_merge_case(
     claude_extra_args: list[str],
     codex_timeout_s: int,
     log_name: str,
+    stop_checker: Callable[[Path], bool] | None = None,
 ) -> int:
     if runtime == "claude":
         abs_workflow = t.test_project_dir / workflow_dir
@@ -55,6 +58,75 @@ def run_merge_case(
         run_goal=run_goal,
         timeout_s=codex_timeout_s,
         log_name=log_name.replace(".jsonl", ".txt"),
+        stop_checker=stop_checker,
+    )
+
+
+def codex_merge_stop_ready(
+    project_dir: Path,
+    workflow_dir: str,
+    entity_slug: str,
+    hook_expected: bool,
+) -> Callable[[Path], bool]:
+    workflow_path = project_dir / workflow_dir
+    hook_file = workflow_path / "_merge-hook-fired.txt"
+    archive_file = workflow_path / "_archive" / f"{entity_slug}.md"
+    entity_file = workflow_path / f"{entity_slug}.md"
+
+    def stop_ready(_: Path) -> bool:
+        if hook_expected:
+            if not hook_file.is_file():
+                return False
+        elif hook_file.exists():
+            return False
+
+        if archive_file.is_file():
+            return True
+
+        if not entity_file.is_file():
+            return False
+
+        frontmatter = read_entity_frontmatter(entity_file)
+        return frontmatter.get("status") == "done"
+
+    return stop_ready
+
+
+def codex_terminal_state_ready(
+    project_dir: Path,
+    workflow_dir: str,
+    entity_slug: str,
+) -> Callable[[Path], bool]:
+    workflow_path = project_dir / workflow_dir
+    archive_file = workflow_path / "_archive" / f"{entity_slug}.md"
+    entity_file = workflow_path / f"{entity_slug}.md"
+
+    def stop_ready(_: Path) -> bool:
+        if archive_file.is_file():
+            return True
+        if not entity_file.is_file():
+            return False
+        frontmatter = read_entity_frontmatter(entity_file)
+        return frontmatter.get("status") == "done"
+
+    return stop_ready
+
+
+def resume_codex_terminal_cleanup(
+    t: TestRunner,
+    workflow_dir: str,
+    run_goal: str,
+    log_name: str,
+    stop_checker: Callable[[Path], bool],
+    timeout_s: int = 240,
+) -> int:
+    return run_codex_first_officer(
+        t,
+        workflow_dir,
+        run_goal=run_goal,
+        timeout_s=timeout_s,
+        log_name=log_name,
+        stop_checker=stop_checker,
     )
 
 
@@ -98,10 +170,35 @@ def main():
             "Stop after the merge hook result and archive outcome are determined."
         ),
         ["--model", args.model, "--effort", args.effort, "--max-budget-usd", "2.00", *extra_args],
-        240,
+        360,
         "fo-log.jsonl",
+        stop_checker=codex_terminal_state_ready(
+            with_hook_project,
+            "merge-hook-pipeline",
+            "merge-hook-entity",
+        ) if args.runtime == "codex" else None,
     )
     if args.runtime == "codex":
+        hook_stop_ready = codex_merge_stop_ready(
+            with_hook_project,
+            "merge-hook-pipeline",
+            "merge-hook-entity",
+            hook_expected=True,
+        )
+        if not hook_stop_ready(t.log_dir / "fo-log.txt"):
+            fo_exit = resume_codex_terminal_cleanup(
+                t,
+                "merge-hook-pipeline",
+                (
+                    "The entity `merge-hook-entity` is already at terminal status `done`. "
+                    "Resume only the merge-and-cleanup portion now: run the registered merge hook from "
+                    "`merge-hook-pipeline/_mods/test-hook.md`, then complete the default local merge/archive "
+                    "cleanup on the main branch. Stop once `_merge-hook-fired.txt` records the entity slug "
+                    "and the entity is archived."
+                ),
+                "fo-merge-resume.txt",
+                hook_stop_ready,
+            )
         t.check("Codex launcher exited cleanly (with hook)", fo_exit == 0)
 
     # --- Phase 3: Validate hook fired ---
@@ -181,10 +278,33 @@ def main():
             "Stop after the archive outcome is determined."
         ),
         ["--model", args.model, "--effort", args.effort, "--max-budget-usd", "2.00", *extra_args],
-        240,
+        360,
         nomods_log,
+        stop_checker=codex_terminal_state_ready(
+            nomods_project,
+            "merge-hook-pipeline",
+            "merge-hook-entity",
+        ) if args.runtime == "codex" else None,
     )
     if args.runtime == "codex":
+        nomods_stop_ready = codex_merge_stop_ready(
+            nomods_project,
+            "merge-hook-pipeline",
+            "merge-hook-entity",
+            hook_expected=False,
+        )
+        if not nomods_stop_ready(t.log_dir / "fo-nomods-log.txt"):
+            fo_exit = resume_codex_terminal_cleanup(
+                t,
+                "merge-hook-pipeline",
+                (
+                    "The entity `merge-hook-entity` is already at terminal status `done` in a workflow with no `_mods/`. "
+                    "Resume only the terminal merge-and-cleanup path now: finish the default local merge/archive cleanup "
+                    "on the main branch and stop once the entity is archived."
+                ),
+                "fo-nomods-resume.txt",
+                nomods_stop_ready,
+            )
         t.check("Codex launcher exited cleanly (no hook)", fo_exit == 0)
 
     # --- Phase 6: Validate no-mods fallback ---

@@ -9,6 +9,7 @@ import json
 import os
 import re
 import select
+import shlex
 import shutil
 import subprocess
 import sys
@@ -229,6 +230,148 @@ def build_codex_worker_bootstrap_prompt(
 def _clean_env() -> dict[str, str]:
     """Return a copy of os.environ without CLAUDECODE so subprocess can launch claude."""
     return {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+
+
+def emit_skip_result(reason: str) -> None:
+    """Print a standardized SKIP result and exit 0 for standalone uv-run scripts."""
+    print(f"  SKIP: {reason}")
+    print()
+    print("=== Results ===")
+    print("  0 passed, 0 failed, 1 skipped")
+    print()
+    print("RESULT: SKIP")
+    raise SystemExit(0)
+
+
+def probe_claude_runtime(model: str, timeout_s: int = 30) -> tuple[bool, str]:
+    """Return whether the local Claude runtime is responsive enough for live E2E."""
+    cmd = [
+        "claude",
+        "-p",
+        "Reply with OK and nothing else.",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--model",
+        model,
+        "--max-budget-usd",
+        "0.20",
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=_clean_env(),
+            timeout=timeout_s,
+        )
+    except FileNotFoundError:
+        return False, "claude CLI not found in PATH"
+    except subprocess.TimeoutExpired:
+        return False, f"claude preflight for model {model!r} produced no result within {timeout_s}s"
+
+    if result.returncode != 0:
+        return False, f"claude preflight for model {model!r} exited {result.returncode}"
+
+    if '"type":"result"' not in result.stdout and '"type": "result"' not in result.stdout:
+        return False, f"claude preflight for model {model!r} returned no stream-json result record"
+
+    return True, ""
+
+
+_READ_ONLY_SHELL_COMMANDS = frozenset({
+    "cat",
+    "file",
+    "find",
+    "grep",
+    "head",
+    "ls",
+    "rg",
+    "stat",
+    "tail",
+    "wc",
+})
+_ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
+_OPTION_TOKEN_RE = re.compile(r"^-")
+
+
+def _strip_harmless_redirections(command: str) -> str:
+    return re.sub(r"\b\d*>\s*/dev/null\b", "", command)
+
+
+def _shell_words(command: str) -> list[str]:
+    try:
+        return shlex.split(command, posix=True)
+    except ValueError:
+        return command.split()
+
+
+def _matches_any_target(path: str, target_patterns: tuple[str, ...] | list[str]) -> bool:
+    cleaned = path.strip().strip("\"'")
+    return any(pattern in cleaned for pattern in target_patterns)
+
+
+def _segment_is_read_only_probe(segment: str) -> bool:
+    words = _shell_words(segment)
+    while words and _ENV_ASSIGNMENT_RE.match(words[0]):
+        words.pop(0)
+    if not words:
+        return False
+    return words[0] in _READ_ONLY_SHELL_COMMANDS
+
+
+def bash_command_targets_write(command: str, target_patterns: tuple[str, ...] | list[str]) -> bool:
+    """Heuristic for whether a Bash command writes to one of the guarded target paths."""
+    stripped = _strip_harmless_redirections(command)
+
+    segments = [
+        segment.strip()
+        for segment in re.split(r"&&|\|\||;|\|", stripped)
+        if segment.strip()
+    ]
+    if segments and all(_segment_is_read_only_probe(segment) for segment in segments):
+        return False
+
+    redirection_targets = re.findall(r">>?\s*([^&;\s|]+)", stripped)
+    if any(_matches_any_target(path, target_patterns) for path in redirection_targets):
+        return True
+
+    for segment in segments:
+        words = _shell_words(segment)
+        while words and _ENV_ASSIGNMENT_RE.match(words[0]):
+            words.pop(0)
+        if not words:
+            continue
+
+        cmd = words[0]
+        args = words[1:]
+
+        if cmd == "tee":
+            if any(not _OPTION_TOKEN_RE.match(arg) and _matches_any_target(arg, target_patterns) for arg in args):
+                return True
+            continue
+
+        if cmd == "sed" and any(arg.startswith("-i") for arg in args):
+            if args and _matches_any_target(args[-1], target_patterns):
+                return True
+            continue
+
+        if cmd == "perl" and any(arg.startswith("-") and "i" in arg for arg in args):
+            if args and _matches_any_target(args[-1], target_patterns):
+                return True
+            continue
+
+        if cmd in {"cp", "mv", "install", "ln"}:
+            path_args = [arg for arg in args if not _OPTION_TOKEN_RE.match(arg)]
+            if path_args and _matches_any_target(path_args[-1], target_patterns):
+                return True
+            continue
+
+        if cmd in {"touch", "mkdir", "chmod", "chown", "rm"}:
+            if any(not _OPTION_TOKEN_RE.match(arg) and _matches_any_target(arg, target_patterns) for arg in args):
+                return True
+
+    return False
 
 
 class TestRunner:
@@ -571,13 +714,15 @@ def run_codex_first_officer(
                 break
 
             idle_long_enough = time.monotonic() - last_output_at >= idle_after_agent_message_s
+            stop_ready = stop_checker(log_path) if stop_checker is not None else saw_turn_completed
+            active_items_clear = not active_item_ids or stop_checker is not None
             if (
                 last_completed_agent_message_at is not None
                 and idle_long_enough
-                and not active_item_ids
+                and active_items_clear
                 and saw_workflow_activity
                 and proc.poll() is None
-                and (stop_checker(log_path) if stop_checker is not None else saw_turn_completed)
+                and stop_ready
             ):
                 proc.terminate()
                 try:

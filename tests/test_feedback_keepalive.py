@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     LogParser, TestRunner, create_test_project, setup_fixture,
-    install_agents, run_first_officer, git_add_commit,
+    emit_skip_result, install_agents, probe_claude_runtime, run_first_officer, git_add_commit,
 )
 
 
@@ -185,6 +185,13 @@ def main():
     # --- Phase 2: Run the first officer ---
 
     print(f"--- Phase 2: Run first officer ({args.runtime}, this takes ~60-180s) ---")
+
+    ok, reason = probe_claude_runtime(args.model)
+    if not ok:
+        emit_skip_result(
+            f"live Claude runtime unavailable before FO dispatch: {reason}. "
+            "This environment cannot currently prove or disprove the keepalive path."
+        )
 
     abs_workflow = t.test_project_dir / "keepalive-pipeline"
     fo_exit = run_first_officer(
