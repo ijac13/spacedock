@@ -9,7 +9,7 @@ verdict:
 score: 0.60
 worktree: .worktrees/spacedock-ensign-status-workflow-discovery
 issue:
-pr:
+pr: #85
 ---
 
 The startup procedure (step 2) requires searching for README.md files with `commissioned-by: spacedock@` frontmatter to discover workflow directories. Every runtime (Claude Code, Codex) reimplements this as a raw grep/rg call before it can invoke `status --boot`.
