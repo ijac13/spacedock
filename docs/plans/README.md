@@ -109,6 +109,8 @@ A task moves to validation after implementation is complete. The work here is to
 - **Inputs:** The implementation summary and the acceptance criteria from the task body
 - **Outputs:**
   - Run applicable tests from the Testing Resources section and report results
+    - Use `tests/README.md` to choose the right harness and entrypoint before running tests
+    - Prefer the stable repo-level entrypoints when they fit the task: `make test-static` for the offline suite, `make test-e2e TEST=... RUNTIME=...` for live runtime-specific E2E checks
   - Verify each acceptance criterion with evidence
   - A PASSED/REJECTED recommendation
 - **Good:** Thorough testing against acceptance criteria, clear evidence of pass/fail, honest assessment
@@ -177,23 +179,37 @@ Validation pilots should use these when verifying implementation work:
 | Resource | Path | Covers |
 |----------|------|--------|
 | Commission test harness | `scripts/test-harness.md` | Batch-mode commission invocation, generated file validation, guardrail checks |
-| Rejection flow E2E test | `tests/test-rejection-flow.sh` | Validation rejection detection, validator-to-implementer relay dispatch |
-| Scaffolding guardrail E2E test | `tests/test-scaffolding-guardrail.sh` | Scaffolding change guardrail, issue filing guardrail |
-| Merge hook guardrail E2E test | `tests/test-merge-hook-guardrail.sh` | Merge hook fires before local merge, no-mods fallback |
+| Rejection flow E2E test | `tests/test_rejection_flow.py` | Validation rejection detection, validator-to-implementer relay dispatch |
+| Scaffolding guardrail E2E test | `tests/test_scaffolding_guardrail.py` | Scaffolding change guardrail, issue filing guardrail |
+| Merge hook guardrail E2E test | `tests/test_merge_hook_guardrail.py` | Merge hook fires before local merge, no-mods fallback |
 | Repo edit guardrail E2E test | `tests/test_repo_edit_guardrail.py` | FO write scope guardrail, code/test/mod edit rejection |
-| Test authoring guidelines | `tests/README.md` | Test infrastructure, CLI conventions, fixtures, when to use which harness |
+| Test authoring and execution guide | `tests/README.md` | Test infrastructure, stable entrypoints, CLI conventions, fixtures, and harness selection |
 
 The test harness documents how to run `claude -p` with `--plugin-dir` for non-interactive commission testing, plus structural and guardrail assertions against the generated output. Use it for any task that changes `skills/commission/SKILL.md` or the first-officer template.
 
-All tests run via `claude -p` in worktrees. E2E tests that invoke `claude -p` (commission harness, gate guardrail, dispatch names, rejection flow, terminology benchmark) work within the standard dispatch environment and should be run as part of validation.
+Validators should treat `tests/README.md` as the authoritative guide for selecting the right test surface and command shape. Not every validation run should use the same entrypoint: some tasks need the offline repo suite, some need runtime-specific E2E coverage, and some need both.
+
+The stable repo-level offline suite is:
+
+```bash
+make test-static
+```
+
+Live E2E checks should use the runtime-aware wrapper:
+
+```bash
+make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex
+```
+
+Use direct `uv run ...` invocations only when the test guide calls for a more specific command than the stable wrappers provide.
 
 ### Running E2E tests
 
-Tests use `uv run`. When running from inside a Claude Code session, unset `CLAUDECODE` first (claude refuses to launch as a subprocess when this variable is set):
+Tests use `uv run`. When running from inside a Claude Code session, unset `CLAUDECODE` first (Claude refuses to launch as a subprocess when this variable is set):
 
     unset CLAUDECODE && uv run tests/test_output_format.py
 
-This applies to all E2E test scripts under `tests/` and `scripts/`.
+This applies to all E2E test scripts under `tests/` and `scripts/`, including the commands launched by `make test-static` and `make test-e2e`.
 
 ## Commit Discipline
 
