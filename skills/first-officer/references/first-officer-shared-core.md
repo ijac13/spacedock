@@ -5,7 +5,7 @@ This file captures the shared first-officer semantics. Keep it aligned with `age
 ## Startup
 
 1. Discover the project root with `git rev-parse --show-toplevel`.
-2. Discover the workflow directory. Prefer an explicit user-provided path. Otherwise search for `README.md` files whose YAML frontmatter contains `commissioned-by: spacedock@...`. Ignore `.git`, `.worktrees`, `node_modules`, `vendor`, `dist`, `build`, and `__pycache__`.
+2. Discover the workflow directory. Prefer an explicit user-provided path. Otherwise run `{spacedock_plugin_dir}/skills/commission/bin/status --discover` and use the result. If the output contains exactly one path, use it. If zero paths, report that no workflow was found. If multiple paths, present the list to the operator and ask which to manage (or, in single-entity mode, fail with an ambiguity error).
 3. Read `{workflow_dir}/README.md` to extract:
    - mission
    - entity labels

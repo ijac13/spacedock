@@ -11,8 +11,8 @@ The packaged first-officer agent asset, not the skill wrapper, should carry the 
 ## Workflow Target
 
 - If the user gives an explicit workflow path, use it.
-- If not, discover candidate workflows from the current repository.
-- If multiple candidates exist, ask the user which workflow to manage.
+- If not, run `status --discover` to find candidate workflows.
+- If exactly one result, use it. If zero, report no workflow found. If multiple, ask the user which to manage.
 - If the session is non-interactive (e.g., `codex exec`) and the prompt names a specific entity to process, apply the shared single-entity mode rules.
 
 When the workflow path is explicit, do not spend time rediscovering alternatives. Move directly to:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # commissioned-by: spacedock@{spacedock_version}
 # ABOUTME: Workflow status viewer — shows entity overview from YAML frontmatter.
-# ABOUTME: Supports default table, --archived, --next, --next-id, and --boot (FO startup data).
+# ABOUTME: Supports default table, --archived, --next, --next-id, --boot, and --discover.
 #
 # goal: Show one-line-per-{entity_label} workflow overview from YAML frontmatter.
 #
@@ -913,8 +913,114 @@ def find_git_root(start_dir):
         d = parent
 
 
+DISCOVER_IGNORE_DIRS = {'.git', '.worktrees', 'node_modules', 'vendor', 'dist', 'build', '__pycache__', 'tests'}
+
+
+def discover_workflows(root):
+    """Walk a directory tree and return workflow directories.
+
+    A workflow directory is one containing a README.md whose YAML frontmatter
+    has a ``commissioned-by`` field starting with ``spacedock@``.
+
+    Matching rule:
+        The ``commissioned-by`` value must start with the literal string
+        ``spacedock@``. Both ``spacedock@1.0`` and bare ``spacedock@`` (no
+        version suffix) are accepted.
+
+    Ignored directories (pruned during walk — canonical source of truth):
+        .git, .worktrees, node_modules, vendor, dist, build, __pycache__, tests
+
+    Symlink handling:
+        Symlinks are followed (``followlinks=True``). Paths are resolved with
+        ``os.path.realpath`` before deduplication. When both a symlink and its
+        target match, the canonical resolved (real) path is returned, not the
+        symlink path. Visited real paths are tracked to avoid infinite loops
+        from symlink cycles.
+
+    Returns:
+        Sorted list of absolute, resolved directory paths.
+    """
+    root = os.path.abspath(root)
+    seen_real = set()
+    results = []
+
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=True):
+        real_dir = os.path.realpath(dirpath)
+        if real_dir in seen_real:
+            dirnames[:] = []
+            continue
+        seen_real.add(real_dir)
+
+        dirnames[:] = [d for d in dirnames if d not in DISCOVER_IGNORE_DIRS]
+
+        if 'README.md' not in filenames:
+            continue
+
+        readme_path = os.path.join(dirpath, 'README.md')
+        try:
+            fields = parse_frontmatter(readme_path)
+        except (OSError, IOError):
+            continue
+
+        commissioned_by = fields.get('commissioned-by', '')
+        if commissioned_by.startswith('spacedock@'):
+            resolved = os.path.realpath(dirpath)
+            if resolved not in {r for r in results}:
+                results.append(resolved)
+
+    return sorted(results)
+
+
 def main():
     args = sys.argv[1:]
+
+    # Handle --discover mode (incompatible with all other flags)
+    if '--discover' in args:
+        incompatible = [
+            f for f in args if f in (
+                '--boot', '--next', '--next-id', '--archived', '--where',
+                '--set', '--archive', '--fields', '--all-fields', '--workflow-dir',
+            )
+        ]
+        if incompatible:
+            print('Error: --discover is incompatible with %s' % ', '.join(sorted(set(incompatible))),
+                  file=sys.stderr)
+            sys.exit(1)
+
+        # Parse --root
+        root_path = None
+        i = 0
+        while i < len(args):
+            if args[i] == '--root':
+                if i + 1 >= len(args):
+                    print('Error: --root requires an argument', file=sys.stderr)
+                    sys.exit(1)
+                root_path = args[i + 1]
+                i += 2
+            else:
+                i += 1
+
+        if root_path is None:
+            try:
+                result = subprocess.run(
+                    ['git', 'rev-parse', '--show-toplevel'],
+                    capture_output=True, text=True,
+                )
+                if result.returncode == 0:
+                    root_path = result.stdout.strip()
+                else:
+                    root_path = os.getcwd()
+            except FileNotFoundError:
+                root_path = os.getcwd()
+
+        if not os.path.isdir(root_path):
+            print('Error: --root path does not exist: %s' % root_path, file=sys.stderr)
+            sys.exit(1)
+
+        for path in discover_workflows(root_path):
+            print(path)
+        sys.exit(0)
+
     try:
         workflow_dir, args = parse_workflow_dir(args)
     except ValueError as e:
