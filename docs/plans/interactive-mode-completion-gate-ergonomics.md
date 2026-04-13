@@ -179,3 +179,23 @@ Assessment:
 This corrected branch now has the right proof surface. The live Codex gate test shows gated completion is surfaced and held correctly, the live rejection-flow test shows follow-up routing only after rejection is observed, and the offline checks now guard prompt discipline instead of proving the behavior by restating injected instructions. Under the revised acceptance criteria, the branch should pass validation.
 
 Counts: 8 done, 0 skipped, 0 failed
+
+## Stage Report: validation
+
+- DONE - Superseded the earlier prompt-text validation. The previous `PASSED` report is no longer the governing evidence because it relied on injected prompt coaching and tautology-style checks instead of the current branch state and fresh full-suite results.
+- DONE - AC1 verified by branch review: the Codex runtime guidance still foregrounds gated completions before unrelated orchestration continues.
+- DONE - AC2 verified by branch review: dispatch stays on main unless stage metadata says `worktree: true`.
+- DONE - AC3 verified by branch review: `REJECTED` validation with `feedback-to` still reroutes immediately in interactive Codex mode.
+- DONE - AC4 verified in the broader test run: the Codex harness prompt remains minimal and the packaged-agent-id guardrail still passes within the suite.
+- DONE - AC5 verified in the broader test run: the shipped Codex runtime-content checks still pass within the suite.
+- DONE - AC6 verified by scope review: the change remains Codex-specific and does not require a shared-contract rewrite.
+- FAILED - Required full-suite command `unset CLAUDECODE && uv run --with pytest pytest -q` did not complete cleanly. Pytest stopped during collection with an import-file mismatch between `tests/fixtures/rejection-flow/tests/test_add.py` and `tests/fixtures/rejection-flow-packaged-agent/tests/test_add.py`.
+- FAILED - Broadest meaningful substitute `unset CLAUDECODE && PYTHONPATH=tests uv run --with pytest pytest -q --import-mode=importlib` completed with `195 passed, 4 failed`. The failures were `tests/fixtures/rejection-flow/tests/test_add.py::test_add_positive`, `tests/fixtures/rejection-flow/tests/test_add.py::test_add_negative_and_positive`, and the matching two tests in `tests/fixtures/rejection-flow-packaged-agent/tests/test_add.py`.
+- DONE - `git diff --check` passed with no whitespace or patch-format errors.
+
+Recommendation: REJECTED
+
+Assessment:
+The branch still contains the intended Codex runtime and prompt-discipline changes, but the requested full-suite validation is not green. The default suite is blocked by a repo-wide pytest collection collision, and the broadest working substitute still reports four failing fixture tests. That is enough to reject the branch on validation even though the task-specific Codex checks remain in place.
+
+Counts: 7 done, 0 skipped, 2 failed
