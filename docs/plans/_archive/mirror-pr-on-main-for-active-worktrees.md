@@ -1,15 +1,16 @@
 ---
 id: 135
 title: Mirror PR metadata on main for active worktree entities
-status: validation
+status: done
 source: FO observation during task 131 PR handling on 2026-04-12
 started: 2026-04-12T20:25:00Z
-completed:
-verdict:
+completed: 2026-04-13T03:25:03Z
+verdict: PASSED
 score: 0.72
-worktree: .worktrees/spacedock-ensign-mirror-pr-on-main-for-active-worktrees
+worktree: 
 issue:
 pr: #83
+archived: 2026-04-13T03:25:03Z
 ---
 
 ## Problem Statement
