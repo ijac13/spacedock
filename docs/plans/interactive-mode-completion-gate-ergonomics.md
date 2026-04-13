@@ -215,3 +215,18 @@ Counts: 7 done, 0 skipped, 2 failed
 ### Summary
 
 This implementation cycle absorbs the stable test-entrypoint fix into task 140. The Codex behavior evidence is unchanged, but the branch now also provides an explicit repo-level wrapper for the intended offline and live E2E suite shapes so validation does not get derailed by bare pytest collecting fixture payloads.
+
+## Stage Report: validation
+
+- DONE - Superseded the earlier rejection report. The prior `REJECTED` validation is no longer the governing result because this cycle reran the required entrypoints against the current branch state after commit `27be9fc` and state commit `afbc080`.
+- DONE - `make test-static` completed successfully from the worktree root as `unset CLAUDECODE && uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q`, with `193 passed in 3.99s`.
+- DONE - `make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex` completed successfully as `unset CLAUDECODE && uv run tests/test_gate_guardrail.py --runtime codex`, with `9 passed, 0 failed` and the final Codex output explicitly surfacing gate review and waiting-for-approval handling while the entity stayed active.
+- DONE - `make test-e2e TEST=tests/test_rejection_flow.py RUNTIME=codex` completed successfully as `unset CLAUDECODE && uv run tests/test_rejection_flow.py --runtime codex`, with `15 passed, 0 failed`; the harness also hit the bounded `300s` Codex timeout and still reached the rejection-flow stop condition with follow-up work observable after the rejection was seen.
+- DONE - `git diff --check` completed successfully with no whitespace or patch-format errors.
+
+Recommendation: PASSED
+
+Assessment:
+The Makefile and docs change resolves the earlier repo-level validation ambiguity by providing a stable offline suite entrypoint and explicit Codex E2E wrappers. The required static and live Codex validation commands all passed on the current branch state, so the previous rejection is superseded by this run.
+
+Counts: 5 done, 0 skipped, 0 failed
