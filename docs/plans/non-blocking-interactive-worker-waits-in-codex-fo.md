@@ -14,13 +14,13 @@ pr: #87
 
 The current Codex first-officer runtime guidance encourages `spawn_agent(...); wait_agent(...)` as the normal dispatch pattern. That works for bounded or single-entity runs, but in an interactive captain conversation it blocks the foreground while a worker is running. During task 136 dispatch, that meant the captain had to interrupt the session just to continue discussing another workflow improvement while the ideation worker was still in flight.
 
-This task should refine the Codex first-officer runtime so interactive sessions keep workers in the background by default. The first officer should only foreground a `wait_agent` when the next orchestration step is truly blocked on that worker result, or when the captain explicitly asks to wait. Bounded or single-entity runs remain a separate case where immediate waiting is still appropriate because completion is the point of the turn.
+This task should refine the Codex first-officer runtime so interactive sessions keep workers in the background by default. The first officer should foreground `wait_agent` only when the next orchestration step is truly blocked on that worker result. Bounded or single-entity runs remain a separate case where immediate waiting is still appropriate because completion is the point of the turn. Post-completion foregrounding and gate ergonomics are handled separately by task 140 and are out of scope here.
 
 ## Problem Statement
 
 Codex interactive sessions are conversational, not strictly transactional. The first officer can spawn a worker and still have useful work to do in the same turn, such as discussing scope, clarifying requirements, or advancing a different entity. If the runtime foregrounds `wait_agent` immediately after dispatch, the conversation loses that flexibility and the captain has to interrupt the turn to keep working.
 
-The observed failure from task 136 was not that waiting exists, but that the default waiting behavior was applied in the wrong mode. Interactive FO sessions should treat worker execution as background activity unless the next orchestration step depends on the result or the captain explicitly asks to block. This task is Codex-specific runtime guidance; it should not generalize the behavior into a shared contract for all platforms.
+The observed failure from task 136 was not that waiting exists, but that the default waiting behavior was applied in the wrong mode. Interactive FO sessions should treat worker execution as background activity unless the next orchestration step depends on the result. This task is Codex-specific runtime guidance focused on in-flight behavior only; it should not generalize the behavior into a shared contract for all platforms, and it should not absorb the post-completion ergonomics already covered by task 140.
 
 ## Proposed Approach
 
@@ -28,34 +28,33 @@ Define two waiting modes in the Codex first-officer runtime guidance:
 
 1. **Interactive mode.** After `spawn_agent`, keep the worker in the background and continue the turn. Foreground a `wait_agent` only when:
    - the next step is blocked on that worker result,
-   - the worker result is needed before any other orchestration can proceed,
-   - or the captain explicitly asks to wait.
+   - or the worker result is needed before any other orchestration can proceed.
 2. **Bounded or single-entity mode.** Keep the current blocking behavior when the session is focused on one entity or one immediate outcome. In that case, waiting right away is still the correct default because the session is already scoped around a single completion.
 
-The implementation should identify interactive vs bounded mode from existing Codex runtime context rather than introducing a new shared abstraction. The goal is a local guidance change: same worker APIs, different waiting policy depending on the session shape.
+The implementation should identify interactive vs bounded mode from existing Codex runtime context rather than introducing a new shared abstraction. The goal is a local guidance change: same worker APIs, different waiting policy depending on the session shape. The branch should rely on shared `--runtime codex` live E2E where possible for blocked and bounded behavior, use static contract checks for the interactive wording that the repo can actually prove today, and leave explicit captain-driven wait requests to a future task if a real Codex interactive harness is needed.
 
 ## Acceptance Criteria
 
-1. Interactive Codex sessions do not foreground `wait_agent` by default after dispatch.
-   - Test: run the Codex FO interactive dispatch path and verify the worker is left running in the background until a block condition or explicit wait request occurs.
-2. The FO foregrounds `wait_agent` when the next orchestration step is actually blocked on the worker result.
-   - Test: use a scenario where the next step requires the worker output and confirm the runtime waits before proceeding.
-3. The FO foregrounds `wait_agent` when the captain explicitly asks to wait.
-   - Test: drive an interactive session with an explicit wait request and confirm the runtime waits even if no dependency block exists.
-4. Bounded or single-entity runs can still wait immediately after dispatch.
-   - Test: execute the single-entity/bounded path and confirm the blocking behavior remains unchanged.
+1. The Codex runtime contract states that interactive sessions keep dispatched workers in the background by default until the next orchestration step is blocked on the result.
+   - Test: static content checks verify the Codex runtime wording and assembled first-officer contract describe background-by-default interactive behavior without claiming a live PTY proof.
+2. The shared `--runtime codex` path still foregrounds `wait_agent` when the next orchestration step is blocked on the worker result.
+   - Test: `tests/test_rejection_flow.py --runtime codex` shows the single-entity validation path waiting on the validation worker before gate handling.
+3. Bounded or single-entity Codex runs can still wait immediately after dispatch.
+   - Test: the same shared `--runtime codex` rejection-flow run preserves the bounded immediate-wait behavior in its live log.
+4. Codex FO test prompts stay minimal and do not encode wait-policy coaching.
+   - Test: `tests/test_codex_packaged_agent_ids.py` verifies the Codex invocation prompt identifies workflow target/scope only and omits behavioral coaching.
 5. The behavior stays Codex-specific and does not require a shared-contract change.
    - Test: review the touched runtime guidance and confirm the change is limited to Codex-first-officer behavior, not shared workflow semantics.
 
 ## Test Plan
 
-Static checks are the main verification tool because this is a runtime-guidance change, not a new algorithm. Add or update focused tests around the Codex first-officer dispatch path so the policy difference is explicit:
+Use the existing shared Codex harness where it can prove real behavior, and keep the remaining checks honest about their scope:
 
-- a unit or integration-level test for interactive mode that asserts `spawn_agent` does not immediately trigger `wait_agent`,
-- a test for the blocked-path case that asserts waiting does happen when the next orchestration step depends on the result,
-- and a regression test for bounded/single-entity mode that preserves immediate waiting.
+- static content checks for the Codex runtime wording that describes background-by-default interactive behavior,
+- shared live `--runtime codex` E2E for blocked and bounded wait behavior via `tests/test_rejection_flow.py`,
+- and prompt-discipline checks that keep Codex invocation prompts minimal per `tests/README.md`.
 
-Estimated cost is low to moderate because the change should be localized to first-officer runtime guidance and its corresponding harness coverage. Full end-to-end coverage is only needed if the implementation cannot be exercised deterministically through the existing dispatch test harness; otherwise, the targeted runtime tests are enough.
+Do not claim live interactive Codex PTY coverage in this task. If explicit captain-requested waiting or true interactive timing proof becomes necessary, that should be a separate follow-up that introduces a real Codex interactive harness instead of overloading this entity.
 
 ## Stage Report: ideation
 
@@ -109,6 +108,25 @@ Interactive Codex first-officer guidance now keeps spawned workers in the backgr
 The available tests pass, but they only prove text-level contract and ID-resolution behavior. They do not prove the acceptance criteria that depend on actual interactive dispatch timing, dependency-blocked waiting, explicit-wait handling, or bounded immediate waiting. Because the requested behavior is not yet covered by a deterministic behavioral test, the validation outcome is `REJECTED`.
 
 Recommendation: REJECTED
+
+## Stage Report: implementation (cycle 4)
+
+- [x] DONE: Re-scope the entity to pre-completion wait behavior after task 140 merged.
+  Updated the intro, problem statement, approach, acceptance criteria, and test plan so task 138 owns only in-flight wait semantics and explicitly leaves post-completion gate ergonomics to task 140.
+- [x] DONE: Remove the explicit-captain-wait proof requirement from this entity.
+  The narrowed acceptance criteria now cover interactive contract wording, blocked/bounded shared Codex evidence, prompt discipline, and Codex-only scope; true explicit-wait interactive proof is left to future harness work instead of being overclaimed here.
+- [x] DONE: Confirm the existing branch code already matches the narrowed scope.
+  No additional runtime/helper code changes were required after the rebase because cycle 3 had already fixed the prompt-discipline issue and restored the shared Codex rejection-flow path.
+- [x] DONE: Re-run proportional verification against the narrowed scope.
+  `python3 -m py_compile scripts/test_lib.py tests/test_rejection_flow.py tests/test_codex_packaged_agent_ids.py tests/test_agent_content.py` passed; `uv run --with pytest python tests/test_codex_packaged_agent_ids.py -q` passed (9/9); `uv run --with pytest python tests/test_agent_content.py -q` passed (36/36); `KEEP_TEST_DIR=1 uv run tests/test_rejection_flow.py --runtime codex` passed (16/16) with preserved evidence under `/var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmp0vftdfqu/`.
+- [x] DONE: Keep the worktree-only ownership rule intact while applying the captain feedback.
+  The scope rewrite and this cycle report were applied only in the worktree copy of the entity; `main` retained only the separate workflow-fix commit outside this task entity.
+- [ ] SKIP: Add a new interactive Codex PTY harness in this cycle.
+  The narrowed task no longer depends on that infra, and any future explicit captain-wait proof should land as a separate harness-oriented task.
+
+### Summary
+
+Cycle 4 turns task 138 into the narrow pre-completion wait-policy task we agreed on after task 140 merged. The existing branch code already satisfies that narrowed scope, and the refreshed verification now lines up with what the repo can actually prove: contract wording for interactive backgrounding, shared live Codex evidence for blocked and bounded waiting, and minimal-prompt discipline.
 
 ## Stage Report: implementation (cycle 3)
 
