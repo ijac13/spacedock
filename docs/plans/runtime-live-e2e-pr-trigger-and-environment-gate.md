@@ -87,3 +87,28 @@ The summary output should continue to show:
 ### Summary
 
 Implemented the PR-native live E2E workflow shape with `CI-E2E` approval gating while keeping manual dispatch available for reruns. The workflow now carries event-specific provenance, the operator docs explain the approval flow, and the offline test coverage matches the new wiring.
+
+## Stage Report: validation
+
+**Validator:** Claude (ensign worker)
+
+**Verification performed:**
+
+1. **Workflow inspection:** Confirmed `.github/workflows/runtime-live-e2e.yml` includes both `pull_request` and `workflow_dispatch`, that `claude-live` and `codex-live` both declare `environment: CI-E2E`, and that the provenance step branches on `github.event_name` to resolve the PR number from `github.event.pull_request.number` or `inputs.pr_number` as appropriate.
+2. **Offline workflow test:** `unset CLAUDECODE && uv run tests/test_runtime_live_e2e_workflow.py` -> exit `0`.
+3. **Diff hygiene:** `git diff --check` -> exit `0`.
+4. **Docs inspection:** `tests/README.md` explains the PR-native flow: PR opens, runtime jobs appear, GitHub blocks them pending `CI-E2E` review, and an approved reviewer releases the jobs.
+
+**Acceptance criteria verdicts:**
+
+- **AC1:** PASS - both trigger paths are wired in the workflow file.
+- **AC2:** PASS - both runtime jobs reference `environment: CI-E2E`.
+- **AC3:** PASS - provenance/preflight logic resolves the correct PR number for both event shapes.
+- **AC4:** PASS - the operator docs describe the PR -> pending review -> release flow.
+- **AC5:** PASS - static workflow checks cover the trigger, environment, provenance, and docs wiring.
+
+**Residual risk:**
+
+- The live GitHub behavior itself was not exercised from this terminal. This validation proves the workflow structure, docs, and offline checks; the actual PR-native pending state and environment approval gate still need a live PR run to observe end-to-end.
+
+**Recommendation: PASSED**
