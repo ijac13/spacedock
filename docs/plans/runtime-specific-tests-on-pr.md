@@ -226,3 +226,24 @@ Captain clarification (2026-04-13): this implementation cycle ships the manual `
   This section records the delivered infrastructure, the captain clarification, and the deferred follow-up scope.
 - DONE: Commit the implementation work in the assigned worktree before replying.
   Committed on the assigned worktree branch after the final workflow/docs verification pass for this changeset.
+
+## Stage Report: validation
+
+- [x] Read the implementation stage report and the captain clarification in the entity file.
+  Reviewed the implementation section and the 2026-04-13 clarification in this entity; validation stayed scoped to the manual `workflow_dispatch` infrastructure rather than live-suite greening.
+- [x] Use `tests/README.md` to choose proportional verification for this infrastructure-focused cycle.
+  Followed `tests/README.md:194-224`: cheap spot-check first, then targeted offline checks, then the stable repo-level offline entrypoint.
+- [x] Run the applicable static checks and focused commands needed to verify workflow wiring, docs, secret scoping, provenance reporting, and honest-red behavior.
+  `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_runtime_live_e2e_workflow.py -q` -> `5 passed`; `unset CLAUDECODE && uv run --with pytest python -m pytest tests/test_ci_static_workflow.py tests/test_test_lib_helpers.py tests/test_runtime_live_e2e_workflow.py -q` -> `16 passed`; `make test-static` -> `220 passed, 10 subtests passed`; `python3 -m py_compile` over the changed helper/live-test files completed cleanly.
+- [x] Verify each acceptance criterion with concrete evidence, explicitly noting any criterion that remains unproven from this environment.
+  AC1/2/4/5 are proven by `.github/workflows/runtime-live-e2e.yml:3-190`; AC7 is proven by `tests/README.md:194-224`; AC3/6 are structurally covered by the provenance-summary steps and `set -euo pipefail` plus `tests/test_runtime_live_e2e_workflow.py:37-117`, but no live GitHub Actions dispatch was available here, so rendered summaries and real red-job behavior were not directly observed.
+- [x] Produce a PASSED or REJECTED recommendation grounded in the clarified scope, not in a requirement to make the live suites green today.
+  Recommendation: PASSED. The manual two-job workflow, runtime-scoped secrets, fixed command inventory, provenance docs, and offline regression coverage are present with no static failures.
+- [x] Append a validation stage report at the end of the entity file with DONE/SKIPPED/FAILED coverage and counts.
+  This appended section is the required validation artifact; checklist counts are `7 DONE / 0 SKIPPED / 0 FAILED`.
+- [x] Commit the validation work in the assigned worktree before replying.
+  Committed on `spacedock-ensign/runtime-specific-tests-on-pr` after appending this validation report.
+
+### Summary
+
+Validation recommends PASSED for the clarified infrastructure scope. The workflow is manual-only, split into exactly `claude-live` and `codex-live`, documents the required secrets and provenance fields, and the offline suite passed cleanly. A live GitHub Actions run was not available from this environment, so the rendered summary/check presentation and live red-job behavior remain explicitly unproven here rather than assumed.
