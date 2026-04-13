@@ -1,7 +1,7 @@
 ---
 id: 145
 title: "PR-triggered runtime live E2E with environment approval gate"
-status: implementation
+status: validation
 source: "CL direction during 2026-04-13 session — show runtime live checks on PRs and gate same-repo runs with a GitHub environment review"
 score: 0.73
 started: 2026-04-13T22:58:00Z
