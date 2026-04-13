@@ -1906,5 +1906,245 @@ class TestStatusDocstring(unittest.TestCase):
         self.assertIn('with or without spaces', header)
 
 
+SHARED_CORE_PATH = os.path.join(
+    SCRIPT_DIR, '..', 'skills', 'first-officer', 'references', 'first-officer-shared-core.md',
+)
+CODEX_RUNTIME_PATH = os.path.join(
+    SCRIPT_DIR, '..', 'skills', 'first-officer', 'references', 'codex-first-officer-runtime.md',
+)
+
+
+def make_workflow_readme(commissioned_by='spacedock@1.0'):
+    """Return a minimal README.md with commissioned-by frontmatter."""
+    return textwrap.dedent(f"""\
+        ---
+        commissioned-by: {commissioned_by}
+        entity-type: task
+        ---
+
+        # Workflow
+        """)
+
+
+class TestDiscover(unittest.TestCase):
+    """Tests for --discover workflow directory discovery."""
+
+    def setUp(self):
+        self._script_dir = tempfile.mkdtemp()
+        self.script_path = build_status_script(self._script_dir)
+
+    def tearDown(self):
+        os.unlink(self.script_path)
+        os.rmdir(self._script_dir)
+
+    def test_discover_single_workflow(self):
+        """--discover with one workflow dir outputs that path and exits 0."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wf_dir = os.path.join(tmpdir, 'docs', 'plans')
+            os.makedirs(wf_dir)
+            with open(os.path.join(wf_dir, 'README.md'), 'w') as f:
+                f.write(make_workflow_readme())
+
+            result = run_status(tmpdir, '--discover', '--root', tmpdir,
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')
+            self.assertEqual(len(lines), 1)
+            self.assertEqual(lines[0], os.path.realpath(wf_dir))
+
+    def test_discover_no_workflows(self):
+        """--discover with no workflows outputs nothing and exits 0."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = run_status(tmpdir, '--discover', '--root', tmpdir,
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), '')
+
+    def test_discover_multiple_workflows(self):
+        """--discover with multiple workflows outputs paths alphabetically."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name in ('beta-workflow', 'alpha-workflow'):
+                wf_dir = os.path.join(tmpdir, name)
+                os.makedirs(wf_dir)
+                with open(os.path.join(wf_dir, 'README.md'), 'w') as f:
+                    f.write(make_workflow_readme())
+
+            result = run_status(tmpdir, '--discover', '--root', tmpdir,
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')
+            self.assertEqual(len(lines), 2)
+            self.assertIn('alpha-workflow', lines[0])
+            self.assertIn('beta-workflow', lines[1])
+
+    def test_discover_ignores_excluded_dirs(self):
+        """--discover skips directories in the ignore list."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Valid workflow
+            valid_dir = os.path.join(tmpdir, 'valid')
+            os.makedirs(valid_dir)
+            with open(os.path.join(valid_dir, 'README.md'), 'w') as f:
+                f.write(make_workflow_readme())
+
+            # Workflow inside an ignored directory
+            for ignored in ('tests', 'node_modules', '.worktrees', 'vendor',
+                            'dist', 'build', '__pycache__'):
+                ignored_dir = os.path.join(tmpdir, ignored, 'fixtures')
+                os.makedirs(ignored_dir, exist_ok=True)
+                with open(os.path.join(ignored_dir, 'README.md'), 'w') as f:
+                    f.write(make_workflow_readme())
+
+            result = run_status(tmpdir, '--discover', '--root', tmpdir,
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')
+            self.assertEqual(len(lines), 1)
+            self.assertIn('valid', lines[0])
+
+    def test_discover_skips_non_spacedock_readme(self):
+        """--discover skips READMEs not commissioned by spacedock@."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Non-spacedock workflow
+            other_dir = os.path.join(tmpdir, 'other')
+            os.makedirs(other_dir)
+            with open(os.path.join(other_dir, 'README.md'), 'w') as f:
+                f.write(make_workflow_readme(commissioned_by='other@1.0'))
+
+            # No commissioned-by at all
+            bare_dir = os.path.join(tmpdir, 'bare')
+            os.makedirs(bare_dir)
+            with open(os.path.join(bare_dir, 'README.md'), 'w') as f:
+                f.write(textwrap.dedent("""\
+                    ---
+                    entity-type: task
+                    ---
+
+                    # Not a workflow
+                    """))
+
+            # Bare spacedock@ (no version suffix) — SHOULD match per staff-review #1
+            bare_version_dir = os.path.join(tmpdir, 'bare-version')
+            os.makedirs(bare_version_dir)
+            with open(os.path.join(bare_version_dir, 'README.md'), 'w') as f:
+                f.write(make_workflow_readme(commissioned_by='spacedock@'))
+
+            # Valid spacedock workflow for positive control
+            valid_dir = os.path.join(tmpdir, 'valid')
+            os.makedirs(valid_dir)
+            with open(os.path.join(valid_dir, 'README.md'), 'w') as f:
+                f.write(make_workflow_readme(commissioned_by='spacedock@2.0'))
+
+            result = run_status(tmpdir, '--discover', '--root', tmpdir,
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')
+            # bare-version (spacedock@) and valid (spacedock@2.0) should match
+            self.assertEqual(len(lines), 2, f'expected 2 matches, got: {lines}')
+            self.assertIn('bare-version', lines[0])
+            self.assertIn('valid', lines[1])
+
+    def test_discover_incompatible_flags(self):
+        """--discover errors when combined with any incompatible flag."""
+        incompatible = [
+            ['--boot'],
+            ['--next'],
+            ['--next-id'],
+            ['--archived'],
+            ['--where', 'status=backlog'],
+            ['--set', 'slug', 'field=val'],
+            ['--archive', 'slug'],
+            ['--fields', 'id,title'],
+            ['--all-fields'],
+            ['--workflow-dir', '/tmp'],
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for flags in incompatible:
+                with self.subTest(flags=flags):
+                    result = run_status(tmpdir, '--discover', *flags,
+                                        script_path=self.script_path)
+                    self.assertEqual(result.returncode, 1,
+                                     f'expected rc=1 for --discover + {flags}, '
+                                     f'got rc={result.returncode}, stderr={result.stderr!r}')
+                    self.assertIn('Error', result.stderr,
+                                  f'expected Error in stderr for {flags}')
+
+    def test_discover_bad_root(self):
+        """--discover --root /nonexistent errors with exit 1."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = run_status(tmpdir, '--discover', '--root', '/nonexistent/path',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('Error', result.stderr)
+
+    def test_discover_default_root(self):
+        """--discover without --root defaults to git toplevel."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Initialize a git repo
+            subprocess.run(['git', 'init'], cwd=tmpdir,
+                           capture_output=True, check=True)
+            subprocess.run(['git', 'config', 'user.email', 'test@test.com'], cwd=tmpdir,
+                           capture_output=True, check=True)
+            subprocess.run(['git', 'config', 'user.name', 'Test'], cwd=tmpdir,
+                           capture_output=True, check=True)
+
+            # Create a workflow subdir
+            wf_dir = os.path.join(tmpdir, 'docs', 'plans')
+            os.makedirs(wf_dir)
+            with open(os.path.join(wf_dir, 'README.md'), 'w') as f:
+                f.write(make_workflow_readme())
+
+            # Create an initial commit so git rev-parse works
+            subprocess.run(['git', 'add', '.'], cwd=tmpdir,
+                           capture_output=True, check=True)
+            subprocess.run(['git', 'commit', '-m', 'init'], cwd=tmpdir,
+                           capture_output=True, check=True)
+
+            # Run from a subdirectory within the repo
+            sub = os.path.join(tmpdir, 'docs')
+            result = subprocess.run(
+                ['python3', self.script_path, '--discover'],
+                capture_output=True, text=True, cwd=sub,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')
+            self.assertEqual(len(lines), 1)
+            self.assertEqual(lines[0], os.path.realpath(wf_dir))
+
+    def test_discover_deduplicates_symlinks(self):
+        """Symlinked directories are discovered and deduplicated; canonical path returned."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Real workflow directory
+            real_dir = os.path.join(tmpdir, 'real-workflow')
+            os.makedirs(real_dir)
+            with open(os.path.join(real_dir, 'README.md'), 'w') as f:
+                f.write(make_workflow_readme())
+
+            # Symlink pointing to the real directory
+            link_path = os.path.join(tmpdir, 'link-workflow')
+            os.symlink(real_dir, link_path)
+
+            result = run_status(tmpdir, '--discover', '--root', tmpdir,
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = result.stdout.strip().split('\n')
+            self.assertEqual(len(lines), 1, f'expected 1 path after dedup, got: {lines}')
+            # Must be the canonical (realpath) path, not the symlink
+            self.assertEqual(lines[0], os.path.realpath(real_dir))
+
+    def test_discover_prose_shared_core(self):
+        """Shared core step 2 references status --discover and omits old grep prose."""
+        with open(SHARED_CORE_PATH, 'r') as f:
+            content = f.read()
+        self.assertIn('status --discover', content)
+        self.assertNotIn('search for `README.md` files', content)
+
+    def test_discover_prose_codex_runtime(self):
+        """Codex runtime Workflow Target references status --discover and omits old prose."""
+        with open(CODEX_RUNTIME_PATH, 'r') as f:
+            content = f.read()
+        self.assertIn('status --discover', content)
+        self.assertNotIn('discover candidate workflows from the current repository', content)
+
+
 if __name__ == '__main__':
     unittest.main()
