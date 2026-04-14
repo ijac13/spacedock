@@ -1,11 +1,11 @@
 ---
 id: 150
 title: "Add claude-live-opus job to runtime-live-e2e workflow"
-status: backlog
-source: "CL direction during 2026-04-14 session — separate opus signal needed alongside haiku for #114 cycle issues"
+status: done
+source: superseded by #114 cycle 3
 started: 
-completed:
-verdict:
+completed: 2026-04-14T20:05:27Z
+verdict: PASSED
 score: 0.55
 worktree: 
 issue:
