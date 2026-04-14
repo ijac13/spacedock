@@ -1,19 +1,20 @@
 # Spacedock
 
-Spacedock turns directories of markdown files into structured workflows operated by AI agents. Each file is a work item that moves through defined stages, with human approval gates where they matter and stage reports that give you concise, high-signal evidence at each gate.
+The first officer coordinates the flow of work done by agents. It dispatches workers through defined stages and surfaces approval-worthy decisions to you, the captain, so batches of work can move forward without pulling you into every session.
 
 **You want Spacedock if:**
 
-- **You are a human tired of context-switching** between agent sessions to make approval decisions. Spacedock batches the decisions an AI wants to hand back to you, and presents each one with structured evidence so you can approve or redirect without re-loading context.
-- **You are an agent delegating repeatable work** and you want a structured place to queue up approval-worthy decisions for your human without interrupting them for every tiny step.
+- **You're a human tired of context-switching** between agent sessions to make approval decisions. Spacedock batches the decisions an agent wants to hand back to you and presents each with evidence, so you approve or redirect without re-loading context.
+- **You're an agent delegating repeatable work** and want a structured place to queue up approval-worthy decisions for your human without interrupting them for every tiny step.
 
 ## What's Different
 
-- **Approval gates with structured evidence.** Every gate comes with a stage report (test outputs, before/after diffs, checklist verdicts, commit SHAs, anomalies) so you can approve, redirect, or bounce back faster than hunting through a sprawling PR.
-- **Isolation.** Stages that need it run in their own git worktree and branch; lightweight stages run inline on main. You declare which is which, and the first officer enforces it.
-- **Declarative and flexible.** Mission shape, stages, work item schema, and gates all live in plain markdown. The whole workflow is a few files in your repo that you can read, edit, fork, and commit like any other code.
-- **Composable.** A single repo can host several workflows side by side, and work items in one workflow can reference items in another when your work spans more than one mission shape.
-- **Reliable subagent recovery.** Workers nearing their context limit are replaced before they die; uncommitted work in their worktree is preserved for the successor. No silent data loss mid-task.
+- **Approval gates with structured evidence.** Every gate comes with a stage report: findings, verdicts, artifacts, anomalies. You approve, redirect, or bounce back faster than sifting through raw output or a sprawling log.
+- **Adversarial review gates.** Review stages can be configured to push back rather than rubber-stamp. They target sycophancy, thin evidence, and work that looks busy without proving its claim. Work clears the gate when it survives the challenge.
+- **Plan in batches, decide as work flows back.** Queue multiple work items at once; agents advance each through its stages independently while you handle approvals as they surface.
+- **The workflow learns with you.** The first officer helps you adjust it when patterns emerge: a stage that never fires, a gate that keeps bouncing the same issue back, a schema field that always ends up empty.
+- **Isolation when needed.** Stages that touch shared state run in their own git worktree; lightweight stages run inline. You declare which is which, and the first officer enforces it.
+- **Work doesn't die at the context limit.** When an agent runs out of context, Spacedock swaps in a successor that carries forward what's in flight. Nothing gets lost in the handoff.
 
 ## Quick Start
 
