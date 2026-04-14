@@ -518,3 +518,47 @@ Implemented mod-block enforcement at terminal transitions. The `status --set` co
 13. DONE: Address implementation note 3 (missing mod recovery) — Mod-Block Enforcement section includes concrete behavior: report to captain with message naming the missing mod and offering restore-or-force options, wait for captain direction.
 14. DONE: All pytest tests pass — 12 mod-block tests in `TestModBlockGuard` class covering: terminal status refusal, completed/verdict refusal, worktree clear refusal, pr update allowed, non-terminal status allowed, force override, archive guard, archive force override, set/clear, absent field treated as no block, empty field treated as no block.
 15. DONE: `make test-static` passes — 232 tests, 10 subtests, all green.
+
+## Stage Report
+
+### Validation
+
+#### Summary
+
+Validated mod-block enforcement implementation against all 17 checklist items. All 232 static tests pass (including 12 mod-block-specific tests in `TestModBlockGuard`). Prose changes to shared-core and runtime adapter match the spec. The `status --set` guard, `--archive` guard, `--force` override, and Field Reference update are all verified. Recommendation: **PASSED**.
+
+#### Checklist
+
+1. DONE: Read `tests/README.md` — confirmed `make test-static` is the correct offline entrypoint (`pytest tests/ --ignore=tests/fixtures`). Live E2E uses `make test-e2e TEST=... RUNTIME=...`.
+
+2. DONE: `make test-static` — 232 passed, 10 subtests passed in 5.26s. Zero failures.
+
+3. DONE: AC-1 verified — `test_modblock_guard_refuses_terminal_status` confirms `status --set slug status=done` on an entity with `mod-block=merge:pr-merge` exits with non-zero return code and stderr contains both "mod-block" and "merge:pr-merge". Code at `skills/commission/bin/status` lines 1171-1194 implements the guard: parses terminal stage names from README, checks if any requested update targets a guarded field, and exits 1 with the error message.
+
+4. DONE: AC-2 verified — `test_modblock_guard_refuses_completed` and `test_modblock_guard_refuses_verdict` confirm that setting `completed` or `verdict=PASSED` on a mod-blocked entity exits 1. The guard at line 1184 checks `field in ('completed', 'verdict')`.
+
+5. DONE: AC-3 verified — `test_modblock_guard_refuses_worktree_clear` confirms `status --set slug worktree=` on a mod-blocked entity exits 1. The guard at line 1187 checks `field == 'worktree' and value == ''`.
+
+6. DONE: AC-4 verified — `test_modblock_guard_allows_pr_update` confirms `status --set slug pr=#57` on a mod-blocked entity succeeds (exit 0) and the `pr` field is updated to `#57`. `test_modblock_guard_allows_nonterminal_status` confirms `status --set slug status=implementation` succeeds. The guard only blocks updates matching the guarded set.
+
+7. DONE: AC-5 verified — `test_modblock_force_overrides_guard` confirms `status --set slug status=done --force` on a mod-blocked entity succeeds (exit 0) and stderr contains "Warning" and "mod-block". Code at lines 1196-1198 prints the warning when `force and mod_block`.
+
+8. DONE: AC-6 verified — `test_modblock_archive_guard` confirms `--archive slug` on a mod-blocked entity exits 1 with "mod-block" in stderr. `test_modblock_archive_force_overrides` confirms `--archive slug --force` succeeds with a warning. Code at `run_archive()` lines 886-894 implements the guard.
+
+9. DONE: AC-7 verified — `test_modblock_set_and_clear` confirms setting `mod-block=merge:pr-merge` then `mod-block=` works correctly, with the field value matching at each step.
+
+10. DONE: AC-8 verified (prose inspection) — `first-officer-shared-core.md` Merge and Cleanup step 1 reads: "Check for registered merge hooks. If any exist, set the mod-block field before invoking them: `status --workflow-dir {workflow_dir} --set {slug} mod-block=merge:{mod_name}`". This is before step 2 which runs the hooks.
+
+11. DONE: AC-9 verified (prose inspection) — `first-officer-shared-core.md` Merge and Cleanup step 5 reads: "If a merge hook completed without creating a blocking condition, clear the mod-block: `status --workflow-dir {workflow_dir} --set {slug} mod-block=`". The Event Loop step 1 also clears mod-block when advancing a merged PR.
+
+12. DONE: AC-10 verified (prose inspection) — `claude-first-officer-runtime.md` Event Loop step 2 reads: "Check mod-blocked entities — Run `status --where "mod-block !="`. For each, re-read the blocking mod and resume its pending action. Do not dispatch new work for a mod-blocked entity."
+
+13. DONE: AC-11 (implementation note 1) verified — `first-officer-shared-core.md` Merge and Cleanup step 3 formalizes hook completion detection: "Detect hook completion by inspecting the entity's state delta after the hook runs. A hook has created a blocking condition when any of: (a) a `pr` field is now set, (b) the hook's prose instructions say to wait for captain approval and the captain has not yet responded, or (c) the hook explicitly declares an external wait."
+
+14. DONE: AC-12 verified — `test_modblock_guard_allows_nonterminal_status` confirms setting `status=implementation` on a mod-blocked entity succeeds. The guard only checks against `terminal_names` from the README stages block.
+
+15. DONE: Implementation note 2 verified — `docs/plans/README.md` Field Reference table at line 71 includes: `| \`mod-block\` | string | Pending mod-declared blocking action, format \`{lifecycle_point}:{mod_name}\`. Empty when no block is active. |`
+
+16. DONE: Implementation note 3 verified — `claude-first-officer-runtime.md` Mod-Block Enforcement section includes: "If the blocking mod file (`{workflow_dir}/_mods/{mod_name}.md`) is missing or unreadable, report to the captain: 'Blocking mod {mod_name} is missing. The entity is stuck. Options: restore the mod file, or use `--force` to clear the block and resume normal flow.' Wait for captain direction before proceeding."
+
+17. DONE: Recommendation — **PASSED**. All 12 acceptance criteria verified with evidence from test execution and prose inspection. All 3 implementation notes addressed. 232 static tests green. No issues found.
