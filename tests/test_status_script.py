@@ -2401,5 +2401,238 @@ class TestModBlockGuard(unittest.TestCase):
             self.assertEqual(fields['verdict'], 'PASSED')
 
 
+PR_MERGE_HOOK = textwrap.dedent("""\
+    ---
+    name: pr-merge
+    description: test merge hook
+    ---
+
+    # PR Merge
+
+    ## Hook: merge
+
+    Push branch and create PR.
+    """)
+
+
+def _add_merge_hook(pipeline_dir, mod_name='pr-merge', content=PR_MERGE_HOOK):
+    """Drop a merge-hook mod into {pipeline_dir}/_mods/."""
+    mods_dir = os.path.join(pipeline_dir, '_mods')
+    os.makedirs(mods_dir, exist_ok=True)
+    with open(os.path.join(mods_dir, f'{mod_name}.md'), 'w') as f:
+        f.write(content)
+
+
+class TestMergeHookTerminalGuard(unittest.TestCase):
+    """Mechanism-level enforcement: terminal transitions require merge-hook completion."""
+
+    def setUp(self):
+        self._script_dir = tempfile.mkdtemp()
+        self.script_path = build_status_script(self._script_dir)
+
+    def tearDown(self):
+        os.unlink(self.script_path)
+        os.rmdir(self._script_dir)
+
+    def _read_frontmatter(self, filepath):
+        fields = {}
+        in_fm = False
+        with open(filepath, 'r') as f:
+            for line in f:
+                line = line.rstrip('\n')
+                if line == '---':
+                    if in_fm:
+                        break
+                    in_fm = True
+                    continue
+                if in_fm and ':' in line:
+                    key, _, val = line.partition(':')
+                    fields[key.strip()] = val.strip()
+        return fields
+
+    def test_set_status_done_refused_when_merge_hook_and_no_pr(self):
+        """Terminal status transition refused when merge hook exists and pr/mod-block empty."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'validation', '0.80'),
+            })
+            _add_merge_hook(tmpdir)
+            result = run_status(tmpdir, '--set', 'task-a', 'status=done',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('merge hook', result.stderr)
+            self.assertIn('pr-merge', result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['status'], 'validation')
+
+    def test_set_completed_refused_when_merge_hook_and_no_pr(self):
+        """Setting completed refused when merge hook exists and pr/mod-block empty."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'done', '0.80'),
+            })
+            _add_merge_hook(tmpdir)
+            result = run_status(tmpdir, '--set', 'task-a', 'completed',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('merge hook', result.stderr)
+
+    def test_set_verdict_refused_when_merge_hook_and_no_pr(self):
+        """Setting verdict refused when merge hook exists and pr/mod-block empty."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'done', '0.80'),
+            })
+            _add_merge_hook(tmpdir)
+            result = run_status(tmpdir, '--set', 'task-a', 'verdict=PASSED',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('merge hook', result.stderr)
+
+    def test_set_worktree_clear_refused_when_merge_hook_and_no_pr(self):
+        """Clearing worktree refused when merge hook exists and pr/mod-block empty."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'done', '0.80',
+                                    worktree='.worktrees/ensign-task-a'),
+            })
+            _add_merge_hook(tmpdir)
+            result = run_status(tmpdir, '--set', 'task-a', 'worktree=',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('merge hook', result.stderr)
+
+    def test_set_terminal_allowed_when_pr_set(self):
+        """Terminal transition permitted when pr field is non-empty (hook ran)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'validation', '0.80', pr='#57'),
+            })
+            _add_merge_hook(tmpdir)
+            result = run_status(tmpdir, '--set', 'task-a', 'status=done',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['status'], 'done')
+
+    def test_set_terminal_allowed_when_pr_set_in_same_call(self):
+        """Terminal transition permitted when pr is being set in the same --set."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'validation', '0.80'),
+            })
+            _add_merge_hook(tmpdir)
+            result = run_status(tmpdir, '--set', 'task-a',
+                                'pr=#57', 'status=done',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['status'], 'done')
+            self.assertEqual(fields['pr'], '#57')
+
+    def test_set_force_bypasses_merge_hook_guard(self):
+        """--force bypasses merge-hook guard even with empty pr/mod-block."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'validation', '0.80'),
+            })
+            _add_merge_hook(tmpdir)
+            result = run_status(tmpdir, '--set', 'task-a', 'status=done', '--force',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_set_terminal_allowed_without_merge_hook(self):
+        """Workflow without merge hooks — terminal transition permitted freely."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'validation', '0.80'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'status=done',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_set_nonterminal_allowed_with_merge_hook(self):
+        """Non-terminal transitions unaffected by merge hook guard."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'backlog', '0.80'),
+            })
+            _add_merge_hook(tmpdir)
+            result = run_status(tmpdir, '--set', 'task-a', 'status=implementation',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_set_pr_only_allowed_with_merge_hook(self):
+        """Setting pr alone unaffected by merge hook guard (not a terminal field)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'validation', '0.80'),
+            })
+            _add_merge_hook(tmpdir)
+            result = run_status(tmpdir, '--set', 'task-a', 'pr=#57',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_archive_refused_when_merge_hook_and_no_pr(self):
+        """--archive refused when merge hook exists and pr/mod-block empty."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'done', '0.80'),
+            })
+            _add_merge_hook(tmpdir)
+            result = run_status(tmpdir, '--archive', 'task-a',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('merge hook', result.stderr)
+            self.assertTrue(os.path.exists(os.path.join(tmpdir, 'task-a.md')))
+
+    def test_archive_allowed_when_pr_set(self):
+        """--archive permitted when pr is set (hook ran)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'done', '0.80', pr='#57'),
+            })
+            _add_merge_hook(tmpdir)
+            result = run_status(tmpdir, '--archive', 'task-a',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(
+                os.path.exists(os.path.join(tmpdir, '_archive', 'task-a.md'))
+            )
+
+    def test_archive_force_bypasses_guard(self):
+        """--archive --force bypasses the merge-hook invariant."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'done', '0.80'),
+            })
+            _add_merge_hook(tmpdir)
+            result = run_status(tmpdir, '--archive', 'task-a', '--force',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_non_merge_hook_does_not_trigger_guard(self):
+        """Only merge hooks trigger the invariant — startup/idle hooks are ignored."""
+        startup_only = textwrap.dedent("""\
+            ---
+            name: pr-scanner
+            ---
+
+            # PR Scanner
+
+            ## Hook: startup
+
+            Scan PRs.
+            """)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'validation', '0.80'),
+            })
+            _add_merge_hook(tmpdir, mod_name='pr-scanner', content=startup_only)
+            result = run_status(tmpdir, '--set', 'task-a', 'status=done',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+
 if __name__ == '__main__':
     unittest.main()
