@@ -130,6 +130,122 @@ jobs:
           path: ${{ runner.temp }}/spacedock-live/${{ github.job }}
           if-no-files-found: warn
 
+  claude-live-opus:
+    runs-on: ubuntu-latest
+    environment:
+      name: CI-E2E-OPUS
+      deployment: false
+    env:
+      DISABLE_AUTOUPDATER: "1"
+      KEEP_TEST_DIR: "1"
+      TRIGGER_SOURCE: ${{ github.event_name }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Check required secret
+        run: |
+          if [ -z "${ANTHROPIC_API_KEY}" ]; then
+            echo "ANTHROPIC_API_KEY is required for claude-live-opus." >&2
+            exit 1
+          fi
+
+      - name: Load PR provenance
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const triggerSource = process.env.TRIGGER_SOURCE;
+            let rawPrNumber;
+
+            if (triggerSource === "pull_request") {
+              rawPrNumber = process.env.PR_NUMBER;
+            } else if (triggerSource === "workflow_dispatch") {
+              rawPrNumber = process.env.DISPATCH_PR_NUMBER;
+            } else {
+              core.setFailed(`Unsupported trigger source: ${JSON.stringify(triggerSource)}`);
+              return;
+            }
+
+            const prNumber = Number(rawPrNumber);
+            if (!Number.isInteger(prNumber) || prNumber <= 0) {
+              core.setFailed(`${triggerSource} PR number must be a positive integer, got ${JSON.stringify(rawPrNumber)}`);
+              return;
+            }
+
+            const { owner, repo } = context.repo;
+            const { data: pull } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber,
+            });
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner,
+              repo,
+              pull_number: prNumber,
+              per_page: 100,
+            });
+
+            const approvers = [...new Set(
+              reviews
+                .filter((review) => review.state === "APPROVED" && review.user?.login)
+                .map((review) => review.user.login)
+            )];
+            const sameRepo = pull.head.repo?.full_name === pull.base.repo?.full_name;
+
+            await core.summary
+              .addHeading("Runtime Live E2E Provenance")
+              .addRaw(`- Trigger source: ${triggerSource}\n`)
+              .addRaw(`- PR number: #${prNumber}\n`)
+              .addRaw(`- Tested workflow SHA: \`${context.sha}\`\n`)
+              .addRaw(`- Current PR head SHA: \`${pull.head.sha}\`\n`)
+              .addRaw(`- Branch source: ${sameRepo ? "same-repo" : `fork (${pull.head.repo?.full_name ?? "unknown"})`}\n`)
+              .addRaw(`- Approval context: ${approvers.length ? approvers.join(", ") : "none recorded"}\n`)
+              .write();
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Prepare live artifact root
+        run: |
+          mkdir -p "$RUNNER_TEMP/spacedock-live/$GITHUB_JOB"
+          echo "SPACEDOCK_TEST_TMP_ROOT=$RUNNER_TEMP/spacedock-live/$GITHUB_JOB" >> "$GITHUB_ENV"
+
+      - name: Install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global init.defaultBranch main
+
+      - name: Show tool versions
+        run: |
+          claude --version
+          uv --version
+
+      - name: Run Claude live suite (opus)
+        run: make test-live-claude-opus
+
+      - name: Upload Claude live opus artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-live-e2e-claude-live-opus
+          path: ${{ runner.temp }}/spacedock-live/${{ github.job }}
+          if-no-files-found: warn
+
   codex-live:
     runs-on: ubuntu-latest
     environment:

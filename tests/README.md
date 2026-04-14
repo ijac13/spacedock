@@ -195,9 +195,10 @@ uv run tests/test_gate_guardrail.py --runtime codex
 
 The expensive runtime-backed PR suite lives in `.github/workflows/runtime-live-e2e.yml`. It triggers on `pull_request` so the runtime jobs show up on the PR alongside Static CI, and it still supports `workflow_dispatch` for targeted reruns.
 
-The default PR-triggered path is intentionally fixed. When a PR opens, GitHub creates exactly two live jobs:
+The default PR-triggered path is intentionally fixed. When a PR opens, GitHub creates three live jobs:
 
 - `claude-live`
+- `claude-live-opus`
 - `codex-live`
 
 Those jobs are not parameterized at approval time. The environment review UI only releases already-defined jobs; it does not collect `workflow_dispatch` inputs such as model selection or matrix expansion.
@@ -205,15 +206,16 @@ Those jobs are not parameterized at approval time. The environment review UI onl
 GitHub still presents the approval flow through the deployment review UI, even though the jobs set `deployment: false`. The current environment split is:
 
 - `CI-E2E` for `claude-live`
+- `CI-E2E-OPUS` for `claude-live-opus`
 - `CI-E2E-CODEX` for `codex-live`
 
-Until an approved reviewer releases the relevant environment, that job stays pending and cannot access the environment-scoped API key.
+Each environment has its own approval gate, so `claude-live-opus` can be released independently from `claude-live` — useful when a haiku run flakes in a way that may be model-specific, or when extra signal is wanted before merging a dispatch-prose change. Until an approved reviewer releases the relevant environment, that job stays pending and cannot access the environment-scoped API key.
 
 ### Operator flow
 
-1. **Push a PR** — The workflow triggers automatically. The `claude-live` and `codex-live` jobs appear on the PR status as pending review, with a "waiting for environment approval" banner in Actions. `make test-static` runs immediately without approval and reports back like any normal CI job.
+1. **Push a PR** — The workflow triggers automatically. The `claude-live`, `claude-live-opus`, and `codex-live` jobs appear on the PR status as pending review, with a "waiting for environment approval" banner in Actions. `make test-static` runs immediately without approval and reports back like any normal CI job.
 2. **Captain decides the PR is ready for live validation.** Typical triggers: static CI is green, the PR description matches the diff, and the cost of burning live-runtime budget is justified.
-3. **Approve the environment deployment.** Either through the GitHub UI (the PR's "pending review" banner → "Review deployments" → approve `CI-E2E` and/or `CI-E2E-CODEX`), or via the CLI:
+3. **Approve the environment deployment.** Either through the GitHub UI (the PR's "pending review" banner → "Review deployments" → approve `CI-E2E`, `CI-E2E-OPUS`, and/or `CI-E2E-CODEX`), or via the CLI:
    ```bash
    gh api repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments \
      -f 'environment_ids[]={env_id}' -F state=approved -f comment='approved'
@@ -227,7 +229,7 @@ Until an approved reviewer releases the relevant environment, that job stays pen
 | Target | Model | When to use |
 |--------|-------|-------------|
 | `make test-live-claude` | haiku (default) | The primary CI signal. Runs on the `CI-E2E` environment via `runtime-live-e2e.yml`. Cheap, fast, catches most regressions. |
-| `make test-live-claude-opus` | opus with `--effort low` | Stronger-model variant of the same suite. Useful when a haiku run flakes in a way that may be model-specific, or when a dispatch-prose change needs a second signal. Not wired into the default CI workflow — invoke manually (`make test-live-claude-opus`) or add a separate job if it becomes a regular gate. |
+| `make test-live-claude-opus` | opus with `--effort low` | Stronger-model variant of the same suite. Runs on the `CI-E2E-OPUS` environment via `runtime-live-e2e.yml`. Separately approvable from the haiku job, so it can be released when a haiku run flakes in a way that may be model-specific, or when a dispatch-prose change needs a second signal. |
 | `make test-live-codex` | codex default | Codex-runtime equivalent. Runs on the `CI-E2E-CODEX` environment. |
 
 Open a PR and then approve the pending environment review to release the live runtime checks. For targeted reruns, API-driven launches, or future release-branch matrix runs, invoke the workflow manually from Actions or with:
@@ -241,6 +243,7 @@ gh workflow run runtime-live-e2e.yml --ref <pr-branch> -f pr_number=<N>
 Required environment secrets:
 
 - `CI-E2E`: `ANTHROPIC_API_KEY` for `claude-live`
+- `CI-E2E-OPUS`: `ANTHROPIC_API_KEY` for `claude-live-opus`
 - `CI-E2E-CODEX`: `OPENAI_API_KEY` for `codex-live`
 
 Each job fails immediately with a clear message if its required secret is missing after the environment is approved.
@@ -259,6 +262,7 @@ Operators should expect each job summary to show the run provenance explicitly:
 The live workflow sets `KEEP_TEST_DIR=1` automatically and uploads each job's preserved temp dirs as GitHub Actions artifacts:
 
 - `runtime-live-e2e-claude-live`
+- `runtime-live-e2e-claude-live-opus`
 - `runtime-live-e2e-codex-live`
 
 For local debugging, set `KEEP_TEST_DIR=1` to preserve temp directories after test runs. Set `SPACEDOCK_TEST_TMP_ROOT=/path/to/root` to force `TestRunner` to create preserved dirs under a predictable parent directory.

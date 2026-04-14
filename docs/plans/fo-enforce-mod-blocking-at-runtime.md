@@ -562,3 +562,24 @@ Validated mod-block enforcement implementation against all 17 checklist items. A
 16. DONE: Implementation note 3 verified — `claude-first-officer-runtime.md` Mod-Block Enforcement section includes: "If the blocking mod file (`{workflow_dir}/_mods/{mod_name}.md`) is missing or unreadable, report to the captain: 'Blocking mod {mod_name} is missing. The entity is stuck. Options: restore the mod file, or use `--force` to clear the block and resume normal flow.' Wait for captain direction before proceeding."
 
 17. DONE: Recommendation — **PASSED**. All 12 acceptance criteria verified with evidence from test execution and prose inspection. All 3 implementation notes addressed. 232 static tests green. No issues found.
+
+## Stage Report
+
+### Implementation (cycle 3 — fold #150 into #114)
+
+#### Summary
+
+Added the permanent `claude-live-opus` CI job to `.github/workflows/runtime-live-e2e.yml`, gated on the new `CI-E2E-OPUS` environment. The job mirrors the existing `claude-live` shape (same provenance step, checkout/setup, secret check, git identity, artifact upload), diverging only on environment name, run command (`make test-live-claude-opus`), and artifact name (`runtime-live-e2e-claude-live-opus`). Extended `tests/test_runtime_live_e2e_workflow.py` with assertions for the new job's presence, environment, secret scoping, make target, and artifact name. Updated `tests/README.md` Live E2E section to document the three-job flow and the independent opus approval gate. `make test-static` reports 283 passed (including the 8 workflow tests; the 51-test delta vs the prior cycle's 232 is from unrelated work merged in between cycles).
+
+#### Checklist
+
+1. DONE: Read #150 spec and existing workflow file — spec recovered from commit `086b4615` (`docs/plans/runtime-live-e2e-claude-opus-job.md`); current workflow reviewed at `.github/workflows/runtime-live-e2e.yml`.
+2. DONE: Added `claude-live-opus` job to `.github/workflows/runtime-live-e2e.yml` — inserted between `claude-live` and `codex-live`, `environment: CI-E2E-OPUS`, runs `make test-live-claude-opus`, uploads `runtime-live-e2e-claude-live-opus` artifact, reuses the same provenance-loading step shape.
+3. DONE: Extended `tests/test_runtime_live_e2e_workflow.py` — renamed the two-jobs test to `has_expected_runtime_jobs` with opus assertions, added opus section to artifact/preserve-dirs loop, added opus secret-scoping asserts, added `make test-live-claude-opus` make-target assert in the opus section, added `CI-E2E-OPUS` and `claude-live-opus` assertions in the README test. 8/8 workflow tests pass.
+4. DONE: Updated `tests/README.md` Live E2E CI section — operator flow now lists three jobs and three environments, Makefile-targets table entry for `test-live-claude-opus` references `CI-E2E-OPUS` and dropped the "not wired into CI" caveat, required-secrets list adds `CI-E2E-OPUS`, artifacts list adds `runtime-live-e2e-claude-live-opus`.
+5. DONE: Ran `make test-static` — 283 passed, 10 subtests passed in 5.79s. All 8 tests in `test_runtime_live_e2e_workflow.py` pass (confirmed via targeted verbose run).
+6. DONE: Commit on `spacedock-ensign/fo-enforce-mod-blocking-at-runtime` — see commit below.
+
+### Summary
+
+Permanent `claude-live-opus` CI job added to `runtime-live-e2e.yml` gated on `CI-E2E-OPUS`, with matching static test coverage and README updates. Folds the #150 spec into the #114 PR per CL direction.

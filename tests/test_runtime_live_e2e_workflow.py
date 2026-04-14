@@ -48,16 +48,21 @@ def test_runtime_live_e2e_workflow_supports_pr_and_manual_triggers():
     assert "required: true" in text
 
 
-def test_runtime_live_e2e_workflow_has_exactly_two_runtime_jobs():
+def test_runtime_live_e2e_workflow_has_expected_runtime_jobs():
     text = read_workflow()
     claude_section = section(text, "  claude-live")
+    claude_opus_section = section(text, "  claude-live-opus")
     codex_section = section(text, "  codex-live")
 
     assert "\n  claude-live:\n" in text
+    assert "\n  claude-live-opus:\n" in text
     assert "\n  codex-live:\n" in text
     assert "environment:" in claude_section
     assert "name: CI-E2E" in claude_section
     assert "deployment: false" in claude_section
+    assert "environment:" in claude_opus_section
+    assert "name: CI-E2E-OPUS" in claude_opus_section
+    assert "deployment: false" in claude_opus_section
     assert "environment:" in codex_section
     assert "name: CI-E2E-CODEX" in codex_section
     assert "deployment: false" in codex_section
@@ -69,10 +74,12 @@ def test_runtime_live_e2e_workflow_has_exactly_two_runtime_jobs():
 def test_runtime_live_e2e_workflow_preserves_and_uploads_live_test_dirs():
     text = read_workflow()
     claude_section = section(text, "  claude-live")
+    claude_opus_section = section(text, "  claude-live-opus")
     codex_section = section(text, "  codex-live")
 
     for job_section, artifact_name in (
         (claude_section, "runtime-live-e2e-claude-live"),
+        (claude_opus_section, "runtime-live-e2e-claude-live-opus"),
         (codex_section, "runtime-live-e2e-codex-live"),
     ):
         assert 'KEEP_TEST_DIR: "1"' in job_section
@@ -91,20 +98,28 @@ def test_runtime_live_e2e_workflow_preserves_and_uploads_live_test_dirs():
 def test_runtime_live_e2e_workflow_scopes_secrets_to_the_matching_job():
     text = read_workflow()
     claude_section = section(text, "  claude-live")
+    claude_opus_section = section(text, "  claude-live-opus")
     codex_section = section(text, "  codex-live")
 
     assert "ANTHROPIC_API_KEY" in claude_section
     assert "OPENAI_API_KEY" not in claude_section
+    assert "ANTHROPIC_API_KEY" in claude_opus_section
+    assert "OPENAI_API_KEY" not in claude_opus_section
     assert "OPENAI_API_KEY" in codex_section
     assert "ANTHROPIC_API_KEY" not in codex_section
-    assert "is required for claude-live" in claude_section
+    assert "is required for claude-live." in claude_section
+    assert "is required for claude-live-opus." in claude_opus_section
     assert "is required for codex-live" in codex_section
 
 
 def test_runtime_live_e2e_workflow_uses_stable_make_targets_and_provenance_fields():
     text = read_workflow()
+    claude_opus_section = section(text, "  claude-live-opus")
 
     assert "make test-live-claude" in text, "claude-live job should call make test-live-claude"
+    assert "make test-live-claude-opus" in claude_opus_section, (
+        "claude-live-opus job should call make test-live-claude-opus"
+    )
     assert "make test-live-codex" in text, "codex-live job should call make test-live-codex"
 
     for field in (
@@ -155,7 +170,9 @@ def test_tests_readme_documents_runtime_live_e2e_workflow():
     assert "workflow_dispatch" in text
     assert "pull_request" in text
     assert "CI-E2E" in text
+    assert "CI-E2E-OPUS" in text
     assert "claude-live" in text
+    assert "claude-live-opus" in text
     assert "codex-live" in text
     assert "ANTHROPIC_API_KEY" in text
     assert "OPENAI_API_KEY" in text
