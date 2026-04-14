@@ -576,13 +576,15 @@ This task must green `test_dispatch_completion_signal.py` in `make test-live-cla
 
 9. **Run `make test-static` and report full output.** DONE. 247 passed, 0 failed, 10 subtests passed in 6.13s. No regressions.
 
-10. **Run completion-signal E2E test.** The live E2E test (`test_dispatch_completion_signal.py --runtime claude`) was launched. Note: this test validates the full integration path — the FO reading the updated runtime adapter, using `claude-team build` to assemble the dispatch, and the ensign receiving the completion signal. The structured helper makes the completion signal deterministic, but the FO must actually invoke it. The `make test-live-claude` target does not exist yet (planned in #148); once the E2E passes, the test should be included in that target.
+10. **Run completion-signal E2E test.** DONE. `test_dispatch_completion_signal.py --runtime claude` passes: 5/5 checks, 0 failures. Wallclock 134s on haiku. The FO dispatched an ensign with the completion signal instruction, the ensign sent the SendMessage completion, and the entity was archived without manual captain intervention. Added `test-live-claude` Makefile target that runs this test.
 
-11. **Commit with meaningful messages on the branch.** DONE. Four commits on `spacedock-ensign/build-dispatch-structured-helper`:
+11. **Commit with meaningful messages on the branch.** DONE. Commits on `spacedock-ensign/build-dispatch-structured-helper`:
     - `feat: add claude-team build subcommand for structured dispatch assembly`
     - `feat: replace Agent() dispatch template with claude-team build helper`
     - `test: add unit tests for claude-team build subcommand`
     - `test: add static content tests for structured dispatch and break-glass`
+    - `report: implementation stage report for build-dispatch-structured-helper`
+    - `ci: add test-live-claude Makefile target and update stage report`
 
 ### Summary
 
