@@ -469,7 +469,15 @@ def create_test_project(runner: TestRunner, name: str = "test-project") -> Path:
 
 
 def setup_fixture(runner: TestRunner, fixture_name: str, pipeline_dir: str) -> Path:
-    """Copy a fixture from tests/fixtures/ into the test project pipeline directory."""
+    """Copy a fixture from tests/fixtures/ into the test project pipeline directory.
+
+    When the fixture registers a merge hook (`_mods/*.md` with `## Hook: merge`),
+    the fixture's stub `status` script is overwritten with the commissioned
+    Python status script from `skills/commission/bin/status`. The commissioned
+    script enforces the mod-block + merge-hook invariants the stub scripts
+    cannot implement in shell, and without it live tests would bypass those
+    mechanism-level guards by editing entity frontmatter directly.
+    """
     fixture_path = runner.repo_root / "tests" / "fixtures" / fixture_name
     dest = runner.test_project_dir / pipeline_dir
     dest.mkdir(parents=True, exist_ok=True)
@@ -482,12 +490,39 @@ def setup_fixture(runner: TestRunner, fixture_name: str, pipeline_dir: str) -> P
         else:
             shutil.copy2(item, target)
 
+    if _fixture_has_merge_hook(dest):
+        _install_commissioned_status_script(runner.repo_root, dest)
+
     # Make status script executable if present
     status = dest / "status"
     if status.exists():
         status.chmod(status.stat().st_mode | 0o111)
 
     return dest
+
+
+def _fixture_has_merge_hook(pipeline_dir: Path) -> bool:
+    """True when the fixture's _mods/ contains at least one `## Hook: merge` entry."""
+    mods_dir = pipeline_dir / "_mods"
+    if not mods_dir.is_dir():
+        return False
+    for mod_file in mods_dir.glob("*.md"):
+        for line in mod_file.read_text().splitlines():
+            if line.strip() == "## Hook: merge":
+                return True
+    return False
+
+
+def _install_commissioned_status_script(repo_root: Path, pipeline_dir: Path) -> None:
+    """Template and install the real skills/commission/bin/status into pipeline_dir."""
+    template = (repo_root / "skills" / "commission" / "bin" / "status").read_text()
+    content = template.replace("{spacedock_version}", "0.0.0-live-fixture")
+    content = content.replace("{entity_label}", "task")
+    content = content.replace(
+        "{stage1}, {stage2}, ..., {last_stage}",
+        "backlog, ideation, implementation, validation, done",
+    )
+    (pipeline_dir / "status").write_text(content)
 
 
 def install_agents(runner: TestRunner, include_ensign: bool = False) -> Path:

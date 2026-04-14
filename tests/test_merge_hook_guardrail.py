@@ -149,7 +149,7 @@ def main():
     git_add_commit(t.test_project_dir, "setup: merge hook guardrail test fixture")
 
     t.check_cmd("status script runs without errors",
-                ["bash", "merge-hook-pipeline/status"], cwd=t.test_project_dir)
+                ["merge-hook-pipeline/status"], cwd=t.test_project_dir)
 
     print()
 

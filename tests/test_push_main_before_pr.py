@@ -128,7 +128,7 @@ def main():
     print(f"  Bare remote:  {bare_repo}")
 
     t.check_cmd("status script runs without errors",
-                ["bash", "push-main-pipeline/status"], cwd=t.test_project_dir)
+                ["push-main-pipeline/status"], cwd=t.test_project_dir)
 
     print()
 
@@ -182,16 +182,22 @@ def main():
         for line in push_lines:
             print(f"    {line}")
 
-        # Find the push-origin-main and push-origin-branch lines
+        # Find the push-origin-main and push-origin-branch lines. Accept
+        # `push origin X` with optional flags between `push` and `origin`
+        # (e.g. `push -u origin X`), and with any git-level options before the
+        # `push` subcommand (e.g. `git -C <dir> push origin X`).
         main_push_idx = None
         branch_push_idx = None
+        push_origin_re = re.compile(r"(?:^|\s)push(?:\s+-\S+)*\s+origin\s+(\S+)")
         for i, line in enumerate(push_lines):
-            if re.search(r"git push origin main", line):
+            m = push_origin_re.search(line)
+            if not m:
+                continue
+            target = m.group(1)
+            if target == "main":
                 if main_push_idx is None:
                     main_push_idx = i
-            # Branch push: "git push origin <branch-name>" where branch-name is not "main"
-            branch_match = re.search(r"git push origin (\S+)", line)
-            if branch_match and branch_match.group(1) != "main":
+            else:
                 if branch_push_idx is None:
                     branch_push_idx = i
 
