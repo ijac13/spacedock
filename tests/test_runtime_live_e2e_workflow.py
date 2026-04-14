@@ -136,6 +136,14 @@ def test_live_makefile_targets_do_not_require_bash_without_declaring_it():
         assert "SHELL := /bin/bash" in text
 
 
+def test_live_makefile_skips_push_main_before_pr_until_mod_block_enforcement_lands():
+    text = read_makefile()
+
+    assert "# SKIPPED: test_push_main_before_pr.py" in text
+    assert "Track: #114" in text
+    assert "\n\tuv run tests/test_push_main_before_pr.py" not in text
+
+
 def test_tests_readme_documents_runtime_live_e2e_workflow():
     text = read_readme()
 
