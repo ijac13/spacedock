@@ -109,3 +109,308 @@ This guarantees every parallel test runs regardless of sequential failures, whil
 - Every live test carries exactly one tier marker (`sequential` or `parallel`).
 - The CI summary clearly shows how many tests were collected, ran, passed, and failed — distinct from whether the suite short-circuited.
 - The Makefile does not use `&&` to chain individual test invocations.
+
+## Test Inventory (ideation, 2026-04-13)
+
+### Classification conventions
+
+- **Kind:** `live` = spawns `claude -p` / `codex exec` / PTY `claude` under test; `static` = no runtime spawn, only file/content assertions; `unit` = pure Python helper tests; `spike` = experiment/probe, not a gate.
+- **Runtime:** `claude-pipe`, `claude-pty`, `codex`, `shared` (parametrized), or `none`.
+- **Subsystem:** FO template (`fo`), ensign template (`ensign`), `status` script, `claude-team` helper, commission skill, mods (pr-merge/merge-hook), CI workflows, test harness itself.
+- **Stage:** gate, dispatch, validation, merge, commission, archive, bootstrap, or "template-content" for static contract checks.
+- **Parallel candidacy:** `yes` (hermetic — own tmpdir, own git, no shared globals), `no` (spike/probe or shares claude config state problematically), `n/a` (static/unit — trivially parallel).
+
+A note on shared Claude-runtime state: `run_first_officer` does **not** isolate `HOME` / `~/.claude` between concurrent invocations. Every live_claude test spawns `claude -p` against the host's Claude config. Parallelism at `-n auto` is therefore bounded by whatever the Claude CLI tolerates for concurrent sessions against the same OAuth token and cache. In practice this has not been stress-tested; the design below starts conservative (`-n 2`) and makes the worker count a Makefile knob.
+
+### Inventory — `tests/`
+
+| # | File | Kind | Runtime | Subsystem / Stage | Purpose (one sentence) | Concrete failure caught | Parallel candidate | Redundancy / overlap | Tautology risk |
+|---|------|------|---------|-------------------|------------------------|--------------------------|--------------------|----------------------|----------------|
+| 1 | `test_agent_captain_interaction.py` | live | claude-pipe | fo / dispatch | FO uses direct text to captain and does not prematurely shut down agents (AC6, AC7). | Regression where FO reaches for SendMessage-to-captain or pre-kills the ensign before completion signal. | yes | Shares the "no premature shutdown" axis with `test_dispatch_completion_signal` but exercises it via agent-captain text channel, not completion signal. Keep both. | Low — parses real log for shutdown patterns. |
+| 2 | `test_agent_content.py` | static | none | fo + ensign / template-content | Pytest-native static asserts on assembled agent content: Claude wait policy, Codex wait policy, shared guardrail wording. | Contract drift where SKILL.md / agent wrapper loses a required line. | n/a | Overlaps `test_codex_packaged_agent_ids.py` for *Codex* prompt-discipline wording; the two split cleanly (this file = shared contract, that file = Codex-specific). | Low — matches strings, but they are load-bearing contracts. |
+| 3 | `test_ci_static_workflow.py` | static | none | CI workflows | Verifies `.github/workflows/ci-static.yml` uses the canonical `pytest tests/ --ignore=tests/fixtures` entrypoint. | Someone hand-edits the workflow and breaks the static CI signal. | n/a | None. | Low. |
+| 4 | `test_claude_team.py` | unit + static | none | claude-team helper | Unit tests for `scripts/claude-team` — context-budget math, model mapping, dispatch assembly, validation. | Refactor of the helper silently breaks token thresholds or dispatch structure. | n/a | None. Largest file (1073 lines); heavy pytest-native parametrize. | Low — exercises real subprocess-invoked binary. |
+| 5 | `test_codex_packaged_agent_e2e.py` | live | codex | fo / dispatch | Proves Codex FO reuses packaged workers and honors explicit shutdown. | Codex adapter loses reuse semantics or ignores shutdown directive. | yes | Partial overlap with `test_reuse_dispatch.py` (Claude reuse); the Codex path is a distinct adapter. | Low — parses codex log spawn count. |
+| 6 | `test_codex_packaged_agent_ids.py` | unit | none | fo / template-content | Pure-Python coverage of Codex worker-id resolution and FO/bootstrap prompt shape. | Bootstrap prompt loses required id or wait-policy wording. | n/a | See #2 note — split is clean. | Low. |
+| 7 | `test_commission_template.py` | static | none | commission / template-content | Static structural checks on `skills/commission/SKILL.md` (Schema section has no YAML fence, required sections). | Template edit breaks schema fencing. | n/a | Partial overlap with `test_commission.py` AC-set (which also validates commission output); this one is cheaper (no live run). | Low. |
+| 8 | `test_commission.py` | live | claude-pipe | commission / commission | Batch-mode commission E2E: runs `run_commission`, validates every output artifact (README, entities, status script, mod). | Commission skill regresses on output shape, frontmatter, guardrails. | yes | See #7; they are complementary. | Low — inspects generated files. |
+| 9 | `test_dispatch_completion_signal.py` | live | claude-pipe | fo / dispatch | Team-mode dispatch: ensign sends `SendMessage(team-lead, "Done: …")`, FO advances status. | Recurrence of #114 pattern: FO silently drops completion signal; entity stalls. | yes | Touches the same FO code path as `test_dispatch_names.py` and `test_reuse_dispatch.py` but asserts a *different* invariant (completion-signal handling). Keep. | Low — asserts on status advance + archive, not on mocked text. |
+| 10 | `test_dispatch_names.py` | live | claude-pipe | fo / dispatch | Full multi-stage pipeline runs without agents getting killed by stale shutdowns (dispatch-name collision regression). | #90-era collision where reusing a stage name kills the live agent. | yes | Overlap with `test_team_dispatch_sequencing.py` (both use `multi-stage-pipeline` / `gated-pipeline`), but they assert different invariants. | Low. |
+| 11 | `test_feedback_keepalive_helpers.py` | unit | none | fo / harness | Regex unit tests for the `_agent_targets_stage` helper inside `test_feedback_keepalive.py`. | Prompt-format change silently regresses the stage-detection regex. | n/a | Scaffolding for #12 — pure unit-level. | **Medium** — this *only* tests a helper that lives inside another test file. It's defensible as a regression guard for the regex but indicates the helper probably belongs in `scripts/test_lib.py` where it can serve more than one test. **Call out:** migration is a good moment to move `_agent_targets_stage` into `test_lib.py` so this unit test stops reaching sideways into a peer test module. |
+| 12 | `test_feedback_keepalive.py` | live | claude-pipe | fo / validation | FO keeps implementation ensign alive across validation rejection; routes feedback via SendMessage instead of fresh dispatch. | Regression where rejected validation respawns a fresh implementer instead of reusing the kept-alive one. | yes | Close sibling of `test_rejection_flow.py` (both exercise rejection path). The split: this one asserts *keepalive* (no fresh dispatch); rejection_flow asserts *flow* (fresh dispatch for fix after reject). They are complementary and in tension — together they pin the policy. | Low. |
+| 13 | `test_gate_guardrail.py` | live | shared (claude + codex) | fo / gate | FO halts at a gate and does not self-approve. | Regression: FO marks gate approved without captain. | yes | None — smallest/simplest live test, intended pilot. | Low. |
+| 14 | `test_interactive_poc.py` | live | claude-pty | harness | PoC that the PTY harness itself works (offline helpers + live smoke). | Regression in `InteractiveSession` framework. | **no** (PTY is not parallel-safe against shared claude config; see note above) | Scaffolding for #21. | **Medium** — runs mostly `assert` statements against local helpers (`_strip_ansi`, `_KEY_SEQUENCES`) that are pure Python — those are fine. The live smoke portion is a real signal. Split it: pure-python asserts → unit marker, live smoke → live_claude_sequential. |
+| 15 | `test_merge_hook_guardrail.py` | live | shared (claude + codex) | fo / merge | Merge hooks fire before local merge; no-mods fallback works. | Merge hook registration regresses; FO silently skips hooks. | yes | None. | Low. |
+| 16 | `test_output_format.py` | live | claude-pipe | fo / dispatch | FO obeys README `## Output Format` block, falls back to default when absent. | Regression in per-workflow output-format lookup. | yes | None. | Low. |
+| 17 | `test_pr_merge_template.py` | static (unittest) | none | mods / template-content | Wording, word-count, and AC regression tests for `docs/plans/_mods/pr-merge.md`. | Template prose drifts outside AC bounds. | n/a | None. Uses `unittest.TestCase` rather than pytest-native; pytest collects it fine. | Low — content asserts. |
+| 18 | `test_push_main_before_pr.py` | live | claude-pipe | mods / merge | `pr-merge` mod pushes `main` before the branch; gh stub sees `gh pr create`. | Push ordering regresses (PR opens against stale main). | **no** — heavier test that stubs `git`/`gh` via wrapper scripts; safer serialized. With its sibling `test_rebase_branch_before_push.py` it would compete for the same `push-main-pipeline` semantics if parallelized. (Both run their own tmpdir, but CL's inventory instruction wants this flagged.) | Overlaps heavily with `test_rebase_branch_before_push.py` (same fixture, same stub strategy). The distinction: this test asserts push-order invariants; the rebase test asserts rebase-before-push invariants. Keep both but sequence them. | Low. |
+| 19 | `test_rebase_branch_before_push.py` | live | claude-pipe | mods / merge | `pr-merge` mod rebases branch onto main via bare-repo remote before push; merge-base validation. | Rebase step skipped; PR opens with stale base. | **no** — same reason as #18 (stubs + PR side-effects). | See #18. | Low. |
+| 20 | `test_rejection_flow.py` | live | shared (claude + codex) | fo / validation | Rejected validation triggers a fix dispatch via relay protocol. | Rejection path fails to re-dispatch implementer. | yes | See #12. | Low. |
+| 21 | `test_repo_edit_guardrail.py` | live | claude-pipe | fo / dispatch | FO refuses to directly edit code/tests/mods on main before dispatch. | FO starts editing source files instead of dispatching an ensign. | yes | Partial overlap with `test_scaffolding_guardrail.py` (same *pattern* — guardrail blocks direct edits) but different target set (code/tests/mods vs. scaffolding/issues). | Low. |
+| 22 | `test_reuse_dispatch.py` | live | claude-pipe | fo / dispatch | Ensign reuse uses SendMessage, `fresh: true` forces new Agent dispatch. | Reuse vs fresh semantics regresses. | yes | See #9, #10. | Low. |
+| 23 | `test_runtime_live_e2e_workflow.py` | static | none | CI workflows | Static checks on `.github/workflows/runtime-live-e2e.yml` (PR trigger, approval gating, two jobs). | CI workflow edits break PR approval gating. | n/a | None. | Low. |
+| 24 | `test_scaffolding_guardrail.py` | live | claude-pipe | fo / dispatch | FO refuses to edit scaffolding files and refuses `gh issue create` without captain approval. | Scaffolding/issue guardrail regresses. | yes | See #21. **Note** the Makefile already marks this SKIPPED because FO currently violates the issue-filing guardrail. Migration must preserve that deliberate skip (as `xfail` or a skip marker with the same rationale — NOT silently enable it). | Low. |
+| 25 | `test_single_entity_mode.py` | live | claude-pty | fo / bootstrap | PTY regression: interactive FO in single-entity mode does NOT create a team. | Interactive bootstrap regresses to team-creating behavior for single-entity workflows. | **no** — PTY; see #14. | Overlap with `test_single_entity_team_skip.py` which exercises the same invariant in pipe mode. Keep both; interactive vs pipe mode have distinct code paths. | Low. |
+| 26 | `test_single_entity_team_skip.py` | live | claude-pipe | fo / bootstrap | Pipe-mode version of #25 — assert `TeamCreate` absent, `team_name` absent from Agent calls. | Same invariant as #25 but for pipe mode. | yes | See #25. | Low. |
+| 27 | `test_spike_termination.py` | spike | claude-pipe | fo / research | Experiments A/B/C on whether/how FO terminates naturally in `claude -p` mode. | n/a — exploratory, not a regression gate. | **no** — spike, ~3x serial experiments, expensive. | **Near-duplicate** of `tests/spike_termination.py`. See #35. | **Medium** — spikes are allowed to be exploratory but this shouldn't run as a gating live test. Migration: mark `@pytest.mark.spike` and exclude from `live_claude` / `live_codex` default targets. |
+| 28 | `test_stats_extraction.py` | unit | none | harness | Parses a known-shape JSONL fixture through `LogParser` + `extract_stats`. | Parser regresses on real stream-json logs. | n/a | None. | **Low, but watch:** fixture is inline and synthetic. Any parser change that also updates the fixture passes vacuously. Keep but add a real-log snapshot as a follow-up if the parser gets more intricate. |
+| 29 | `test_status_script.py` | unit | none | status script | Forms the bulk of status-script coverage (frontmatter parsing, stage ordering, `--next`, `--set`, help output). | Status-script regression in any subcommand. | n/a | #30 imports its helpers — good sharing. | Low. Heaviest pytest suite, very thorough. |
+| 30 | `test_status_set_missing_field.py` | unit | none | status script | Focused coverage for `--set` inserting fields missing from frontmatter. | Missing-field path regresses. | n/a | Extension of #29; imports `build_status_script`, `make_pipeline`, etc. | Low. |
+| 31 | `test_team_dispatch_sequencing.py` | live | claude-pipe | fo / dispatch | No assistant message mixes `TeamCreate`/`TeamDelete` with `Agent` dispatch. | FO batches team-lifecycle and dispatch into the same turn (forbidden). | yes | See #10. | Low. |
+| 32 | `test_team_health_check.py` | live | claude-pipe | fo / dispatch | FO runs `test -f config.json` preflight before first `Agent` dispatch. | Pre-dispatch health check drops off. | yes | None. | Low. |
+| 33 | `test_test_lib_helpers.py` | unit | none | harness | Unit tests for `scripts/test_lib.py` helpers (`probe_claude_runtime`, `bash_command_targets_write`). | Harness helper regression. | n/a | None. | Low. |
+| 34 | `spike_termination.py` | spike | claude-pipe | fo / research | Older sibling of #27 — earlier version of the same experiment set; filename lacks `test_` prefix so pytest would not auto-collect it. | n/a. | **no** — spike. | **Direct redundancy with #27** (`test_spike_termination.py` is the newer, cleaned-up variant). See "Resolution" below. | n/a — spike. |
+
+### Inventory — `scripts/`
+
+| # | File | Kind | Runtime | Subsystem / Stage | Purpose | Failure caught | Parallel | Redundancy | Tautology |
+|---|------|------|---------|-------------------|---------|----------------|----------|-----------|-----------|
+| 35 | `scripts/test_checklist_e2e.py` | live | claude-pipe | fo+ensign / dispatch | Commissions a full workflow then runs FO to verify ensign checklist compliance. | Checklist protocol regression (ensign skips required checklist entries). | yes | None. Lives in `scripts/` because it pre-dates the `tests/` convention; it IS a live test and should move to `tests/`. | Low. |
+| 36 | `scripts/test_lib.py` | library | n/a | harness | Shared test library (TestRunner, parsers, runtime wrappers). Not a test file — naming just starts with `test_`. | n/a — library. | n/a | n/a | n/a. Leave where it is; only rename if we want to stop pytest from attempting collection (it currently skips because there are no `test_*` functions, but the filename is collision-prone). |
+| 37 | `scripts/test_lib_interactive.py` | library | n/a | harness | PTY-session library. Same note as #36. | n/a | n/a | n/a | n/a. |
+
+### Findings — redundancy and tautology resolutions
+
+The inventory surfaces these concrete cleanups that the pytest migration should resolve (or explicitly defer with a rationale):
+
+1. **`tests/spike_termination.py` vs `tests/test_spike_termination.py` (#27 vs #34)** — the non-`test_` file is an older draft of the newer one. Delete `tests/spike_termination.py` during migration; the one we keep carries a `@pytest.mark.spike` marker and is excluded from the live default targets.
+2. **`_agent_targets_stage` helper (#11 vs #12)** — move the helper from `tests/test_feedback_keepalive.py` into `scripts/test_lib.py`. `test_feedback_keepalive_helpers.py` then imports from `test_lib`, which is how every other harness unit test works.
+3. **`scripts/test_checklist_e2e.py` (#35)** — move to `tests/test_checklist_e2e.py`. The `scripts/` location is historical and hides the test from default pytest collection in `tests/`.
+4. **`scripts/test_lib.py` and `scripts/test_lib_interactive.py` (#36, #37)** — leave in `scripts/` (they are libraries, not tests) but confirm pytest does not attempt to collect them as tests. If pytest complains when it tries to import them from a `scripts/conftest.py`, add `collect_ignore` to exclude them.
+5. **`test_interactive_poc.py` (#14)** — split into two test functions: pure-Python asserts under `@pytest.mark.unit`, live PTY smoke under `@pytest.mark.live_claude` + `@pytest.mark.live_claude_sequential`.
+6. **`test_scaffolding_guardrail.py` (#24)** — carry the existing SKIPPED status over as `@pytest.mark.skip(reason="FO violates issue-filing guardrail — see task to file")` so the skip is surfaced in the pytest summary instead of hidden in a Makefile comment.
+7. **Static files written in `unittest`** — `test_pr_merge_template.py` (#17) and `test_status_script.py` / `test_status_set_missing_field.py` (#29, #30) use `unittest.TestCase`. Pytest collects these fine; do not rewrite them just to please a style guide. YAGNI.
+
+No tautologies in the "tests that test mocked behavior" sense were found. Most live tests parse real JSONL logs from a real `claude -p` / `codex exec` subprocess; static tests match against real on-disk template files. The only concerns worth flagging to CL: (a) `test_stats_extraction.py` uses a synthetic inline fixture, and (b) the `_agent_targets_stage` helper test is one layer removed from production code — both are defensible but noted.
+
+## Pytest Structure Design (ideation, 2026-04-13)
+
+### Marker scheme
+
+Registered in `pyproject.toml` under `[tool.pytest.ini_options] markers = [...]`. Using plain markers (not a custom decorator) keeps collection-time discovery simple and lets `pytest -m` filter work out of the box. A small wrapper (`live_claude_stage(tier)`) may be introduced later if we find we're repeating three decorators per test.
+
+| Marker | Meaning |
+|--------|---------|
+| `live_claude` | Test spawns a live Claude runtime (pipe or PTY). |
+| `live_codex` | Test spawns a live Codex runtime. |
+| `live_claude_sequential` | Live-claude test that MUST run serially (PTY, stubbed-git/gh, expensive spike, or explicit sequencing dependency). |
+| `live_claude_parallel` | Live-claude test that is safe to run concurrently with others of the same tier. |
+| `live_codex_sequential` | Codex analog of `live_claude_sequential`. |
+| `live_codex_parallel` | Codex analog of `live_claude_parallel`. |
+| `spike` | Exploratory experiment; excluded from default live/static targets. |
+| `unit` | Pure-Python helper/unit test; always collected by `make test-static`. |
+| `static` | No-runtime content/workflow assertions; always collected by `make test-static`. |
+
+Every live test carries **exactly one** of `live_claude` / `live_codex` (or both when shared) AND **exactly one** tier marker (`_sequential` / `_parallel`). A pytest session hook (`pytest_collection_modifyitems` in `conftest.py`) asserts this invariant at collection time and fails loudly if a new test is added without a tier, so the "every-test-categorized" requirement becomes a hard gate rather than a review check.
+
+### Tier assignments
+
+Parallel tier (`live_claude_parallel` unless noted — those marked † are shared):
+
+- `test_gate_guardrail.py` †
+- `test_rejection_flow.py` †
+- `test_merge_hook_guardrail.py` †
+- `test_feedback_keepalive.py`
+- `test_dispatch_completion_signal.py`
+- `test_dispatch_names.py`
+- `test_reuse_dispatch.py`
+- `test_single_entity_team_skip.py`
+- `test_team_dispatch_sequencing.py`
+- `test_team_health_check.py`
+- `test_output_format.py`
+- `test_repo_edit_guardrail.py`
+- `test_scaffolding_guardrail.py` (skipped; still marked parallel)
+- `test_agent_captain_interaction.py`
+- `test_commission.py`
+- `test_checklist_e2e.py` (after moving to `tests/`)
+- `test_codex_packaged_agent_e2e.py` (`live_codex_parallel`)
+
+Sequential tier (`live_claude_sequential`):
+
+- `test_push_main_before_pr.py` — stubs `git`/`gh`, side-effecty.
+- `test_rebase_branch_before_push.py` — same.
+- `test_single_entity_mode.py` — PTY.
+- `test_interactive_poc.py` (live portion only) — PTY.
+
+Spike (`spike`, excluded from default):
+
+- `test_spike_termination.py`
+- `spike_termination.py` → delete (see Findings #1).
+
+Static / unit (collected by `make test-static`):
+
+- All of: `test_agent_content`, `test_ci_static_workflow`, `test_claude_team`, `test_codex_packaged_agent_ids`, `test_commission_template`, `test_feedback_keepalive_helpers`, `test_pr_merge_template`, `test_runtime_live_e2e_workflow`, `test_stats_extraction`, `test_status_script`, `test_status_set_missing_field`, `test_test_lib_helpers`.
+
+### `conftest.py` shape
+
+A top-level `tests/conftest.py` — with a deliberately short surface:
+
+```python
+# ABOUTME: pytest wiring for live runtime flags, fixtures, and tier-marker invariants.
+# ABOUTME: One conftest at tests/ root — no per-subdir conftests.
+
+def pytest_addoption(parser):
+    parser.addoption("--runtime", action="store", default="claude",
+                     choices=["claude", "codex"])
+    parser.addoption("--model",   action="store", default="haiku")
+    parser.addoption("--effort",  action="store", default="low")
+    parser.addoption("--budget",  action="store", type=float, default=None)
+
+def pytest_configure(config):
+    # Registration is declared in pyproject.toml; this hook stays empty unless
+    # we need dynamic behavior.
+    pass
+
+def pytest_collection_modifyitems(config, items):
+    """Every live_* test must carry exactly one tier marker."""
+    # Fail fast on missing tier; warn on multiple tiers.
+    ...
+
+# --- Fixtures ---
+@pytest.fixture
+def runtime(request):           return request.config.getoption("--runtime")
+@pytest.fixture
+def model(request):             return request.config.getoption("--model")
+@pytest.fixture
+def effort(request):            return request.config.getoption("--effort")
+
+@pytest.fixture
+def test_project(request):
+    """Yield a TestRunner with tmpdir + git init + cleanup on success."""
+    t = TestRunner(request.node.name)
+    t.create_test_project()
+    yield t
+    t.finish()       # prints summary; does NOT sys.exit
+
+@pytest.fixture
+def fo_run(test_project, runtime, model, effort):
+    """Factory fixture — returns a callable that runs FO and returns parsed logs."""
+    def _run(prompt, fixture=None, **extra):
+        ...
+    return _run
+```
+
+Key decisions in the conftest:
+
+- Single conftest at `tests/` root. No nested conftests — the file stays under 150 lines and all wiring is visible.
+- `TestRunner.finish()` (new method) replaces the `sys.exit` path used today. In pytest mode the summary is printed but the process keeps running; standard pytest assertions drive pass/fail.
+- The `test_project` fixture yields a `TestRunner`, so individual tests can keep calling `setup_fixture(t, ...)`, `install_agents(t)`, `run_first_officer(t, ...)` verbatim. This makes the per-test migration a near-mechanical delete-the-`main()`-and-argparse change.
+- `fo_run` is opt-in. Tests that prefer to keep calling `run_first_officer` directly still can — we do not force a new call shape on day one.
+
+### Makefile changes
+
+Replace the hand-rolled `&&` chain with explicit pytest invocations that honor the "sequential tier first, parallel tier regardless" rule:
+
+```makefile
+# Worker count is a knob because we have not yet stress-tested Claude config
+# under concurrency. Start low; raise once green.
+LIVE_CLAUDE_WORKERS ?= 2
+
+test-live-claude:
+	unset CLAUDECODE && \
+	pytest tests/ -m live_claude_sequential -x ; SEQ=$$? ; \
+	pytest tests/ -m live_claude_parallel -n $(LIVE_CLAUDE_WORKERS) ; PAR=$$? ; \
+	test $$SEQ -eq 0 -a $$PAR -eq 0
+
+test-live-codex:
+	pytest tests/ -m live_codex_sequential -x ; SEQ=$$? ; \
+	pytest tests/ -m live_codex_parallel -n $(LIVE_CLAUDE_WORKERS) ; PAR=$$? ; \
+	test $$SEQ -eq 0 -a $$PAR -eq 0
+
+test-static:
+	unset CLAUDECODE && uv run --with pytest python -m pytest tests/ \
+	  --ignore=tests/fixtures -m "not live_claude and not live_codex and not spike" -q
+
+test-e2e:     # single-file override, unchanged shape
+	unset CLAUDECODE && pytest $(TEST) --runtime $(RUNTIME)
+```
+
+- `-x` on the sequential tier is intentional: within a sequential chain the later tests often depend on the earlier setup/learning, so short-circuit is the right semantics. The parallel tier runs regardless.
+- The final `test $$SEQ -eq 0 -a $$PAR -eq 0` makes the overall target fail if *either* tier failed — so CI signal stays honest.
+- The `test-static` marker filter guarantees collection under `tests/` does not accidentally run a live test offline.
+- `test-live-claude-opus` survives as a variant of `test-live-claude` with `--model opus --effort low` override — same shape, different defaults.
+
+### `pyproject.toml`
+
+Add:
+
+```toml
+[tool.pytest.ini_options]
+markers = [
+    "live_claude: spawns a live Claude runtime",
+    "live_codex: spawns a live Codex runtime",
+    "live_claude_sequential: must run serially within the claude tier",
+    "live_claude_parallel: safe to run concurrently within the claude tier",
+    "live_codex_sequential: must run serially within the codex tier",
+    "live_codex_parallel: safe to run concurrently within the codex tier",
+    "spike: exploratory experiment — excluded from default targets",
+    "unit: pure-python unit test",
+    "static: no-runtime content or workflow assertion",
+]
+```
+
+Add `pytest-xdist` to the dev dependency group so `-n` works.
+
+### Migration order
+
+1. **Land the wiring first, migrate zero tests.** Add `conftest.py`, register markers in `pyproject.toml`, add pytest-xdist. Update `tests/README.md` with the new invocation pattern but keep old `uv run` entrypoints intact. Run `make test-static` to prove wiring does not break anything. Commit.
+2. **Pilot: `test_gate_guardrail.py`.** Convert to a pytest function with `@pytest.mark.live_claude @pytest.mark.live_claude_parallel @pytest.mark.live_codex @pytest.mark.live_codex_parallel`. Preserve the old `main()` as a thin `if __name__ == "__main__": pytest.main([__file__])` wrapper so the Makefile / CI can still invoke the file directly during transition. Run under both runtimes manually, commit.
+3. **Update Makefile `test-live-claude` / `test-live-codex`** to the pytest form, with the gate_guardrail test already migrated. Verify chain runs end-to-end. Commit.
+4. **Batch-migrate parallel tier, one commit per file.** Follow the parallel-tier list above in order of increasing complexity: `test_single_entity_team_skip`, `test_team_health_check`, `test_team_dispatch_sequencing`, `test_dispatch_names`, `test_output_format`, `test_repo_edit_guardrail`, `test_scaffolding_guardrail`, `test_reuse_dispatch`, `test_merge_hook_guardrail`, `test_dispatch_completion_signal`, `test_rejection_flow`, `test_feedback_keepalive`, `test_agent_captain_interaction`, `test_commission`, `test_codex_packaged_agent_e2e`.
+5. **Move and migrate `scripts/test_checklist_e2e.py` → `tests/test_checklist_e2e.py`.** Same commit moves the file and converts to pytest.
+6. **Migrate sequential tier.** `test_push_main_before_pr`, `test_rebase_branch_before_push`, `test_single_entity_mode`, `test_interactive_poc` (splitting unit/live halves).
+7. **Handle spikes.** Add `@pytest.mark.spike` to `test_spike_termination.py`. Delete `tests/spike_termination.py`. Exclude `spike` from default targets.
+8. **Helper relocation.** Move `_agent_targets_stage` into `scripts/test_lib.py`; update `test_feedback_keepalive_helpers.py` import path.
+9. **Drop the old `main()` wrappers.** Once every test is migrated and the Makefile is green, remove the `if __name__ == "__main__": pytest.main([__file__])` tails — the Makefile is the only caller.
+10. **Docs.** Final pass over `tests/README.md`, `docs/plans/README.md` Testing Resources, and any onboarding notes. Each mention of `uv run tests/test_...py` becomes `pytest tests/...` or a `make` target.
+
+Each step is a committable checkpoint. Steps 1–3 must land before any CI pipeline flips; steps 4–10 are incremental.
+
+### Acceptance criteria
+
+Each AC lists the concrete command or assertion that verifies it.
+
+1. **Marker registration.** `pyproject.toml` declares all nine markers. Verify: `pytest --markers | grep -E 'live_claude|live_codex|spike|unit|static'` prints each marker with its description.
+2. **Tier invariant enforced at collection.** Every `live_*` test carries exactly one `*_sequential` or `*_parallel` marker. Verify: add a deliberately-mis-marked test in a throwaway branch, run `pytest --collect-only tests/` and assert the custom `pytest_collection_modifyitems` hook fails collection. Remove the throwaway test before merging.
+3. **Conftest fixtures available.** `test_project`, `fo_run`, `runtime`, `model`, `effort`, `budget` are resolvable from any test under `tests/`. Verify: `pytest tests/test_gate_guardrail.py --collect-only -q` shows the test using those fixtures with no "fixture not found" errors.
+4. **Static Makefile target unaffected.** `make test-static` passes with the same test count as pre-migration. Verify: compare `make test-static 2>&1 | tail -1` before and after — the "N passed" count matches (or is higher, per splits like `test_interactive_poc`).
+5. **Sequential-first, parallel-always Makefile behavior.** If a sequential-tier test fails, parallel-tier tests still run and are reported. Verify: run `make test-live-claude` against a branch where `test_push_main_before_pr` is deliberately failing; confirm `test_gate_guardrail`, `test_rejection_flow`, etc. still collected and reported.
+6. **No `&&` chain in Makefile targets.** Verify: `grep -c '&&' Makefile` shows only the `unset CLAUDECODE &&` prefix, not test-file chaining.
+7. **CI summary surfaces collected / ran / passed / failed.** `pytest` default output (`-v` or `-ra`) satisfies this — no custom summary needed. Verify: `make test-live-claude 2>&1 | tail -5` shows the pytest short summary line with explicit counts.
+8. **Every live test categorized (tier + runtime).** Verify: `pytest --collect-only -m 'live_claude and not live_claude_sequential and not live_claude_parallel' tests/` produces zero items (same check for `live_codex`).
+9. **`test-live-claude-opus` variant preserved.** Verify: `make test-live-claude-opus` runs the same test set as `test-live-claude` with `--model opus --effort low` — no behavioral drift beyond the flag override.
+10. **Skipped tests surface as skipped.** `test_scaffolding_guardrail` shows as skipped (with rationale) in the pytest short summary. Verify: `pytest -rs tests/test_scaffolding_guardrail.py` prints `SKIPPED` with the reason.
+11. **Spike tests excluded from default targets.** Verify: `make test-live-claude 2>&1 | grep test_spike_termination` prints nothing; `pytest -m spike tests/` runs them explicitly.
+12. **Checklist test relocated.** `tests/test_checklist_e2e.py` exists and is collected; `scripts/test_checklist_e2e.py` does not. Verify: `git ls-files tests/test_checklist_e2e.py scripts/test_checklist_e2e.py` lists only the `tests/` path.
+13. **Helper relocation.** `scripts/test_lib.py` exports `_agent_targets_stage`; `test_feedback_keepalive_helpers.py` imports from `test_lib`, not from `test_feedback_keepalive`. Verify: `grep -n 'from test_feedback_keepalive' tests/test_feedback_keepalive_helpers.py` is empty; `grep -n '_agent_targets_stage' scripts/test_lib.py` is non-empty.
+
+### Test plan
+
+| Check | Command | Expected | Cost | When run |
+|-------|---------|----------|------|----------|
+| Static regression | `make test-static` | all green, count >= pre-migration | free, ~30s | every commit during migration |
+| Marker invariant | `pytest --collect-only -q tests/` | collection succeeds, no "missing tier" errors | free, ~3s | every commit |
+| Pilot E2E green | `make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=claude` | PASS | ~$0.02 haiku, ~60s | after step 2 |
+| Shared runtime pilot | `make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex` | PASS | ~$0.05 codex, ~90s | after step 2 |
+| Sequential-first short-circuit | `make test-live-claude` with `test_push_main_before_pr` forced-fail | sequential fails, parallel still runs, overall red | ~$0.30 haiku | after step 3 + periodically |
+| Full live-claude green (haiku) | `make test-live-claude` on clean branch | all green | ~$0.30 haiku, ~6–10 min | after each migration batch |
+| Full live-claude green (opus) | `make test-live-claude-opus` | all green | ~$2–3 opus, ~10–15 min | once after migration complete |
+| Full live-codex green | `make test-live-codex` | all green | codex usage ~$1, ~5 min | after codex tests migrate |
+| Spike gating | `make test-live-claude` | no spike test runs; `pytest -m spike` still runs them | free to observe | step 7 |
+
+Total one-time migration cost during ideation + implementation: on the order of $10–15 of live-runtime budget assuming 3 full `test-live-claude` passes, 1 opus, 1 codex, and incremental pilots. No E2E burn is required during ideation — this plan is complete without running live.
+
+## Stage Report
+
+- **Inventory every test file under `tests/`**: **DONE** — 33 files inventoried (#1–#34; `tests/spike_termination.py` counted as #34).
+- **Inventory every test file under `scripts/`**: **DONE** — 3 files (`test_checklist_e2e.py`, `test_lib.py`, `test_lib_interactive.py`, #35–#37). Only `test_checklist_e2e.py` is a real test; the other two are libraries noted as such.
+- **Per-file breakdown (purpose / stage / coverage / parallel / redundancy / tautology)**: **DONE** — see the two tables in "Test Inventory". Columns populated for every row.
+- **Inventory written into entity body as "Test Inventory" section**: **DONE**.
+- **Open classification questions resolved by reading test code**: **DONE** — sequential/parallel calls made by inspecting `run_first_officer` (shared Claude config note), `InteractiveSession` (PTY = sequential), and the stubbed-git/stubbed-gh tests (`test_push_main_before_pr`, `test_rebase_branch_before_push` flagged sequential). Codex isolation via `prepare_codex_skill_home` confirmed per-test.
+- **Pytest structure design written as "Pytest Structure Design" section**: **DONE** — marker scheme, tier assignments, `conftest.py` shape, `pyproject.toml` additions, Makefile rewrite, migration order.
+- **Acceptance criteria — at least one per marker scheme / conftest / Makefile / sequential-parallel split / every-test-categorized**: **DONE** — 13 ACs, each with a concrete verification command. Marker (AC1), conftest (AC3), Makefile (AC5, AC6, AC9), sequential/parallel split (AC5, AC11), every-test-categorized (AC2, AC8).
+- **Test plan with specific commands and cost estimates**: **DONE** — 9-row table with commands, expected outcomes, cost estimates, and when-to-run guidance.
+
+### Summary
+
+The inventory turned up 37 files: 20 live E2E tests (17 parallelizable, 3 sequential — PTY and stubbed-git), 2 spikes to quarantine, 12 static/unit tests that already work under pytest, 1 test misplaced in `scripts/`, and one near-duplicate spike file to delete. The design proposes nine pytest markers (`live_claude`, `live_codex`, their `_sequential`/`_parallel` tiers, `spike`, `unit`, `static`), a single small `tests/conftest.py` that exposes a `TestRunner`-yielding `test_project` fixture and enforces the tier invariant at collection, and a Makefile that runs the sequential tier first (`-x`) and the parallel tier always (`-n $(LIVE_CLAUDE_WORKERS)`), with an explicit failure aggregation so no tier's result is ever masked by another's. Migration starts with wiring-only landing, pilots `test_gate_guardrail.py`, then batches the remaining tests one commit per file, finishing with helper relocation and spike quarantining.
