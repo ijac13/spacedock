@@ -350,11 +350,11 @@ def test_assembled_claude_first_officer_has_dispatch_idle_guardrail():
 
 
 def test_assembled_claude_first_officer_dispatch_template_has_team_mode_completion_signal():
-    """The team-mode dispatch prompt MUST tell the worker to SendMessage(to="team-lead", ...) on completion.
+    """The team-mode dispatch path MUST ensure the worker gets a SendMessage completion instruction.
 
-    Without this, team-dispatched ensigns never see a completion-signal instruction
-    (see task 107 / bug #30703 — team-dispatched agents lose their agents/{name}.md body),
-    and the FO's DISPATCH IDLE GUARDRAIL waits forever for a message that never arrives.
+    The structured helper deterministically includes the completion signal in
+    team-mode prompts. The break-glass fallback template also includes it.
+    Both paths ensure the FO's DISPATCH IDLE GUARDRAIL does not wait forever.
     """
     t = TestRunner("agent content", keep_test_dir=False)
     text = assembled_agent_content(t, "first-officer")
@@ -364,9 +364,8 @@ def test_assembled_claude_first_officer_dispatch_template_has_team_mode_completi
 
     dispatch_section = section_text(runtime_text, "## Dispatch Adapter", (r"^## ",))
 
-    # The team-mode Agent() prompt template must include an explicit SendMessage
-    # completion instruction. The inner quotes may be escaped (because the prompt
-    # literal itself lives inside a double-quoted string in the Agent(...) template).
+    # The break-glass Agent() template includes an explicit SendMessage completion
+    # instruction for team-mode dispatch.
     assert re.search(
         r'SendMessage\(to=\\?"team-lead\\?"',
         dispatch_section,
@@ -375,12 +374,10 @@ def test_assembled_claude_first_officer_dispatch_template_has_team_mode_completi
         'SendMessage(to="team-lead", ...) on completion.'
     )
 
-    # The instruction must be gated on team mode — bare mode returns inline and does not need SendMessage.
-    assert re.search(
-        r"if\s+not\s+bare\s+mode|team[- ]mode|when.*team_name",
-        dispatch_section,
-        re.IGNORECASE,
-    ), "Completion-signal instruction must be conditional on team mode."
+    # The structured helper controls team-mode gating via bare_mode input field.
+    assert "bare_mode" in dispatch_section, (
+        "Dispatch assembly must reference bare_mode for team-mode gating."
+    )
 
     # The assembled FO contract must contain the same signal (sanity check that the
     # runtime file is actually the one loaded via assembled_agent_content).
@@ -504,6 +501,77 @@ def test_assembled_skill_contract_exposes_resolved_include_paths():
     assert "skill include resolution" in text
     assert "first-officer-shared-core.md" in text
     assert "code-project-guardrails.md" in text
+
+
+def test_assembled_claude_first_officer_has_structured_dispatch():
+    """AC-11: Runtime adapter instructs the FO to use claude-team build for dispatch assembly."""
+    t = TestRunner("agent content", keep_test_dir=False)
+    assembled = assembled_agent_content(t, "first-officer")
+
+    runtime_path = Path(__file__).resolve().parent.parent / "skills" / "first-officer" / "references" / "claude-first-officer-runtime.md"
+    runtime_text = runtime_path.read_text()
+
+    dispatch_section = section_text(runtime_text, "## Dispatch Adapter", (r"^## ",))
+
+    # The dispatch section references the helper
+    assert "claude-team build" in dispatch_section, (
+        "Dispatch Adapter must reference claude-team build"
+    )
+
+    # The dispatch section has the input JSON shape
+    assert '"schema_version": 1' in dispatch_section
+    assert '"entity_path"' in dispatch_section
+    assert '"checklist"' in dispatch_section
+
+    # The 4-step process is present
+    assert "Pipe the JSON to the helper" in dispatch_section
+    assert "On exit 0, parse the stdout JSON" in dispatch_section
+    assert "On non-zero exit" in dispatch_section
+
+    # The assembled FO contract must also contain the helper reference
+    assert "claude-team build" in assembled
+
+
+def test_assembled_claude_first_officer_has_break_glass_dispatch():
+    """AC-12: Runtime adapter contains Break-Glass Manual Dispatch with minimal Agent() template."""
+    runtime_path = Path(__file__).resolve().parent.parent / "skills" / "first-officer" / "references" / "claude-first-officer-runtime.md"
+    runtime_text = runtime_path.read_text()
+
+    dispatch_section = section_text(runtime_text, "## Dispatch Adapter", (r"^## ",))
+
+    # Break-glass section exists
+    assert "Break-Glass Manual Dispatch" in dispatch_section, (
+        "Dispatch Adapter must contain Break-Glass Manual Dispatch section"
+    )
+
+    # The break-glass template includes the essential Agent() fields
+    assert 'subagent_type="{dispatch_agent_id}"' in dispatch_section
+    assert 'name="{worker_key}-{slug}-{stage}"' in dispatch_section
+    assert 'team_name="{team_name}"' in dispatch_section
+
+    # It has the SendMessage completion signal
+    assert re.search(
+        r'SendMessage\(to=\\?"team-lead\\?"',
+        dispatch_section,
+    )
+
+
+def test_assembled_claude_first_officer_has_bare_mode_guardrail():
+    """Implementation Note 6: bare_mode guardrail sentence is present in dispatch prose."""
+    runtime_path = Path(__file__).resolve().parent.parent / "skills" / "first-officer" / "references" / "claude-first-officer-runtime.md"
+    runtime_text = runtime_path.read_text()
+
+    dispatch_section = section_text(runtime_text, "## Dispatch Adapter", (r"^## ",))
+
+    assert (
+        "bare_mode" in dispatch_section
+        and "never infer it from the stage" in dispatch_section
+        and "live team state" in dispatch_section
+    ), (
+        "Dispatch prose must contain the bare_mode guardrail: "
+        "'bare_mode field must match the current dispatch context — "
+        "never infer it from the stage, always from the live team state'"
+    )
 
 
 if __name__ == "__main__":

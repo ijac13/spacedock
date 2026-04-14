@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: test-static test-e2e test-live-claude test-live-codex
+.PHONY: test-static test-e2e test-live-claude test-live-claude-opus test-live-codex
 
 TEST ?= tests/test_gate_guardrail.py
 RUNTIME ?= claude
@@ -16,11 +16,21 @@ test-live-claude:
 	uv run tests/test_gate_guardrail.py --runtime claude && \
 	uv run tests/test_rejection_flow.py --runtime claude && \
 	uv run tests/test_feedback_keepalive.py && \
-	uv run tests/test_merge_hook_guardrail.py --runtime claude && \
-	uv run tests/test_rebase_branch_before_push.py
+	uv run tests/test_merge_hook_guardrail.py --runtime claude
+	# SKIPPED: test_dispatch_completion_signal.py — FO drops SendMessage block on haiku. Track: #114
+	# SKIPPED: test_rebase_branch_before_push.py — FO skips merge lifecycle on haiku (no Agent dispatch, no pr-merge invocation). Track: #114
 	# SKIPPED: test_push_main_before_pr.py — FO still archives past pr-merge without persisting pr state. Track: #114
 	# SKIPPED: test_scaffolding_guardrail.py — FO violates issue-filing guardrail. Track: file new task
-	# SKIPPED: test_dispatch_completion_signal.py — FO drops SendMessage block. Track: #120
+
+# test-live-claude-opus runs the full suite including test_dispatch_completion_signal — use it to manually verify completion signal compliance before #114 lands.
+test-live-claude-opus:
+	unset CLAUDECODE && set -euo pipefail && \
+	uv run tests/test_gate_guardrail.py --runtime claude --model opus && \
+	uv run tests/test_rejection_flow.py --runtime claude --model opus --effort low && \
+	uv run tests/test_feedback_keepalive.py --model opus --effort low && \
+	uv run tests/test_merge_hook_guardrail.py --runtime claude --model opus --effort low && \
+	uv run tests/test_rebase_branch_before_push.py --model opus --effort low && \
+	uv run tests/test_dispatch_completion_signal.py --runtime claude --model opus --effort low
 
 test-live-codex:
 	uv run tests/test_gate_guardrail.py --runtime codex && \

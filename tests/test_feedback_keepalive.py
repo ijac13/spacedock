@@ -28,6 +28,30 @@ SHUTDOWN_PATTERN = re.compile(
 )
 
 
+def _agent_targets_stage(agent_input: dict, stage: str) -> bool:
+    """Check whether an Agent() call targets a given stage.
+
+    Checks both the name field (which should contain the stage when the FO
+    follows the naming convention) and the prompt field, which contains a
+    'Stage: {stage}' header. The header appears in two formats depending on
+    whether the FO uses the claude-team build helper or hand-assembles the
+    prompt:
+
+    - plain (helper): ``Stage: implementation``
+    - markdown-bold (hand-assembled by haiku): ``**Stage:** implementation``
+
+    Both forms are accepted.
+    """
+    name_lower = agent_input.get("name", "").lower()
+    if stage in name_lower:
+        return True
+    prompt = agent_input.get("prompt", "")
+    pattern = rf"(?m)^\*{{0,2}}Stage:?\*{{0,2}}\s+\*{{0,2}}{re.escape(stage)}\*{{0,2}}\s*$"
+    if re.search(pattern, prompt):
+        return True
+    return False
+
+
 def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(description="Feedback keepalive E2E test")
     parser.add_argument("--runtime", choices=["claude"], default="claude")
@@ -108,14 +132,13 @@ def scan_keepalive_events(log: LogParser) -> dict:
             if block.get("name") == "Agent":
                 inp = block.get("input", {})
                 name = inp.get("name", "")
-                name_lower = name.lower()
 
-                if "implementation" in name_lower and not impl_dispatch_seen:
+                if _agent_targets_stage(inp, "implementation") and not impl_dispatch_seen:
                     impl_dispatch_seen = True
                     impl_agent_name = name
-                elif "validation" in name_lower and not validation_dispatch_seen:
+                elif _agent_targets_stage(inp, "validation") and not validation_dispatch_seen:
                     validation_dispatch_seen = True
-                elif "implementation" in name_lower and rejection_seen:
+                elif _agent_targets_stage(inp, "implementation") and rejection_seen:
                     # Fresh Agent() dispatch for implementation after rejection
                     feedback_via_fresh_agent = True
 
@@ -233,8 +256,8 @@ def main():
     print("[Agent Dispatch Overview]")
 
     ensign_calls = [c for c in agent_calls if c["subagent_type"] == "spacedock:ensign"]
-    impl_dispatches = [c for c in ensign_calls if "implementation" in c["name"].lower()]
-    val_dispatches = [c for c in ensign_calls if "validation" in c["name"].lower()]
+    impl_dispatches = [c for c in ensign_calls if _agent_targets_stage(c, "implementation")]
+    val_dispatches = [c for c in ensign_calls if _agent_targets_stage(c, "validation")]
 
     print(f"  Total ensign dispatches: {len(ensign_calls)}")
     print(f"  Implementation dispatches: {len(impl_dispatches)}")

@@ -2,8 +2,8 @@
 # /// script
 # requires-python = ">=3.10"
 # ///
-# ABOUTME: Unit tests for the claude-team script's context-budget subcommand.
-# ABOUTME: Tests token extraction, model mapping, threshold logic, and error cases.
+# ABOUTME: Unit tests for the claude-team script's context-budget and build subcommands.
+# ABOUTME: Tests token extraction, model mapping, threshold logic, dispatch assembly, and validation rules.
 
 from __future__ import annotations
 
@@ -497,6 +497,574 @@ class TestRuntimeModelDetection:
         assert data["model"] == "opus[1m]"
         assert data["context_limit"] == 1000000
         assert "config_fallback_warning" in data
+
+
+# --- Build subcommand tests ---
+
+STATUS_PATH = REPO_ROOT / "skills" / "commission" / "bin" / "status"
+WORKFLOW_DIR = REPO_ROOT / "docs" / "plans"
+WORKFLOW_README = WORKFLOW_DIR / "README.md"
+
+
+def _make_workflow_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    """Create a minimal workflow directory with README and entity file for build tests."""
+    wf_dir = tmp_path / "workflow"
+    wf_dir.mkdir()
+    readme = wf_dir / "README.md"
+    readme.write_text(
+        "---\n"
+        "commissioned-by: spacedock@test\n"
+        "entity-label: task\n"
+        "stages:\n"
+        "  defaults:\n"
+        "    worktree: false\n"
+        "    concurrency: 2\n"
+        "  states:\n"
+        "    - name: backlog\n"
+        "      initial: true\n"
+        "    - name: ideation\n"
+        "    - name: implementation\n"
+        "      worktree: true\n"
+        "    - name: validation\n"
+        "      worktree: true\n"
+        "      fresh: true\n"
+        "      feedback-to: implementation\n"
+        "      gate: true\n"
+        "    - name: done\n"
+        "      terminal: true\n"
+        "---\n"
+        "\n"
+        "# Test Workflow\n"
+        "\n"
+        "## Stages\n"
+        "\n"
+        "### `backlog`\n"
+        "\n"
+        "The initial holding stage.\n"
+        "\n"
+        "- **Inputs:** None\n"
+        "- **Outputs:** A seed task\n"
+        "\n"
+        "### `ideation`\n"
+        "\n"
+        "Flesh out the idea.\n"
+        "\n"
+        "- **Inputs:** Seed description\n"
+        "- **Outputs:** Fleshed-out task\n"
+        "\n"
+        "### `implementation`\n"
+        "\n"
+        "Produce the deliverable.\n"
+        "\n"
+        "- **Inputs:** Approved design\n"
+        "- **Outputs:** Code committed to worktree\n"
+        "\n"
+        "### `validation`\n"
+        "\n"
+        "Verify the deliverable.\n"
+        "\n"
+        "- **Inputs:** Implementation summary\n"
+        "- **Outputs:** PASSED/REJECTED recommendation\n"
+        "\n"
+        "### `done`\n"
+        "\n"
+        "Terminal.\n"
+    )
+    entity = wf_dir / "my-task.md"
+    entity.write_text(
+        "---\n"
+        "id: 001\n"
+        "title: My test task\n"
+        "status: ideation\n"
+        "score: 0.50\n"
+        "worktree:\n"
+        "---\n"
+        "\n"
+        "Description of the task.\n"
+    )
+    return wf_dir, entity
+
+
+def _make_worktree_entity(tmp_path: Path, wf_dir: Path) -> Path:
+    """Create an entity with a worktree field and an actual worktree directory.
+
+    Also creates a .git marker in tmp_path so find_git_root resolves correctly.
+    """
+    # Ensure find_git_root can find the project root at tmp_path
+    (tmp_path / ".git").mkdir(exist_ok=True)
+    entity = wf_dir / "wt-task.md"
+    wt_rel = ".worktrees/spacedock-ensign-wt-task"
+    wt_abs = tmp_path / wt_rel
+    wt_abs.mkdir(parents=True)
+    # Put a copy of the entity in the worktree
+    entity.write_text(
+        "---\n"
+        "id: 002\n"
+        "title: Worktree task\n"
+        "status: implementation\n"
+        f"worktree: {wt_rel}\n"
+        "---\n"
+        "\n"
+        "A worktree-backed task.\n"
+    )
+    (wt_abs / "wt-task.md").write_text(entity.read_text())
+    return entity
+
+
+def run_build(wf_dir: Path, stdin_data: dict, cwd: Path | None = None) -> subprocess.CompletedProcess:
+    """Run claude-team build with the given stdin JSON."""
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), "build", "--workflow-dir", str(wf_dir)],
+        input=json.dumps(stdin_data),
+        capture_output=True,
+        text=True,
+        cwd=cwd or wf_dir.parent,
+    )
+
+
+class TestBuildHelp:
+    """AC-1: Subcommand exists."""
+
+    def test_claude_team_build_help(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "build", "--help"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        assert "--workflow-dir" in result.stdout
+
+
+class TestBuildNormalDispatch:
+    """AC-2: Normal dispatch emits valid JSON."""
+
+    def test_build_normal_dispatch(self, tmp_path):
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Do the first thing", "2. Do the second thing"],
+            "team_name": "test-team",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert out["schema_version"] == 1
+        assert out["subagent_type"] == "spacedock:ensign"
+        assert "prompt" in out
+        assert "My test task" in out["prompt"]
+        assert "ideation" in out["description"]
+
+
+class TestBuildTeamMode:
+    """AC-3: Team-mode includes name, team_name, and completion signal."""
+
+    def test_build_team_mode_dispatch(self, tmp_path):
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Test item"],
+            "team_name": "happy-team",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert out["name"] == "spacedock-ensign-my-task-ideation"
+        assert out["team_name"] == "happy-team"
+        assert 'SendMessage(to="team-lead"' in out["prompt"]
+        assert "Completion Signal" in out["prompt"]
+
+
+class TestBuildBareMode:
+    """AC-4: Bare-mode omits team fields and completion signal."""
+
+    def test_build_bare_mode_dispatch(self, tmp_path):
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "bare_mode": True,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert "name" not in out
+        assert "team_name" not in out
+        assert "SendMessage" not in out["prompt"]
+        assert "Completion Signal" not in out["prompt"]
+
+
+class TestBuildWorktreeStage:
+    """AC-5: Worktree-stage dispatch includes worktree instructions."""
+
+    def test_build_worktree_stage_dispatch(self, tmp_path):
+        wf_dir, _ = _make_workflow_fixture(tmp_path)
+        entity = _make_worktree_entity(tmp_path, wf_dir)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "implementation",
+            "checklist": ["1. Write code"],
+            "team_name": "impl-team",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp, cwd=tmp_path)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert "Your working directory is" in out["prompt"]
+        assert "Your git branch is" in out["prompt"]
+        assert "spacedock-ensign/wt-task" in out["prompt"]
+        assert "Do NOT switch branches" in out["prompt"]
+
+
+class TestBuildFeedbackDispatch:
+    """AC-6: Feedback dispatch includes feedback context."""
+
+    def test_build_feedback_dispatch(self, tmp_path):
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Fix the issue"],
+            "team_name": "fb-team",
+            "feedback_context": "The validator found bug X in line 42.",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert "Feedback from prior review" in out["prompt"]
+        assert "bug X in line 42" in out["prompt"]
+
+
+class TestBuildValidationRules:
+    """AC-7: Each validation rule enforced."""
+
+    def test_build_validation_rule_1_missing_required_field(self, tmp_path):
+        """Rule 1: Missing required field."""
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            # "stage" is missing
+            "checklist": ["1. Item"],
+            "team_name": "t",
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 1
+        assert "missing required field 'stage'" in result.stderr
+
+    def test_build_validation_rule_2_schema_version(self, tmp_path):
+        """Rule 2: Unsupported schema version."""
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        inp = {
+            "schema_version": 99,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 2
+        assert "unsupported input schema_version 99, expected 1" in result.stderr
+
+    def test_build_validation_rule_3_stage_not_found(self, tmp_path):
+        """Rule 3: Stage not in workflow."""
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "nonexistent",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 1
+        assert "stage 'nonexistent' not found" in result.stderr
+
+    def test_build_validation_rule_4_worktree_missing_path(self, tmp_path):
+        """Rule 4: Worktree stage but entity has no worktree path."""
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        # entity has empty worktree field, but implementation requires worktree
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "implementation",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 1
+        assert "worktree stage 'implementation' but entity has no worktree path" in result.stderr
+
+    def test_build_validation_rule_4_worktree_dir_not_exist(self, tmp_path):
+        """Rule 4: Worktree path does not exist on disk."""
+        wf_dir, _ = _make_workflow_fixture(tmp_path)
+        entity = wf_dir / "ghost-wt.md"
+        entity.write_text(
+            "---\n"
+            "id: 003\n"
+            "title: Ghost worktree\n"
+            "status: implementation\n"
+            "worktree: .worktrees/does-not-exist\n"
+            "---\n"
+        )
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "implementation",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+        }
+        result = run_build(wf_dir, inp, cwd=tmp_path)
+        assert result.returncode == 1
+        assert "worktree path" in result.stderr
+        assert "does not exist" in result.stderr
+
+    def test_build_validation_rule_5_feedback_context_missing(self, tmp_path):
+        """Rule 5: Feedback reflow without feedback_context."""
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+            "is_feedback_reflow": True,
+            # feedback_context intentionally missing
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 1
+        assert "feedback_context is missing" in result.stderr
+
+    def test_build_validation_rule_7_name_too_long(self, tmp_path):
+        """Rule 7: Derived name exceeds 63 characters."""
+        wf_dir, _ = _make_workflow_fixture(tmp_path)
+        long_slug = "a" * 60
+        entity = wf_dir / f"{long_slug}.md"
+        entity.write_text(
+            "---\n"
+            f"id: 004\n"
+            f"title: Long slug task\n"
+            "status: ideation\n"
+            "worktree:\n"
+            "---\n"
+        )
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 1
+        assert "exceeds 63 characters" in result.stderr
+
+    def test_build_validation_rule_8_team_name_missing(self, tmp_path):
+        """Rule 8: Team mode without team_name."""
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "bare_mode": False,
+            # team_name intentionally missing
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 1
+        assert "team mode requires team_name" in result.stderr
+
+    def test_build_validation_rule_9_checklist_empty(self, tmp_path):
+        """Rule 9: Empty checklist."""
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": [],
+            "team_name": "t",
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 1
+        assert "checklist must not be empty" in result.stderr
+
+    def test_build_validation_rule_10_entity_not_readable(self, tmp_path):
+        """Rule 10: Entity file does not exist."""
+        wf_dir, _ = _make_workflow_fixture(tmp_path)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(tmp_path / "nonexistent.md"),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 1
+        assert "entity file not readable" in result.stderr
+
+    def test_build_validation_rule_11_workflow_readme_missing(self, tmp_path):
+        """Rule 11: Workflow README not found."""
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+        entity = tmp_path / "dummy.md"
+        entity.write_text("---\ntitle: Dummy\n---\n")
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(empty_dir),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+        }
+        result = run_build(empty_dir, inp)
+        assert result.returncode == 1
+        assert "workflow README not found" in result.stderr
+
+
+class TestBuildSchemaVersion:
+    """AC-8: Schema version check."""
+
+    def test_build_schema_version_rejection(self, tmp_path):
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        inp = {
+            "schema_version": 2,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 2
+        assert "unsupported input schema_version 2, expected 1" in result.stderr
+
+
+class TestStatusSiblingImport:
+    """AC-9: Sibling import works and is guarded against signature drift."""
+
+    def _import_status(self):
+        import importlib.machinery
+        loader = importlib.machinery.SourceFileLoader("_status_lib", str(STATUS_PATH))
+        spec = importlib.util.spec_from_file_location("_status_lib", str(STATUS_PATH), loader=loader)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_status_sibling_import_parse_frontmatter(self):
+        mod = self._import_status()
+        assert callable(mod.parse_frontmatter)
+        # Smoke test with a known entity
+        result = mod.parse_frontmatter(str(WORKFLOW_DIR / "build-dispatch-structured-helper.md"))
+        assert isinstance(result, dict)
+        assert "title" in result
+
+    def test_status_sibling_import_parse_stages_block(self):
+        mod = self._import_status()
+        assert callable(mod.parse_stages_block)
+        result = mod.parse_stages_block(str(WORKFLOW_README))
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert "name" in result[0]
+
+    def test_status_sibling_import_load_active_entity_fields(self):
+        mod = self._import_status()
+        assert callable(mod.load_active_entity_fields)
+        # Smoke test
+        result = mod.load_active_entity_fields(
+            str(WORKFLOW_DIR / "build-dispatch-structured-helper.md"),
+            str(REPO_ROOT),
+        )
+        assert isinstance(result, dict)
+
+    def test_status_sibling_import_find_git_root(self):
+        mod = self._import_status()
+        assert callable(mod.find_git_root)
+        result = mod.find_git_root(str(WORKFLOW_DIR))
+        assert os.path.isdir(result)
+
+
+class TestParseStagesBlockExtraFields:
+    """AC-10: parse_stages_block includes feedback-to, agent, fresh fields."""
+
+    def test_parse_stages_block_extra_fields(self):
+        import importlib.machinery
+        loader = importlib.machinery.SourceFileLoader("_status_lib", str(STATUS_PATH))
+        spec = importlib.util.spec_from_file_location("_status_lib", str(STATUS_PATH), loader=loader)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        stages = mod.parse_stages_block(str(WORKFLOW_README))
+        assert stages is not None
+
+        stage_by_name = {s["name"]: s for s in stages}
+
+        # validation stage has feedback-to: implementation and fresh: true
+        assert "validation" in stage_by_name
+        val_stage = stage_by_name["validation"]
+        assert val_stage.get("feedback-to") == "implementation"
+        assert val_stage.get("fresh") == "true"
+
+        # stages without these fields should not have them
+        assert "feedback-to" not in stage_by_name["ideation"]
+        assert "agent" not in stage_by_name["ideation"]
+
+
+class TestBuildBreakGlassFallback:
+    """Implementation Note 4: Break-glass template is syntactically valid."""
+
+    def test_break_glass_template_is_parseable(self):
+        """The break-glass Agent() template in the runtime adapter is valid Python syntax."""
+        import ast
+        runtime_path = REPO_ROOT / "skills" / "first-officer" / "references" / "claude-first-officer-runtime.md"
+        text = runtime_path.read_text()
+
+        # Extract the break-glass code block
+        in_break_glass = False
+        in_code_block = False
+        code_lines = []
+        for line in text.splitlines():
+            if "Break-Glass Manual Dispatch" in line:
+                in_break_glass = True
+                continue
+            if in_break_glass and line.strip() == "```":
+                if not in_code_block:
+                    in_code_block = True
+                    continue
+                else:
+                    break
+            if in_code_block:
+                code_lines.append(line)
+
+        code_text = "\n".join(code_lines)
+        assert len(code_lines) > 0, "Could not extract break-glass code block"
+        # It should parse as a valid Python expression (function call)
+        tree = ast.parse(code_text, mode="eval")
+        assert isinstance(tree.body, ast.Call)
+        assert tree.body.func.id == "Agent"
 
 
 if __name__ == "__main__":

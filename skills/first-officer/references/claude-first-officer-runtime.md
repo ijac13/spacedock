@@ -45,18 +45,57 @@ Use the Agent tool to spawn each worker. **Use Agent() for initial dispatch** �
 
 **STOP. Do NOT call Agent() until you have verified the team is healthy.** Run `test -f ~/.claude/teams/{team_name}/config.json` via the Bash tool. You MUST do this before every Agent dispatch batch. If the command succeeds, proceed to dispatch. If the file is missing, the team's on-disk state has been corrupted — STOP and follow the TeamCreate recovery procedure above. If recovery fails, fall back to bare mode.
 
-Only fill `{named_variables}` — do not expand bracketed placeholders or add behavioral instructions beyond what the dispatch template specifies.
+**MANDATORY — Dispatch assembly via `claude-team build`:**
 
+Do NOT assemble `Agent()` prompts manually. Do NOT construct the `prompt` string yourself. Do NOT invent `name` values. ALWAYS pipe input through `claude-team build` first and forward its output to `Agent()` verbatim. The key fields that MUST come from the helper output are `subagent_type`, `name`, `team_name`, and `prompt` (which contains the completion signal). Assembling these manually is a protocol violation except in the documented break-glass fallback below.
+
+The only permitted path for initial `Agent()` dispatch is:
+
+1. **REQUIRED — Assemble the input JSON** from the entity, stage, and your judgment:
+   ```json
+   {
+     "schema_version": 1,
+     "entity_path": "{absolute path to entity file}",
+     "workflow_dir": "{absolute path to workflow directory}",
+     "stage": "{target stage name}",
+     "checklist": ["1. ...", "2. ..."],
+     "team_name": "{team_name or null if bare mode}",
+     "feedback_context": "{reviewer findings or null}",
+     "scope_notes": "{additional context or null}",
+     "bare_mode": false,
+     "is_feedback_reflow": false
+   }
+   ```
+   The `bare_mode` field must match the current dispatch context — never infer it from the stage, always from the live team state. Set `is_feedback_reflow` to true only when routing a rejection back to its `feedback-to` target stage.
+2. **REQUIRED — Pipe the JSON to the helper** (do NOT skip this step):
+   ```
+   echo '<json>' | {spacedock_plugin_dir}/skills/commission/bin/claude-team build --workflow-dir {workflow_dir}
+   ```
+3. **REQUIRED — On exit 0, parse the stdout JSON and call `Agent()` with the emitted fields verbatim.** The `name` and `prompt` fields MUST be taken from the helper output unchanged. The `prompt` already contains the team-mode `SendMessage(to="team-lead", ...)` completion signal — do not strip it, do not rewrite it:
+   ```
+   Agent(
+       subagent_type=output.subagent_type,
+       name=output.name,           // omit if bare mode (field absent)
+       team_name=output.team_name, // omit if bare mode (field absent)
+       prompt=output.prompt
+   )
+   ```
+4. **On non-zero exit ONLY** (or if the binary is unavailable): read stderr for the error message, report the helper failure to the captain, and fall back to the Break-Glass Manual Dispatch procedure below. A zero-exit helper run is never a break-glass trigger.
+
+In bare mode, dispatch blocks until the subagent completes — concurrent dispatch of multiple entities is not possible. Dispatch one entity at a time and process completions inline.
+
+**Reuse dispatch (SendMessage advancement):** `claude-team build` serves only initial `Agent()` dispatch. When advancing a reused ensign to its next stage via `SendMessage(to="{ensign_name}")`, assemble the advancement message directly — the helper is not involved in the reuse path.
+
+**Break-Glass Manual Dispatch (fallback ONLY when `claude-team build` exits non-zero or is unavailable):** Do NOT use this template while the helper is working. Report the helper failure to the captain before proceeding. Use this minimal template only as a degraded fallback:
 ```
 Agent(
     subagent_type="{dispatch_agent_id}",
     name="{worker_key}-{slug}-{stage}",
-    {if not bare mode: 'team_name="{team_name}"',}
-    prompt="You are working on: {entity title}\n\nStage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim]\n\n{if worktree: 'Your working directory is {worktree_path}\nAll file reads and writes MUST use paths under {worktree_path}.\nYour git branch is {branch}. All commits MUST be on this branch. Do NOT switch branches or commit to main.\nDo NOT modify YAML frontmatter in entity files.\nDo NOT modify files under agents/ or references/ — these are plugin scaffolding.'}\nRead the entity file at {entity_file_path} for the current spec (problem statement, acceptance criteria, design). Stage reports from prior cycles are appended at the end of the file — you do not need to read them for your current assignment.\n\n{if stage has feedback-to: insert feedback instructions}\n\n### Completion checklist\n\nWrite a ## Stage Report section into the entity file when done.\nMark each: DONE, SKIPPED (with rationale), or FAILED (with details).\n\n[CHECKLIST — insert numbered checklist from step 2]\n\n### Summary\n{brief description of what was accomplished}\n\nEvery checklist item must appear in your report. Do not omit items.{if not bare mode: '\n\n### Completion Signal\n\nThis is a team-mode dispatch. When you finish (after all commits and stage report writes are done), your last action MUST be:\n\n    SendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {next_stage_name}. Report written to {entity_file_path}.\")\n\nPlain text only. No JSON. Until you send this message, the first officer keeps waiting for that explicit completion message. Idle notifications are normal between-turn state while it waits.'}"
+    team_name="{team_name}",
+    prompt="You are working on: {entity title}\n\nStage: {stage}\n\n### Stage definition:\n\n{copy stage subsection from README verbatim}\n\nRead the entity file at {entity_file_path}.\n\n### Completion checklist\n\n{numbered checklist}\n\n### Completion Signal\n\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {stage}. Report written to {entity_file_path}.\")"
 )
 ```
-
-In bare mode, dispatch blocks until the subagent completes — concurrent dispatch of multiple entities is not possible. Dispatch one entity at a time and process completions inline.
+The break-glass template omits worktree instructions, feedback context, and scope notes. Use only when the helper is unavailable.
 
 ## Context Budget and Dead Ensign Handling
 
