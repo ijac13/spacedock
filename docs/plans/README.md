@@ -95,7 +95,7 @@ A task moves to validation after implementation is complete. The work here is to
 - **Outputs:**
   - Run applicable tests from the Testing Resources section and report results
     - Use `tests/README.md` to choose the right harness and entrypoint before running tests
-    - Prefer the stable repo-level entrypoints when they fit the task: `make test-static` for the offline suite, `make test-e2e TEST=... RUNTIME=...` for live runtime-specific E2E checks
+    - Prefer the stable repo-level entrypoints when they fit the task: `make test-static` for the offline suite, `make test-live-claude` / `make test-live-codex` for tier-aware live runs, and `make test-e2e TEST=... RUNTIME=...` for single-file runtime-specific E2E checks
   - Verify each acceptance criterion with evidence
   - A PASSED/REJECTED recommendation
 - **Good:** Thorough testing against acceptance criteria, clear evidence of pass/fail, honest assessment
@@ -180,21 +180,26 @@ The stable repo-level offline suite is:
 make test-static
 ```
 
-Live E2E checks should use the runtime-aware wrapper:
+Live E2E checks go through the pytest two-tier wrappers:
 
 ```bash
-make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex
+make test-live-claude                                # serial tier, then parallel tier
+make test-live-codex
+make test-live-claude-opus                           # same shape, --model opus --effort low
+make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex   # single-file override
 ```
 
-Use direct `uv run ...` invocations only when the test guide calls for a more specific command than the stable wrappers provide.
+- `test-live-{claude,codex}` run the serial tier (`-m "... and serial" -x`) first, then the parallel tier (`-m "... and not serial" -n $LIVE_{CLAUDE,CODEX}_WORKERS`) regardless of the serial tier outcome. Overall result is the logical AND of both exit codes.
+- `test-e2e` replaces the old `test-e2e-commission` target: pass `TEST=tests/test_commission.py` for the same effect.
+- Use direct `uv run pytest …` invocations only when the test guide calls for a more specific command than the stable wrappers provide.
 
 ### Running E2E tests
 
-Tests use `uv run`. When running from inside a Claude Code session, unset `CLAUDECODE` first (Claude refuses to launch as a subprocess when this variable is set):
+Tests run under pytest. When running from inside a Claude Code session, unset `CLAUDECODE` first (Claude refuses to launch as a subprocess when this variable is set):
 
-    unset CLAUDECODE && uv run tests/test_output_format.py
+    unset CLAUDECODE && uv run pytest tests/test_output_format.py --runtime claude -v
 
-This applies to all E2E test scripts under `tests/` and `scripts/`, including the commands launched by `make test-static` and `make test-e2e`.
+This applies to every test invocation, including those behind the `make test-static` / `make test-live-*` / `make test-e2e` wrappers.
 
 ## Commit Discipline
 

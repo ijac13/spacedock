@@ -56,27 +56,23 @@ Key class:
 
 ## Standard CLI Flags
 
-All E2E tests should accept these flags via `argparse`:
+All E2E tests read their runtime configuration from pytest CLI options registered in `tests/conftest.py`:
 
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--runtime` | `choices=["claude"]` or `choices=["claude", "codex"]` | `"claude"` | Which runtime to test. Use `["claude"]` for interactive-only tests. |
-| `--agent` | `str` | `"spacedock:first-officer"` | Agent id to invoke |
-| `--model` | `str` | `"haiku"` | Model for the test run |
-| `--effort` | `str` | `"low"` | Effort level (non-interactive tests) |
-| `--budget` | `float` | varies | Max budget in USD |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--runtime` | `claude` | Which runtime to test (`claude` or `codex`). |
+| `--model` | `haiku` | Model for the test run. |
+| `--effort` | `low` | Effort level (non-interactive tests). |
+| `--budget` | `None` | Max budget in USD (optional). |
 
-Tests should run by default without special flags. Do not gate tests behind a `--live` flag.
+Tests receive these values via the matching `runtime`, `model`, `effort`, `budget` fixtures. A `test_project` fixture yields a `TestRunner` with a tmpdir + git init; a `fo_run` factory fixture exposes a runtime-aware wrapper around `run_first_officer` / `run_codex_first_officer`.
 
-Use `parse_known_args()` to pass extra CLI args through to the claude/codex invocation:
+Tier membership is declared with pytest markers:
 
-```python
-def parse_args() -> tuple[argparse.Namespace, list[str]]:
-    parser = argparse.ArgumentParser(description="My E2E test")
-    parser.add_argument("--runtime", choices=["claude", "codex"], default="claude")
-    parser.add_argument("--model", default="haiku")
-    return parser.parse_known_args()
-```
+- `@pytest.mark.live_claude` — spawns a live Claude runtime (pipe or PTY).
+- `@pytest.mark.live_codex` — spawns a live Codex runtime.
+- `@pytest.mark.serial` — must run serially (PTY, stubbed git/gh, or explicit sequencing). Parallel tests carry no `serial` marker.
+- No marker = implicit static/unit — collected by `make test-static`.
 
 ## When to Use Which Harness
 
@@ -147,48 +143,35 @@ Existing fixtures and their purposes:
 
 ## Running Tests
 
-Tests use `uv run`. When running from inside a Claude Code session (including from dispatched team agents / ensigns), unset `CLAUDECODE` first — Claude Code refuses to launch as a subprocess when this variable is set. The `unset CLAUDECODE &&` prefix is the escape hatch:
-
-```bash
-unset CLAUDECODE && uv run tests/test_agent_content.py
-```
-
-This works from any context: your terminal, the FO session, a dispatched ensign's Bash tool call, or a CI runner. The spawned `claude -p` subprocess gets its own isolated home directory with the project's OAuth token, so authentication is handled automatically.
+The whole suite runs under pytest. When invoking from inside a Claude Code session (including from dispatched team agents / ensigns), unset `CLAUDECODE` first — Claude Code refuses to launch as a subprocess when that variable is set. The `unset CLAUDECODE &&` prefix is the escape hatch and is already baked into the Makefile targets.
 
 Stable repo-level entrypoints:
 
 ```bash
-make test-static
-make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex
+make test-static                                      # offline suite, no live marker
+make test-live-claude                                 # all live_claude tests (serial first, parallel second)
+make test-live-codex                                  # all live_codex tests
+make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex   # single-file override
 ```
 
-- `make test-static` is the canonical offline repo suite. It runs `pytest tests/ --ignore=tests/fixtures` because `tests/fixtures/` contains runnable fixture payloads for harness tests, not repo-level suite modules.
-- `make test-e2e` is the canonical live harness entrypoint. Override `TEST=...` to choose the E2E script and `RUNTIME=claude|codex` to select the runtime.
-- Do not use bare repo-wide `pytest tests/` as the suite entrypoint unless you intentionally want pytest to recurse into `tests/fixtures/`.
+- `make test-static` runs `pytest tests/ --ignore=tests/fixtures -m "not live_claude and not live_codex"`. `tests/fixtures/` contains runnable fixture payloads and is excluded from collection.
+- `make test-live-claude` runs the serial tier first (`-m "live_claude and serial" -x`), then the parallel tier (`-m "live_claude and not serial" -n $LIVE_CLAUDE_WORKERS`) regardless of the serial tier's outcome, and fails overall if either tier failed. Same shape for `make test-live-codex` with `LIVE_CODEX_WORKERS`.
+- `make test-live-claude-opus` is the same shape with `--model opus --effort low` overrides.
+- `make test-e2e` is the single-file override — pass `TEST=...` for the target file and `RUNTIME=claude|codex` for the runtime. This replaces the old `test-e2e-commission` target (use `TEST=tests/test_commission.py`).
+- Do not invoke bare `pytest tests/` as the suite entrypoint unless you intentionally want pytest to recurse into `tests/fixtures/`.
 
-Static tests (no live session needed):
+Parallel worker count defaults are conservative because `claude -p` / `codex exec` share host runtime state:
 
 ```bash
-make test-static
-uv run tests/test_agent_content.py
-uv run tests/test_codex_packaged_agent_ids.py
-uv run tests/test_stats_extraction.py
-uv run tests/test_status_script.py
+LIVE_CLAUDE_WORKERS=4 make test-live-claude           # raise when stable
+LIVE_CODEX_WORKERS=2 make test-live-codex
 ```
 
-E2E tests (require live claude, cost varies):
+Direct pytest invocation for ad-hoc runs:
 
 ```bash
-make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=claude
-unset CLAUDECODE && uv run tests/test_gate_guardrail.py --model haiku
-unset CLAUDECODE && uv run tests/test_single_entity_mode.py --model haiku
-```
-
-With Codex runtime:
-
-```bash
-make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex
-uv run tests/test_gate_guardrail.py --runtime codex
+unset CLAUDECODE && uv run pytest tests/test_gate_guardrail.py --runtime claude --model haiku -v
+unset CLAUDECODE && uv run pytest tests/ -m "live_claude and not serial" -n 2 --runtime claude
 ```
 
 ## PR Runtime Live E2E
@@ -271,18 +254,23 @@ For local debugging, set `KEEP_TEST_DIR=1` to preserve temp directories after te
 
 Every test file must:
 
-1. Start with `#!/usr/bin/env -S uv run` and `# /// script` / `# ///` header for `uv run` compatibility
-2. Have two `# ABOUTME:` comment lines explaining what the test does
-3. Use `argparse` with standard CLI flags
-4. Print `RESULT: PASS` or `RESULT: FAIL` and exit with appropriate code
+1. Have two `# ABOUTME:` comment lines at the top explaining what the test does.
+2. Expose one or more `test_*` functions collected by pytest.
+3. Carry the appropriate tier marker(s) — `@pytest.mark.live_claude`, `@pytest.mark.live_codex`, and/or `@pytest.mark.serial` — or no marker for static/unit tests.
+4. Use pytest assertions for pass/fail. Tests that drive a `TestRunner` for log parsing should call `t.finish()` at the end; `finish()` raises `AssertionError` if any `t.check` calls failed.
 
-Example header:
+Example skeleton:
 
 ```python
-#!/usr/bin/env -S uv run
-# /// script
-# requires-python = ">=3.10"
-# ///
 # ABOUTME: E2E test for feature X in the first-officer template.
 # ABOUTME: Verifies behavior Y using fixture Z.
+
+import pytest
+
+
+@pytest.mark.live_claude
+def test_feature_x(test_project, model, effort):
+    t = test_project
+    # ... setup_fixture, install_agents, run_first_officer, etc.
+    t.finish()
 ```
