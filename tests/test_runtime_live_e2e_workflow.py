@@ -151,16 +151,26 @@ def test_live_makefile_targets_do_not_require_bash_without_declaring_it():
         assert "SHELL := /bin/bash" in text
 
 
-def test_live_makefile_runs_mod_block_enforced_tests():
+def test_live_makefile_uses_pytest_markers_not_raw_script_chains():
+    """Post #148 migration: the Makefile uses pytest marker filters
+    (live_claude + serial / not serial) instead of raw `uv run tests/*.py` chains.
+    Any per-test skip lives as a decorator on the test file, not a Makefile comment."""
     text = read_makefile()
 
-    # After #114 landed, these tests run as part of `test-live-claude` instead of being skipped.
-    assert "\n\tuv run tests/test_push_main_before_pr.py" in text
-    assert "\n\tuv run tests/test_rebase_branch_before_push.py" in text
-    assert "\n\tuv run tests/test_dispatch_completion_signal.py --runtime claude" in text
-    assert "# SKIPPED: test_push_main_before_pr.py" not in text
-    assert "# SKIPPED: test_rebase_branch_before_push.py" not in text
-    assert "# SKIPPED: test_dispatch_completion_signal.py" not in text
+    # Raw script invocations are gone — pytest with marker filter replaces them.
+    assert "\n\tuv run tests/test_push_main_before_pr.py" not in text
+    assert "\n\tuv run tests/test_rebase_branch_before_push.py" not in text
+    assert "\n\tuv run tests/test_dispatch_completion_signal.py --runtime claude" not in text
+    assert '-m "live_claude and serial"' in text
+    assert '-m "live_claude and not serial"' in text
+
+    test_path = Path(__file__).resolve().parent / "test_push_main_before_pr.py"
+    if test_path.exists():
+        body = test_path.read_text()
+        # Once migrated to pytest the skip moves into a decorator on the test function.
+        if "import pytest" in body:
+            assert "pytest.mark.skip" in body
+            assert "#114" in body
 
 
 def test_tests_readme_documents_runtime_live_e2e_workflow():

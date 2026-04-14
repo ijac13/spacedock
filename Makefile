@@ -1,41 +1,50 @@
 SHELL := /bin/bash
 
-.PHONY: test-static test-e2e test-e2e-commission test-live-claude test-live-claude-opus test-live-codex
+.PHONY: test-static test-e2e test-live-claude test-live-claude-opus test-live-codex
 
-TEST ?= tests/test_gate_guardrail.py
+TEST ?= tests/
 RUNTIME ?= claude
+LIVE_CLAUDE_WORKERS ?= 2
+LIVE_CODEX_WORKERS ?= 2
 
 test-static:
-	unset CLAUDECODE && uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q
+	unset CLAUDECODE && uv run pytest tests/ --ignore=tests/fixtures \
+	  -m "not live_claude and not live_codex" -q
 
+# Single-file live override — pass TEST=tests/<file>.py RUNTIME=claude|codex.
+# Replaces the old test-e2e-commission target: `make test-e2e TEST=tests/test_commission.py`.
 test-e2e:
-	unset CLAUDECODE && uv run $(TEST) --runtime $(RUNTIME)
-
-test-e2e-commission:
-	unset CLAUDECODE && uv run tests/test_commission.py
+	unset CLAUDECODE && uv run pytest $(TEST) --runtime $(RUNTIME) -v
 
 test-live-claude:
-	unset CLAUDECODE && set -euo pipefail && \
-	uv run tests/test_gate_guardrail.py --runtime claude && \
-	uv run tests/test_rejection_flow.py --runtime claude && \
-	uv run tests/test_feedback_keepalive.py && \
-	uv run tests/test_merge_hook_guardrail.py --runtime claude && \
-	uv run tests/test_dispatch_completion_signal.py --runtime claude && \
-	uv run tests/test_rebase_branch_before_push.py && \
-	uv run tests/test_push_main_before_pr.py
-	# SKIPPED: test_scaffolding_guardrail.py — FO violates issue-filing guardrail. Track: file new task
+	unset CLAUDECODE && { \
+	  uv run pytest tests/ --ignore=tests/fixtures \
+	    -m "live_claude and serial" --runtime claude -x -v ; SEQ=$$? ; \
+	  uv run pytest tests/ --ignore=tests/fixtures \
+	    -m "live_claude and not serial" --runtime claude \
+	    -n $(LIVE_CLAUDE_WORKERS) -v ; PAR=$$? ; \
+	  test $$SEQ -eq 0 -a $$PAR -eq 0 ; \
+	}
+	# SKIPPED: test_scaffolding_guardrail.py carries @pytest.mark.skip (see the file). Track: file new task.
 
-# test-live-claude-opus runs the full suite including test_dispatch_completion_signal — use it to manually verify completion signal compliance before #114 lands.
+# test-live-claude-opus runs the same suite with --model opus --effort low overrides —
+# use it to manually verify stronger-model compliance when haiku flakes.
 test-live-claude-opus:
-	unset CLAUDECODE && set -euo pipefail && \
-	uv run tests/test_gate_guardrail.py --runtime claude --model opus && \
-	uv run tests/test_rejection_flow.py --runtime claude --model opus --effort low && \
-	uv run tests/test_feedback_keepalive.py --model opus --effort low && \
-	uv run tests/test_merge_hook_guardrail.py --runtime claude --model opus --effort low && \
-	uv run tests/test_rebase_branch_before_push.py --model opus --effort low && \
-	uv run tests/test_dispatch_completion_signal.py --runtime claude --model opus --effort low
+	unset CLAUDECODE && { \
+	  uv run pytest tests/ --ignore=tests/fixtures \
+	    -m "live_claude and serial" --runtime claude --model opus --effort low -x -v ; SEQ=$$? ; \
+	  uv run pytest tests/ --ignore=tests/fixtures \
+	    -m "live_claude and not serial" --runtime claude --model opus --effort low \
+	    -n $(LIVE_CLAUDE_WORKERS) -v ; PAR=$$? ; \
+	  test $$SEQ -eq 0 -a $$PAR -eq 0 ; \
+	}
 
 test-live-codex:
-	uv run tests/test_gate_guardrail.py --runtime codex && \
-	uv run tests/test_rejection_flow.py --runtime codex && \
-	uv run tests/test_merge_hook_guardrail.py --runtime codex
+	{ \
+	  uv run pytest tests/ --ignore=tests/fixtures \
+	    -m "live_codex and serial" --runtime codex -x -v ; SEQ=$$? ; \
+	  uv run pytest tests/ --ignore=tests/fixtures \
+	    -m "live_codex and not serial" --runtime codex \
+	    -n $(LIVE_CODEX_WORKERS) -v ; PAR=$$? ; \
+	  test $$SEQ -eq 0 -a $$PAR -eq 0 ; \
+	}
