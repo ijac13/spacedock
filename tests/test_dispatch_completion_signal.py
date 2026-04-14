@@ -126,18 +126,27 @@ def main():
     else:
         t.fail("entity file missing from both main and _archive (unexpected state)")
 
-    # Sanity check: the dispatched ensign prompt should carry the completion-signal
-    # instruction. This is an additional guard against a regression where the fix
-    # exists in the template but the prompt assembly drops it.
-    last_prompt = log.agent_prompt()
-    if ensign_calls:
-        if 'SendMessage(to="team-lead"' in last_prompt:
-            t.pass_("dispatched ensign prompt carries SendMessage completion-signal instruction")
-        else:
-            t.fail(
-                'dispatched ensign prompt does NOT carry SendMessage(to="team-lead", ...) '
-                "instruction — the FO dropped the completion signal from its dispatch template."
-            )
+    # Sanity check: when the FO dispatched in team mode, the ensign prompt must carry
+    # the SendMessage completion-signal instruction. In bare mode (no team_name on the
+    # Agent call) the signal is intentionally absent — Agent() blocks and returns
+    # inline, so SendMessage is unnecessary and would fail (no team to message).
+    last_team_mode_prompt = next(
+        (c["prompt"] for c in reversed(ensign_calls) if c.get("team_name")),
+        None,
+    )
+    if last_team_mode_prompt is None:
+        t.pass_(
+            "FO dispatched in bare mode (no team_name on Agent call); SendMessage is "
+            "unnecessary since Agent() returns inline. Entity-advancement checks above "
+            "cover the end-to-end pre-fix hang regression."
+        )
+    elif 'SendMessage(to="team-lead"' in last_team_mode_prompt:
+        t.pass_("team-mode ensign prompt carries SendMessage completion-signal instruction")
+    else:
+        t.fail(
+            'team-mode ensign prompt does NOT carry SendMessage(to="team-lead", ...) '
+            "instruction — the FO dropped the completion signal from its dispatch template."
+        )
 
     # --- Results ---
     t.results()

@@ -828,7 +828,7 @@ class LogParser:
         ]
 
     def agent_calls(self) -> list[dict]:
-        """Extract Agent() tool calls with subagent_type, name, and prompt."""
+        """Extract Agent() tool calls with subagent_type, name, team_name, and prompt."""
         calls = []
         for msg in self.assistant_messages():
             for block in msg["message"].get("content", []):
@@ -837,6 +837,7 @@ class LogParser:
                     calls.append({
                         "subagent_type": inp.get("subagent_type", ""),
                         "name": inp.get("name", ""),
+                        "team_name": inp.get("team_name", ""),
                         "prompt": inp.get("prompt", ""),
                     })
         return calls

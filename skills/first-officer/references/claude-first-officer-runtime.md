@@ -80,20 +80,7 @@ The only permitted path for initial `Agent()` dispatch is:
        prompt=output.prompt
    )
    ```
-
-   **Verbatim means character-for-character.** Copy `output.prompt` into the `Agent(prompt=...)` call with no paraphrasing, summarization, or rewriting. The helper's completion-signal block is distinctive for a reason — downstream validators grep the dispatched prompt for the literal string `SendMessage(to="team-lead"` and a dispatch that lacks that exact substring is treated as malformed.
-
-   **Anti-patterns that break this contract (do NOT do any of these):**
-
-   - Rewriting `SendMessage(to="team-lead", message="Done: ...")` as `SendMessage with to="team-lead" and message format "Done: ..."` (the parens/equals syntax MUST be preserved).
-   - Collapsing the completion-signal block into a single sentence like "Send a team-lead completion message when done."
-   - Dropping the `### Completion Signal` heading.
-   - Describing the template in English instead of emitting the literal call.
-   - Changing double quotes to single quotes or escaping them differently.
-
-   If the helper emitted the prompt, emit it into `Agent(prompt=...)` exactly as-is. If you feel the urge to edit, stop and re-read this section.
-4. **REQUIRED — Post-dispatch verification.** Immediately after the `Agent()` call, confirm that the prompt you dispatched still contains the literal substring `SendMessage(to="team-lead"`. If the helper's output was modified in transit (paraphrased, summarized, or the signal block was dropped), treat the dispatch as malformed: shut the agent down with `SendMessage(shutdown_request)` if it is still live, then re-dispatch using the helper's output verbatim. A paraphrased dispatch will cause the FO to wait forever for a completion signal the ensign was never told how to emit.
-5. **On non-zero exit ONLY** (or if the binary is unavailable): read stderr for the error message, report the helper failure to the captain, and fall back to the Break-Glass Manual Dispatch procedure below. A zero-exit helper run is never a break-glass trigger.
+4. **On non-zero exit ONLY** (or if the binary is unavailable): read stderr for the error message, report the helper failure to the captain, and fall back to the Break-Glass Manual Dispatch procedure below. A zero-exit helper run is never a break-glass trigger.
 
 In bare mode, dispatch blocks until the subagent completes — concurrent dispatch of multiple entities is not possible. Dispatch one entity at a time and process completions inline.
 
