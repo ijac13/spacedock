@@ -8,7 +8,7 @@ started:
 completed:
 verdict:
 worktree:
-issue:
+issue: #89
 pr:
 ---
 
