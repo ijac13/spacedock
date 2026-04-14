@@ -1,0 +1,18 @@
+[project]
+name = "spacedock"
+version = "0.0.0"
+description = "Spacedock workflow plugin (test harness and scaffolding)"
+requires-python = ">=3.10"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-xdist>=3.5",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "live_claude: spawns a live Claude runtime (pipe or PTY)",
+    "live_codex: spawns a live Codex runtime",
+    "serial: must run serially (PTY, stubbed git/gh, or explicit sequencing)",
+]
