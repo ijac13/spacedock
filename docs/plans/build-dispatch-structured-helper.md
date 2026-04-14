@@ -495,6 +495,10 @@ These notes are all implementable without another ideation cycle. Any item that 
 - Generalizing the pattern to other fuzzy-template sites (feedback rejection flow, gate presentation, event loop) — Phase 4 of issue #63.
 - Mod files (`pr-merge.md`) — separate concern (task 118).
 
+## CI green gate
+
+This task must green `test_dispatch_completion_signal.py` in `make test-live-claude`. The test is currently SKIPPED in the Makefile because the FO drops the `SendMessage(to="team-lead")` completion-signal block from its dispatch prompt — confirmed on both haiku and opus (2026-04-13). The structured helper will make the completion-signal block deterministic, which should resolve this. The implementer must verify the test passes end-to-end and restore it to the active `test-live-claude` target before closing.
+
 ## Related
 
 - anthropics/claude-code local issue #63 — umbrella, this is Phase 2.
