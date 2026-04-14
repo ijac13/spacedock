@@ -228,6 +228,3 @@ def test_push_main_before_pr(test_project, model, effort):
 
     t.finish()
 
-
-if __name__ == "__main__":
-    sys.exit(pytest.main([__file__, "-v"]))

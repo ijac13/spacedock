@@ -96,6 +96,3 @@ def test_dispatch_names(test_project):
 
     t.finish()
 
-
-if __name__ == "__main__":
-    sys.exit(pytest.main([__file__, "-v"]))

@@ -96,6 +96,3 @@ def test_single_entity_team_skip(test_project, model, effort):
 
     t.finish()
 
-
-if __name__ == "__main__":
-    sys.exit(pytest.main([__file__, "-v"]))

@@ -80,6 +80,3 @@ def test_interactive_poc_live(model):
         print("Stopping session...")
         session.stop()
 
-
-if __name__ == "__main__":
-    sys.exit(pytest.main([__file__, "-v"]))

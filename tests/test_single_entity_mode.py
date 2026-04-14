@@ -194,6 +194,3 @@ def test_single_entity_mode(model, budget):
     print()
     assert failures == 0, f"{failures} checks failed"
 
-
-if __name__ == "__main__":
-    sys.exit(pytest.main([__file__, "-v"]))
