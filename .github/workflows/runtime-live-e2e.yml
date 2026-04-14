@@ -120,14 +120,7 @@ jobs:
           uv --version
 
       - name: Run Claude live suite
-        run: |
-          set -euo pipefail
-          unset CLAUDECODE && uv run tests/test_gate_guardrail.py --runtime claude
-          unset CLAUDECODE && uv run tests/test_rejection_flow.py --runtime claude
-          unset CLAUDECODE && uv run tests/test_feedback_keepalive.py
-          unset CLAUDECODE && uv run tests/test_merge_hook_guardrail.py --runtime claude
-          unset CLAUDECODE && uv run tests/test_push_main_before_pr.py
-          unset CLAUDECODE && uv run tests/test_rebase_branch_before_push.py
+        run: make test-live-claude
 
       - name: Upload Claude live artifacts
         if: always()
@@ -244,11 +237,7 @@ jobs:
           uv --version
 
       - name: Run Codex live suite
-        run: |
-          set -euo pipefail
-          uv run tests/test_gate_guardrail.py --runtime codex
-          uv run tests/test_rejection_flow.py --runtime codex
-          uv run tests/test_merge_hook_guardrail.py --runtime codex
+        run: make test-live-codex
 
       - name: Upload Codex live artifacts
         if: always()

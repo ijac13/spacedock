@@ -96,21 +96,11 @@ def test_runtime_live_e2e_workflow_scopes_secrets_to_the_matching_job():
     assert "is required for codex-live" in codex_section
 
 
-def test_runtime_live_e2e_workflow_lists_the_expected_commands_and_provenance_fields():
+def test_runtime_live_e2e_workflow_uses_stable_make_targets_and_provenance_fields():
     text = read_workflow()
 
-    for command in (
-        "unset CLAUDECODE && uv run tests/test_gate_guardrail.py --runtime claude",
-        "unset CLAUDECODE && uv run tests/test_rejection_flow.py --runtime claude",
-        "unset CLAUDECODE && uv run tests/test_feedback_keepalive.py",
-        "unset CLAUDECODE && uv run tests/test_merge_hook_guardrail.py --runtime claude",
-        "unset CLAUDECODE && uv run tests/test_push_main_before_pr.py",
-        "unset CLAUDECODE && uv run tests/test_rebase_branch_before_push.py",
-        "uv run tests/test_gate_guardrail.py --runtime codex",
-        "uv run tests/test_rejection_flow.py --runtime codex",
-        "uv run tests/test_merge_hook_guardrail.py --runtime codex",
-    ):
-        assert command in text
+    assert "make test-live-claude" in text, "claude-live job should call make test-live-claude"
+    assert "make test-live-codex" in text, "codex-live job should call make test-live-codex"
 
     for field in (
         "PR number",
@@ -127,7 +117,6 @@ def test_runtime_live_e2e_workflow_lists_the_expected_commands_and_provenance_fi
     assert "inputs.pr_number" in text
     assert "TRIGGER_SOURCE" in text
     assert "DISPATCH_PR_NUMBER" in text
-    assert "set -euo pipefail" in text
     assert "continue-on-error" not in text
     assert "|| true" not in text
 
