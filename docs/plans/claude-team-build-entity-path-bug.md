@@ -1,7 +1,7 @@
 ---
 id: 151
 title: "claude-team build: entity path translation drops workflow_dir subpath"
-status: implementation
+status: validation
 source: "FO dry-run of helper for #148 implementation dispatch, 2026-04-14 — exposed a path-mangling bug"
 started: 2026-04-14T21:03:21Z
 completed:
