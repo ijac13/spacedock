@@ -1,7 +1,7 @@
 ---
 id: 144
 title: "Workflow README — `## Schema` YAML and `### Field Reference` table are redundant"
-status: validation
+status: done
 source: CL observation on a fresh commissioned workflow README during 2026-04-13 session
 started: 2026-04-14T04:31:46Z
 completed:
@@ -10,6 +10,7 @@ score: 0.45
 worktree: .worktrees/spacedock-ensign-workflow-readme-schema-and-fields-deduplication
 issue:
 pr:
+mod-block: merge:pr-merge
 ---
 
 A freshly commissioned workflow README emits two adjacent sections that describe the same per-entity fields:
