@@ -7,6 +7,7 @@ score: 0.70
 started: 2026-04-13T21:19:53Z
 worktree: .worktrees/spacedock-ensign-build-dispatch-structured-helper
 mod-block: merge:pr-merge
+pr: #90
 ---
 
 Replace the prose-wearing-code `Agent()` dispatch template in the Claude first-officer runtime adapter with a structured helper. The helper owns deterministic scaffolding (name derivation, team_name wiring, stage definition extraction, guardrail paragraphs, completion rubric); the FO supplies judgment fragments (checklist, feedback context, scope notes) as JSON on stdin; the helper emits a validated dispatch JSON object that the FO forwards to `Agent()` verbatim. This is Phase 2 of local issue #63.
