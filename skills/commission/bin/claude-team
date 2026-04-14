@@ -1,12 +1,265 @@
 #!/usr/bin/env python3
 # ABOUTME: Team utility for Claude Code agent coordination.
-# ABOUTME: Subcommands: context-budget (check agent context window usage and reuse eligibility).
+# ABOUTME: Subcommands: context-budget, build (structured dispatch assembly).
 
 import argparse
 import glob
+import importlib.machinery
+import importlib.util
 import json
 import os
+import re
 import sys
+from pathlib import Path
+
+# --- Shared functions imported from sibling `status` script ---
+# Borrowed surface: parse_frontmatter, parse_stages_block,
+#     load_active_entity_fields, find_git_root
+# These functions are tested via the sibling-import path in
+# tests/test_claude_team.py::test_status_sibling_import_*
+_here = Path(__file__).resolve().parent
+_status_path = str(_here / "status")
+_loader = importlib.machinery.SourceFileLoader("_status_lib", _status_path)
+_spec = importlib.util.spec_from_file_location("_status_lib", _status_path, loader=_loader)
+_status = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_status)
+
+parse_frontmatter = _status.parse_frontmatter
+parse_stages_block = _status.parse_stages_block
+load_active_entity_fields = _status.load_active_entity_fields
+find_git_root = _status.find_git_root
+
+
+SCHEMA_VERSION = 1
+BUILD_REQUIRED_FIELDS = ('schema_version', 'entity_path', 'workflow_dir', 'stage', 'checklist')
+NAME_PATTERN = re.compile(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$')
+NAME_MAX_LEN = 63
+
+
+def extract_stage_subsection(readme_path, stage_name):
+    """Extract the full ### `{stage_name}` subsection from a workflow README."""
+    with open(readme_path, 'r') as f:
+        text = f.read()
+    lines = text.splitlines()
+    start = None
+    heading_pattern = f'### `{stage_name}`'
+    for i, line in enumerate(lines):
+        if line.strip() == heading_pattern:
+            start = i
+            break
+    if start is None:
+        return None
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        stripped = lines[i].strip()
+        if stripped.startswith('### ') or stripped.startswith('## '):
+            end = i
+            break
+    while end > start and not lines[end - 1].strip():
+        end -= 1
+    return '\n'.join(lines[start:end])
+
+
+def _build_error(msg, code=1):
+    """Print error to stderr and return exit code."""
+    print(f'error: {msg}', file=sys.stderr)
+    return code
+
+
+def cmd_build(args):
+    """Assemble a structured dispatch JSON from entity, workflow, and FO-supplied fragments."""
+    workflow_dir = args.workflow_dir
+
+    # Read stdin
+    try:
+        raw = sys.stdin.read()
+    except Exception as e:
+        return _build_error(f'failed to read stdin: {e}')
+
+    try:
+        inp = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return _build_error(f'invalid JSON on stdin: {e}')
+
+    if not isinstance(inp, dict):
+        return _build_error('stdin must be a JSON object')
+
+    # Rule 1: Required fields present
+    for field in BUILD_REQUIRED_FIELDS:
+        if field not in inp or inp[field] is None:
+            return _build_error(f"missing required field '{field}'")
+
+    # Rule 2: Schema version supported
+    sv = inp['schema_version']
+    if sv != SCHEMA_VERSION:
+        return _build_error(f'unsupported input schema_version {sv}, expected {SCHEMA_VERSION}', code=2)
+
+    entity_path = inp['entity_path']
+    stage = inp['stage']
+    checklist = inp['checklist']
+    team_name = inp.get('team_name')
+    feedback_context = inp.get('feedback_context')
+    scope_notes = inp.get('scope_notes')
+    bare_mode = inp.get('bare_mode', False)
+    is_feedback_reflow = inp.get('is_feedback_reflow', False)
+
+    # Rule 9: Checklist non-empty
+    if not isinstance(checklist, list) or len(checklist) == 0:
+        return _build_error('checklist must not be empty')
+
+    # Rule 10: Entity file readable
+    if not os.path.isfile(entity_path):
+        return _build_error(f"entity file not readable at '{entity_path}'")
+
+    # Rule 11: Workflow README readable
+    readme_path = os.path.join(workflow_dir, 'README.md')
+    if not os.path.isfile(readme_path):
+        return _build_error(f"workflow README not found at '{readme_path}'")
+
+    # Parse workflow stages
+    stages = parse_stages_block(readme_path)
+    if stages is None:
+        return _build_error(f"no stages block found in {readme_path}")
+
+    stage_by_name = {s['name']: s for s in stages}
+
+    # Rule 3: Stage exists in workflow
+    if stage not in stage_by_name:
+        return _build_error(f"stage '{stage}' not found in {readme_path}")
+
+    stage_meta = stage_by_name[stage]
+
+    # Rule 4: Worktree stage has worktree path
+    entity_fields = parse_frontmatter(entity_path)
+    entity_title = entity_fields.get('title', '')
+    entity_worktree = entity_fields.get('worktree', '').strip()
+
+    if stage_meta.get('worktree', False):
+        if not entity_worktree:
+            return _build_error(f"worktree stage '{stage}' but entity has no worktree path")
+        git_root = find_git_root(workflow_dir)
+        worktree_path = os.path.join(git_root, entity_worktree)
+        if not os.path.isdir(worktree_path):
+            return _build_error(f"worktree path '{worktree_path}' does not exist")
+    else:
+        worktree_path = None
+
+    # Rule 5: Feedback context required for feedback reflow
+    if is_feedback_reflow and not feedback_context:
+        return _build_error(f"dispatching to feedback target stage '{stage}' but feedback_context is missing")
+
+    # Rule 8: Team name non-empty in team mode
+    if not bare_mode and not team_name:
+        return _build_error('team mode requires team_name')
+
+    # Rule 6: Derive subagent_type from stage agent field
+    subagent_type = stage_meta.get('agent', 'spacedock:ensign')
+
+    # Derive worker_key and name
+    worker_key = subagent_type.replace(':', '-')
+    slug = os.path.splitext(os.path.basename(entity_path))[0]
+    derived_name = f'{worker_key}-{slug}-{stage}'
+
+    # Rule 7: Name length and safety
+    if len(derived_name) > NAME_MAX_LEN:
+        return _build_error(f"derived name '{derived_name}' exceeds 63 characters")
+    if not NAME_PATTERN.match(derived_name):
+        return _build_error(f"derived name '{derived_name}' contains invalid characters")
+
+    # Extract stage subsection from README
+    stage_subsection = extract_stage_subsection(readme_path, stage)
+    if stage_subsection is None:
+        return _build_error(f"stage '{stage}' heading not found in {readme_path}")
+
+    # --- Prompt Assembly (9 components) ---
+    prompt_parts = []
+
+    # 1. Header
+    prompt_parts.append(f'You are working on: {entity_title}\n\nStage: {stage}\n')
+
+    # 2. Stage definition
+    prompt_parts.append(f'### Stage definition:\n\n{stage_subsection}\n')
+
+    # 3. Worktree instructions (conditional)
+    if worktree_path:
+        branch = f'{worker_key}/{slug}'
+        prompt_parts.append(
+            f'Your working directory is {worktree_path}\n'
+            f'All file reads and writes MUST use paths under {worktree_path}.\n'
+            f'Your git branch is {branch}. All commits MUST be on this branch. '
+            f'Do NOT switch branches or commit to main.\n'
+        )
+
+    # 4. Entity read instruction
+    if worktree_path:
+        entity_filename = os.path.basename(entity_path)
+        worktree_entity_path = os.path.join(worktree_path, entity_filename)
+        prompt_parts.append(
+            f'Read the entity file at {worktree_entity_path} for the full spec. '
+            f'It contains:\n'
+        )
+    else:
+        prompt_parts.append(
+            f'Read the entity file at {entity_path} for the current spec.\n'
+        )
+
+    # 5. Do-not-modify block (always)
+    prompt_parts.append(
+        'Do NOT modify YAML frontmatter in entity files.\n'
+        'Do NOT modify files under agents/ or references/ — these are plugin scaffolding.\n'
+    )
+
+    # 6. Feedback context (conditional)
+    if feedback_context:
+        prompt_parts.append(f'### Feedback from prior review\n\n{feedback_context}\n')
+
+    # 7. Scope notes (conditional)
+    if scope_notes:
+        prompt_parts.append(f'{scope_notes}\n')
+
+    # 8. Completion checklist
+    checklist_text = '\n'.join(checklist)
+    prompt_parts.append(
+        '### Completion checklist\n\n'
+        'Write a ## Stage Report section into the entity file when done.\n'
+        'Mark each: DONE, SKIPPED (with rationale), or FAILED (with details).\n\n'
+        f'{checklist_text}\n\n'
+        '### Summary\n'
+        '{brief description of what was accomplished}\n\n'
+        'Every checklist item must appear in your report. Do not omit items.'
+    )
+
+    # 9. Completion signal (conditional, team mode only)
+    if not bare_mode and team_name:
+        entity_file_ref = worktree_entity_path if worktree_path else entity_path
+        prompt_parts.append(
+            '\n\n### Completion Signal\n\n'
+            'This is a team-mode dispatch. When you finish (after all commits and '
+            'stage report writes are done), your last action MUST be:\n\n'
+            f'    SendMessage(to="team-lead", message="Done: {entity_title} completed '
+            f'{stage}. Report written to {entity_file_ref}.")\n\n'
+            'Plain text only. No JSON. Until you send this message, the first officer '
+            'keeps waiting for that explicit completion message. Idle notifications are '
+            'normal between-turn state while it waits.'
+        )
+
+    prompt = '\n'.join(prompt_parts)
+
+    # Build output
+    output = {
+        'schema_version': SCHEMA_VERSION,
+        'subagent_type': subagent_type,
+        'description': f'{entity_title}: {stage}',
+        'prompt': prompt,
+    }
+
+    if not bare_mode:
+        output['name'] = derived_name
+        if team_name:
+            output['team_name'] = team_name
+
+    print(json.dumps(output, indent=2))
+    return 0
 
 
 DEFAULT_CONTEXT_LIMIT = 200000
@@ -216,6 +469,9 @@ def main():
     budget_parser = subparsers.add_parser("context-budget", help="Check agent context budget")
     budget_parser.add_argument("--name", required=True, help="Agent name to look up")
 
+    build_parser = subparsers.add_parser("build", help="Assemble structured dispatch JSON")
+    build_parser.add_argument("--workflow-dir", required=True, help="Absolute path to workflow directory")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -224,6 +480,8 @@ def main():
 
     if args.command == "context-budget":
         sys.exit(cmd_context_budget(args))
+    elif args.command == "build":
+        sys.exit(cmd_build(args))
 
 
 if __name__ == "__main__":
