@@ -230,6 +230,36 @@ def _clean_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
 
 
+def _isolated_claude_env() -> dict[str, str] | None:
+    """Return an env dict with an isolated HOME and OAuth token injected.
+
+    Returns None when the opt-in preconditions aren't met: the operator must
+    have placed a valid OAuth token at `~/.claude/benchmark-token` (created via
+    `claude setup-token`). When present, we point HOME at a fresh empty
+    directory and set CLAUDE_CODE_OAUTH_TOKEN so `claude -p` authenticates
+    against the API without loading the operator's personal
+    ~/.claude/CLAUDE.md, plugins, or skills.
+
+    Returns the env dict (caller is responsible for cleaning up the temp dir
+    if it tracks one) or None if the token file is missing/empty.
+    """
+    real_home = os.environ.get("HOME")
+    if not real_home:
+        return None
+    token_path = Path(real_home) / ".claude" / "benchmark-token"
+    if not token_path.is_file():
+        return None
+    token = token_path.read_text().strip()
+    if not token:
+        return None
+    clean_home = tempfile.mkdtemp(prefix="spacedock-clean-home-")
+    env = _clean_env()
+    env["HOME"] = clean_home
+    env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+    env.pop("ANTHROPIC_API_KEY", None)
+    return env
+
+
 def emit_skip_result(reason: str) -> None:
     """Print a standardized SKIP result and exit 0 for standalone uv-run scripts."""
     print(f"  SKIP: {reason}")
@@ -260,7 +290,7 @@ def probe_claude_runtime(model: str, timeout_s: int = 30) -> tuple[bool, str]:
             cmd,
             capture_output=True,
             text=True,
-            env=_clean_env(),
+            env=_isolated_claude_env() or _clean_env(),
             timeout=timeout_s,
         )
     except FileNotFoundError:
@@ -630,11 +660,12 @@ def run_first_officer(
     if extra_args:
         cmd.extend(extra_args)
 
+    env = _isolated_claude_env() or _clean_env()
     with open(log_path, "w") as log_file:
         try:
             result = subprocess.run(
                 cmd, stdout=log_file, stderr=subprocess.STDOUT,
-                cwd=runner.test_project_dir, env=_clean_env(), timeout=600,
+                cwd=runner.test_project_dir, env=env, timeout=600,
             )
         except subprocess.TimeoutExpired:
             print("\n  TIMEOUT: first officer exceeded 600s limit")
