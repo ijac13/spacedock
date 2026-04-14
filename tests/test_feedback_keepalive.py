@@ -32,14 +32,22 @@ def _agent_targets_stage(agent_input: dict, stage: str) -> bool:
     """Check whether an Agent() call targets a given stage.
 
     Checks both the name field (which should contain the stage when the FO
-    follows the naming convention) and the prompt field (which reliably
-    contains 'Stage: {stage}' from both claude-team build and break-glass).
+    follows the naming convention) and the prompt field, which contains a
+    'Stage: {stage}' header. The header appears in two formats depending on
+    whether the FO uses the claude-team build helper or hand-assembles the
+    prompt:
+
+    - plain (helper): ``Stage: implementation``
+    - markdown-bold (hand-assembled by haiku): ``**Stage:** implementation``
+
+    Both forms are accepted.
     """
     name_lower = agent_input.get("name", "").lower()
     if stage in name_lower:
         return True
     prompt = agent_input.get("prompt", "")
-    if re.search(rf"(?m)^Stage:\s*{re.escape(stage)}\s*$", prompt):
+    pattern = rf"(?m)^\*{{0,2}}Stage:?\*{{0,2}}\s+\*{{0,2}}{re.escape(stage)}\*{{0,2}}\s*$"
+    if re.search(pattern, prompt):
         return True
     return False
 
