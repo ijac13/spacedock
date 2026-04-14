@@ -1,7 +1,7 @@
 ---
 title: First officer must enforce mod-declared blocking actions at runtime
 id: 114
-status: implementation
+status: validation
 source: CL observation during entity 110 closeout
 started: 2026-04-09T22:56:43Z
 completed:
@@ -9,7 +9,7 @@ verdict:
 score: 0.80
 worktree: .worktrees/spacedock-ensign-fo-enforce-mod-blocking-at-runtime
 issue:
-pr:
+pr: #92
 ---
 
 First officer currently relies too heavily on remembering mod instructions from prose. That is brittle. A mod can require a stop, approval, or external wait, but the runtime does not yet enforce those requirements mechanically.
