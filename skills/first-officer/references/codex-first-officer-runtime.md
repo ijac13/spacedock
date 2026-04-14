@@ -138,6 +138,9 @@ wait_agent(...)
 Always preserve the logical packaged id in summaries and use only `worker_key` in branch/worktree/session names.
 When reusing a completed worker, the equivalent pattern is `send_input(<existing_handle>, message="<next assignment>")` followed by `wait_agent(...)` on that same handle when the reused result is part of that entity's current critical path, then explicit shutdown once the reused cycle is complete and the worker is no longer needed. This wait blocks advancement of that entity, not unrelated ready entities.
 
+In interactive sessions, do not foreground `wait_agent` immediately after `spawn_agent` just because a worker was dispatched. Keep the worker in the background and continue the turn unless the next orchestration step is blocked on that worker result or the captain explicitly asks to wait.
+For bounded single-entity runs, immediate waiting after dispatch remains appropriate when completion is the point of the turn.
+
 ## Codex Worker Assignment Fields
 
 Pass these fields to a worker:
@@ -164,8 +167,9 @@ If a `worktree_path` is present, `entity_path` should point to the entity file i
 
 - Workers report completion by returning a concise final response.
 - The first officer treats the entity file and stage report as the source of truth.
-- The first officer waits for the worker result before continuing.
-- In interactive Codex mode, a completion for a gated stage becomes the next required action: foreground the stage report and gate handling before any unrelated orchestration continues.
+- In interactive sessions, the first officer keeps the worker in the background and continues the turn unless the next step is blocked on the worker result or the captain explicitly asks to wait.
+- In bounded single-entity runs, the first officer may wait immediately after dispatch because the run is scoped around that completion.
+- In interactive Codex mode, once a worker completes for a gated stage, the stage report and gate handling become the next required action before unrelated orchestration continues.
 - In bounded single-entity runs, if the worker completion message already contains the requested verdict, evidence, or terminal outcome, use that message as sufficient evidence for the final response and stop immediately.
 - Only reread the entity file or rerun `status` after `wait_agent(...)` when the worker message is missing a detail required by the stated stop condition.
 
