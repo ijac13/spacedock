@@ -9,7 +9,7 @@ verdict:
 score: 0.45
 worktree: .worktrees/spacedock-ensign-workflow-readme-schema-and-fields-deduplication
 issue:
-pr:
+pr: #91
 mod-block: merge:pr-merge
 ---
 
