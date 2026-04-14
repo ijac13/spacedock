@@ -54,7 +54,7 @@ def test_runtime_live_e2e_workflow_has_exactly_two_runtime_jobs():
     assert "name: CI-E2E" in claude_section
     assert "deployment: false" in claude_section
     assert "environment:" in codex_section
-    assert "name: CI-E2E" in codex_section
+    assert "name: CI-E2E-CODEX" in codex_section
     assert "deployment: false" in codex_section
     assert "path classifier" not in text.lower()
     assert "shard" not in text.lower()
@@ -78,6 +78,9 @@ def test_runtime_live_e2e_workflow_preserves_and_uploads_live_test_dirs():
         assert "if: always()" in job_section
         assert f"name: {artifact_name}" in job_section
         assert "path: ${{ runner.temp }}/spacedock-live/${{ github.job }}" in job_section
+
+    assert "Login Codex with API key" in codex_section
+    assert "printenv OPENAI_API_KEY | codex login --with-api-key" in codex_section
 
 
 def test_runtime_live_e2e_workflow_scopes_secrets_to_the_matching_job():

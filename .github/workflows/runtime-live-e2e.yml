@@ -141,7 +141,7 @@ jobs:
   codex-live:
     runs-on: ubuntu-latest
     environment:
-      name: CI-E2E
+      name: CI-E2E-CODEX
       deployment: false
     env:
       KEEP_TEST_DIR: "1"
@@ -228,6 +228,10 @@ jobs:
 
       - name: Install Codex CLI
         run: npm install --global @openai/codex
+
+      - name: Login Codex with API key
+        run: |
+          printenv OPENAI_API_KEY | codex login --with-api-key
 
       - name: Configure git identity
         run: |
