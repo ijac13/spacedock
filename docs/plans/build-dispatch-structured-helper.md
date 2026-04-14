@@ -456,7 +456,40 @@ The new instructions in the `## Dispatch Adapter` section, after the team health
 | 4 | **Static content test invalidation.** Replacing the adapter's `Agent()` template changes the text that `test_agent_content.py` assertions match. | High (certain) | Low | The implementation must update existing assertions in `test_agent_content.py` that reference the old template wording. Specifically: `test_assembled_claude_first_officer_has_team_health_check` (AC1 asserts `test -f` which stays), `test_assembled_claude_first_officer_dispatch_template_has_team_mode_completion_signal` (must be updated to check the break-glass template or the helper instruction). Each affected test is enumerated in the implementation checklist. |
 | 5 | **`parse_stages_block` extension regresses existing callers.** Adding `feedback-to`, `agent`, `fresh` fields to the output dict could break callers that iterate over dict keys. | Low | Low | The extension adds optional keys to dicts in a list. Existing callers use `.get()` or explicit key access — they never iterate all keys. The implementation must verify this by grepping all `parse_stages_block` call sites. |
 
-## Out of scope
+## Implementation Notes (gate-approved 2026-04-13)
+
+The ideation gate was approved with seven follow-up items from the staff review. These are mandatory for the implementer to address; they are not optional polish.
+
+1. **Correct the line references to the old dispatch template.** The ideation quotes "lines 48-57" (and in one place "lines 51-57") of `skills/first-officer/references/claude-first-officer-runtime.md` as the replacement target. The reviewer confirmed the actual `Agent(...)` block spans **lines 50-57** (line 50 opens the code block, lines 51-56 hold the Agent call, line 57 closes). Re-verify against the current file at implementation start and update any checklist or assertion that references specific line numbers.
+
+2. **Spell out worktree path and branch derivation in the prompt-assembly rules.** Prompt component #3 (worktree instructions, conditional on `worktree: true`) must name where each value comes from:
+   - `worktree_path` is read from the entity frontmatter's `worktree` field (relative or absolute — specify one and normalize).
+   - `branch` is derived as `{worker_key}/{slug}`, where `worker_key` is the dispatch_agent_id with `:` replaced by `-` (per the existing claude-first-officer runtime adapter convention at around line 30-35).
+   - Cross-reference to Validation Rule 4 (worktree path must exist on disk) so the reader sees which field is being validated.
+
+3. **Resolve the feedback-to detection ambiguity.** Validation Rule 5 fires when the stage being dispatched is a feedback-to target, but the stdin schema as written doesn't carry an explicit "this is a feedback re-dispatch" flag. Pick one of the following and encode it in both the input schema and the rule:
+   - **Option A (recommended):** FO sets `is_feedback_reflow: true` in stdin when routing a rejection. Helper trusts the flag. Simple, explicit.
+   - **Option B:** Helper scans the workflow README for any stage whose `feedback-to` field matches the target stage name, then requires `feedback_context` to be present when that pattern holds. More magical; helper must read the README.
+   - Whichever is chosen, the worked example in the Output JSON Schema section should include a feedback-reflow example alongside the ideation example.
+
+4. **Add a break-glass fallback test.** AC-12 asserts the break-glass prose exists in the runtime adapter. That is not enough. Add one of:
+   - **Unit test** in `tests/test_claude_team.py` that forces the helper to exit 1 (e.g., via malformed stdin) and asserts the FO's break-glass prose is triggered — this requires a small harness because the FO's recovery path is driven by the runtime prose, not code. If a pure unit test is not feasible, use the static-content harness to assert the break-glass template is reachable and syntactically usable as an `Agent()` call.
+   - **Static assertion** that the break-glass template in the adapter, when rendered with stub values, produces a valid Python function call — parse it with `ast.parse` as a sanity check.
+
+5. **Split the E2E test line in the test-plan table.** The "high ($2-3)" cost cell is ambiguous. Replace with two lines:
+   - `test_structured_dispatch_happy_path_e2e` — FO assembles JSON, calls helper, forwards to Agent(), minimal worker completes. Estimated cost **$0.50–$1** on haiku/low.
+   - `test_structured_dispatch_multistage_e2e` — deferred to #134 (runtime-specific-tests-on-pr) rather than a new standalone E2E, because the multi-stage path is already exercised by `test_dispatch_completion_signal.py` and the full FO pipeline. The implementer should confirm the existing completion-signal test goes green after the helper lands, and note this in the stage report.
+
+6. **Document the FO's input-assembly guardrail.** The helper validates its input, but the FO's prose-based JSON assembly is still a failure vector: if the FO sets `bare_mode: false` when teams are not active (or vice versa), the helper rejects, the FO falls back to break-glass, and the completion signal can be lost. Either:
+   - Add a one-sentence guardrail note in the new runtime-adapter prose at the place where the FO is told to assemble stdin: "the `bare_mode` field must match the current dispatch context — never infer it from the stage, always from the live team state." and
+   - Add a static assertion in `tests/test_agent_content.py` that the new prose contains that guardrail sentence verbatim.
+
+7. **Resolve the reuse path (SendMessage) scope question.** The runtime adapter has two dispatch surfaces: initial `Agent()` dispatch and `SendMessage(to="team-lead")` reuse-advance of an already-alive ensign. The ideation only covers the initial `Agent()` path. Decide, in this task, which of the following the implementation ships:
+   - **Option X (narrow):** `claude-team build` serves only initial `Agent()` dispatch. Reuse continues to use the existing prose-based `SendMessage` template in the runtime adapter. The runtime adapter then has two dispatch surfaces — document this explicitly. Future task to unify.
+   - **Option Y (wide):** `claude-team build` serves both paths. Output schema gains a `dispatch_kind: "agent"|"send_message"` field (or a sibling `claude-team send` subcommand). Single dispatch surface in the adapter.
+   - Option X is the lower-risk landing for this task; Option Y is the cleaner end-state. Pick one before implementation starts. If Option X, add a task to the Related section filing the eventual Option Y work.
+
+These notes are all implementable without another ideation cycle. Any item that cannot be resolved during implementation (e.g., discovering a structural blocker for item 7) must be raised to the captain before writing code, not silently deferred.
 
 - Codex and Gemini runtime adapter updates (separate tasks after this lands).
 - Generalizing the pattern to other fuzzy-template sites (feedback rejection flow, gate presentation, event loop) — Phase 4 of issue #63.
