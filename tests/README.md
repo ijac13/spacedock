@@ -209,6 +209,27 @@ GitHub still presents the approval flow through the deployment review UI, even t
 
 Until an approved reviewer releases the relevant environment, that job stays pending and cannot access the environment-scoped API key.
 
+### Operator flow
+
+1. **Push a PR** — The workflow triggers automatically. The `claude-live` and `codex-live` jobs appear on the PR status as pending review, with a "waiting for environment approval" banner in Actions. `make test-static` runs immediately without approval and reports back like any normal CI job.
+2. **Captain decides the PR is ready for live validation.** Typical triggers: static CI is green, the PR description matches the diff, and the cost of burning live-runtime budget is justified.
+3. **Approve the environment deployment.** Either through the GitHub UI (the PR's "pending review" banner → "Review deployments" → approve `CI-E2E` and/or `CI-E2E-CODEX`), or via the CLI:
+   ```bash
+   gh api repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments \
+     -f 'environment_ids[]={env_id}' -F state=approved -f comment='approved'
+   ```
+   The first officer can perform this step on the captain's explicit instruction, but does not self-approve. Approving one environment releases only that environment's job; approve both to release both.
+4. **Jobs run.** Each job's summary shows run provenance (trigger source, PR number, workflow SHA, head SHA, fork/same-repo, approvers). Failures come back as a normal red CI signal on the PR.
+5. **Re-test after a fix.** Push a new commit to the branch. The workflow re-triggers and the live jobs go back to pending review — approve again. For targeted reruns without a new commit, use `workflow_dispatch` (see below).
+
+### Makefile targets
+
+| Target | Model | When to use |
+|--------|-------|-------------|
+| `make test-live-claude` | haiku (default) | The primary CI signal. Runs on the `CI-E2E` environment via `runtime-live-e2e.yml`. Cheap, fast, catches most regressions. |
+| `make test-live-claude-opus` | opus with `--effort low` | Stronger-model variant of the same suite. Useful when a haiku run flakes in a way that may be model-specific, or when a dispatch-prose change needs a second signal. Not wired into the default CI workflow — invoke manually (`make test-live-claude-opus`) or add a separate job if it becomes a regular gate. |
+| `make test-live-codex` | codex default | Codex-runtime equivalent. Runs on the `CI-E2E-CODEX` environment. |
+
 Open a PR and then approve the pending environment review to release the live runtime checks. For targeted reruns, API-driven launches, or future release-branch matrix runs, invoke the workflow manually from Actions or with:
 
 ```bash

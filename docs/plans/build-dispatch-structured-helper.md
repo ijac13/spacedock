@@ -694,3 +694,21 @@ Fixed the `test_feedback_keepalive.py` CI regression by making stage detection r
 ### Summary
 
 Strengthened two reference files and added an opus CI target to close the CI failure root cause. The shared-core Dispatch section now states up front that the FO must use runtime-specific dispatch mechanisms. The claude runtime adapter's Dispatch Adapter section marks `claude-team build` as MANDATORY with explicit prohibitions ("Do NOT assemble prompts manually", "Do NOT invent `name` values"), marks each assembly step as REQUIRED, and clarifies that break-glass is reachable ONLY on non-zero exit. The new `test-live-claude-opus` Makefile target runs the same live suite with `--model opus --effort low` to give a second CI signal with a stronger model. `make test-static` is green (254/254).
+
+## Stage Report: implementation (cycle 3 follow-up — tests/README operator flow)
+
+### Checklist
+
+1. **Add operator-flow section to `tests/README.md` explaining the live E2E CI approval flow:** DONE. Added an `### Operator flow` subsection under `## PR Runtime Live E2E` with 5 numbered steps (push PR → captain decides → approve environment → jobs run → re-test via push). Included the `gh api repos/.../pending_deployments` CLI form as an alternative to the UI approval path, and noted that the FO can execute the approval on captain's explicit instruction but does not self-approve.
+
+2. **Mention the environment names (`CI-E2E`, `CI-E2E-CODEX`):** DONE. Named in the operator-flow step 3 and already present in the existing prose above. No duplication needed.
+
+3. **Reference `test-live-claude` and `test-live-claude-opus` Makefile targets and when to use each:** DONE. Added a `### Makefile targets` subsection with a 3-row table: `test-live-claude` (haiku default, primary CI signal, wired into the workflow), `test-live-claude-opus` (opus + `--effort low`, manual/secondary signal for model-specific flakes or dispatch-prose changes, not wired into the default workflow), and `test-live-codex` (codex-runtime equivalent for `CI-E2E-CODEX`).
+
+4. **Commit on branch `spacedock-ensign/build-dispatch-structured-helper`:** DONE. Commit: `docs: describe live E2E CI operator flow in tests/README`.
+
+5. **Run `make test-static` to verify no regressions:** DONE. 254 passed, 0 failed, 10 subtests passed in 5.88s.
+
+### Summary
+
+Added an operator-flow section and Makefile-target guidance to `tests/README.md` under the existing `## PR Runtime Live E2E` heading. The new prose explains the 5-step flow (push → captain decision → environment approval → run → re-test), names the two environments (`CI-E2E`, `CI-E2E-CODEX`), and distinguishes `test-live-claude` (primary CI signal, haiku) from `test-live-claude-opus` (secondary opus/low signal for model-specific verification). `make test-static` is green (254/254).
