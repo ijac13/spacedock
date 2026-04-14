@@ -725,6 +725,88 @@ class TestBuildWorktreeStage:
         assert "Your git branch is" in out["prompt"]
         assert "spacedock-ensign/wt-task" in out["prompt"]
         assert "Do NOT switch branches" in out["prompt"]
+        # AC-2: assert exact worktree-local entity path preserves workflow-dir subpath.
+        # Fixture: git_root=tmp_path, workflow under tmp_path/workflow/, so subpath is "workflow/".
+        expected_entity = str(
+            tmp_path / ".worktrees" / "spacedock-ensign-wt-task" / "workflow" / "wt-task.md"
+        )
+        assert f"Read the entity file at {expected_entity}" in out["prompt"]
+
+
+class TestBuildEntityPathTranslation:
+    """AC-1/AC-2/AC-3: Entity path translation preserves workflow_dir subpath."""
+
+    def test_build_entity_path_nested_workflow_dir(self, tmp_path):
+        """AC-1: Nested workflow dir (docs/plans/) preserves subpath in worktree entity path."""
+        (tmp_path / ".git").mkdir()
+        wf_dir = tmp_path / "docs" / "plans"
+        wf_dir.mkdir(parents=True)
+        (wf_dir / "README.md").write_text(
+            "---\n"
+            "commissioned-by: spacedock@test\n"
+            "entity-label: task\n"
+            "stages:\n"
+            "  defaults:\n"
+            "    worktree: false\n"
+            "  states:\n"
+            "    - name: ideation\n"
+            "      initial: true\n"
+            "    - name: implementation\n"
+            "      worktree: true\n"
+            "    - name: done\n"
+            "      terminal: true\n"
+            "---\n"
+            "\n"
+            "## Stages\n\n"
+            "### `ideation`\n\nThink.\n\n"
+            "### `implementation`\n\nBuild.\n\n"
+            "### `done`\n\nTerminal.\n"
+        )
+        wt_rel = ".worktrees/spacedock-ensign-task"
+        wt_abs = tmp_path / wt_rel
+        (wt_abs / "docs" / "plans").mkdir(parents=True)
+        entity = wf_dir / "task.md"
+        entity.write_text(
+            "---\n"
+            "id: 100\n"
+            "title: Nested task\n"
+            "status: implementation\n"
+            f"worktree: {wt_rel}\n"
+            "---\n"
+        )
+        (wt_abs / "docs" / "plans" / "task.md").write_text(entity.read_text())
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "implementation",
+            "checklist": ["1. Build"],
+            "team_name": "t",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp, cwd=tmp_path)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        expected_entity = str(wt_abs / "docs" / "plans" / "task.md")
+        assert f"Read the entity file at {expected_entity}" in out["prompt"]
+
+    def test_build_entity_path_non_worktree(self, tmp_path):
+        """AC-3: Non-worktree stage leaves entity path untranslated (main-branch path)."""
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Think"],
+            "team_name": "t",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert f"Read the entity file at {entity}" in out["prompt"]
+        assert ".worktrees" not in out["prompt"]
 
 
 class TestBuildFeedbackDispatch:
@@ -856,9 +938,9 @@ class TestBuildValidationRules:
         assert "feedback_context is missing" in result.stderr
 
     def test_build_validation_rule_7_name_too_long(self, tmp_path):
-        """Rule 7: Derived name exceeds 63 characters."""
+        """Rule 7: Derived name exceeds NAME_MAX_LEN (200) characters."""
         wf_dir, _ = _make_workflow_fixture(tmp_path)
-        long_slug = "a" * 60
+        long_slug = "a" * 220
         entity = wf_dir / f"{long_slug}.md"
         entity.write_text(
             "---\n"
@@ -878,7 +960,62 @@ class TestBuildValidationRules:
         }
         result = run_build(wf_dir, inp)
         assert result.returncode == 1
-        assert "exceeds 63 characters" in result.stderr
+        assert "exceeds 200 characters" in result.stderr
+
+    def test_build_long_derived_name(self, tmp_path):
+        """AC-5: Derived name longer than the old 63-char limit succeeds."""
+        wf_dir, _ = _make_workflow_fixture(tmp_path)
+        # "spacedock-ensign-" (17) + slug (45) + "-ideation" (9) = 71 chars total.
+        slug = "fo-enforce-mod-blocking-at-runtime-cycle-three"[:45]
+        assert len(slug) == 45
+        entity = wf_dir / f"{slug}.md"
+        entity.write_text(
+            "---\n"
+            "id: 005\n"
+            "title: Long slug in real life\n"
+            "status: ideation\n"
+            "worktree:\n"
+            "---\n"
+        )
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert len(out["name"]) == 71
+        assert out["name"] == f"spacedock-ensign-{slug}-ideation"
+
+    def test_build_very_long_name_still_rejected(self, tmp_path):
+        """Sanity bound: a name above 200 chars still rejects."""
+        wf_dir, _ = _make_workflow_fixture(tmp_path)
+        long_slug = "z" * 205
+        entity = wf_dir / f"{long_slug}.md"
+        entity.write_text(
+            "---\n"
+            "id: 006\n"
+            "title: Pathological slug\n"
+            "status: ideation\n"
+            "worktree:\n"
+            "---\n"
+        )
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 1
+        assert "exceeds 200 characters" in result.stderr
 
     def test_build_validation_rule_8_team_name_missing(self, tmp_path):
         """Rule 8: Team mode without team_name."""
