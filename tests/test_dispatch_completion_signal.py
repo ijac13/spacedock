@@ -1,64 +1,45 @@
-#!/usr/bin/env -S uv run
-# /// script
-# requires-python = ">=3.10"
-# ///
 # ABOUTME: E2E regression test for team-mode dispatch completion-signal in the FO template.
 # ABOUTME: Drives an FO through a team-dispatched worktree stage and asserts status advances.
 
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from test_lib import (
-    TestRunner, LogParser, create_test_project, setup_fixture,
-    emit_skip_result, install_agents, probe_claude_runtime, run_first_officer, git_add_commit, read_entity_frontmatter,
+from test_lib import (  # noqa: E402
+    LogParser,
+    emit_skip_result,
+    git_add_commit,
+    install_agents,
+    probe_claude_runtime,
+    read_entity_frontmatter,
+    run_first_officer,
+    setup_fixture,
 )
 
 
-def parse_args() -> tuple[argparse.Namespace, list[str]]:
-    parser = argparse.ArgumentParser(description="Dispatch completion-signal E2E test")
-    parser.add_argument("--runtime", choices=["claude"], default="claude")
-    parser.add_argument("--agent", default="spacedock:first-officer")
-    parser.add_argument("--model", default="haiku", help="Model to use (default: haiku)")
-    parser.add_argument("--effort", default="low", help="Effort level (default: low)")
-    return parser.parse_known_args()
-
-def main():
-    args, extra_args = parse_args()
-    t = TestRunner(f"Dispatch Completion-Signal E2E Test ({args.runtime})")
-
-    # --- Phase 1: Set up test project from fixture ---
+@pytest.mark.live_claude
+def test_dispatch_completion_signal(test_project, model, effort):
+    """Team-mode dispatch: ensign SendMessage(team-lead, "Done: ..."); FO advances status."""
+    t = test_project
 
     print("--- Phase 1: Set up test project from fixture ---")
-
-    create_test_project(t)
     setup_fixture(t, "completion-signal-pipeline", "completion-signal-pipeline")
     install_agents(t, include_ensign=True)
-
     git_add_commit(t.test_project_dir, "setup: completion-signal regression fixture")
-
     status_cmd = [
         "python3",
         str(t.repo_root / "skills" / "commission" / "bin" / "status"),
         "--workflow-dir", "completion-signal-pipeline",
     ]
     t.check_cmd("status script runs without errors", status_cmd, cwd=t.test_project_dir)
-
     print()
 
-    # --- Phase 2: Run the first officer ---
-
-    # Prompt intentionally refers to "all tasks" (plural) so the FO stays in normal
-    # team-mode dispatch instead of single-entity mode. The bug only manifests in
-    # team mode — bare mode dispatches return inline and never need the SendMessage
-    # completion signal.
-
-    print(f"--- Phase 2: Run first officer ({args.runtime}) ---")
-
-    ok, reason = probe_claude_runtime(args.model)
+    print("--- Phase 2: Run first officer (claude) ---")
+    ok, reason = probe_claude_runtime(model)
     if not ok:
         emit_skip_result(
             f"live Claude runtime unavailable before FO dispatch: {reason}. "
@@ -73,25 +54,17 @@ def main():
             "Drive every dispatchable task through its stages until the entity reaches the done "
             "stage and the local merge path archives it. Stop once the entity is archived."
         ),
-        agent_id=args.agent,
-        extra_args=["--model", args.model, "--effort", args.effort, "--max-budget-usd", "3.00", *extra_args],
+        agent_id="spacedock:first-officer",
+        extra_args=["--model", model, "--effort", effort, "--max-budget-usd", "3.00"],
     )
     if fo_exit != 0:
         print(f"  (first officer exit code {fo_exit} — may be expected for the pre-fix hang case)")
-    # Pre-fix: the FO hits the 600s timeout (exit 124) because it cannot cleanly
-    # shut down the team-dispatched ensign after it goes idle — the
-    # SendMessage(to="team-lead", ...) completion signal the FO is waiting for was
-    # never emitted by the worker. Post-fix: the ensign sends completion promptly,
-    # the FO processes it, and exits cleanly within the timeout.
     t.check("first officer exited cleanly within timeout (no pre-fix hang)", fo_exit == 0)
-
-    # --- Phase 3: Validate entity advanced without manual captain intervention ---
 
     print()
     print("--- Phase 3: Validation ---")
     print()
     print("[Entity Advancement]")
-
     entity_main = t.test_project_dir / "completion-signal-pipeline" / "completion-signal-task.md"
     entity_archive = t.test_project_dir / "completion-signal-pipeline" / "_archive" / "completion-signal-task.md"
 
@@ -104,12 +77,6 @@ def main():
     ensign_calls = [c for c in agent_calls if "ensign" in c["subagent_type"]]
     t.check("FO dispatched at least one ensign", len(ensign_calls) > 0)
 
-    # Core assertion: the entity must have advanced past the dispatched `work` stage.
-    # Pre-fix: the ensign writes its stage report and goes idle, so the FO's DISPATCH
-    # IDLE GUARDRAIL waits indefinitely — the entity stays at status=work until the
-    # session times out or the budget cap hits.
-    # Post-fix: the ensign SendMessages completion, the FO treats that as completion,
-    # and the entity advances to done (or is archived via the default local merge path).
     if entity_archive.is_file():
         t.pass_("entity advanced and was archived without manual captain intervention")
     elif entity_main.is_file():
@@ -148,9 +115,8 @@ def main():
             "instruction — the FO dropped the completion signal from its dispatch template."
         )
 
-    # --- Results ---
-    t.results()
+    t.finish()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(pytest.main([__file__, "-v"]))
