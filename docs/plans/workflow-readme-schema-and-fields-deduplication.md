@@ -1,7 +1,7 @@
 ---
 id: 144
 title: "Workflow README — `## Schema` YAML and `### Field Reference` table are redundant"
-status: implementation
+status: validation
 source: CL observation on a fresh commissioned workflow README during 2026-04-13 session
 started: 2026-04-14T04:31:46Z
 completed:
