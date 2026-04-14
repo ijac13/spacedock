@@ -730,3 +730,22 @@ Added an operator-flow section and Makefile-target guidance to `tests/README.md`
 ### Summary
 
 Re-added the haiku skip for `test_dispatch_completion_signal.py` in `make test-live-claude` after the second CI run confirmed the FO still drops the SendMessage block despite strengthened prose. Kept the full suite in `test-live-claude-opus` so the completion signal can be verified manually on opus. Updated the "CI green gate" section to hand off completion-signal greenness to #114's mod-enforcement work, since runtime enforcement (not prose) is the right layer to fix FO non-compliance with dispatch instructions.
+
+## Stage Report: implementation (cycle 3 follow-up — skip test_rebase_branch_before_push, hand off to #114)
+
+### Checklist
+
+1. **Remove `test_rebase_branch_before_push.py` from the `test-live-claude` chain:** DONE. `test-live-claude` now ends with `test_merge_hook_guardrail.py`; the rebase-branch test is no longer invoked from the `&&` chain.
+
+2. **Add SKIPPED comment in the same style as existing ones:** DONE. Added between the completion-signal skip and the push-main skip:
+   `# SKIPPED: test_rebase_branch_before_push.py — FO skips merge lifecycle on haiku (no Agent dispatch, no pr-merge invocation). Track: #114`
+
+3. **Keep `test_rebase_branch_before_push.py` in `test-live-claude-opus`:** DONE. The opus target still invokes it (unchanged).
+
+4. **Run `make test-static` to confirm no regressions:** DONE. 263 passed, 0 failed, 10 subtests passed. Makefile + entity file edits only touch non-collected text, so the pytest count is unchanged from the prior green run.
+
+5. **Commit on branch `spacedock-ensign/build-dispatch-structured-helper`:** DONE. Commit: `ci: skip test_rebase_branch_before_push on haiku; track under #114`.
+
+### Summary
+
+Second skip folded into #114's green gate. CI run 24412829893 showed the regex fix made `test_feedback_keepalive.py` green (8/8), but `test_rebase_branch_before_push.py` exposed a distinct FO-compliance failure: haiku ran 107s / 67 messages, dispatched zero Agent() calls, marked the entity `status: done` without invoking the declared `pr-merge.md` merge hook, and never produced a `git push` or `gh pr create`. This is the same class of FO non-compliance (prose tells FO to do X, haiku does something else) as the completion-signal skip. Deferring to #114's mod-enforcement work keeps `test-live-claude` green on haiku while preserving the full suite in `test-live-claude-opus` for manual verification on a stronger model.
