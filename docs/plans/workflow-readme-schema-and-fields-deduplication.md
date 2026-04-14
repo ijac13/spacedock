@@ -246,3 +246,25 @@ Removed the redundant YAML code block from the `## Schema` section in both the c
 5. Add a Makefile target for the commission E2E test — **DONE** (`test-e2e-commission` target added to Makefile)
 6. Add a static pytest test asserting no YAML fence exists in the Schema section of the commission template — **DONE** (`tests/test_commission_template.py` with 5 test functions: no yaml fence, no code fence, Field Reference exists, Template has yaml fence)
 7. Run `make test-static` and verify all existing tests pass — **DONE** (224 passed, 10 subtests passed)
+
+## Stage Report — Validation
+
+### Summary
+
+Validated all 10 acceptance criteria for the schema/field-reference dedup task. All static tests pass (224 total, including the 4 new commission template tests). The YAML code block has been removed from the `## Schema` section in both the commission skill template and the live workflow README, with the Field Reference table and Template sections preserved intact.
+
+### Checklist
+
+1. Read `tests/README.md` to determine correct test harness and entrypoints — **DONE** (identified `make test-static` as the correct offline entrypoint; no E2E needed for this template-only change)
+2. Run `make test-static` and report results — **DONE** (224 passed, 10 subtests passed in 4.71s)
+3. Verify AC-1: `## Schema` section in `skills/commission/SKILL.md` does NOT contain a YAML code block between `## Schema` and `### Field Reference` — **DONE** (lines 240-244: intro sentence only, no code fence)
+4. Verify AC-2: `## Schema` section in `skills/commission/SKILL.md` still contains `### Field Reference` table with all standard fields — **DONE** (lines 244-258: table with 11 field rows — id, title, status, source, started, completed, verdict, score, worktree, issue, pr)
+5. Verify AC-3: `## {Entity_label} Template` section in `skills/commission/SKILL.md` is unchanged — still has YAML code block — **DONE** (lines 307-325: `\`\`\`yaml` fence with all fields and body placeholder present)
+6. Verify AC-4: `## Schema` section in `docs/plans/README.md` does NOT contain a YAML code block — **DONE** (lines 37-39: intro sentence only, no code fence)
+7. Verify AC-5: `## Schema` section in `docs/plans/README.md` includes cross-reference to **Task Template** — **DONE** (line 38: "see **Task Template** for a copy-paste starter.")
+8. Verify AC-6: `scripts/test_commission.py` no longer exists (moved to `tests/test_commission.py`) — **DONE** (`ls` confirms file absent from `scripts/`)
+9. Verify AC-7: `tests/test_commission.py` exists and imports work correctly — **DONE** (file exists, `sys.path.insert` points to `scripts/` for `test_lib` import)
+10. Verify AC-8: Makefile has a target for the commission E2E test — **DONE** (`test-e2e-commission` target on line 12-13, runs `uv run tests/test_commission.py`)
+11. Verify AC-9: Static test exists asserting no YAML fence in Schema section of commission template — **DONE** (`tests/test_commission_template.py` with 4 tests: no yaml fence, no code fence, Field Reference exists, Template has yaml fence)
+12. Verify AC-10: Run the new static test and confirm it passes — **DONE** (all 4 tests in `test_commission_template.py` pass)
+13. Recommendation: **PASSED** — all acceptance criteria verified with evidence, all static tests green
