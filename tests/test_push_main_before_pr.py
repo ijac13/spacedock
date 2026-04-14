@@ -40,9 +40,23 @@ def create_git_wrapper(test_dir: Path) -> Path:
 
     log_file = test_dir / "git-push-log.txt"
     wrapper = bin_dir / "git"
+    # Detect `git push ...` and `git -C <path> push ...` forms. Skip leading
+    # `-C <path>` pairs and any other leading options so the first non-option
+    # argument is inspected as the subcommand.
     wrapper.write_text(
         f'#!/bin/bash\n'
-        f'if [ "$1" = "push" ]; then\n'
+        f'args=("$@")\n'
+        f'i=0\n'
+        f'while [ $i -lt ${{#args[@]}} ]; do\n'
+        f'  case "${{args[$i]}}" in\n'
+        f'    -C|-c|--git-dir|--work-tree|--namespace|--super-prefix)\n'
+        f'      i=$((i+2));;\n'
+        f'    --*=*|-*)\n'
+        f'      i=$((i+1));;\n'
+        f'    *) break;;\n'
+        f'  esac\n'
+        f'done\n'
+        f'if [ "${{args[$i]}}" = "push" ]; then\n'
         f'  echo "$(date +%s.%N) git $*" >> {log_file}\n'
         f'fi\n'
         f'exec {git_path} "$@"\n'
