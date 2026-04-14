@@ -72,3 +72,40 @@ Migrate one test first (e.g., `test_gate_guardrail.py` — simplest, single runt
 - Interactive PTY tests (`test_lib_interactive.py`) — different harness, different lifecycle
 - Static tests — already on pytest
 - Changing test logic or assertions — harness migration only
+
+## Test structure: sequential short-circuit vs parallel (CL note, 2026-04-14)
+
+The current `test-live-claude` Makefile target uses `&&` with `set -euo pipefail`, which means the first failing test short-circuits the chain and subsequent tests never run. Concrete consequence observed on PR #90 cycles: a `test_rebase_branch_before_push` failure masked whether `test_dispatch_completion_signal` would have passed — we reported "completion-signal passed" when in fact it never executed.
+
+The pytest migration should fix this by structuring the suite into two tiers:
+
+1. **Sequential short-circuit tier** — tests that genuinely require sequential execution because a later test depends on the FO state or fixture produced by an earlier test. These run with `pytest -x` (stop on first failure) when the sequencing is meaningful.
+
+2. **Parallel tier** — tests that are hermetic and share no state. These run in parallel (pytest-xdist or marker-based batching). A failure in one should not prevent others from running.
+
+The goal is that after any CI run we know exactly which tests were supposed to run and which actually ran. The current ad-hoc chain obscures both.
+
+### Proposed mechanism
+
+Use pytest markers per stage / dependency tier rather than `&&`-chaining in the Makefile:
+
+- `@pytest.mark.live_claude_sequential` — for tests that must run in order
+- `@pytest.mark.live_claude_parallel` — for hermetic tests safe to parallelize
+- A single custom marker decorator `@live_claude_stage("sequential"|"parallel")` could wrap both — implementation detail to decide during ideation
+
+The Makefile target then invokes both tiers explicitly:
+
+```bash
+test-live-claude: ## run sequential tier, then parallel tier regardless of the first result
+	pytest -m live_claude_sequential -x || SEQ_RESULT=$$?; \
+	pytest -m live_claude_parallel -n auto || PAR_RESULT=$$?; \
+	exit $${SEQ_RESULT:-0} || exit $${PAR_RESULT:-0}
+```
+
+This guarantees every parallel test runs regardless of sequential failures, while still failing the overall CI job if any test fails.
+
+### Acceptance criteria addendum
+
+- Every live test carries exactly one tier marker (`sequential` or `parallel`).
+- The CI summary clearly shows how many tests were collected, ran, passed, and failed — distinct from whether the suite short-circuited.
+- The Makefile does not use `&&` to chain individual test invocations.
