@@ -230,3 +230,19 @@ Estimated cost: zero (static grep tests, no LLM invocation).
 ## Implementation Notes (gate-approved 2026-04-14)
 
 CL directive at gate approval: move `scripts/test_commission.py` to `tests/` alongside other test files, and wire it into the Makefile entrypoint. The script is an E2E test that invokes `claude -p` to run the commission skill, then does static validation on the output. It imports from `scripts/test_lib.py` (many `tests/` files already import from there via `sys.path`). Add a `make test-e2e-commission` target or integrate it into an existing target as appropriate.
+
+## Stage Report
+
+### Summary
+
+Removed the redundant YAML code block from the `## Schema` section in both the commission skill template (`skills/commission/SKILL.md`) and the live workflow README (`docs/plans/README.md`). Replaced with a one-sentence intro pointing readers to the Field Reference table and the copy-paste Template section. Moved the commission E2E test to `tests/` and added a static test asserting the dedup invariant. All 224 static tests pass.
+
+### Checklist
+
+1. Remove the YAML code block from `## Schema` section in `skills/commission/SKILL.md`, replace with intro sentence — **DONE** (line 242: "Every {entity_label} file has YAML frontmatter. Fields are documented below; see **{Entity_label} Template** for a copy-paste starter.")
+2. Remove the YAML code block from `## Schema` section in `docs/plans/README.md`, replace with intro sentence — **DONE** (line 38: "Every task file has YAML frontmatter. Fields are documented below; see **Task Template** for a copy-paste starter.")
+3. Verify `### Field Reference` table and `## Task Template` / `## {Entity_label} Template` sections remain unchanged in both files — **DONE** (verified by reading both files after edit; Field Reference tables and Template sections untouched)
+4. Move `scripts/test_commission.py` to `tests/test_commission.py` — update the sys.path import for `test_lib` to point to `scripts/` — **DONE** (`git mv` + updated `sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))`)
+5. Add a Makefile target for the commission E2E test — **DONE** (`test-e2e-commission` target added to Makefile)
+6. Add a static pytest test asserting no YAML fence exists in the Schema section of the commission template — **DONE** (`tests/test_commission_template.py` with 5 test functions: no yaml fence, no code fence, Field Reference exists, Template has yaml fence)
+7. Run `make test-static` and verify all existing tests pass — **DONE** (224 passed, 10 subtests passed)
