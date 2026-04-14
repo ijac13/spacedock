@@ -102,7 +102,6 @@ def test_runtime_live_e2e_workflow_lists_the_expected_commands_and_provenance_fi
     for command in (
         "unset CLAUDECODE && uv run tests/test_gate_guardrail.py --runtime claude",
         "unset CLAUDECODE && uv run tests/test_rejection_flow.py --runtime claude",
-        "unset CLAUDECODE && uv run tests/test_scaffolding_guardrail.py",
         "unset CLAUDECODE && uv run tests/test_feedback_keepalive.py",
         "unset CLAUDECODE && uv run tests/test_merge_hook_guardrail.py --runtime claude",
         "unset CLAUDECODE && uv run tests/test_push_main_before_pr.py",
