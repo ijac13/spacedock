@@ -77,7 +77,24 @@ for f in mods/*.md; do
     fi
 done
 
+# Sync self-hosted mod copies deterministically. The LLM-driven refit in step 2
+# handles narrative scaffolding updates, but mod-copy sync is a byte-equality
+# invariant enforced by tests/test_agent_content.py and must not depend on an
+# LLM skill execution.
+SELF_MODS_DIR="docs/plans/_mods"
+if [ -d "$SELF_MODS_DIR" ]; then
+    for canonical in mods/*.md; do
+        target="$SELF_MODS_DIR/$(basename "$canonical")"
+        if [ -f "$target" ]; then
+            cp "$canonical" "$target"
+        fi
+    done
+fi
+
 git add "$PLUGIN_JSON" "$MARKETPLACE_JSON" mods/*.md
+if [ -d "$SELF_MODS_DIR" ]; then
+    git add "$SELF_MODS_DIR"
+fi
 git commit -m "release: bump version to spacedock@$VERSION"
 
 # --- Step 2: Refit self-hosted workflow ---
