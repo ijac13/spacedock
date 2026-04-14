@@ -1,13 +1,13 @@
 ---
 title: First officer must enforce mod-declared blocking actions at runtime
 id: 114
-status: ideation
+status: implementation
 source: CL observation during entity 110 closeout
 started: 2026-04-09T22:56:43Z
 completed:
 verdict:
 score: 0.80
-worktree:
+worktree: .worktrees/spacedock-ensign-fo-enforce-mod-blocking-at-runtime
 issue:
 pr:
 ---
@@ -432,6 +432,18 @@ if mod_block:
 | `test_modblock_e2e_enforcement` | Live E2E (`test_modblock_enforcement.py`) | FO sets mod-block before merge hook; direct `status --set status=done` fails while blocked; normal flow completes after block clears | Medium-high |
 
 The pytest tests extend `test_status_script.py` infrastructure (shared `build_status_script`, `make_pipeline`, `run_status` helpers). The E2E test follows the pattern of `test_merge_hook_guardrail.py` — a fixture workflow with a merge mod, run through single-entity mode.
+
+### Implementation Notes (gate-approved 2026-04-14)
+
+Three mandatory items from the staff review:
+
+1. **Clarify the FO's signal for detecting hook completion.** The FO sets `mod-block` before invoking a merge hook and clears it after. But mods are prose, not executables — the FO needs a deterministic way to know the hook completed. Formalize this: does the FO check for `pr` field presence after running the hook? Does it follow the mod's explicit instructions and infer completion from state delta? Encode the answer in the Merge and Cleanup before/after wording so the session-resume path is deterministic, not heuristic.
+
+2. **Update the entity schema in `docs/plans/README.md`** to include `mod-block` in the `### Field Reference` table (Type: string, Description: "Pending mod-declared blocking action, format `{lifecycle_point}:{mod_name}`. Empty when no block is active."). Also confirm that absent/empty `mod-block` is treated as "no block" everywhere in the implementation (existing entities and archived files lack the field).
+
+3. **Extend the risk register recovery steps for missing mod files.** Replace "handle gracefully" with concrete behavior: report to captain ("Blocking mod {mod_name} is missing. The entity is stuck. Options: restore the mod file, or use `--force` to clear the block and resume normal flow."), wait for captain direction before proceeding.
+
+Additional note (not blocking but worth documenting): `mod-block` on worktree-based entities should be mirrored to main like `pr` is, so the startup/resume path on main can discover pending blocks without scanning worktrees.
 
 ### Checklist Item 9: Scope Boundary
 
