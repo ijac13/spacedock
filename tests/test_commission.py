@@ -1,45 +1,30 @@
-#!/usr/bin/env -S uv run
-# /// script
-# requires-python = ">=3.10"
-# ///
 # ABOUTME: Executable test script for the commission skill.
 # ABOUTME: Runs batch-mode commission, validates output, reports PASS/FAIL per check.
 
 from __future__ import annotations
 
-import argparse
 import os
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-# test_lib is in scripts/
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from test_lib import TestRunner, create_test_project, run_commission, extract_stats, file_contains, file_grep
+from test_lib import extract_stats  # noqa: E402
 
 
-def parse_args() -> tuple[argparse.Namespace, list[str]]:
-    parser = argparse.ArgumentParser(description="Commission skill test")
-    parser.add_argument("--model", default="opus", help="Model to use (default: opus)")
-    parser.add_argument("--effort", default="low", help="Effort level (default: low)")
-    parser.add_argument("--snapshot-dir", default=None, help="Save commissioned project to this directory")
-    return parser.parse_known_args()
+@pytest.mark.live_claude
+def test_commission(test_project, model, effort):
+    """Batch-mode commission E2E: validates every output artifact (README, entities, status script, mod)."""
+    t = test_project
+    t.keep_test_dir = t.keep_test_dir or bool(os.environ.get("KEEP_LOG"))
 
-
-def main():
-    args, extra_args = parse_args()
-    t = TestRunner("Commission Skill Test", keep_test_dir=bool(os.environ.get("KEEP_LOG")))
-
-    create_test_project(t)
     workflow_dir = t.test_project_dir / "v0-test-1"
     fo_path = t.repo_root / "agents" / "first-officer.md"
 
-    # --- Phase 1: Run commission ---
-
     print("--- Phase 1: Running commission (this takes ~30-60s) ---")
-
     prompt = """/spacedock:commission
 
 All inputs for this workflow:
@@ -55,7 +40,10 @@ All inputs for this workflow:
 
 Skip interactive questions and confirmation — use these inputs directly. Make reasonable assumptions for anything not specified. Do NOT run the pilot phase — just generate the files and stop."""
 
-    extra = ["--model", args.model, "--effort", args.effort] + extra_args
+    # test_commission historically defaulted to opus; respect the fixture-wide --model override
+    # but fall back to opus when the caller left --model at its default value of haiku.
+    model_for_run = model if model != "haiku" else "opus"
+    extra = ["--model", model_for_run, "--effort", effort]
     log_path = t.log_dir / "test-log.jsonl"
     cmd = [
         "claude", "-p", prompt,
@@ -74,11 +62,7 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
 
     extract_stats(log_path, "commission", t.log_dir)
 
-    # --- Phase 2: Validate output ---
-
     print("--- Phase 2: Validation ---")
-
-    # -- File existence --
     print()
     print("[File Existence]")
     t.check("README.md exists", (workflow_dir / "README.md").is_file())
@@ -89,7 +73,6 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
     t.check("plugin first-officer agent exists", fo_path.is_file())
     t.check("workflow-local pr-merge mod is not generated", not (workflow_dir / "_mods" / "pr-merge.md").exists())
 
-    # -- Status script --
     print()
     print("[Status Script]")
     status_script = t.repo_root / "skills" / "commission" / "bin" / "status"
@@ -103,13 +86,12 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
             status_output = status_result.stdout + status_result.stderr
         except Exception:
             status_output = ""
-
         t.check("plugin-shipped status viewer produces output", bool(status_output.strip()))
         t.check("plugin status output contains header",
                 bool(re.search(r"STATUS|SCORE", status_output, re.IGNORECASE)))
         row_count = status_output.lower().count("ideation")
         t.check(
-            f"plugin status shows 3 entities in ideation" if row_count >= 3
+            "plugin status shows 3 entities in ideation" if row_count >= 3
             else f"plugin status shows 3 entities in ideation (found {row_count})",
             row_count >= 3,
         )
@@ -118,7 +100,6 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
         t.fail("plugin status output contains header (file missing)")
         t.fail("plugin status shows 3 entities in ideation (file missing)")
 
-    # -- Entity frontmatter --
     print()
     print("[Entity Frontmatter]")
     for entity in ("full-cycle-test", "refit-command", "multi-pipeline"):
@@ -135,7 +116,6 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
             t.fail(f"{entity}.md has title field (file missing)")
             t.fail(f"{entity}.md has status: ideation (file missing)")
 
-    # -- README completeness --
     print()
     print("[README Completeness]")
     readme = workflow_dir / "README.md"
@@ -150,7 +130,6 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
     else:
         t.fail("README completeness checks (file missing)")
 
-    # -- First-officer completeness --
     print()
     print("[First-Officer Completeness]")
     if fo_path.is_file():
@@ -158,10 +137,8 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
         fo_head20 = "\n".join(fo_text.splitlines()[:20])
         t.check("first-officer has name in frontmatter",
                 bool(re.search(r"name:.*first-officer", fo_head20)))
-        # tools: should NOT be in frontmatter
         t.check("first-officer has no tools in frontmatter",
                 not bool(re.search(r"tools:", fo_head20)))
-
         keyword_checks = {
             "DISPATCHER or dispatcher": r"DISPATCHER|dispatcher",
             "TeamCreate": r"TeamCreate",
@@ -170,12 +147,10 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
             "initialPrompt": r"initialPrompt",
         }
         for label, pattern in keyword_checks.items():
-            t.check(f"plugin first-officer contains '{label}'",
-                    bool(re.search(pattern, fo_text)))
+            t.check(f"plugin first-officer contains '{label}'", bool(re.search(pattern, fo_text)))
     else:
         t.fail("plugin first-officer completeness checks (file missing)")
 
-    # -- First-officer guardrails --
     print()
     print("[First-Officer Guardrails]")
     if fo_path.is_file():
@@ -184,13 +159,10 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
                 "MUST use the Agent tool" in fo_text)
         t.check("guardrail: subagent_type prohibition",
                 bool(re.search(r"NEVER use.*subagent_type.*first-officer|never.*subagent_type.*first-officer", fo_text)))
-        t.check("guardrail: TeamCreate in startup",
-                "TeamCreate" in fo_text)
-        t.check("guardrail: report-once",
-                bool(re.search(r"Report.*ONCE|report.*once", fo_text)))
+        t.check("guardrail: TeamCreate in startup", "TeamCreate" in fo_text)
+        t.check("guardrail: report-once", bool(re.search(r"Report.*ONCE|report.*once", fo_text)))
         t.check("guardrail: gate self-approval prohibition",
                 bool(re.search(r"NEVER self-approve|NOT treat ensign.*messages as approval", fo_text)))
-        # Dispatch name must include stage to avoid name collisions
         t.check("guardrail: dispatch name includes stage for uniqueness",
                 bool(re.search(r'name=.*\{.*stage', fo_text)))
     else:
@@ -200,12 +172,10 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
         t.fail("guardrail: report-once (file missing)")
         t.fail("guardrail: gate self-approval prohibition (file missing)")
 
-    # -- README frontmatter: stages block --
     print()
     print("[README Frontmatter]")
     if readme.is_file():
         readme_text = readme.read_text()
-        # Extract frontmatter (between first and second --- delimiters)
         fm_lines = []
         in_fm = False
         for line in readme_text.splitlines():
@@ -226,17 +196,16 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
         t.check("stages has terminal state marker", "terminal: true" in fm)
         t.check("stages has at least one gate", "gate: true" in fm)
 
-        # Verify dispatch-property bullets are NOT in prose stage sections
         prose_worktree = len(re.findall(r"^- \*\*Worktree:\*\*", readme_text, re.MULTILINE))
         t.check(
-            f"no Worktree bullets in prose stage sections"
+            "no Worktree bullets in prose stage sections"
             if prose_worktree == 0
             else f"no Worktree bullets in prose stage sections (found {prose_worktree})",
             prose_worktree == 0,
         )
         prose_gate = len(re.findall(r"^- \*\*(Approval gate|Human approval):\*\*", readme_text, re.MULTILINE))
         t.check(
-            f"no approval gate bullets in prose stage sections"
+            "no approval gate bullets in prose stage sections"
             if prose_gate == 0
             else f"no approval gate bullets in prose stage sections (found {prose_gate})",
             prose_gate == 0,
@@ -244,19 +213,16 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
     else:
         t.fail("README frontmatter checks (file missing)")
 
-    # -- Entity frontmatter: id field --
     print()
     print("[Entity ID Field]")
     for entity in ("full-cycle-test", "refit-command", "multi-pipeline"):
         entity_file = workflow_dir / f"{entity}.md"
         if entity_file.is_file():
             head15 = "\n".join(entity_file.read_text().splitlines()[:15])
-            t.check(f"{entity}.md has id field",
-                    bool(re.search(r"^id:", head15, re.MULTILINE)))
+            t.check(f"{entity}.md has id field", bool(re.search(r"^id:", head15, re.MULTILINE)))
         else:
             t.fail(f"{entity}.md has id field (file missing)")
 
-    # -- First-officer: frontmatter stages reading --
     print()
     print("[First-Officer Stages Support]")
     if fo_path.is_file():
@@ -267,8 +233,7 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
         t.check("first-officer supports Fresh stage property",
                 bool(re.search(r"fresh|Fresh", fo_text)))
         t.check("first-officer dispatches fresh ensigns",
-                bool(re.search(r"dispatch fresh|always.*fresh|fresh.*dispatch",
-                               fo_text, re.IGNORECASE)))
+                bool(re.search(r"dispatch fresh|always.*fresh|fresh.*dispatch", fo_text, re.IGNORECASE)))
         t.check("first-officer has feedback protocol instructions",
                 bool(re.search(r"feedback-to|feedback instructions|deliverable|produce.*deliverable",
                                fo_text, re.IGNORECASE)))
@@ -277,7 +242,6 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
         t.check("first-officer discovers plugin-shipped mods",
                 bool(re.search(r"mods/\*\.md|plugin-shipped|mod hook", fo_text, re.IGNORECASE)))
 
-    # -- PR merge mod --
     print()
     print("[PR Merge Mod]")
     prm = t.repo_root / "mods" / "pr-merge.md"
@@ -293,7 +257,6 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
         t.fail("plugin-shipped pr-merge mod has startup hook (file missing)")
         t.fail("plugin-shipped pr-merge mod has merge hook (file missing)")
 
-    # -- No leaked template variables --
     print()
     print("[No Leaked Template Variables]")
     if workflow_dir.is_dir():
@@ -303,7 +266,6 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
             for line in text.splitlines():
                 if re.search(r'\{[a-z_]+\}', line) and "${" not in line and "slug" not in line:
                     leaked.append(f"{md_file.name}: {line.strip()}")
-
         if not leaked:
             t.pass_("no leaked template variables")
         else:
@@ -313,7 +275,6 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
     else:
         t.fail("no leaked template variables (directory missing)")
 
-    # -- No absolute paths --
     print()
     print("[No Absolute Paths]")
     if workflow_dir.is_dir():
@@ -323,7 +284,6 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
             for line in md_file.read_text().splitlines():
                 if abs_pattern.search(line):
                     abs_found.append(f"{md_file.name}: {line.strip()}")
-
         if not abs_found:
             t.pass_("no absolute paths in generated files")
         else:
@@ -331,7 +291,6 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
             for l in abs_found[:5]:
                 print(f"    Found: {l}")
 
-        # Also check the plugin-shipped status viewer
         if status_script.is_file():
             status_text = status_script.read_text()
             abs_in_status = [l for l in status_text.splitlines() if abs_pattern.search(l)]
@@ -344,20 +303,8 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
     else:
         t.fail("no absolute paths (directory missing)")
 
-    # --- Snapshot ---
-    if args.snapshot_dir:
-        print()
-        print("[Snapshot]")
-        snapshot = Path(args.snapshot_dir)
-        snapshot.mkdir(parents=True, exist_ok=True)
-
-        # Copy the test project (workflow dir + .claude/agents + any git state)
-        shutil.copytree(t.test_dir, snapshot, dirs_exist_ok=True)
-        print(f"  Snapshot saved to: {snapshot}")
-
-    # --- Summary ---
-    t.results()
+    t.finish()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(pytest.main([__file__, "-v"]))
