@@ -37,14 +37,18 @@ NAME_MAX_LEN = 200
 
 
 def extract_stage_subsection(readme_path, stage_name):
-    """Extract the full ### `{stage_name}` subsection from a workflow README."""
+    """Extract the full ### {stage_name} subsection from a workflow README.
+
+    Accepts both backtick-quoted (`### \`work\``) and bare (`### work`) headings
+    so fixtures and hand-authored workflows both parse cleanly.
+    """
     with open(readme_path, 'r') as f:
         text = f.read()
     lines = text.splitlines()
     start = None
-    heading_pattern = f'### `{stage_name}`'
+    accepted_headings = (f'### `{stage_name}`', f'### {stage_name}')
     for i, line in enumerate(lines):
-        if line.strip() == heading_pattern:
+        if line.strip() in accepted_headings:
             start = i
             break
     if start is None:
@@ -240,7 +244,12 @@ def cmd_build(args):
             f'{stage}. Report written to {entity_file_ref}.")\n\n'
             'Plain text only. No JSON. Until you send this message, the first officer '
             'keeps waiting for that explicit completion message. Idle notifications are '
-            'normal between-turn state while it waits.'
+            'normal between-turn state while it waits.\n\n'
+            '**If you are the first officer forwarding this prompt to Agent():** copy '
+            'the entire block above into `Agent(prompt=...)` character-for-character. '
+            'Do NOT paraphrase `SendMessage(to="team-lead", ...)` as "SendMessage with '
+            'to=\'team-lead\'" or any other English rewrite — the parenthesis-equals '
+            'syntax is the literal call the ensign must emit, not a description of one.'
         )
 
     prompt = '\n'.join(prompt_parts)
