@@ -268,3 +268,17 @@ Validated all 10 acceptance criteria for the schema/field-reference dedup task. 
 11. Verify AC-9: Static test exists asserting no YAML fence in Schema section of commission template — **DONE** (`tests/test_commission_template.py` with 4 tests: no yaml fence, no code fence, Field Reference exists, Template has yaml fence)
 12. Verify AC-10: Run the new static test and confirm it passes — **DONE** (all 4 tests in `test_commission_template.py` pass)
 13. Recommendation: **PASSED** — all acceptance criteria verified with evidence, all static tests green
+
+## Stage Report — Piggyback Fix: sibling-import tests decoupled from live entity
+
+### Summary
+
+After #120 merged and its entity file `docs/plans/build-dispatch-structured-helper.md` was archived to `docs/plans/_archive/`, two static tests in `TestStatusSiblingImport` broke because they hardcoded that filename as their fixture. Fixed by introducing a dedicated, stable fixture entity at `tests/fixtures/workflow-entity/sample-entity.md` and pointing both tests at it, decoupling them from the live workflow directory.
+
+### Checklist
+
+1. Read `tests/test_claude_team.py` and find all hardcoded references to `docs/plans/build-dispatch-structured-helper.md` — **DONE** (found 2 references: `test_status_sibling_import_parse_frontmatter` at line 981 and `test_status_sibling_import_load_active_entity_fields` at line 998)
+2. Pick the fix approach (dedicated fixture preferred) and apply it — **DONE** (option 1: created `tests/fixtures/workflow-entity/sample-entity.md` with minimal valid YAML frontmatter — title, id, status, score, source — and updated both tests to reference it via `REPO_ROOT / "tests" / "fixtures" / "workflow-entity" / "sample-entity.md"`)
+3. Run `make test-static` — confirm all tests pass including the two that were failing — **DONE** (267 passed, 10 subtests passed in 6.44s; focused run of `TestStatusSiblingImport` shows all 4 tests pass)
+4. Commit on the branch with message `fix: decouple sibling-import tests from live workflow entity` — **DONE** (see next commit on branch `spacedock-ensign/workflow-readme-schema-and-fields-deduplication`)
+5. Append a stage report note to the #144 entity body explaining this piggyback fix — **DONE** (this section)
