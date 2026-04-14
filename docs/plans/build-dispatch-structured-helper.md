@@ -499,7 +499,7 @@ These notes are all implementable without another ideation cycle. Any item that 
 
 ## CI green gate
 
-This task must green `test_dispatch_completion_signal.py` in `make test-live-claude`. The test is currently SKIPPED in the Makefile because the FO drops the `SendMessage(to="team-lead")` completion-signal block from its dispatch prompt — confirmed on both haiku and opus (2026-04-13). The structured helper will make the completion-signal block deterministic, which should resolve this. The implementer must verify the test passes end-to-end and restore it to the active `test-live-claude` target before closing.
+This task SKIPS `test_dispatch_completion_signal.py` on haiku due to FO model compliance variability. The structured helper is correct (247 unit tests prove it), but haiku doesn't reliably invoke it. Completion-signal greenness is tracked by #114's mod-enforcement green gate — runtime enforcement of protocol requirements is the right layer to solve FO non-compliance with dispatch instructions. The `test-live-claude-opus` Makefile target still runs the full suite including the completion-signal test for manual verification on a stronger model.
 
 ## Related
 
@@ -712,3 +712,21 @@ Strengthened two reference files and added an opus CI target to close the CI fai
 ### Summary
 
 Added an operator-flow section and Makefile-target guidance to `tests/README.md` under the existing `## PR Runtime Live E2E` heading. The new prose explains the 5-step flow (push → captain decision → environment approval → run → re-test), names the two environments (`CI-E2E`, `CI-E2E-CODEX`), and distinguishes `test-live-claude` (primary CI signal, haiku) from `test-live-claude-opus` (secondary opus/low signal for model-specific verification). `make test-static` is green (254/254).
+
+## Stage Report: implementation (cycle 3 follow-up — skip completion-signal, hand off to #114)
+
+### Checklist
+
+1. **Re-add skip for `test_dispatch_completion_signal.py` in the `test-live-claude` Makefile target:** DONE. Removed the test from the command chain (`test_rebase_branch_before_push.py` is now the last entry). Added a skip comment matching the style of existing skip comments: `# SKIPPED: test_dispatch_completion_signal.py — FO drops SendMessage block on haiku. Track: #114`.
+
+2. **Keep `test-live-claude-opus` running the full suite, add a comment near the target:** DONE. The opus target continues to invoke `test_dispatch_completion_signal.py --runtime claude --model opus --effort low`. Added the exact comment above the target: `# test-live-claude-opus runs the full suite including test_dispatch_completion_signal — use it to manually verify completion signal compliance before #114 lands.`
+
+3. **Update the "CI green gate" section in the entity file:** DONE. Replaced the old "must green" prose with: "This task SKIPS `test_dispatch_completion_signal.py` on haiku due to FO model compliance variability. The structured helper is correct (247 unit tests prove it), but haiku doesn't reliably invoke it. Completion-signal greenness is tracked by #114's mod-enforcement green gate — runtime enforcement of protocol requirements is the right layer to solve FO non-compliance with dispatch instructions. The `test-live-claude-opus` Makefile target still runs the full suite including the completion-signal test for manual verification on a stronger model."
+
+4. **Commit on the branch:** DONE. Commit on `spacedock-ensign/build-dispatch-structured-helper`: `ci: skip completion-signal test on haiku; hand off to #114`.
+
+5. **Do not update #114's entity:** NOT TOUCHED. Left untouched — FO owns that commit on main.
+
+### Summary
+
+Re-added the haiku skip for `test_dispatch_completion_signal.py` in `make test-live-claude` after the second CI run confirmed the FO still drops the SendMessage block despite strengthened prose. Kept the full suite in `test-live-claude-opus` so the completion signal can be verified manually on opus. Updated the "CI green gate" section to hand off completion-signal greenness to #114's mod-enforcement work, since runtime enforcement (not prose) is the right layer to fix FO non-compliance with dispatch instructions.
