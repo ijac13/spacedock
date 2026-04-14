@@ -2146,5 +2146,205 @@ class TestDiscover(unittest.TestCase):
         self.assertNotIn('discover candidate workflows from the current repository', content)
 
 
+class TestModBlockGuard(unittest.TestCase):
+    """Test mod-block enforcement in --set and --archive."""
+
+    def setUp(self):
+        self._script_dir = tempfile.mkdtemp()
+        self.script_path = build_status_script(self._script_dir)
+
+    def tearDown(self):
+        os.unlink(self.script_path)
+        os.rmdir(self._script_dir)
+
+    def _read_frontmatter(self, filepath):
+        fields = {}
+        in_fm = False
+        with open(filepath, 'r') as f:
+            for line in f:
+                line = line.rstrip('\n')
+                if line == '---':
+                    if in_fm:
+                        break
+                    in_fm = True
+                    continue
+                if in_fm and ':' in line:
+                    key, _, val = line.partition(':')
+                    fields[key.strip()] = val.strip()
+        return fields
+
+    @staticmethod
+    def _blocked_entity(id, title, status, mod_block='merge:pr-merge',
+                        score='', worktree='', pr=''):
+        return textwrap.dedent(f"""\
+            ---
+            id: {id}
+            title: {title}
+            status: {status}
+            source:
+            started:
+            completed:
+            verdict:
+            score: {score}
+            worktree: {worktree}
+            pr: {pr}
+            mod-block: {mod_block}
+            ---
+
+            Description.
+            """)
+
+    def test_modblock_guard_refuses_terminal_status(self):
+        """--set slug status=done on entity with mod-block exits 1."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': self._blocked_entity('001', 'Task A', 'validation'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'status=done',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('mod-block', result.stderr)
+            self.assertIn('merge:pr-merge', result.stderr)
+
+    def test_modblock_guard_refuses_completed(self):
+        """--set slug completed on mod-blocked entity exits 1."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': self._blocked_entity('001', 'Task A', 'validation'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'completed',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('mod-block', result.stderr)
+
+    def test_modblock_guard_refuses_verdict(self):
+        """--set slug verdict=PASSED on mod-blocked entity exits 1."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': self._blocked_entity('001', 'Task A', 'validation'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'verdict=PASSED',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('mod-block', result.stderr)
+
+    def test_modblock_guard_refuses_worktree_clear(self):
+        """--set slug worktree= on mod-blocked entity exits 1."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': self._blocked_entity('001', 'Task A', 'validation',
+                                                   worktree='.worktrees/ensign-task-a'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'worktree=',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('mod-block', result.stderr)
+
+    def test_modblock_guard_allows_pr_update(self):
+        """--set slug pr=#57 on mod-blocked entity succeeds."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': self._blocked_entity('001', 'Task A', 'validation'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'pr=#57',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['pr'], '#57')
+
+    def test_modblock_guard_allows_nonterminal_status(self):
+        """--set slug status=implementation on mod-blocked entity succeeds."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': self._blocked_entity('001', 'Task A', 'ideation'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'status=implementation',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['status'], 'implementation')
+
+    def test_modblock_force_overrides_guard(self):
+        """--set slug status=done --force on mod-blocked entity succeeds with warning."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': self._blocked_entity('001', 'Task A', 'validation'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'status=done', '--force',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('Warning', result.stderr)
+            self.assertIn('mod-block', result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['status'], 'done')
+
+    def test_modblock_archive_guard(self):
+        """--archive slug on mod-blocked entity exits 1."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': self._blocked_entity('001', 'Task A', 'done'),
+            })
+            result = run_status(tmpdir, '--archive', 'task-a',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('mod-block', result.stderr)
+
+    def test_modblock_archive_force_overrides(self):
+        """--archive slug --force on mod-blocked entity succeeds with warning."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': self._blocked_entity('001', 'Task A', 'done'),
+            })
+            result = run_status(tmpdir, '--archive', 'task-a', '--force',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('Warning', result.stderr)
+            dest = os.path.join(tmpdir, '_archive', 'task-a.md')
+            self.assertTrue(os.path.exists(dest))
+
+    def test_modblock_set_and_clear(self):
+        """mod-block field is settable and clearable via --set."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'validation', '0.80'),
+            })
+            # Set mod-block
+            result = run_status(tmpdir, '--set', 'task-a', 'mod-block=merge:pr-merge',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['mod-block'], 'merge:pr-merge')
+
+            # Clear mod-block
+            result = run_status(tmpdir, '--set', 'task-a', 'mod-block=',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['mod-block'], '')
+
+    def test_absent_modblock_treated_as_no_block(self):
+        """Entity without mod-block field allows terminal transitions freely."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'validation', '0.80'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'status=done',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['status'], 'done')
+
+    def test_empty_modblock_treated_as_no_block(self):
+        """Entity with empty mod-block field allows terminal transitions."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': self._blocked_entity('001', 'Task A', 'validation',
+                                                   mod_block=''),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'status=done',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+
 if __name__ == '__main__':
     unittest.main()
