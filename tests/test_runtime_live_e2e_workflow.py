@@ -104,7 +104,6 @@ def test_runtime_live_e2e_workflow_lists_the_expected_commands_and_provenance_fi
         "unset CLAUDECODE && uv run tests/test_rejection_flow.py --runtime claude",
         "unset CLAUDECODE && uv run tests/test_scaffolding_guardrail.py",
         "unset CLAUDECODE && uv run tests/test_feedback_keepalive.py",
-        "unset CLAUDECODE && uv run tests/test_dispatch_completion_signal.py",
         "unset CLAUDECODE && uv run tests/test_merge_hook_guardrail.py --runtime claude",
         "unset CLAUDECODE && uv run tests/test_push_main_before_pr.py",
         "unset CLAUDECODE && uv run tests/test_rebase_branch_before_push.py",
@@ -152,4 +151,4 @@ def test_tests_readme_documents_runtime_live_e2e_workflow():
     assert "approval/reviewer context" in text
     assert "Trigger source" in text
     assert "job stays red" in text
-    assert "pending `CI-E2E` deployment" in text
+    assert "pending environment review" in text

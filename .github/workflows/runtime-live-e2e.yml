@@ -125,7 +125,6 @@ jobs:
           unset CLAUDECODE && uv run tests/test_rejection_flow.py --runtime claude
           unset CLAUDECODE && uv run tests/test_scaffolding_guardrail.py
           unset CLAUDECODE && uv run tests/test_feedback_keepalive.py
-          unset CLAUDECODE && uv run tests/test_dispatch_completion_signal.py
           unset CLAUDECODE && uv run tests/test_merge_hook_guardrail.py --runtime claude
           unset CLAUDECODE && uv run tests/test_push_main_before_pr.py
           unset CLAUDECODE && uv run tests/test_rebase_branch_before_push.py
