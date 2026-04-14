@@ -1,15 +1,16 @@
 ---
 id: 100
 title: "status tool: add workflow directory discovery"
-status: validation
+status: done
 source: CL observation — Codex startup uses raw rg for discovery
 started: 2026-04-13T15:57:56Z
-completed:
-verdict:
+completed: 2026-04-14T01:08:21Z
+verdict: PASSED
 score: 0.60
-worktree: .worktrees/spacedock-ensign-status-workflow-discovery
+worktree: 
 issue:
 pr: #85
+archived: 2026-04-14T01:08:37Z
 ---
 
 The startup procedure (step 2) requires searching for README.md files with `commissioned-by: spacedock@` frontmatter to discover workflow directories. Every runtime (Claude Code, Codex) reimplements this as a raw grep/rg call before it can invoke `status --boot`.
