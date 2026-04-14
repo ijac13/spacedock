@@ -13,10 +13,9 @@ from pathlib import Path
 import pytest
 
 _HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE))
 sys.path.insert(0, str(_HERE.parent / "scripts"))
 
-from test_feedback_keepalive import _agent_targets_stage
+from test_lib import _agent_targets_stage
 
 
 class TestAgentTargetsStage:
