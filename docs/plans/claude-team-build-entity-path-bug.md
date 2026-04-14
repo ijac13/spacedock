@@ -115,3 +115,27 @@ The bug is small, well-understood, and blocks clean dispatch for #148 (pytest mi
 
 - 2026-04-14: FO dry-run for #148 implementation dispatch exposed entity-path translation bug
 - 2026-04-14: FO dry-run for #114 cycle 4 dispatch exposed 63-char name limit as over-restrictive (real entity slug + stage suffix exceeds the rule)
+
+## Stage Report
+
+### Summary
+Fixed both bugs in `skills/commission/bin/claude-team` `build` subcommand:
+- **Entity path translation** now computes `os.path.relpath(entity_path, git_root)` and joins onto the worktree root, preserving nested workflow subpaths like `docs/plans/`. Before: `{worktree_root}/{basename(entity_path)}`. After: `{worktree_root}/{rel_path_from_repo_root}`.
+- **Name length limit** raised from 63 to 200 via the `NAME_MAX_LEN` constant. The rule-7 error message now interpolates the constant rather than hardcoding `63`.
+
+### Checklist
+1. **Read entity file for full spec** — DONE
+2. **Fix path computation in prompt assembly** — DONE. `skills/commission/bin/claude-team:194-196` now uses `os.path.relpath(entity_path, git_root)`.
+3. **Raise Rule 7 limit to 200** — DONE. `skills/commission/bin/claude-team:36` updated `NAME_MAX_LEN = 200`; error message at line 165 uses the constant.
+4. **Dry-run verifies corrected subpath in output prompt** — DONE. Non-worktree dry-run against `docs/plans/claude-team-build-entity-path-bug.md` emits the untranslated main-branch path. Nested-workflow translation is covered end-to-end by `test_build_entity_path_nested_workflow_dir`, which constructs a `docs/plans/` fixture and asserts the exact worktree-local path.
+5. **71-char derived name emits valid JSON** — DONE. `test_build_long_derived_name` asserts a 71-char derived name builds successfully.
+6. **Pytest tests for all 5 ACs in tests/test_claude_team.py** — DONE:
+   - `TestBuildEntityPathTranslation::test_build_entity_path_nested_workflow_dir` (AC-1)
+   - `TestBuildWorktreeStage::test_build_worktree_stage_dispatch` extended to assert exact worktree path (AC-2)
+   - `TestBuildEntityPathTranslation::test_build_entity_path_non_worktree` (AC-3)
+   - `TestBuildValidationRules::test_build_long_derived_name` (AC-5)
+   - `TestBuildValidationRules::test_build_very_long_name_still_rejected` (sanity bound)
+   - `test_build_validation_rule_7_name_too_long` updated to use 220-char slug and assert "exceeds 200 characters" message.
+7. **make test-static green** — DONE. 271 passed, 10 subtests passed (baseline 267; +4 new test functions, AC-2 extension within existing test).
+8. **Commit on the branch** — DONE.
+
