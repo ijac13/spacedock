@@ -136,12 +136,16 @@ def test_live_makefile_targets_do_not_require_bash_without_declaring_it():
         assert "SHELL := /bin/bash" in text
 
 
-def test_live_makefile_skips_push_main_before_pr_until_mod_block_enforcement_lands():
+def test_live_makefile_runs_mod_block_enforced_tests():
     text = read_makefile()
 
-    assert "# SKIPPED: test_push_main_before_pr.py" in text
-    assert "Track: #114" in text
-    assert "\n\tuv run tests/test_push_main_before_pr.py" not in text
+    # After #114 landed, these tests run as part of `test-live-claude` instead of being skipped.
+    assert "\n\tuv run tests/test_push_main_before_pr.py" in text
+    assert "\n\tuv run tests/test_rebase_branch_before_push.py" in text
+    assert "\n\tuv run tests/test_dispatch_completion_signal.py --runtime claude" in text
+    assert "# SKIPPED: test_push_main_before_pr.py" not in text
+    assert "# SKIPPED: test_rebase_branch_before_push.py" not in text
+    assert "# SKIPPED: test_dispatch_completion_signal.py" not in text
 
 
 def test_tests_readme_documents_runtime_live_e2e_workflow():
