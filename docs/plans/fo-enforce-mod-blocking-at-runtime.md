@@ -696,3 +696,56 @@ Fixture compliance is still required to *reach* the mechanism, but cycle 4's `se
 | `tests/test_push_main_before_pr.py` | claude/haiku | PASS 10/10 |
 | `tests/test_push_main_before_pr.py` | claude/opus low | PASS 11/11 |
 | `make test-static` | n/a | PASS 297/297 (10 subtests) |
+
+## Stage Report — Cycle 5 addendum
+
+### Goal
+
+Fix `test_dispatch_completion_signal.py` on CI haiku after cycle 4 additions caused the assertion "dispatched ensign prompt carries SendMessage(to=\"team-lead\", ...) instruction" to fail on PR #92.
+
+### Root cause
+
+The failure is **not** "the FO dropped the completion signal from its dispatch template" as the brief framed it. The actual chain of events in CI (run 24426773839):
+
+1. FO (haiku) reads the README; one task in the workflow.
+2. FO decides this is a single-entity-like scenario and skips team setup entirely — no `ToolSearch(query="select:TeamCreate")`, no `TeamCreate`.
+3. FO calls `claude-team build` with `bare_mode: true, team_name: null`.
+4. `claude-team build` at `skills/commission/bin/claude-team:237` **correctly** suppresses the `### Completion Signal` block because `bare_mode` is true — in bare mode, Agent() blocks and returns inline, SendMessage would fail (no team to message).
+5. FO calls `Agent(subagent_type=..., prompt=<no signal>)`. Ensign writes greeting.txt, updates entity frontmatter via the merge path, entity is archived. Everything works end-to-end — `fo_exit=0`, entity archived, `status=done` equivalent.
+6. Test's prompt-sanity assertion looks for `SendMessage(to="team-lead"` in the Agent prompt and fails, because bare mode legitimately omits it.
+
+The test was un-skipped on this branch (commit 7168fad7) from the previous SKIPPED-on-haiku state of PR #90/91/93. It was never actually passing on haiku in CI — the brief's claim that it "passed on PR #90/91/93" reflects the SKIPPED status on those PRs, not a real pass.
+
+Cycle 4's prose additions did not cause the regression. Haiku's bare-mode preference for single-task workflows is a standing behavior.
+
+### Design choice: hybrid (A) + (B-variant)
+
+- **Option A (trim prose):** the cycle 4 "Verbatim means character-for-character" paragraph, "Anti-patterns" list, and "Post-dispatch verification" step are warnings about a failure mode (paraphrasing the signal) that was not the actual CI failure. They bloat the runtime adapter without evidence of benefit. Trimmed.
+- **Option B (helper sentinel):** rejected as implemented by the brief — "emit the signal unconditionally from the helper" is unsafe. In bare mode, instructing the ensign to "your last action MUST be `SendMessage(to=\"team-lead\")`" risks the ensign retrying a call that fails (no team exists) instead of returning cleanly. The helper's bare-mode suppression at line 237 is correct and should stay.
+- **B-variant (test-level):** the test assertion is the thing that needs to adapt to bare mode. Bare-mode dispatches don't need the signal because Agent() returns inline — the original-bug scenario (FO hangs waiting for a signal the ensign was never told to send) only applies in team mode. Extended `LogParser.agent_calls` to include `team_name`; the test now passes the signal check when dispatch was bare (no `team_name` on the Agent call) and still catches the team-mode regression if `team_name` is present without `SendMessage(to="team-lead"` in the prompt.
+
+The entity-advancement checks (lines 113-125 of the test) remain unconditional — they catch the end-to-end pre-fix hang regardless of mode. The SendMessage-in-prompt check is the narrower sanity check that's now mode-aware.
+
+### Checklist
+
+1. DONE: `git status` clean at start.
+2. DONE: Downloaded run 24426773839 artifact. Inspected `agent-calls.txt`, `agent-prompts.txt`, `fo-log.jsonl` at `/tmp/ci-pr92-cycle4/spacedock-test-l5mkclka/`. Also inspected earlier cycle 4 run 24418652541 at `/tmp/ci-cycle4-first/spacedock-test-crzwgti4/`, and attempted PR #91/#93 artifacts (both did not include completion-signal-pipeline because the test was SKIPPED via the Makefile comment on fb5f57c5).
+3. DONE: FO invoked `claude-team build` with `bare_mode: true, team_name: null`. The helper's conditional at line 237 suppressed the `### Completion Signal` block exactly as designed. Agent() was called with the prompt missing `SendMessage(to="team-lead"`. End-to-end entity archival succeeded.
+4. DONE: Picked hybrid A + test-level B-variant. Justified above.
+5. DONE: Implemented the fix.
+   - `skills/first-officer/references/claude-first-officer-runtime.md`: removed the "Verbatim means character-for-character" paragraph, anti-patterns list, and the post-dispatch verification step. Restored the numbered step 4 → 5 as 4.
+   - `scripts/test_lib.py`: `LogParser.agent_calls()` now captures `team_name` from the Agent tool call input.
+   - `tests/test_dispatch_completion_signal.py`: the SendMessage-in-prompt check is gated on finding a team-mode Agent call (non-empty `team_name`). Bare-mode dispatches pass the check (with a note) because the signal is intentionally absent and the mode is valid for the end-to-end scenario.
+6. DONE: `make test-static` — 301 passed, 10 subtests passed. Output pristine.
+7. SKIPPED: local haiku reproduction of `test_dispatch_completion_signal.py`. The captain's `~/.claude/CLAUDE.md` contaminates the FO context; the documented workarounds (`CLAUDE_CONFIG_DIR=$(mktemp -d)` or renaming `~/.claude/CLAUDE.md`) both either require session-wide side effects or don't neutralize the plugins/skills directories. Chose not to rename global state without CL approval. The fix is structural — trimmed prose (no behavior change in the helper) + a mode-aware test assertion (no behavior change in the FO) — and `make test-static` covers the code paths that changed. CI on claude-live will confirm.
+8. DONE: Commit on `spacedock-ensign/fo-enforce-mod-blocking-at-runtime` — see history.
+
+### Files changed
+
+- `skills/first-officer/references/claude-first-officer-runtime.md` — trimmed cycle 4 prose (the "Verbatim means character-for-character" paragraph, anti-patterns list, and post-dispatch verification step). Kept the Mod-Block Enforcement section.
+- `scripts/test_lib.py` — `LogParser.agent_calls()` captures `team_name`.
+- `tests/test_dispatch_completion_signal.py` — SendMessage-in-prompt assertion now mode-aware (bare-mode dispatches pass since the signal is intentionally absent).
+
+### Summary
+
+Root cause: FO (haiku) takes the bare-mode path for single-task workflows and the helper correctly suppresses the completion signal in bare mode — the test asserted a team-mode behavior but the FO never entered team mode. Cycle 4 prose was not the cause. Fix: trimmed the redundant cycle 4 prose that warned about paraphrasing (not the actual failure mode), and made the test's SendMessage-in-prompt check conditional on finding a team-mode Agent dispatch. The end-to-end entity-advancement checks in the test remain unconditional and still catch the original pre-fix hang scenario.
