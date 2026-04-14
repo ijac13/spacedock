@@ -583,3 +583,46 @@ Added the permanent `claude-live-opus` CI job to `.github/workflows/runtime-live
 ### Summary
 
 Permanent `claude-live-opus` CI job added to `runtime-live-e2e.yml` gated on `CI-E2E-OPUS`, with matching static test coverage and README updates. Folds the #150 spec into the #114 PR per CL direction.
+
+## Stage Report
+
+### Implementation (cycle 4 — un-skip the three live tests #114 owns)
+
+#### Summary
+
+Cycle 2's task was to drive the three SKIPPED haiku live tests (`test_dispatch_completion_signal.py`, `test_rebase_branch_before_push.py`, `test_push_main_before_pr.py`) back to green and wire them into `make test-live-claude`. All three now pass on haiku. The fix spanned four areas:
+
+1. **Combined-clear guard** (primary fix for the "FO drifts past pr-merge" class of failures). The status `--set` guard now refuses to clear `mod-block` and touch terminal fields (`status={terminal}`, `completed`, `verdict`, `worktree=`) in the same call. Haiku's drift pattern on the rebase test was exactly that: one `--set slug mod-block= verdict=PASSED worktree=` bundled the clear with terminalization, then archived and deleted the remote branch. Separating the two operations forces the clear commit to stand on its own so any session-resume or reviewer sees the block resolving before terminalization.
+2. **Dispatch helper + runtime adapter verbatim-prompt discipline.** `claude-team build`'s `extract_stage_subsection` now accepts both backtick-quoted and bare `### stage` headings (fixtures use bare; live docs/plans uses backtick), and the runtime adapter's dispatch step 3 adds explicit paraphrase anti-patterns and a step 4 post-dispatch verification requiring the literal `SendMessage(to="team-lead"` substring. Haiku had been dropping the completion signal when the helper failed silently on fixture headings and when it paraphrased the output.
+3. **Test infrastructure fixes.** The `git` wrappers in `test_push_main_before_pr` and `test_rebase_branch_before_push` only caught `git push ...` and missed `git -C <path> push ...` — haiku uses the latter form. Normalized the wrapper to skip `-C`/option pairs. The `test_gate_guardrail` self-approval regex was matching the FO's recitation of the guardrail ("must not self-approve"); scrub negated phrasings before searching. The sibling-import smoke tests in `test_claude_team.py` hard-coded an archived entity; CL moved them to a stable fixture in parallel.
+4. **Prose updates to shared-core.** Merge-and-Cleanup step 5 now requires the clear in its own `--set` and documents the refusal; step 9 forbids `git push origin --delete` while a PR is pending. The Mod-Block Enforcement subsection cross-references the combined-clear refusal.
+
+`make test-live-claude` runs the full 7-test chain end-to-end on haiku with every test green. `make test-static` reports 283 passed, 10 subtests passed.
+
+#### Checklist
+
+1. DONE: `make test-static` baseline — 273 passed initially with 2 pre-existing failures against the archived `build-dispatch-structured-helper.md` entity; CL parallel-fixed the sibling-import tests to point at a stable fixture. Post-cycle-2: 283 passed, 10 subtests passed.
+2. DONE: `test_dispatch_completion_signal.py --runtime claude` — initially flaky on haiku (FO paraphrased `SendMessage(...)` as "SendMessage with to=..."). Root cause: `claude-team build` failed silently on the fixture's bare `### work` heading, pushing the FO onto manual prompt assembly. Fixes: `extract_stage_subsection` accepts both heading forms + runtime adapter verbatim-prompt prose + post-dispatch verification step. Passes cleanly now.
+3. DONE: `test_rebase_branch_before_push.py` — initial failure: the `git` wrapper didn't detect `git -C <path> push`, making the push-log empty. Wrapper fixed to strip leading `-C`/option pairs. Passes now.
+4. DONE: `test_push_main_before_pr.py` — initial failure (after wrapper fix): FO bundled `mod-block= verdict=PASSED worktree=` in one `--set` then deleted the remote branch. Combined-clear guard in `status --set` plus shared-core prose updates block that drift. Passes now.
+5. DONE: Full `make test-live-claude` chain — 7/7 tests pass end-to-end (`test_gate_guardrail`, `test_rejection_flow`, `test_feedback_keepalive`, `test_merge_hook_guardrail`, `test_dispatch_completion_signal`, `test_rebase_branch_before_push`, `test_push_main_before_pr`). `test_scaffolding_guardrail.py` remains SKIPPED (separate follow-up per task description, not cycle 2 scope).
+6. DONE: Makefile updated — removed the three SKIPPED comments for the now-active tests, re-added `test_dispatch_completion_signal.py --runtime claude`, `test_rebase_branch_before_push.py`, and `test_push_main_before_pr.py` into the `test-live-claude` chain in the right order (after `test_merge_hook_guardrail`). Flipped the `test_runtime_live_e2e_workflow.py` guard from "expect SKIPPED" to "expect active" for the three tests.
+7. DONE: `make test-static` post-fix — 283 passed, 10 subtests passed (cycle 2 added 4 mod-block combined-clear tests and picked up the CI-E2E-OPUS workflow tests from the cycle 3 fold).
+8. DONE: Commits on `spacedock-ensign/fo-enforce-mod-blocking-at-runtime` — see history below.
+
+#### Commits
+
+- `364c52c7` test: fix git push wrapper to detect -C form in pr-merge live tests
+- `2cc36816` test: un-skip three live tests now that #114 mod-block enforcement lands
+- `52805416` test: point sibling-import smoke tests at an active entity (later refined by CL's parallel fixture move)
+- `03898edd` test: tighten gate-guardrail self-approval regex to ignore guardrail recitation
+- `744a48b5` feat: harden dispatch helper + runtime adapter for verbatim-prompt discipline
+- `8c33d351` feat: refuse combined mod-block clear with terminal transition in one --set
+
+#### Mechanism per test (per task-description prompt)
+
+- **test_dispatch_completion_signal**: heading-tolerant dispatch helper + runtime-adapter anti-paraphrase prose + post-dispatch verification instruction.
+- **test_rebase_branch_before_push**: test wrapper fix (`-C` form detection) to expose the FO's correct behavior, plus the combined-clear guard below as defense in depth against any terminal drift.
+- **test_push_main_before_pr**: combined-clear guard in `status --set` that refuses bundling `mod-block=` with any guarded terminal field; prose updates in shared-core step 5 and step 9 to match; forbidden `git push origin --delete` prose on step 9.
+
+Every checklist item in the team-lead dispatch is addressed.
