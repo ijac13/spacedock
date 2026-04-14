@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 .PHONY: test-static test-e2e test-live-claude test-live-codex
 
 TEST ?= tests/test_gate_guardrail.py

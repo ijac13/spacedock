@@ -13,6 +13,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "runtime-live-e2e.yml"
 README_PATH = REPO_ROOT / "tests" / "README.md"
+MAKEFILE_PATH = REPO_ROOT / "Makefile"
 
 
 def read_workflow() -> str:
@@ -21,6 +22,10 @@ def read_workflow() -> str:
 
 def read_readme() -> str:
     return README_PATH.read_text()
+
+
+def read_makefile() -> str:
+    return MAKEFILE_PATH.read_text()
 
 
 def section(text: str, heading: str) -> str:
@@ -119,6 +124,16 @@ def test_runtime_live_e2e_workflow_uses_stable_make_targets_and_provenance_field
     assert "DISPATCH_PR_NUMBER" in text
     assert "continue-on-error" not in text
     assert "|| true" not in text
+
+
+def test_live_makefile_targets_do_not_require_bash_without_declaring_it():
+    text = read_makefile()
+
+    assert "test-live-claude:" in text
+    assert "test-live-codex:" in text
+
+    if "set -euo pipefail" in text:
+        assert "SHELL := /bin/bash" in text
 
 
 def test_tests_readme_documents_runtime_live_e2e_workflow():
