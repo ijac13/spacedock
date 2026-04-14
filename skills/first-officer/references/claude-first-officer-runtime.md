@@ -172,6 +172,15 @@ Before advancing an entity into the Merge and Cleanup path, the FO must:
 4. Only clear `mod-block` after the blocking condition is resolved (PR merged, captain chose alternative, hook completed without blocking).
 5. Only proceed to terminal frontmatter updates (completed, verdict, worktree clear) and archival after `mod-block` is clear.
 
+**The mechanism enforces this even if you forget.** `status --set` and `status --archive` refuse terminal transitions (status to a terminal stage, completed, verdict, worktree clear) and archival when all of the following hold:
+
+- the workflow registers at least one merge hook (`_mods/*.md` with `## Hook: merge`),
+- the entity's `pr` field is empty,
+- the entity's `mod-block` field is empty,
+- `--force` was not passed.
+
+In that state the merge hook has provably not run. The refusal names the blocking hook so you can recover by either setting `mod-block=merge:{mod_name}` and invoking the hook (normal flow), or letting the hook set `pr` (which satisfies the invariant), or passing `--force` (captain explicitly approved bypassing the hook). Do NOT pass `--force` just because the guard is in the way — it exists to catch exactly the mistake of skipping the hook.
+
 On session resume, scan entities with non-empty `mod-block` and resume the pending action. Do not re-run the hook from scratch — check what state the hook left (was a PR created? is the branch pushed?) and continue from there.
 
 If the blocking mod file (`{workflow_dir}/_mods/{mod_name}.md`) is missing or unreadable, report to the captain: "Blocking mod {mod_name} is missing. The entity is stuck. Options: restore the mod file, or use `--force` to clear the block and resume normal flow." Wait for captain direction before proceeding.

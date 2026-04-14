@@ -143,6 +143,7 @@ When an entity reaches its terminal stage:
 1. Check for registered merge hooks. If any exist, set the mod-block field before invoking them:
    `status --workflow-dir {workflow_dir} --set {slug} mod-block=merge:{mod_name}`
    Commit: `mod-block: {slug} awaiting merge:{mod_name}`
+   If you skip this step, `status --set` and `status --archive` will refuse the terminal transition anyway — when merge hooks are registered and both `pr` and `mod-block` are empty, terminal updates (status to terminal stage, completed, verdict, worktree clear) and archival are rejected until the hook has run or set `mod-block`. The set-then-invoke pattern is still the correct flow: it tags the entity with *which* mod is blocking so a session resume can pick up where you left off.
 2. Run registered merge hooks before any local merge, archival, or status advancement.
 3. Detect hook completion by inspecting the entity's state delta after the hook runs. A hook has created a blocking condition when any of: (a) a `pr` field is now set, (b) the hook's prose instructions say to wait for captain approval and the captain has not yet responded, or (c) the hook explicitly declares an external wait. If none of these conditions hold, the hook completed without blocking.
 4. If a merge hook created a blocking condition (e.g., set a `pr` field or requires captain approval), leave `mod-block` set, report the pending state, and do not local-merge.
@@ -200,12 +201,13 @@ Hooks are additive and run in alphabetical order by mod filename.
 
 ### Mod-Block Enforcement
 
-Merge hooks can create blocking conditions (e.g., requiring captain approval before pushing, waiting for a PR to merge). The FO enforces these blocks via the entity `mod-block` frontmatter field:
+Merge hooks can create blocking conditions (e.g., requiring captain approval before pushing, waiting for a PR to merge). The FO enforces these blocks via the entity `mod-block` frontmatter field and a mechanism-level invariant in `status --set` and `status --archive`:
 
 - **Set** by the FO before invoking a merge hook: `mod-block=merge:{mod_name}`
 - **Cleared** by the FO after the hook's blocking action completes or the captain force-overrides. The clear runs in its own `--set` call — `status --set` refuses to clear `mod-block` and apply terminal fields (`status={terminal}`, `completed`, `verdict`, `worktree=`) in the same command unless `--force` is passed.
-- **Guarded** by `status --set`, which refuses terminal transitions (status to a terminal stage, completed, verdict, worktree clear) while `mod-block` is non-empty unless `--force` is passed
-- **Survives session resume** — the FO reads `mod-block` from entity frontmatter on boot and resumes the pending action
+- **Guarded** by `status --set`, which refuses terminal transitions (status to a terminal stage, completed, verdict, worktree clear) while `mod-block` is non-empty unless `--force` is passed.
+- **Enforced at the mechanism level** — independent of whether the FO set `mod-block` first, `status --set` and `status --archive` refuse terminal transitions and archival when the workflow has registered merge hooks (`_mods/*.md` with `## Hook: merge`) AND `pr` is empty AND `mod-block` is empty. In that state the hook has provably not run, so terminal advancement is rejected with an error naming the hook. `--force` bypasses this check. This prevents the FO from skipping the hook even if it forgot to set `mod-block` first.
+- **Survives session resume** — the FO reads `mod-block` from entity frontmatter on boot and resumes the pending action.
 
 ## Clarification and Communication
 
