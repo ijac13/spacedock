@@ -1,7 +1,7 @@
 ---
 title: First officer must enforce mod-declared blocking actions at runtime
 id: 114
-status: validation
+status: implementation
 source: CL observation during entity 110 closeout
 started: 2026-04-09T22:56:43Z
 completed:
