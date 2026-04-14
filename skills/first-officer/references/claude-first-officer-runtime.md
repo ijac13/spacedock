@@ -142,11 +142,26 @@ In teams mode, the fix agent and reviewer can interact via messaging. Keep the r
 
 After each agent completion:
 
-1. **Check PR-pending entities** — Run `status --where "pr !="`. For each, check PR state via `gh pr view`. Advance merged PRs.
-2. **Run `status --next`** — Dispatch any newly ready entities.
-3. **If nothing is dispatchable** — Fire `idle` hooks (from registered mods), then re-run `status --next`. If entities became dispatchable (e.g., a hook advanced an entity), dispatch them. If still nothing, the event loop iteration ends.
+1. **Check PR-pending entities** — Run `status --where "pr !="`. For each, check PR state via `gh pr view`. Advance merged PRs. When advancing a merged PR entity, clear its `mod-block` field if set: `status --set {slug} mod-block=`.
+2. **Check mod-blocked entities** — Run `status --where "mod-block !="`. For each, re-read the blocking mod and resume its pending action (e.g., re-present the PR summary to the captain). Do not dispatch new work for a mod-blocked entity.
+3. **Run `status --next`** — Dispatch any newly ready entities.
+4. **If nothing is dispatchable** — Fire `idle` hooks (from registered mods), then re-run `status --next`. If entities became dispatchable (e.g., a hook advanced an entity), dispatch them. If still nothing, the event loop iteration ends.
 
 Repeat from step 1 after each agent completion until the captain ends the session or, in single-entity mode, until the target entity is resolved.
+
+## Mod-Block Enforcement at Terminal Transitions
+
+Before advancing an entity into the Merge and Cleanup path, the FO must:
+
+1. Check whether merge hooks are registered (from boot-time MODS data).
+2. If merge hooks exist, set `mod-block` on the entity before invoking the first hook.
+3. Invoke merge hooks in order. If a hook creates a blocking condition (sets `pr`, requires captain approval), leave `mod-block` set and report the pending state.
+4. Only clear `mod-block` after the blocking condition is resolved (PR merged, captain chose alternative, hook completed without blocking).
+5. Only proceed to terminal frontmatter updates (completed, verdict, worktree clear) and archival after `mod-block` is clear.
+
+On session resume, scan entities with non-empty `mod-block` and resume the pending action. Do not re-run the hook from scratch — check what state the hook left (was a PR created? is the branch pushed?) and continue from there.
+
+If the blocking mod file (`{workflow_dir}/_mods/{mod_name}.md`) is missing or unreadable, report to the captain: "Blocking mod {mod_name} is missing. The entity is stuck. Options: restore the mod file, or use `--force` to clear the block and resume normal flow." Wait for captain direction before proceeding.
 
 ## Agent Back-off
 
