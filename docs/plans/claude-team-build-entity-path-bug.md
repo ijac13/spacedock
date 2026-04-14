@@ -9,7 +9,7 @@ verdict:
 score: 0.70
 worktree: .worktrees/spacedock-ensign-claude-team-build-entity-path-bug
 issue:
-pr:
+pr: #93
 mod-block: merge:pr-merge
 ---
 
