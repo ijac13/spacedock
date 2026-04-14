@@ -22,6 +22,12 @@ The `pr-merge` mod correctly says gate approval does not imply PR approval, but 
 
 Add a generic runtime mechanism so active mods can force first officer to pause for captain approval or another blocking condition, and a resumed session cannot silently skip that pending requirement.
 
+## CI green gate
+
+This task must green `test_push_main_before_pr.py` in `make test-live-claude`. The live Claude run on PR #87 reached the `pr-merge` path, called `gh pr create`, and still archived the entity with an empty `pr` field. That is the exact class of drift this task is meant to prevent: the merge hook side effect happened, but the runtime still advanced past the pending mod-controlled block instead of preserving a PR-pending state.
+
+Until task 114 lands, `test_push_main_before_pr.py` is temporarily SKIPPED in the live Claude Makefile target so unrelated live coverage can stay green. The implementer must restore that test to the active `test-live-claude` target and verify it passes end-to-end before closing this task.
+
 ## Follow-up Observation From Task 139
 
 Task 139 exposed the concrete failure mode this task needs to prevent. After validation passed, the first officer advanced the entity straight through terminalization and archival without running the `pr-merge` mod first. The problem was not lack of prose coverage; the shared core already says merge hooks run before any local merge, archival, or terminal status advancement. The failure was that the stop lived only in instructions, not in an enforced runtime checkpoint.
