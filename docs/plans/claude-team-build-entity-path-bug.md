@@ -115,3 +115,48 @@ The bug is small, well-understood, and blocks clean dispatch for #148 (pytest mi
 
 - 2026-04-14: FO dry-run for #148 implementation dispatch exposed entity-path translation bug
 - 2026-04-14: FO dry-run for #114 cycle 4 dispatch exposed 63-char name limit as over-restrictive (real entity slug + stage suffix exceeds the rule)
+
+## Stage Report
+
+### Summary
+Fixed both bugs in `skills/commission/bin/claude-team` `build` subcommand:
+- **Entity path translation** now computes `os.path.relpath(entity_path, git_root)` and joins onto the worktree root, preserving nested workflow subpaths like `docs/plans/`. Before: `{worktree_root}/{basename(entity_path)}`. After: `{worktree_root}/{rel_path_from_repo_root}`.
+- **Name length limit** raised from 63 to 200 via the `NAME_MAX_LEN` constant. The rule-7 error message now interpolates the constant rather than hardcoding `63`.
+
+### Checklist
+1. **Read entity file for full spec** — DONE
+2. **Fix path computation in prompt assembly** — DONE. `skills/commission/bin/claude-team:194-196` now uses `os.path.relpath(entity_path, git_root)`.
+3. **Raise Rule 7 limit to 200** — DONE. `skills/commission/bin/claude-team:36` updated `NAME_MAX_LEN = 200`; error message at line 165 uses the constant.
+4. **Dry-run verifies corrected subpath in output prompt** — DONE. Non-worktree dry-run against `docs/plans/claude-team-build-entity-path-bug.md` emits the untranslated main-branch path. Nested-workflow translation is covered end-to-end by `test_build_entity_path_nested_workflow_dir`, which constructs a `docs/plans/` fixture and asserts the exact worktree-local path.
+5. **71-char derived name emits valid JSON** — DONE. `test_build_long_derived_name` asserts a 71-char derived name builds successfully.
+6. **Pytest tests for all 5 ACs in tests/test_claude_team.py** — DONE:
+   - `TestBuildEntityPathTranslation::test_build_entity_path_nested_workflow_dir` (AC-1)
+   - `TestBuildWorktreeStage::test_build_worktree_stage_dispatch` extended to assert exact worktree path (AC-2)
+   - `TestBuildEntityPathTranslation::test_build_entity_path_non_worktree` (AC-3)
+   - `TestBuildValidationRules::test_build_long_derived_name` (AC-5)
+   - `TestBuildValidationRules::test_build_very_long_name_still_rejected` (sanity bound)
+   - `test_build_validation_rule_7_name_too_long` updated to use 220-char slug and assert "exceeds 200 characters" message.
+7. **make test-static green** — DONE. 271 passed, 10 subtests passed (baseline 267; +4 new test functions, AC-2 extension within existing test).
+8. **Commit on the branch** — DONE.
+
+## Stage Report — validation
+
+### Summary
+Validated both fixes against all 5 acceptance criteria. Code change at `skills/commission/bin/claude-team:194-196` correctly computes `os.path.relpath(entity_path, git_root)` and joins it onto the worktree root, preserving nested workflow subpaths. `NAME_MAX_LEN` raised to 200 at line 36 and referenced in the Rule 7 error message at line 165. Static suite is green at 271 passed / 10 subtests passed; the six targeted tests (AC-1/2/3/5 + sanity bounds) pass individually. Real dry-runs against the live `docs/plans/` entities for `fo-enforce-mod-blocking-at-runtime` (implementation, worktree stage) and `claude-team-build-entity-path-bug` (ideation, non-worktree stage) match the expected prompt shapes exactly. Recommendation: **PASSED**.
+
+### Checklist
+1. **Read the entity file for the 5 ACs** — DONE. ACs 1–5 and the test-plan table at lines 70–107 inform what follows.
+2. **Run `make test-static` — report pass/fail count; note regressions from baseline** — DONE. Result: `271 passed, 10 subtests passed in 70.26s`. Baseline per implementation stage report was 267 passed; delta +4 matches the 4 new test functions (`test_build_entity_path_nested_workflow_dir`, `test_build_entity_path_non_worktree`, `test_build_long_derived_name`, `test_build_very_long_name_still_rejected`). No regressions.
+3. **Verify AC-1: Nested workflow dir produces correct path via a real `claude-team build` dry-run** — DONE. Input: `entity_path=/Users/clkao/git/spacedock/docs/plans/fo-enforce-mod-blocking-at-runtime.md`, `workflow_dir=/Users/clkao/git/spacedock/docs/plans`, `stage=implementation`, team mode. Output prompt's entity-read line: `Read the entity file at /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-fo-enforce-mod-blocking-at-runtime/docs/plans/fo-enforce-mod-blocking-at-runtime.md for the full spec.` — the `docs/plans/` subpath is preserved as required. `test_build_entity_path_nested_workflow_dir` also passes in the pytest harness.
+4. **Verify AC-2: Flat workflow dir still works** — DONE. `test_build_worktree_stage_dispatch` (at `tests/test_claude_team.py:709`) was extended (lines 728–733) to assert the exact worktree path `{tmp_path}/.worktrees/spacedock-ensign-wt-task/workflow/wt-task.md`. In this fixture the workflow dir is one level deep (`tmp_path/workflow`), so the relpath logic still produces the right shape — `workflow/wt-task.md` is preserved, no spurious subpath collapse. Test passes.
+5. **Verify AC-3: Non-worktree stages preserve the main-path (no translation)** — DONE. Real dry-run with `stage=ideation` against `docs/plans/claude-team-build-entity-path-bug.md` emits: `Read the entity file at /Users/clkao/git/spacedock/docs/plans/claude-team-build-entity-path-bug.md for the current spec.` — no `.worktrees` substring anywhere in the prompt. `test_build_entity_path_non_worktree` passes and explicitly asserts `".worktrees" not in out["prompt"]`.
+6. **Verify AC-4: Static suite green** — DONE. Covered by checklist item 2 — 271 passed, 0 failed, 0 errored.
+7. **Verify AC-5: Longer derived name (e.g., 71 chars) succeeds — no exit 1 from validation rule** — DONE. Real dry-run with the #114 slug (`fo-enforce-mod-blocking-at-runtime`, stage `implementation`) yields `name=spacedock-ensign-fo-enforce-mod-blocking-at-runtime-implementation` (66 chars, well above the old 63-char cap) with exit code 0 and a valid JSON dispatch. The pytest `test_build_long_derived_name` exercises a 71-char name specifically and asserts success; `test_build_very_long_name_still_rejected` confirms the new 200-char cap still rejects pathological inputs. Both pass.
+8. **PASSED/REJECTED recommendation with Assessment line** — DONE. See below.
+
+### Assessment
+
+8 done, 0 skipped, 0 failed.
+
+Recommendation: **PASSED**. All 5 acceptance criteria verified with evidence from both targeted pytest runs and real `claude-team build` dry-runs against live repo entities. Static suite is green with +4 net tests and no regressions. The implementation matches the fix specified in the entity (lines 60–68): `os.path.relpath(entity_path, git_root)` joined onto the worktree root. `NAME_MAX_LEN` is now a named constant referenced in both the guard and the error message, matching the scope item at lines 94–95.
+

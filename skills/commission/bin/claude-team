@@ -33,7 +33,7 @@ find_git_root = _status.find_git_root
 SCHEMA_VERSION = 1
 BUILD_REQUIRED_FIELDS = ('schema_version', 'entity_path', 'workflow_dir', 'stage', 'checklist')
 NAME_PATTERN = re.compile(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$')
-NAME_MAX_LEN = 63
+NAME_MAX_LEN = 200
 
 
 def extract_stage_subsection(readme_path, stage_name):
@@ -162,7 +162,7 @@ def cmd_build(args):
 
     # Rule 7: Name length and safety
     if len(derived_name) > NAME_MAX_LEN:
-        return _build_error(f"derived name '{derived_name}' exceeds 63 characters")
+        return _build_error(f"derived name '{derived_name}' exceeds {NAME_MAX_LEN} characters")
     if not NAME_PATTERN.match(derived_name):
         return _build_error(f"derived name '{derived_name}' contains invalid characters")
 
@@ -192,8 +192,8 @@ def cmd_build(args):
 
     # 4. Entity read instruction
     if worktree_path:
-        entity_filename = os.path.basename(entity_path)
-        worktree_entity_path = os.path.join(worktree_path, entity_filename)
+        entity_rel = os.path.relpath(entity_path, git_root)
+        worktree_entity_path = os.path.join(worktree_path, entity_rel)
         prompt_parts.append(
             f'Read the entity file at {worktree_entity_path} for the full spec. '
             f'It contains:\n'
