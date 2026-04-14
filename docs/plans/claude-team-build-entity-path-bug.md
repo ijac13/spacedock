@@ -92,7 +92,8 @@ No E2E needed; the bug is entirely in the helper's path-assembly function and fu
 
 **In:**
 - Fix prompt-assembly entity-path translation in `skills/commission/bin/claude-team`'s `build` subcommand
-- Add two new pytest cases for the path shape
+- Fix the 63-char `name` length limit (Rule 7) — the Agent tool accepts longer names (e.g., 71 chars observed in `spacedock-ensign-fo-enforce-mod-blocking-at-runtime-implementation-cycle2`). Raise to a number that actually reflects filesystem / agent-tool constraints (e.g., 200) so real entity slugs don't trigger false refusals.
+- Add pytest cases for both fixes
 - Tighten existing worktree test to assert exact path (not just substring presence)
 
 **Out of scope:**
@@ -100,6 +101,16 @@ No E2E needed; the bug is entirely in the helper's path-assembly function and fu
 - Break-glass template — it uses `{entity_file_path}` placeholder which is FO-supplied; not affected
 - Any Codex-side adapter work
 
+## Additional AC (name length)
+
+5. **AC-5: Longer entity slugs don't trip the length limit.** Helper input with a derived name of 71 chars (e.g., slug `fo-enforce-mod-blocking-at-runtime`, stage `implementation`) succeeds and emits a valid dispatch JSON.
+   - Test: `test_build_long_derived_name` (pytest, `tests/test_claude_team.py`)
+
 ## Fast-track rationale
 
 The bug is small, well-understood, and blocks clean dispatch for #148 (pytest migration) and any other task in the `docs/plans/` workflow shape. CL directive: skip ideation gate, go straight to implementation.
+
+## Discovery history
+
+- 2026-04-14: FO dry-run for #148 implementation dispatch exposed entity-path translation bug
+- 2026-04-14: FO dry-run for #114 cycle 4 dispatch exposed 63-char name limit as over-restrictive (real entity slug + stage suffix exceeds the rule)
