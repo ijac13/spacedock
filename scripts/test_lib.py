@@ -464,7 +464,19 @@ class TestRunner:
             return False
 
     def results(self):
-        """Print summary and exit with appropriate code."""
+        """Print summary and exit with appropriate code. Legacy entrypoint for uv-run scripts."""
+        self._print_summary()
+        sys.exit(1 if self.failures > 0 else 0)
+
+    def finish(self):
+        """Print summary and raise AssertionError if any checks failed. Pytest entrypoint."""
+        self._print_summary()
+        if self.failures > 0:
+            raise AssertionError(
+                f"{self.failures} of {self.passes + self.failures} checks failed in {self.test_name}"
+            )
+
+    def _print_summary(self):
         print()
         print("=== Results ===")
         total = self.passes + self.failures
@@ -480,10 +492,8 @@ class TestRunner:
                 print(f"  Log:        {f}")
             # Preserve test dir on failure
             self.keep_test_dir = True
-            sys.exit(1)
         else:
             print("RESULT: PASS")
-            sys.exit(0)
 
 
 def create_test_project(runner: TestRunner, name: str = "test-project") -> Path:
