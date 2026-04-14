@@ -1,13 +1,13 @@
 ---
 id: 138
 title: Non-blocking interactive worker waits in Codex first officer
-status: validation
+status: done
 source: FO observation during task 136 dispatch on 2026-04-12
 score: 0.66
 started: 2026-04-12T18:17:59Z
-completed:
-verdict:
-worktree: .worktrees/spacedock-ensign-non-blocking-interactive-worker-waits-in-codex-fo
+completed: 2026-04-14T14:42:15Z
+verdict: PASSED
+worktree: 
 issue:
 pr: #87
 ---
