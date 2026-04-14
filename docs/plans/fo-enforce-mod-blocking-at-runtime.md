@@ -494,3 +494,27 @@ Additional note (not blocking but worth documenting): `mod-block` on worktree-ba
 8. DONE: Test plan table with 10 entries covering pytest unit tests, static review, and live E2E.
 9. DONE: Scope boundary (IN vs OUT).
 10. DONE: Risk register with 5 risks, mitigations, and likelihood/impact.
+
+## Stage Report
+
+### Summary
+
+Implemented mod-block enforcement at terminal transitions. The `status --set` command now refuses terminal field updates (status to terminal stage, completed, verdict, worktree clear) when `mod-block` is non-empty, with `--force` override. The `--archive` command has the same guard. Prose updates to `first-officer-shared-core.md` and `claude-first-officer-runtime.md` formalize the FO's mod-block lifecycle and session resume behavior. All 232 tests pass including 12 mod-block-specific tests.
+
+### Checklist
+
+1. DONE: Handle worktree recovery — the prior ensign's uncommitted changes to `first-officer-shared-core.md` aligned with the spec; committed as `7f8825a`.
+2. DONE: Implement `status --set` mod-block guard — refuses terminal transitions when mod-block is non-empty (committed by prior ensign in `2b0ddd8`, verified working).
+3. DONE: Implement `--force` override — prints warning to stderr and allows guarded updates (committed in `2b0ddd8`).
+4. DONE: Implement `status --archive` mod-block guard — refuses archival when mod-block is non-empty without `--force` (committed in `2b0ddd8`).
+5. DONE: Ensure non-guarded updates allowed — `pr`, non-terminal status changes proceed when mod-block is set (verified by `test_modblock_guard_allows_pr_update`, `test_modblock_guard_allows_nonterminal_status`).
+6. DONE: mod-block field settable and clearable via `status --set` (verified by `test_modblock_set_and_clear`).
+7. DONE: Update `first-officer-shared-core.md` Merge and Cleanup section — committed as `7f8825a`. Steps now include set mod-block before hooks, detect completion via state delta, clear on non-blocking completion.
+8. DONE: Update `first-officer-shared-core.md` Mod Hook Convention — added Mod-Block Enforcement subsection (committed as `7f8825a`).
+9. DONE: Update `claude-first-officer-runtime.md` Event Loop — added mod-block check step (step 2), PR advancement clears mod-block (committed as `e27c5b8`).
+10. DONE: Add Mod-Block Enforcement at Terminal Transitions section to `claude-first-officer-runtime.md` (committed as `e27c5b8`).
+11. DONE: Update `docs/plans/README.md` Field Reference table — added `mod-block` field (committed as `ad68088`).
+12. DONE: Address implementation note 1 (hook completion detection) — Merge and Cleanup step 3 formalizes detection via state delta: `pr` field presence, captain approval state, or explicit external wait declaration.
+13. DONE: Address implementation note 3 (missing mod recovery) — Mod-Block Enforcement section includes concrete behavior: report to captain with message naming the missing mod and offering restore-or-force options, wait for captain direction.
+14. DONE: All pytest tests pass — 12 mod-block tests in `TestModBlockGuard` class covering: terminal status refusal, completed/verdict refusal, worktree clear refusal, pr update allowed, non-terminal status allowed, force override, archive guard, archive force override, set/clear, absent field treated as no block, empty field treated as no block.
+15. DONE: `make test-static` passes — 232 tests, 10 subtests, all green.
