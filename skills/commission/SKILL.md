@@ -239,24 +239,7 @@ Each {entity_label} is a markdown file named `{slug}.md` — lowercase, hyphens,
 
 ## Schema
 
-Every {entity_label} file has YAML frontmatter with these fields:
-
-```yaml
----
-id:
-title: Human-readable name
-status: {first_stage}
-source:
-started:
-completed:
-verdict:
-score:
-worktree:
-issue:
-pr:
-{any domain-specific fields from {captain}'s answers}
----
-```
+Every {entity_label} file has YAML frontmatter. Fields are documented below; see **{Entity_label} Template** for a copy-paste starter.
 
 ### Field Reference
 

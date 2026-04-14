@@ -977,8 +977,9 @@ class TestStatusSiblingImport:
     def test_status_sibling_import_parse_frontmatter(self):
         mod = self._import_status()
         assert callable(mod.parse_frontmatter)
-        # Smoke test with a known entity
-        result = mod.parse_frontmatter(str(WORKFLOW_DIR / "build-dispatch-structured-helper.md"))
+        # Smoke test against a stable fixture entity (decoupled from live workflow)
+        fixture = REPO_ROOT / "tests" / "fixtures" / "workflow-entity" / "sample-entity.md"
+        result = mod.parse_frontmatter(str(fixture))
         assert isinstance(result, dict)
         assert "title" in result
 
@@ -993,9 +994,10 @@ class TestStatusSiblingImport:
     def test_status_sibling_import_load_active_entity_fields(self):
         mod = self._import_status()
         assert callable(mod.load_active_entity_fields)
-        # Smoke test
+        # Smoke test against a stable fixture entity (decoupled from live workflow)
+        fixture = REPO_ROOT / "tests" / "fixtures" / "workflow-entity" / "sample-entity.md"
         result = mod.load_active_entity_fields(
-            str(WORKFLOW_DIR / "build-dispatch-structured-helper.md"),
+            str(fixture),
             str(REPO_ROOT),
         )
         assert isinstance(result, dict)

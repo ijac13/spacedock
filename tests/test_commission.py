@@ -15,8 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-# test_lib is in the same directory
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# test_lib is in scripts/
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import TestRunner, create_test_project, run_commission, extract_stats, file_contains, file_grep
 
 

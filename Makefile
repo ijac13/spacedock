@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: test-static test-e2e test-live-claude test-live-claude-opus test-live-codex
+.PHONY: test-static test-e2e test-e2e-commission test-live-claude test-live-claude-opus test-live-codex
 
 TEST ?= tests/test_gate_guardrail.py
 RUNTIME ?= claude
@@ -10,6 +10,9 @@ test-static:
 
 test-e2e:
 	unset CLAUDECODE && uv run $(TEST) --runtime $(RUNTIME)
+
+test-e2e-commission:
+	unset CLAUDECODE && uv run tests/test_commission.py
 
 test-live-claude:
 	unset CLAUDECODE && set -euo pipefail && \

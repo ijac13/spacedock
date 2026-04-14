@@ -230,3 +230,55 @@ Estimated cost: zero (static grep tests, no LLM invocation).
 ## Implementation Notes (gate-approved 2026-04-14)
 
 CL directive at gate approval: move `scripts/test_commission.py` to `tests/` alongside other test files, and wire it into the Makefile entrypoint. The script is an E2E test that invokes `claude -p` to run the commission skill, then does static validation on the output. It imports from `scripts/test_lib.py` (many `tests/` files already import from there via `sys.path`). Add a `make test-e2e-commission` target or integrate it into an existing target as appropriate.
+
+## Stage Report
+
+### Summary
+
+Removed the redundant YAML code block from the `## Schema` section in both the commission skill template (`skills/commission/SKILL.md`) and the live workflow README (`docs/plans/README.md`). Replaced with a one-sentence intro pointing readers to the Field Reference table and the copy-paste Template section. Moved the commission E2E test to `tests/` and added a static test asserting the dedup invariant. All 224 static tests pass.
+
+### Checklist
+
+1. Remove the YAML code block from `## Schema` section in `skills/commission/SKILL.md`, replace with intro sentence — **DONE** (line 242: "Every {entity_label} file has YAML frontmatter. Fields are documented below; see **{Entity_label} Template** for a copy-paste starter.")
+2. Remove the YAML code block from `## Schema` section in `docs/plans/README.md`, replace with intro sentence — **DONE** (line 38: "Every task file has YAML frontmatter. Fields are documented below; see **Task Template** for a copy-paste starter.")
+3. Verify `### Field Reference` table and `## Task Template` / `## {Entity_label} Template` sections remain unchanged in both files — **DONE** (verified by reading both files after edit; Field Reference tables and Template sections untouched)
+4. Move `scripts/test_commission.py` to `tests/test_commission.py` — update the sys.path import for `test_lib` to point to `scripts/` — **DONE** (`git mv` + updated `sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))`)
+5. Add a Makefile target for the commission E2E test — **DONE** (`test-e2e-commission` target added to Makefile)
+6. Add a static pytest test asserting no YAML fence exists in the Schema section of the commission template — **DONE** (`tests/test_commission_template.py` with 5 test functions: no yaml fence, no code fence, Field Reference exists, Template has yaml fence)
+7. Run `make test-static` and verify all existing tests pass — **DONE** (224 passed, 10 subtests passed)
+
+## Stage Report — Validation
+
+### Summary
+
+Validated all 10 acceptance criteria for the schema/field-reference dedup task. All static tests pass (224 total, including the 4 new commission template tests). The YAML code block has been removed from the `## Schema` section in both the commission skill template and the live workflow README, with the Field Reference table and Template sections preserved intact.
+
+### Checklist
+
+1. Read `tests/README.md` to determine correct test harness and entrypoints — **DONE** (identified `make test-static` as the correct offline entrypoint; no E2E needed for this template-only change)
+2. Run `make test-static` and report results — **DONE** (224 passed, 10 subtests passed in 4.71s)
+3. Verify AC-1: `## Schema` section in `skills/commission/SKILL.md` does NOT contain a YAML code block between `## Schema` and `### Field Reference` — **DONE** (lines 240-244: intro sentence only, no code fence)
+4. Verify AC-2: `## Schema` section in `skills/commission/SKILL.md` still contains `### Field Reference` table with all standard fields — **DONE** (lines 244-258: table with 11 field rows — id, title, status, source, started, completed, verdict, score, worktree, issue, pr)
+5. Verify AC-3: `## {Entity_label} Template` section in `skills/commission/SKILL.md` is unchanged — still has YAML code block — **DONE** (lines 307-325: `\`\`\`yaml` fence with all fields and body placeholder present)
+6. Verify AC-4: `## Schema` section in `docs/plans/README.md` does NOT contain a YAML code block — **DONE** (lines 37-39: intro sentence only, no code fence)
+7. Verify AC-5: `## Schema` section in `docs/plans/README.md` includes cross-reference to **Task Template** — **DONE** (line 38: "see **Task Template** for a copy-paste starter.")
+8. Verify AC-6: `scripts/test_commission.py` no longer exists (moved to `tests/test_commission.py`) — **DONE** (`ls` confirms file absent from `scripts/`)
+9. Verify AC-7: `tests/test_commission.py` exists and imports work correctly — **DONE** (file exists, `sys.path.insert` points to `scripts/` for `test_lib` import)
+10. Verify AC-8: Makefile has a target for the commission E2E test — **DONE** (`test-e2e-commission` target on line 12-13, runs `uv run tests/test_commission.py`)
+11. Verify AC-9: Static test exists asserting no YAML fence in Schema section of commission template — **DONE** (`tests/test_commission_template.py` with 4 tests: no yaml fence, no code fence, Field Reference exists, Template has yaml fence)
+12. Verify AC-10: Run the new static test and confirm it passes — **DONE** (all 4 tests in `test_commission_template.py` pass)
+13. Recommendation: **PASSED** — all acceptance criteria verified with evidence, all static tests green
+
+## Stage Report — Piggyback Fix: sibling-import tests decoupled from live entity
+
+### Summary
+
+After #120 merged and its entity file `docs/plans/build-dispatch-structured-helper.md` was archived to `docs/plans/_archive/`, two static tests in `TestStatusSiblingImport` broke because they hardcoded that filename as their fixture. Fixed by introducing a dedicated, stable fixture entity at `tests/fixtures/workflow-entity/sample-entity.md` and pointing both tests at it, decoupling them from the live workflow directory.
+
+### Checklist
+
+1. Read `tests/test_claude_team.py` and find all hardcoded references to `docs/plans/build-dispatch-structured-helper.md` — **DONE** (found 2 references: `test_status_sibling_import_parse_frontmatter` at line 981 and `test_status_sibling_import_load_active_entity_fields` at line 998)
+2. Pick the fix approach (dedicated fixture preferred) and apply it — **DONE** (option 1: created `tests/fixtures/workflow-entity/sample-entity.md` with minimal valid YAML frontmatter — title, id, status, score, source — and updated both tests to reference it via `REPO_ROOT / "tests" / "fixtures" / "workflow-entity" / "sample-entity.md"`)
+3. Run `make test-static` — confirm all tests pass including the two that were failing — **DONE** (267 passed, 10 subtests passed in 6.44s; focused run of `TestStatusSiblingImport` shows all 4 tests pass)
+4. Commit on the branch with message `fix: decouple sibling-import tests from live workflow entity` — **DONE** (see next commit on branch `spacedock-ensign/workflow-readme-schema-and-fields-deduplication`)
+5. Append a stage report note to the #144 entity body explaining this piggyback fix — **DONE** (this section)
