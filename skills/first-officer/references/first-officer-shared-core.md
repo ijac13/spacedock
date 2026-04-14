@@ -52,6 +52,8 @@ Your working directory stays at the project root. Do not `cd` into worktrees. Us
 
 ## Dispatch
 
+The FO MUST use the runtime-specific dispatch mechanism described in the runtime adapter to build and issue worker assignments. Manual prompt assembly is prohibited except in documented break-glass scenarios. The runtime adapter's dispatch section is the authoritative source for how to invoke Agent() or equivalent.
+
 For each entity reported by `status --next`:
 
 1. Read the entity file and the target stage definition.

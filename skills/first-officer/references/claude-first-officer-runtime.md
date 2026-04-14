@@ -45,9 +45,13 @@ Use the Agent tool to spawn each worker. **Use Agent() for initial dispatch** �
 
 **STOP. Do NOT call Agent() until you have verified the team is healthy.** Run `test -f ~/.claude/teams/{team_name}/config.json` via the Bash tool. You MUST do this before every Agent dispatch batch. If the command succeeds, proceed to dispatch. If the file is missing, the team's on-disk state has been corrupted — STOP and follow the TeamCreate recovery procedure above. If recovery fails, fall back to bare mode.
 
-**Dispatch assembly via `claude-team build`:**
+**MANDATORY — Dispatch assembly via `claude-team build`:**
 
-1. Assemble the input JSON from the entity, stage, and your judgment:
+Do NOT assemble `Agent()` prompts manually. Do NOT construct the `prompt` string yourself. Do NOT invent `name` values. ALWAYS pipe input through `claude-team build` first and forward its output to `Agent()` verbatim. The key fields that MUST come from the helper output are `subagent_type`, `name`, `team_name`, and `prompt` (which contains the completion signal). Assembling these manually is a protocol violation except in the documented break-glass fallback below.
+
+The only permitted path for initial `Agent()` dispatch is:
+
+1. **REQUIRED — Assemble the input JSON** from the entity, stage, and your judgment:
    ```json
    {
      "schema_version": 1,
@@ -63,11 +67,11 @@ Use the Agent tool to spawn each worker. **Use Agent() for initial dispatch** �
    }
    ```
    The `bare_mode` field must match the current dispatch context — never infer it from the stage, always from the live team state. Set `is_feedback_reflow` to true only when routing a rejection back to its `feedback-to` target stage.
-2. Pipe the JSON to the helper:
+2. **REQUIRED — Pipe the JSON to the helper** (do NOT skip this step):
    ```
    echo '<json>' | {spacedock_plugin_dir}/skills/commission/bin/claude-team build --workflow-dir {workflow_dir}
    ```
-3. On exit 0, parse the stdout JSON and call `Agent()` with the emitted fields verbatim:
+3. **REQUIRED — On exit 0, parse the stdout JSON and call `Agent()` with the emitted fields verbatim.** The `name` and `prompt` fields MUST be taken from the helper output unchanged. The `prompt` already contains the team-mode `SendMessage(to="team-lead", ...)` completion signal — do not strip it, do not rewrite it:
    ```
    Agent(
        subagent_type=output.subagent_type,
@@ -76,13 +80,13 @@ Use the Agent tool to spawn each worker. **Use Agent() for initial dispatch** �
        prompt=output.prompt
    )
    ```
-4. On non-zero exit, read stderr for the error message, report to captain, and fall back to the Break-Glass Manual Dispatch procedure below.
+4. **On non-zero exit ONLY** (or if the binary is unavailable): read stderr for the error message, report the helper failure to the captain, and fall back to the Break-Glass Manual Dispatch procedure below. A zero-exit helper run is never a break-glass trigger.
 
 In bare mode, dispatch blocks until the subagent completes — concurrent dispatch of multiple entities is not possible. Dispatch one entity at a time and process completions inline.
 
 **Reuse dispatch (SendMessage advancement):** `claude-team build` serves only initial `Agent()` dispatch. When advancing a reused ensign to its next stage via `SendMessage(to="{ensign_name}")`, assemble the advancement message directly — the helper is not involved in the reuse path.
 
-**Break-Glass Manual Dispatch:** If `claude-team build` exits non-zero or is unavailable, fall back to direct `Agent()` assembly. Report the helper failure to the captain. Use this minimal template:
+**Break-Glass Manual Dispatch (fallback ONLY when `claude-team build` exits non-zero or is unavailable):** Do NOT use this template while the helper is working. Report the helper failure to the captain before proceeding. Use this minimal template only as a degraded fallback:
 ```
 Agent(
     subagent_type="{dispatch_agent_id}",

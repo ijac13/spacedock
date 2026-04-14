@@ -668,3 +668,29 @@ Validated `claude-team build` structured dispatch helper against all 14 acceptan
 ### Summary
 
 Fixed the `test_feedback_keepalive.py` CI regression by making stage detection resilient to FO naming conventions. The test previously matched stages only by the Agent() `name` field, which haiku on CI does not populate with stage names. The fix adds prompt-based fallback detection using the `Stage: {stage}` header line that is present in all dispatch paths.
+
+## Stage Report: implementation (cycle 3 — dispatch prose strengthening)
+
+### Checklist
+
+1. **Strengthen shared-core Dispatch section with mandatory runtime-specific dispatch construct usage:** DONE. Added a directive paragraph at the head of the `## Dispatch` section in `skills/first-officer/references/first-officer-shared-core.md`: "The FO MUST use the runtime-specific dispatch mechanism described in the runtime adapter to build and issue worker assignments. Manual prompt assembly is prohibited except in documented break-glass scenarios. The runtime adapter's dispatch section is the authoritative source for how to invoke Agent() or equivalent." This sits above the numbered per-entity dispatch steps so it is read before any per-step prose.
+
+2. **Strengthen claude runtime adapter Dispatch Adapter section with explicit prohibitions against manual assembly:** DONE. Changes in `skills/first-officer/references/claude-first-officer-runtime.md`:
+   - Replaced `**Dispatch assembly via claude-team build:**` with `**MANDATORY — Dispatch assembly via claude-team build:**`.
+   - Added a blocking paragraph before the numbered steps: "Do NOT assemble `Agent()` prompts manually. Do NOT construct the `prompt` string yourself. Do NOT invent `name` values. ALWAYS pipe input through `claude-team build` first and forward its output to `Agent()` verbatim. The key fields that MUST come from the helper output are `subagent_type`, `name`, `team_name`, and `prompt` (which contains the completion signal). Assembling these manually is a protocol violation except in the documented break-glass fallback below."
+   - Marked each of the 4 numbered steps with `**REQUIRED — ...**` headings, and step 4 with `**On non-zero exit ONLY** (or if the binary is unavailable): ... A zero-exit helper run is never a break-glass trigger.` The literal `On non-zero exit` substring is preserved so `test_assembled_claude_first_officer_has_structured_dispatch` stays green.
+   - Strengthened step 3 with an explicit instruction: "The `name` and `prompt` fields MUST be taken from the helper output unchanged. The `prompt` already contains the team-mode `SendMessage(to="team-lead", ...)` completion signal — do not strip it, do not rewrite it."
+   - Strengthened the break-glass header: "Break-Glass Manual Dispatch (fallback ONLY when `claude-team build` exits non-zero or is unavailable)" with an explicit "Do NOT use this template while the helper is working."
+
+3. **Add `test-live-claude-opus` Makefile target for opus/low CI variant:** DONE. Added `test-live-claude-opus` target to `Makefile` that runs the same live-claude test suite but with `--model opus --effort low`:
+   - `test_gate_guardrail.py` passes `--model opus` via `parse_known_args()` → claude CLI extra args (the test has no argparse for `--model`; other tests in the target script have `--model` and `--effort` argparse entries).
+   - All other targets use `--model opus --effort low` directly as argparse flags. Verified each script's argparse accepts both flags (grep across tests/ confirmed).
+   - `.PHONY` line updated to include `test-live-claude-opus`.
+
+4. **Run `make test-static` to verify no test regressions:** DONE. 254 passed, 0 failed, 10 subtests passed in 5.64s. No regressions from the prose changes. Existing assertions for `"Pipe the JSON to the helper"`, `"On exit 0, parse the stdout JSON"`, `"On non-zero exit"`, `"Break-Glass Manual Dispatch"`, and the bare_mode guardrail sentence all continue to pass.
+
+5. **Commit all changes on the branch:** DONE. One commit on `spacedock-ensign/build-dispatch-structured-helper`: `docs: strengthen dispatch prose to enforce claude-team build usage`.
+
+### Summary
+
+Strengthened two reference files and added an opus CI target to close the CI failure root cause. The shared-core Dispatch section now states up front that the FO must use runtime-specific dispatch mechanisms. The claude runtime adapter's Dispatch Adapter section marks `claude-team build` as MANDATORY with explicit prohibitions ("Do NOT assemble prompts manually", "Do NOT invent `name` values"), marks each assembly step as REQUIRED, and clarifies that break-glass is reachable ONLY on non-zero exit. The new `test-live-claude-opus` Makefile target runs the same live suite with `--model opus --effort low` to give a second CI signal with a stronger model. `make test-static` is green (254/254).
