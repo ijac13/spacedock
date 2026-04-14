@@ -1171,10 +1171,17 @@ def main():
         git_root = find_git_root(pipeline_dir)
         entity_path = resolve_active_entity_path(main_entity_path, git_root)
 
-        # Mod-block guard: refuse terminal transitions while mod-block is active
+        # Mod-block guard: refuse terminal transitions while mod-block is active.
+        # Also refuse terminal transitions combined with clearing mod-block in the
+        # same --set call — the two operations must be separate so the clear gets
+        # its own commit and any reviewer/session-resume can see the block was
+        # resolved before terminalization began.
         current_fields = parse_frontmatter(entity_path)
         mod_block = current_fields.get('mod-block', '').strip()
-        if mod_block and not force:
+        clearing_mod_block = any(
+            field == 'mod-block' and value == '' for field, value in updates
+        )
+        if (mod_block or clearing_mod_block) and not force:
             readme_path = os.path.join(pipeline_dir, 'README.md')
             stages = parse_stages_block(readme_path) if os.path.exists(readme_path) else None
             terminal_names = {s['name'] for s in (stages or []) if s.get('terminal')}
@@ -1192,8 +1199,23 @@ def main():
                     break
 
             if guarded:
-                print(f'Error: entity {slug} has pending mod-block ({mod_block}). '
-                      f'Use --force to override.', file=sys.stderr)
+                if mod_block and not clearing_mod_block:
+                    reason = f'pending mod-block ({mod_block})'
+                elif clearing_mod_block:
+                    # Either the block is currently set and the caller is clearing
+                    # it in the same call, or the caller redundantly cleared an
+                    # already-empty field alongside a terminal update. Either way
+                    # the combined operation is rejected to keep the clear commit
+                    # separate from the terminal commit.
+                    reason = (
+                        f'combined mod-block clear with terminal transition '
+                        f'(current mod-block={mod_block!r})'
+                    )
+                else:
+                    reason = 'mod-block transition'
+                print(f'Error: entity {slug} has {reason}. '
+                      f'Clear mod-block in a separate --set call, or use --force.',
+                      file=sys.stderr)
                 sys.exit(1)
 
         if force and mod_block:

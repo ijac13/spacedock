@@ -2345,6 +2345,61 @@ class TestModBlockGuard(unittest.TestCase):
                                 script_path=self.script_path)
             self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_modblock_guard_refuses_combined_clear_with_terminal(self):
+        """Clearing mod-block and setting terminal fields in one --set refuses."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': self._blocked_entity('001', 'Task A', 'validation'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a',
+                                'mod-block=', 'verdict=PASSED', 'worktree=',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('mod-block', result.stderr)
+            self.assertIn('separate', result.stderr)
+            # Nothing was written — the frontmatter must still show the block.
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['mod-block'], 'merge:pr-merge')
+            self.assertEqual(fields.get('verdict', ''), '')
+
+    def test_modblock_guard_refuses_combined_clear_with_status_done(self):
+        """Clearing mod-block and advancing to terminal status in one --set refuses."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': self._blocked_entity('001', 'Task A', 'validation'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a',
+                                'mod-block=', 'status=done',
+                                script_path=self.script_path)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('mod-block', result.stderr)
+
+    def test_modblock_guard_allows_standalone_clear(self):
+        """Clearing mod-block on its own is allowed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': self._blocked_entity('001', 'Task A', 'validation'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'mod-block=',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['mod-block'], '')
+
+    def test_modblock_force_overrides_combined_clear_guard(self):
+        """--force permits clearing mod-block together with terminal fields."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': self._blocked_entity('001', 'Task A', 'validation'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a',
+                                'mod-block=', 'verdict=PASSED', 'worktree=',
+                                '--force', script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fields = self._read_frontmatter(os.path.join(tmpdir, 'task-a.md'))
+            self.assertEqual(fields['mod-block'], '')
+            self.assertEqual(fields['verdict'], 'PASSED')
+
 
 if __name__ == '__main__':
     unittest.main()
