@@ -35,23 +35,7 @@ Each task is a markdown file named `{slug}.md` — lowercase, hyphens, no spaces
 
 ## Schema
 
-Every task file has YAML frontmatter with these fields:
-
-```yaml
----
-id:
-title: Human-readable name
-status: backlog
-source:
-started:
-completed:
-verdict:
-score:
-worktree:
-issue:
-pr:
----
-```
+Every task file has YAML frontmatter. Fields are documented below; see **Task Template** for a copy-paste starter.
 
 ### Field Reference
 
