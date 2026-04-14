@@ -1,13 +1,13 @@
 ---
 id: 151
 title: "claude-team build: entity path translation drops workflow_dir subpath"
-status: backlog
+status: implementation
 source: "FO dry-run of helper for #148 implementation dispatch, 2026-04-14 — exposed a path-mangling bug"
-started:
+started: 2026-04-14T21:03:21Z
 completed:
 verdict:
 score: 0.70
-worktree:
+worktree: .worktrees/spacedock-ensign-claude-team-build-entity-path-bug
 issue:
 pr:
 ---
