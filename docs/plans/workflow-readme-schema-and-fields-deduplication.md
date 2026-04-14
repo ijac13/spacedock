@@ -1,13 +1,13 @@
 ---
 id: 144
 title: "Workflow README — `## Schema` YAML and `### Field Reference` table are redundant"
-status: ideation
+status: implementation
 source: CL observation on a fresh commissioned workflow README during 2026-04-13 session
 started: 2026-04-14T04:31:46Z
 completed:
 verdict:
 score: 0.45
-worktree:
+worktree: .worktrees/spacedock-ensign-workflow-readme-schema-and-fields-deduplication
 issue:
 pr:
 ---
@@ -225,3 +225,7 @@ Estimated cost: zero (static grep tests, no LLM invocation).
 - Changing test fixture READMEs under `tests/fixtures/` (they don't have the duplication)
 - Reworking how the commission skill generates READMEs beyond this specific dedup
 - Any runtime or E2E test changes
+
+## Implementation Notes (gate-approved 2026-04-14)
+
+CL directive at gate approval: move `scripts/test_commission.py` to `tests/` alongside other test files, and wire it into the Makefile entrypoint. The script is an E2E test that invokes `claude -p` to run the commission skill, then does static validation on the output. It imports from `scripts/test_lib.py` (many `tests/` files already import from there via `sys.path`). Add a `make test-e2e-commission` target or integrate it into an existing target as appropriate.

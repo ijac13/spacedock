@@ -1,7 +1,7 @@
 ---
 id: 120
 title: build_dispatch helper — structured dispatch assembly (Phase 2 of issue #63)
-status: implementation
+status: validation
 source: anthropics/claude-code (local) issue #63 — fuzzy prose dispatch template causes silent failures
 score: 0.70
 started: 2026-04-13T21:19:53Z
