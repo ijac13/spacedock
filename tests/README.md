@@ -191,39 +191,56 @@ make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex
 uv run tests/test_gate_guardrail.py --runtime codex
 ```
 
-## Manual PR Runtime Live E2E
+## PR Runtime Live E2E
 
-The expensive runtime-backed PR suite lives in `.github/workflows/runtime-live-e2e.yml`. It is a `workflow_dispatch` workflow, not an always-on `pull_request` workflow. A maintainer runs it only after the PR has been approved and the always-on static workflow is already green.
+The expensive runtime-backed PR suite lives in `.github/workflows/runtime-live-e2e.yml`. It triggers on `pull_request` so the runtime jobs show up on the PR alongside Static CI, and it still supports `workflow_dispatch` for targeted reruns.
 
-Invoke it from the Actions UI on the branch under test, or with:
+The default PR-triggered path is intentionally fixed. When a PR opens, GitHub creates exactly two live jobs:
+
+- `claude-live`
+- `codex-live`
+
+Those jobs are not parameterized at approval time. The environment review UI only releases already-defined jobs; it does not collect `workflow_dispatch` inputs such as model selection or matrix expansion.
+
+GitHub still presents the approval flow through the deployment review UI, even though the jobs set `deployment: false`. The current environment split is:
+
+- `CI-E2E` for `claude-live`
+- `CI-E2E-CODEX` for `codex-live`
+
+Until an approved reviewer releases the relevant environment, that job stays pending and cannot access the environment-scoped API key.
+
+Open a PR and then approve the pending environment review to release the live runtime checks. For targeted reruns, API-driven launches, or future release-branch matrix runs, invoke the workflow manually from Actions or with:
 
 ```bash
 gh workflow run runtime-live-e2e.yml --ref <pr-branch> -f pr_number=<N>
 ```
 
-This workflow runs exactly two jobs:
+`workflow_dispatch` inputs are supplied when the run is created, not when the environment approval is granted. That makes manual dispatch the right entrypoint for any future parameterized or matrix live runs.
 
-- `claude-live`
-- `codex-live`
+Required environment secrets:
 
-Required repository secrets:
+- `CI-E2E`: `ANTHROPIC_API_KEY` for `claude-live`
+- `CI-E2E-CODEX`: `OPENAI_API_KEY` for `codex-live`
 
-- `ANTHROPIC_API_KEY` for `claude-live`
-- `OPENAI_API_KEY` for `codex-live`
+Each job fails immediately with a clear message if its required secret is missing after the environment is approved.
 
-Each job fails immediately with a clear message if its required secret is missing.
-
-This workflow is expected to report current live-suite status honestly. If a runtime test fails, the corresponding job stays red; shipping the manual CI wiring does not imply the Claude and Codex suites are already fully green.
+This workflow is expected to report current live-suite status honestly. If a runtime test fails, the corresponding job stays red; shipping the CI wiring does not imply the Claude and Codex suites are already fully green.
 
 Operators should expect each job summary to show the run provenance explicitly:
 
+- Trigger source
 - PR number
 - Tested workflow SHA
 - Current PR head SHA
 - same-repo vs fork status
 - approval/reviewer context
 
-Set `KEEP_TEST_DIR=1` to preserve temp directories after test runs for debugging.
+The live workflow sets `KEEP_TEST_DIR=1` automatically and uploads each job's preserved temp dirs as GitHub Actions artifacts:
+
+- `runtime-live-e2e-claude-live`
+- `runtime-live-e2e-codex-live`
+
+For local debugging, set `KEEP_TEST_DIR=1` to preserve temp directories after test runs. Set `SPACEDOCK_TEST_TMP_ROOT=/path/to/root` to force `TestRunner` to create preserved dirs under a predictable parent directory.
 
 ## File Requirements
 

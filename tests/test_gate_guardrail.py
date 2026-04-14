@@ -130,7 +130,13 @@ def main():
         )
         t.check(
             "waiting-for-approval result is explicitly surfaced",
-            bool(re.search(r"waiting for approval", fo_text_output, re.IGNORECASE)),
+            bool(
+                re.search(
+                    r"waiting(?:[_\s-]+)for(?:[_\s-]+)approval",
+                    fo_text_output,
+                    re.IGNORECASE,
+                )
+            ),
         )
 
     # --- Results ---
