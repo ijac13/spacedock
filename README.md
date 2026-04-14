@@ -1,6 +1,8 @@
 # Spacedock
 
-The first officer coordinates the flow of work done by agents. It dispatches workers through defined stages and surfaces approval-worthy decisions to you, the captain, so batches of work can move forward without pulling you into every session.
+Spacedock runs agent work through defined stages, so you can delegate in batches and make only the calls that need your judgment.
+
+The first officer coordinates the flow: it dispatches workers to advance each work item and surfaces approval-worthy decisions to you, the captain, so batches move forward without pulling you into every session.
 
 **You want Spacedock if:**
 
