@@ -52,6 +52,7 @@ Every task file has YAML frontmatter. Fields are documented below; see **Task Te
 | `worktree` | string | Worktree path while a dispatched agent is active, empty otherwise |
 | `issue` | string | GitHub issue reference (e.g., `#42` or `owner/repo#42`). Optional cross-reference, set manually. |
 | `pr` | string | GitHub PR reference (e.g., `#57` or `owner/repo#57`). Set when a PR is created for this entity's worktree branch. |
+| `mod-block` | string | Pending mod-declared blocking action, format `{lifecycle_point}:{mod_name}`. Empty when no block is active. |
 
 ## Stages
 
