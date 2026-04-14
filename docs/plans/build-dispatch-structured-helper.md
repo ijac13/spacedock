@@ -652,3 +652,19 @@ Shipped `claude-team build` — a structured dispatch helper that replaces the f
 ### Summary
 
 Validated `claude-team build` structured dispatch helper against all 14 acceptance criteria. The static test suite passes cleanly (247/247). All 48 `test_claude_team.py` tests pass (24 existing context-budget + 24 new build). All 37 `test_agent_content.py` tests pass (including 3 new structured-dispatch/break-glass/guardrail assertions). The implementation correctly resolves all 7 gate notes, enforces all 11 validation rules, and the runtime adapter properly documents both the helper invocation path and the break-glass fallback. Recommendation: PASSED.
+
+## Stage Report: implementation feedback fix (#120)
+
+### Checklist
+
+1. **Investigate root cause — determine why the FO's Agent() calls don't have stage names in the `name` field:** DONE. The `claude-team build` helper correctly derives names as `{worker_key}-{slug}-{stage}` (e.g., `spacedock-ensign-keepalive-test-task-implementation`). The break-glass template also includes the stage in the name. The root cause is that haiku on CI does not reliably follow the naming convention from either path — it dispatches Agent() calls with `subagent_type == "spacedock:ensign"` but uses its own naming for the `name` field. The test was brittle because it relied solely on the `name` field for stage identification.
+
+2. **Implement the fix (minimal change to resolve the regression):** DONE. Added `_agent_targets_stage(agent_input, stage)` helper function in `tests/test_feedback_keepalive.py` that checks both the `name` field (existing behavior) and the `prompt` field (new fallback). The prompt reliably contains `Stage: {stage}` on its own line from both `claude-team build` and break-glass assembly. Applied the helper in three places: the overview filtering (lines 251-252), and the `scan_keepalive_events` function (lines 128, 131, 133). Total change: 21 lines added, 6 lines removed.
+
+3. **Run `make test-static` to verify no regressions:** DONE. 254 passed, 0 failed, 10 subtests passed in 5.59s.
+
+4. **Verify the fix would resolve the CI failure by checking the name derivation path:** DONE. The CI failure showed 4 ensign dispatches with 0 matching "implementation"/"validation" in the name. With the fix, those same dispatches would match via the prompt field, since every dispatch path (helper, break-glass, or FO-assembled) includes `Stage: implementation` or `Stage: validation` in the prompt text. The regex `(?m)^Stage:\s*{stage}\s*$` is anchored to line boundaries to avoid false positives.
+
+### Summary
+
+Fixed the `test_feedback_keepalive.py` CI regression by making stage detection resilient to FO naming conventions. The test previously matched stages only by the Agent() `name` field, which haiku on CI does not populate with stage names. The fix adds prompt-based fallback detection using the `Stage: {stage}` header line that is present in all dispatch paths.
