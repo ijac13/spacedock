@@ -1,13 +1,13 @@
 ---
 id: 148
 title: "Migrate live E2E tests to pytest with runtime markers"
-status: backlog
+status: ideation
 source: "CL observation during 2026-04-13 session — standalone uv-run scripts cause test sprawl and boilerplate duplication"
-started:
+started: 2026-04-14T19:40:43Z
 completed:
 verdict:
 score: 0.70
-worktree:
+worktree: .worktrees/spacedock-ensign-live-e2e-pytest-harness
 issue:
 pr:
 ---
