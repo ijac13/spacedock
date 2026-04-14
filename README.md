@@ -24,12 +24,28 @@ The first officer coordinates the flow: it dispatches workers to advance each wo
 
 ### Claude Code
 
-1. `claude plugin marketplace add clkao/spacedock`
-2. `claude plugin install spacedock`
-3. Start a first-officer session and commission your workflow in one command:
+1. Install the plugin:
 
    ```bash
-   claude --agent spacedock:first-officer "/spacedock:commission <your mission prompt>"
+   claude plugin marketplace add clkao/spacedock && claude plugin install spacedock
+   ```
+
+2. Commission a workflow with your own mission prompt:
+
+   ```bash
+   claude --agent spacedock:first-officer "/commission <your mission prompt>"
+   ```
+
+3. Or start from one of these example workflows — copy and run:
+
+   **Email triage:**
+   ```bash
+   claude --agent spacedock:first-officer "/commission Email triage: fetch, categorize, and act on Gmail inbox. Entity: a batch of up to 50 emails. Stages: intake (use gws-cli, triage in:inbox and read email body if necessary, categorize, propose action per email, output as table) → approval (Captain reviews proposal) -> execute (carry out approved actions, do not mark as read). Use gws-cli (https://github.com/googleworkspace/cli/tree/main/skills/gws-gmail), GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws/<account> for different accounts. Walk me through gws-cli setup if not already done."
+   ```
+
+   **[Superpowers](https://github.com/obra/superpowers)-style dev task workflow:**
+   ```bash
+   claude --agent spacedock:first-officer "/commission Dev task workflow: superpowers-style design → plan → implement → review with ## Design and ## Implementation Plan inlined in the entity body (no separate spec/plan files), implement on isolated worktrees with strict TDD, design and review gated for approval."
    ```
 
 ### Codex CLI
@@ -50,15 +66,9 @@ The first officer coordinates the flow: it dispatches workers to advance each wo
    codex --enable multi_agent
    ```
 
-   At the prompt: `Use the spacedock:first-officer skill to run /spacedock:commission <your mission prompt> in this directory.`
+   At the prompt: `Use the spacedock:first-officer skill to run /commission <your mission prompt> in this directory.`
 
 > Codex multi-agent is experimental. The Claude Code path is the primary supported surface.
-
-### Example workflows
-
-**Email triage:** `claude --agent spacedock:first-officer "/spacedock:commission Email triage: fetch, categorize, and act on Gmail inbox. Entity: a batch of up to 50 emails. Stages: intake (use gws-cli, triage in:inbox and read email body if necessary, categorize, propose action per email, output as table) → approval (Captain reviews proposal) -> execute (carry out approved actions, do not mark as read). Use gws-cli (https://github.com/googleworkspace/cli/tree/main/skills/gws-gmail), GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws/<account> for different accounts. Walk me through gws-cli setup if not already done."`
-
-**[Superpowers](https://github.com/obra/superpowers)-style dev task workflow:** `claude --agent spacedock:first-officer "/spacedock:commission Dev task workflow: superpowers-style design → plan → implement → review with ## Design and ## Implementation Plan inlined in the entity body (no separate spec/plan files), implement on isolated worktrees with strict TDD, design and review gated for approval."`
 
 ## What a Work Item Looks Like
 
