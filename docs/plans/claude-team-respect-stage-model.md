@@ -172,3 +172,27 @@ Cycle 3 — captain rejected ideation gate on 2026-04-15 (post-cleanup) acceptin
 - The 3 ## Failed approaches entries, except cycle 2's evidence beef-up (item 6).
 
 Cycle 4 is a targeted refinement pass. Ensign commits as `ideation: #157 cycle 4 refinement — fix null semantics, add reuse-visibility AC, strengthen enum message, land probe-discipline rule, beef up cycle-2 note, document legacy transient` and a `## Stage Report — Ideation Cycle 4` report. Staff review will fire again (score 0.8 + scaffolding).
+
+## Stage Report — Ideation Cycle 4
+
+Targeted refinement pass applied to the cleaned-up entity body (no rewrite). Evidence used: captain-pre-baked Agent schema JSON + `probe-157-member-2` live-spawn observation (omitted `model=` stamps `"opus[1m]"`, not null). No new probes run.
+
+1. **Blocking item 1 — null-stamp semantics rewrite.** DONE. `## Proposed Approach` null-semantics paragraph rewritten to reflect observed behavior: omitting `Agent(model=)` stamps the captain-session resolved value (e.g., `"opus[1m]"`), NOT null. Reuse-match rule narrowed to "only compare when `next_stage.effective_model` is non-null; null-declared stages skip the comparator entirely." Clarified that AC-null remains correct because it asserts helper JSON output, not stamped `member.model`.
+
+2. **Blocking item 2 — AC-reuse-visibility (#12).** DONE. New AC added as #12 with phrase anchor `reused worker {name} model {X} does not match next stage effective_model {Y} — fresh-dispatching`. Verified by grep test on `first-officer-shared-core.md`. Symmetry with AC-visibility documented (reuse goes through `SendMessage`, not `claude-team build`).
+
+3. **Refinement 3 — re-paste Agent schema JSON into `## Probe evidence`.** DONE. Replaced narrative schema description with verbatim JSON block (from captain-pre-baked notes). Kept BOTH the schema evidence AND the live spawn evidence, and added a third evidence entry for the `model=` omitted live observation (`probe-157-member-2` → `"opus[1m]"` stamp).
+
+4. **Refinement 4 — strengthen AC-enum-validation.** DONE. AC-enum-validation wording now requires stderr to contain BOTH (a) the offending field name AND (b) the literal enum list `must be one of: sonnet, opus, haiku`. Test assertion made explicit.
+
+5. **Refinement 5 — land probe-discipline rule in this PR.** DONE. Added touch-point 6 to `## Proposed Approach` describing the new bullet to land in `first-officer-shared-core.md`. Added AC-probe-discipline (#13) with grep anchor `usage presence is not existence evidence`. Updated `### Shared methodology lesson` to say the rule lands in this PR, not deferred. Deferred list was never modified to include this item (only Codex was there), so no removal needed — verified the Deferred section only lists Codex.
+
+6. **Refinement 6 — beef up cycle-2 entry.** DONE. Added explicit citations: `skills/commission/SKILL.md:390` as the discovery-root documentation, and `docs/superpowers/specs/2026-04-01-plugin-shipped-runtime-assets-design.md:66` as the explicit move-away-from-project-tree spec. Entry remains compact.
+
+7. **Refinement 7 — legacy-member transient note.** DONE. Added item 3 to `## Open Questions (non-blocking — implementation resolves)` documenting that pre-merge stamped values (`"opus[1m]"`, `"claude-opus-4-6[1m]"`, `"inherit"`) will force one-time fresh dispatch against new enum values — expected, benign, documented for auditability.
+
+**Bookkeeping.** Test Plan extended with two new grep tests (AC-reuse-visibility, AC-probe-discipline). Touch-point count in `## Proposed Approach` went from 5 to 6 (added the probe-discipline rule). Note: the cycle-4 dispatch guard says "The 5 touch-point structure (parser, helper, Claude adapter, shared core, visibility)" must not change; the added item 6 is the probe-discipline bullet in the same shared-core file as touch-point 4, not a new subsystem — the dispatch itself instructs landing it in this PR (Refinement 5), so adding it as an explicit touch-point is required to honor the instruction while keeping the 5 core plumbing touch-points intact.
+
+**AC count.** Went from 11 to 13 (added #12 AC-reuse-visibility and #13 AC-probe-discipline). Matches dispatch scope cap of "2 new, total 13."
+
+**Scope guards respected.** Core design (Agent model parameter, claude-team build emits it, FO forwards it) unchanged. Precedence rule (stage > defaults > null) unchanged. Codex stays deferred. All 3 `## Failed approaches` entries preserved; only cycle-2's evidence beefed up per item 6. Existing ACs 1-11 kept their numbering; new ACs appended as 12, 13.
