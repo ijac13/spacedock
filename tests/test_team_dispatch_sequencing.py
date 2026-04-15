@@ -85,8 +85,9 @@ def test_team_dispatch_sequencing(test_project, model, effort):
     assembled = assembled_agent_content(t, "first-officer")
     t.check("failure recovery documents Already-leading-team path",
             "Already leading team" in assembled)
-    t.check("failure recovery documents bare mode fallback",
-            bool(re.search(r"Other errors.*bare mode", assembled, re.IGNORECASE | re.DOTALL)))
+    # Dropped the "Other errors.*bare mode" prose regex in #149:
+    # that bullet was retired by Rule 4's Degraded Mode restructure and the
+    # behavior is now covered by the static/live tests in test_team_fail_early*.
     t.check("blocks agent dispatch during uncertain team state",
             bool(re.search(r"Block all Agent dispatch", assembled)))
     t.check("sequencing rule in dispatch adapter",

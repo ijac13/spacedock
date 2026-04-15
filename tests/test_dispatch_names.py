@@ -23,6 +23,7 @@ from test_lib import (  # noqa: E402
 
 
 @pytest.mark.live_claude
+@pytest.mark.xfail(strict=False, reason="pending #160 — haiku FO compresses multi-stage dispatch (1 Agent() instead of work+review 2); see docs/plans/haiku-fo-multi-dispatch-compression.md")
 def test_dispatch_names(test_project):
     """Entity completes the full pipeline without agents getting killed by stale shutdowns."""
     t = test_project
