@@ -285,3 +285,73 @@ Items not blocking gate but worth a line in the ideation: (i) audit `agents/firs
 ### Summary
 
 Applied all 3 blocking revisions and 3 non-blocking flags from the staff review (commit 343f451d). Revisions landed on the entity body only; YAML frontmatter and the staff-review section are untouched. The ideation now specifies (a) a counter-free "any second dispatch failure" trigger, (b) three section-anchored AC-4-* assertions plus a parse-sections helper requirement, (c) explicit resolution of the session-restart / Rule-1b-probe tension (diagnostic-only, never short-circuits `TeamCreate`), (d) a captain-report sentence with three concrete next steps, (e) a Step-0 audit of `agents/first-officer.md` (executed during this revision — no duplication found, scope stays 2 files), (f) an active-feedback-cycle exemption on the cooperative shutdown sweep, and (g) an explicit follow-on flag for AC-E. Ready for gate re-review.
+
+## Stage Report — Implementation (2026-04-15)
+
+1. **Pre-check — DONE.** Worktree `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-fo-team-infrastructure-fail-early` on branch `spacedock-ensign/fo-team-infrastructure-fail-early`, clean tree at entry. HEAD at start: `b065050f` (the revised-ideation commit).
+2. **Re-read entity body — DONE.** Re-read the Behavior Change Requirements (9 rows 1a/1b/2a/2b/4a/4b/4c/4d/6), all 11 Acceptance Criteria including the AC-4 split, the Proposed Approach's Step 0 audit status, and the Staff Review as the reference for why specific phrasings were chosen.
+3. **Step 0 audit — DONE.** Ran `grep -E 'test -f|config.json|Team does not exist|TeamDelete|retry|bare mode|degraded' agents/first-officer.md` — no matches. Scope remains 2 files (runtime adapter + test refresh); the agent-definition file is untouched.
+4. **Rule 1 applied — DONE.** In `skills/first-officer/references/claude-first-officer-runtime.md`: deleted the `REQUIRED — Team health check` paragraph from the `## Dispatch Adapter` section; replaced with an explicit `No pre-dispatch filesystem probe.` paragraph that forbids any pre-dispatch check against `~/.claude/teams/{team_name}/` and cites anthropics/claude-code#36806. Added the DIAGNOSTIC-ONLY startup probe paragraph to `## Team Creation` that explicitly does NOT gate / short-circuit / skip `TeamCreate`; preserved the existing line-13 "NEVER delete existing team directories" constraint.
+5. **Rule 2 applied — DONE.** Rewrote the `TeamCreate failure recovery` block in `## Team Creation` as a priority-ordered ladder: (1) fresh-suffixed `TeamCreate` with name `{project_name}-{dir_basename}-{YYYYMMDD-HHMM}-{shortuuid}`; (2) fall back to Degraded Mode; (3) surface to captain. Includes the exact asserted phrase `Retry to the same team name is banned` and the exact phrase `All prior agent names are presumed zombified. Do not SendMessage them; re-dispatch from entity frontmatter.` The prescriptive `Call TeamDelete ... then call TeamCreate` same-name recovery is removed; `TeamDelete` is now only permitted as a narrow startup-only procedure for the `Already leading team` case and explicitly forbidden as a mid-session response to registry-desync.
+6. **Rule 6 applied — DONE.** Updated the startup TeamCreate example on line 11 to `TeamCreate(team_name="{project_name}-{dir_basename}-{YYYYMMDD-HHMM}-{shortuuid}")`; documented the NAME_PATTERN-compatible constraint (lowercase, no colons, hyphen-separated); preserved the existing "always use the returned team_name" note.
+7. **Rule 4 applied — DONE.** Added a new top-level `## Degraded Mode` section with four subsections keyed by heading for the test parser: `### Triggers` (three triggers as a markdown list: first "Team does not exist" error, any SECOND dispatch failure, captain `/spacedock bare`), `### Effects` (three bullets: no `team_name` on subsequent dispatches, every stage dispatches fresh and blocks, no SendMessage reuse), `### Captain Report Template` (verbatim canonical sentence with the three next-step options), `### Cooperative Shutdown Sweep` (single-pass, ignore failures, do not retry, active-feedback-cycle exemption referencing `### Feedback Cycles`, sweep of feedback-cycle reviewers only on explicit captain confirmation).
+8. **Test refresh — DONE.** Created `tests/test_team_fail_early.py` with nine pytest-style ACs and a `parse_sections()` helper that anchors assertions by markdown heading (not global `re.search`). Deleted the superseded `tests/test_team_health_check.py` (its AC1–AC5 directly contradicted the new adapter). Also refreshed two stale tests in `tests/test_agent_content.py` (`test_assembled_claude_first_officer_has_teamcreate_failure_recovery` and the renamed `test_assembled_claude_first_officer_has_no_predispatch_health_check`) that asserted the retired probe and same-name recovery invariants against the assembled first-officer contract. AC-T (refresh property) is implicit in the comment at the top of the new test file.
+9. **Static test suite — DONE.** `make test-static` → `310 passed, 10 subtests passed in 6.60s`. Baseline before this cycle (on this worktree) was `301 passed, 10 subtests passed` because the old `test_team_health_check.py` was a `main()`-style E2E that pytest did not collect; the +9 delta matches the nine new ACs in `test_team_fail_early.py`. The checklist's anticipated `308/309` numbers reflected a different baseline; the shape of the result (fully green, +9 from the refresh) matches the intent.
+10. **Refreshed test file standalone — DONE.** `unset CLAUDECODE && uv run --with pytest pytest tests/test_team_fail_early.py -v` →
+    ```
+    tests/test_team_fail_early.py::test_ac1_dispatch_adapter_has_no_config_probe PASSED [ 11%]
+    tests/test_team_fail_early.py::test_ac1b_team_creation_has_single_diagnostic_only_probe PASSED [ 22%]
+    tests/test_team_fail_early.py::test_ac2_retry_same_name_banned_and_no_same_name_teamdelete_teamcreate PASSED [ 33%]
+    tests/test_team_fail_early.py::test_ac2b_prior_agents_presumed_zombified_and_redispatch_from_frontmatter PASSED [ 44%]
+    tests/test_team_fail_early.py::test_ac4_triggers_enumerated_as_list_in_degraded_mode PASSED [ 55%]
+    tests/test_team_fail_early.py::test_ac4_effects_listed_in_degraded_mode PASSED [ 66%]
+    tests/test_team_fail_early.py::test_ac4_shutdown_sweep_with_feedback_cycle_exemption PASSED [ 77%]
+    tests/test_team_fail_early.py::test_ac4c_captain_report_template_verbatim PASSED [ 88%]
+    tests/test_team_fail_early.py::test_ac6_teamcreate_name_uses_timestamp_and_shortuuid_suffix PASSED [100%]
+    9 passed in 0.01s
+    ```
+
+### Files changed
+
+- `skills/first-officer/references/claude-first-officer-runtime.md` (+43 / −9): Rule 1 deletion, Rule 2 ladder rewrite, Rule 4 new section, Rule 6 name template.
+- `tests/test_team_fail_early.py` (new, +260): nine section-anchored ACs with a `parse_sections()` helper.
+- `tests/test_team_health_check.py` (deleted): superseded by the refresh.
+- `tests/test_agent_content.py` (±): `test_assembled_claude_first_officer_has_teamcreate_failure_recovery` refreshed to assert the new fail-early ladder invariants; `test_assembled_claude_first_officer_has_team_health_check` renamed and inverted to `test_assembled_claude_first_officer_has_no_predispatch_health_check`.
+- `agents/first-officer.md`: unchanged (Step 0 audit confirmed no duplication).
+
+### Per-AC evidence
+
+| AC | Satisfied by | Location |
+|---|---|---|
+| AC-1 | `## Dispatch Adapter` contains "No pre-dispatch filesystem probe." paragraph; no `test -f` / `config.json` / "Team health check" tokens in that section. | `claude-first-officer-runtime.md` line 48. |
+| AC-1b | `## Team Creation` contains exactly one `config.json` reference (the DIAGNOSTIC-ONLY startup probe) with the non-short-circuit clause "does NOT gate, short-circuit, or skip `TeamCreate` — `TeamCreate` always runs". | `claude-first-officer-runtime.md` line 16. |
+| AC-2 | `Retry to the same team name is banned` present verbatim; `fresh-suffixed` present; no prescriptive `Call TeamDelete ... then call TeamCreate` same-name instruction. | `claude-first-officer-runtime.md` lines 20–22 (recovery ladder tier 1). |
+| AC-2b | `All prior agent names are presumed zombified. Do not SendMessage them; re-dispatch from entity frontmatter.` present verbatim. | `claude-first-officer-runtime.md` line 22 (end of ladder tier 1). |
+| AC-4-triggers | `### Triggers` subsection lists three triggers as a markdown list: `First "Team does not exist" error`, `Any SECOND dispatch failure within the session`, `Captain command /spacedock bare`. | `claude-first-officer-runtime.md` lines 106–112. |
+| AC-4-effects | `### Effects` subsection lists three effect bullets. | `claude-first-officer-runtime.md` lines 114–120. |
+| AC-4-shutdown | `### Cooperative Shutdown Sweep` contains single-pass, ignore-failures, do-not-retry, active feedback-cycle exemption referencing `### Feedback Cycles`, and explicit-captain-confirmation language. | `claude-first-officer-runtime.md` lines 128–132. |
+| AC-4c | `### Captain Report Template` contains the verbatim canonical sentence including the three next-step options. | `claude-first-officer-runtime.md` lines 122–126. |
+| AC-6 | Startup TeamCreate example uses `TeamCreate(team_name="{project_name}-{dir_basename}-{YYYYMMDD-HHMM}-{shortuuid}")`; lowercase / no-colon constraint is documented. | `claude-first-officer-runtime.md` line 11. |
+| AC-T | Implicit — old test asserted probe present; new test asserts probe absent. Comment at the top of `test_team_fail_early.py` documents this. | N/A (property). |
+| AC-E | DEFERRED per the ideation's `### Follow-on required task` subsection. Not in scope for this cycle. | N/A. |
+
+### Commits
+
+- `8589df72` — `prose: #149 adapt runtime adapter for fail-early team-infrastructure defense`
+- `d8271e84` — `tests: #149 refresh team-fail-early assertions with section-anchored matching`
+- (this report will be in a subsequent `report:` commit)
+
+### Static + test results
+
+- `make test-static` → `310 passed, 10 subtests passed in 6.60s` (baseline on this worktree was 301; +9 for the new AC suite).
+- `uv run --with pytest pytest tests/test_team_fail_early.py -v` → `9 passed in 0.01s`.
+
+### Pre/post HEAD SHAs
+
+- Pre: `b065050f2d2d27e3c86f05d049e07de530f43e8f`
+- Post (after adapter + tests commits): `d8271e845bf0fb724ee8580b8238648c6292e208`
+- Post (after this report commit): will be captured at final report.
+
+### Summary
+
+Implementation of #149 rules 1, 2, 4, and 6 landed on `claude-first-officer-runtime.md` with Rule 1 deletion, Rule 2 priority-ordered recovery ladder, a new `## Degraded Mode` section (Triggers / Effects / Captain Report Template / Cooperative Shutdown Sweep), and Rule 6 fresh-suffixed TeamCreate name. Tests refreshed: new section-anchored `tests/test_team_fail_early.py` supersedes the retired `test_team_health_check.py`, and two stale assertions in `tests/test_agent_content.py` were updated to match the new contract. `make test-static` green (310 passed). AC-E is deferred to the mandatory post-v1 follow-on per ideation.
