@@ -109,6 +109,8 @@ Use only when the behavior under test requires an interactive session — multi-
 
 Examples: `test_interactive_poc.py`, `test_single_entity_mode.py`.
 
+**Headless-CI behavior.** Both PTY tests carry `@pytest.mark.skipif(not sys.stdin.isatty(), reason="requires real TTY; CI runners are headless — see #155")`. They SKIP on GitHub Actions ubuntu-latest runners (no attached TTY) and RUN locally when invoked from a real terminal. See task #155 for the long-term plan (CI-detection vs test-split vs PTY-harness fix).
+
 ### Purely offline (no claude/codex)
 
 Some tests validate infrastructure without needing a live session: `test_stats_extraction.py` (log parsing), `test_status_script.py` (status script behavior), `test_codex_packaged_agent_ids.py` (worker id resolution).
@@ -178,6 +180,39 @@ Direct pytest invocation for ad-hoc runs:
 unset CLAUDECODE && uv run pytest tests/test_gate_guardrail.py --runtime claude --model haiku -v
 unset CLAUDECODE && uv run pytest tests/ -m "live_claude and not serial" -n 2 --runtime claude
 ```
+
+### Quick local smoke before pushing
+
+Before pushing a PR — especially one that touches dispatch, commission, scaffolding, or the runtime adapters — run two cheap checks locally:
+
+```bash
+# 1) static discipline: ~6s, free
+make test-static
+
+# 2) cheapest live signal: ~60s, ~$0.02 haiku
+unset CLAUDECODE && uv run pytest tests/test_gate_guardrail.py --runtime claude --model haiku -v
+```
+
+`test_gate_guardrail.py` is the pilot live test — smallest fixture, single gate transition, fails loudly on any FO-level regression (self-approval, wrong status, early archive). If both pass locally, the CI haiku jobs usually pass too.
+
+For a serial-tier fail-fast sweep before burning the expensive parallel tier:
+
+```bash
+# Bare-mode serial tier — matches claude-live-bare's first phase
+unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && \
+  uv run pytest tests/ --ignore=tests/fixtures \
+    -m "live_claude and serial" --runtime claude --team-mode=bare -x -v
+```
+
+Stops on the first serial-tier failure in ~90s. The `-x` flag is the fail-fast lever; removing it runs all serial tests regardless.
+
+### Known xfail / skip state
+
+Some live tests are currently marked `xfail` or `skipif` on the `#148` branch — normal, not a regression of your change:
+
+- **`@pytest.mark.xfail(reason="pending #154 ...")`** — applied to nine tests whose assertions target `agents/first-officer.md` for tokens that moved into `skills/first-officer/SKILL.md` and the reference files during the #085 skill-preload refactor. Surfaces as `XFAIL` in the pytest summary. Affected tests: `test_commission`, `test_agent_captain_interaction`, `test_output_format`, `test_reuse_dispatch`, `test_team_health_check`, `test_repo_edit_guardrail`, `test_dispatch_completion_signal`, `test_checklist_e2e`, `test_codex_packaged_agent_e2e`. Some show `XPASS` under bare mode because the drift only bites teams-mode paths — `strict=False` makes xpass silently OK. When #154 lands, these markers come off.
+- **`@pytest.mark.skipif(not sys.stdin.isatty(), reason="requires real TTY; ... see #155")`** — applied to the two PTY-using tests (`test_interactive_poc_live`, `test_single_entity_mode`). Skips under headless CI, runs locally from a real terminal.
+- **`@pytest.mark.skip(reason="pending #141 ...")`** — applied to `test_rejection_flow` (same-stage reviewer reuse during feedback cycles is correct behavior #141 will formalize; the test's current `ensign_count >= 3` assertion is bare-mode-biased).
 
 ## PR Runtime Live E2E
 
