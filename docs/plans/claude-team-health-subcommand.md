@@ -1,9 +1,9 @@
 ---
 id: 143
 title: "claude-team health subcommand — replace raw `test -f` with a proper helper"
-status: backlog
+status: ideation
 source: CL observation during 2026-04-13 session — asymmetry between reuse-eligibility (helper) and health-check (raw `test -f`)
-started:
+started: 2026-04-15T05:18:01Z
 completed:
 verdict:
 score: 0.55

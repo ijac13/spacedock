@@ -1,10 +1,10 @@
 ---
 id: 146
 title: "Release-branch runtime live E2E matrix parameterization"
-status: backlog
+status: ideation
 source: "CL direction during 2026-04-13 session — keep PR live CI on fixed defaults, but allow manual/release full-matrix runtime runs"
 score: 0.61
-started:
+started: 2026-04-15T05:18:01Z
 completed:
 verdict:
 worktree:

@@ -1,9 +1,9 @@
 ---
 title: Commission compile targets (claude-code, codex, portable)
 id: 036
-status: backlog
+status: ideation
 source: CL
-started:
+started: 2026-04-15T05:18:01Z
 completed:
 verdict:
 score: 0.65

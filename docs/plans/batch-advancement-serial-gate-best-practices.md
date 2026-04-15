@@ -1,11 +1,11 @@
 ---
 id: 124
 title: "Best practices — batch advancement + serial gate (mod-based loops)"
-status: backlog
+status: ideation
 source: "External FO feedback (GTM outreach pipeline) during 2026-04-10 session"
 score: 0.55
 worktree:
-started:
+started: 2026-04-15T05:18:01Z
 completed:
 verdict:
 issue:

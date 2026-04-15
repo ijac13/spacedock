@@ -1,10 +1,10 @@
 ---
 id: 141
 title: Reviewer keepalive across feedback cycles
-status: backlog
+status: ideation
 source: FO observation during task 140 rejection routing on 2026-04-12
 score: 0.63
-started:
+started: 2026-04-15T05:18:01Z
 completed:
 verdict:
 worktree:

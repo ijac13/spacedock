@@ -1,9 +1,9 @@
 ---
 id: 152
 title: "pr-merge mod: detect CI failure on PR and route back to implementation"
-status: backlog
+status: ideation
 source: "CL observation during 2026-04-14 session — validator PASSED based on local tests while PR CI could silently fail post-handoff, leaving entities stuck PR-pending"
-started:
+started: 2026-04-15T05:18:01Z
 completed:
 verdict:
 score: 0.75

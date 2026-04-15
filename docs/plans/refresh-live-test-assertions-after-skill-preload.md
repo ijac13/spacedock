@@ -1,9 +1,9 @@
 ---
 id: 154
 title: "Refresh live-test assertions against post-#085 skill-preloading scaffolding (test_commission and peers)"
-status: backlog
+status: ideation
 source: "PR #94 (#148 pytest migration) cycle-5 CI — pytest-parallel surfaced previously-masked content-drift failures across 8 claude live tests + 1 codex live test"
-started:
+started: 2026-04-15T05:18:01Z
 completed:
 verdict:
 score: 0.70

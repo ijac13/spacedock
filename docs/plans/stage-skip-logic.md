@@ -1,9 +1,9 @@
 ---
 id: 083
 title: Stage skip logic — allow entities to bypass stages when preconditions are met
-status: backlog
+status: ideation
 source: oh-my-codex analysis
-started:
+started: 2026-04-15T05:18:01Z
 completed:
 verdict:
 score: 0.40

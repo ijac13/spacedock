@@ -1,9 +1,9 @@
 ---
 id: 147
 title: "FO issue-filing guardrail enforcement — make test_scaffolding_guardrail green"
-status: backlog
+status: ideation
 source: "2026-04-13 CI observation — FO runs gh issue create despite shared-core prohibition"
-started:
+started: 2026-04-15T05:18:01Z
 completed:
 verdict:
 score: 0.65

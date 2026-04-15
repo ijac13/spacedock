@@ -1,9 +1,9 @@
 ---
 id: 155
 title: "PTY interactive tests skip on CI — ubuntu-latest has no real TTY"
-status: backlog
+status: ideation
 source: "PR #94 (#148 pytest migration) cycle-6 CI — test_interactive_poc_live fails deterministically across all 3 claude live jobs: 'turn 1 did not echo ALPHA_MARKER'"
-started:
+started: 2026-04-15T05:18:01Z
 completed:
 verdict:
 score: 0.45
