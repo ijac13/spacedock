@@ -12,468 +12,114 @@ issue: "#95"
 pr:
 ---
 
-Workflow READMEs accept `stages.defaults.model` and per-state `model:` overrides, but the plugin never reads them. Subagents unconditionally inherit the captain session's model, so a workflow author declaring `model: haiku` for routine stages still gets Opus subagents whenever the captain is running Opus.
-
-```
-$ grep -rn '\bmodel\b' skills/commission/ skills/first-officer/
-(no dispatch-side matches — only runtime parsing helpers in claude-team)
-```
+Workflow READMEs accept `stages.defaults.model` and per-state `model:` overrides, but the plugin never reads them. Subagents unconditionally inherit the captain session's model, so a workflow author declaring `model: haiku` for routine stages still gets opus subagents whenever the captain is running opus.
 
 ## Problem Statement
 
-A captain on Opus running a workflow whose README declares `model: haiku` on dispatch/execute stages gets every subagent on Opus — >10× overspend on stages explicitly designed to run cheap. The declared stage model is inert at dispatch time. The gap is silent; only a jsonl transcript audit surfaces it.
+A captain on opus running a workflow whose README declares `model: haiku` on dispatch/execute stages gets every subagent on opus — >10× overspend on stages explicitly designed to run cheap. The declared stage model is inert at dispatch time. The gap is silent; only a jsonl transcript audit surfaces it.
 
-The workaround today — captain switches their own session model to match the target stage — forfeits Opus for captain-side judgment work (gate reviews, clarification, plan review), which is exactly where operator-visible quality matters most.
-
-The fix must resolve the declared model at `claude-team build` time (the single chokepoint through which both Claude and Codex FO runtimes are already required to pipe dispatch assembly) and thread it through both dispatch paths without regressing the default-inherit behavior.
+The workaround today — captain switches their own session model to match the target stage — forfeits opus for captain-side judgment work (gate reviews, clarification, plan review), which is exactly where operator-visible quality matters most.
 
 ## Proposed Approach
 
-**⚠ Architectural shift flagged in cycle 2:** the cycle-1 design assumed Claude Code's `Agent()` tool accepted a per-dispatch `model=` parameter. Probing the upstream plugin docs (see Prior Art below) shows that is false: Claude Code agent-level model selection is declared in `agents/*.md` YAML frontmatter (e.g., `model: inherit` in superpowers' `code-reviewer.md`), not as a runtime Agent-call argument. The cycle-2 design therefore routes per-stage model through **agent-file materialization at `claude-team build` time**, not through a forwarded `Agent(model=...)` parameter. Codex's `spawn_agent` also has no documented `model` parameter in any runtime reference shipped today; the Codex path uses the same materialization strategy (a prefabricated per-model agent definition the packaged worker can load).
+The Claude Code `Agent` tool accepts an optional `model` parameter with enum `"sonnet" | "opus" | "haiku"` (verified 2026-04-15 via the tool schema and a live `Agent(model="haiku", ...)` spawn — see **Probe evidence** below). The fix is a single dispatch-path change:
 
-Resolve at `claude-team build` with this precedence:
+1. **Parser** — `skills/commission/bin/status` `parse_stages_block`: add `model` to the per-state optional allowlist and expose `stages.defaults.*` to callers (simplest shape: a sibling `parse_stages_with_defaults` that returns `(stages_list, defaults_dict)`, keeping `parse_stages_block` back-compat for existing callers).
+2. **Helper** — `skills/commission/bin/claude-team` `cmd_build`: compute `effective_model` using the precedence below; emit it as a top-level `model` field in the output JSON. When non-null, value MUST be one of `"sonnet"`, `"opus"`, `"haiku"` (the Agent schema enum) — the helper validates and errors loudly on out-of-enum values.
+3. **Claude runtime adapter** — `skills/first-officer/references/claude-first-officer-runtime.md` `## Dispatch Adapter`: forwarding clause gains `model=output.model if output.model else <omit>` alongside the existing `subagent_type` / `name` / `team_name` / `prompt`. Break-glass template gets a conditional `model=` slot.
+4. **Shared core reuse** — `skills/first-officer/references/first-officer-shared-core.md` `## Completion and Gates`: add a bullet requiring `lookup_model(worker_name) == next_stage.effective_model` (or null/null). `lookup_model` reads `~/.claude/teams/{team}/config.json members[].model`, which is stamped from `Agent(model=...)` at join time (confirmed live).
+5. **Dispatch-time visibility** — `claude-team build` prints a one-line stderr notice `[build] effective_model={resolved} (from {stage|defaults|null}) → Agent model={...|omit}` whenever a model is resolved. Silent correctness is as hard to audit as silent incorrectness.
+
+Precedence:
 
 ```
 effective_model = stages.states[stage].model
               ?? stages.defaults.model
-              ?? null  (omit — let agent frontmatter / session default apply)
+              ?? null  (omit the Agent `model=` parameter entirely; Agent's default-inheritance applies)
 ```
 
-### Touch points (revised for cycle 2)
+Null semantics: when `effective_model` is null, the helper emits `"model": null` in the JSON and the FO omits the `model=` argument on the `Agent()` call entirely (not passing `null`). Reuse matches null against null — a stage that doesn't declare a model is reuse-compatible with any reused worker that also joined without a model override.
 
-1. **`skills/commission/bin/status` — `parse_stages_block`.** Today this helper collects only a fixed allowlist of optional per-state keys (`feedback-to`, `agent`, `fresh`) into the returned stage dict, and consumes `defaults:` only to compute `default_worktree` / `default_concurrency` before discarding the rest. To surface `model`, extend `parse_stages_block` to:
-   - add `model` to the per-state optional-field allowlist, so `stages.states[stage].model` is preserved on each returned stage dict;
-   - expose the parsed `defaults` dict to callers. Simplest shape: return `(stages_list, defaults_dict)` from a new sibling helper (e.g., `parse_stages_with_defaults`) and keep `parse_stages_block` as-is for back-compat with existing callers (`status --boot`, `--next`, etc.). `claude-team build` switches to the new helper.
+### Out of Scope
 
-2. **`skills/commission/bin/claude-team` — `cmd_build`.** Call the defaults-aware helper, compute `effective_model` using the precedence above, and:
-   - **Materialize a per-stage agent file** when `effective_model` is non-null. Path: `{workflow_dir}/.claude/agents/{base_agent_name}-{model_slug}.md` where `base_agent_name` is derived from the stage's `agent:` (e.g., `spacedock:ensign` → `ensign`) and `model_slug` is a filesystem-safe derivation of the model string (e.g., `claude-haiku-4-5` → `claude-haiku-4-5`). The materialized file copies the base agent's body and sets `model: {effective_model}` in the YAML frontmatter. Skip materialization if the file already exists with a matching model field (idempotent).
-   - **Emit `subagent_type: {namespace}:{base_agent_name}-{model_slug}`** in the build output JSON so the FO's `Agent(subagent_type=...)` call targets the materialized variant.
-   - **Emit `model: {effective_model}` as a top-level output field** for visibility, tests, and the stderr observability requirement (see item 7 below). Value is the resolved string or `null`.
-   - **On null `effective_model`:** emit the vanilla `subagent_type` unchanged (no materialization), preserving today's captain-session inheritance.
+- **Codex per-stage model selection.** Codex has no team config and a different runtime model-selection mechanism. Filed as a separate follow-up task after this ships — not part of this task's scope.
+- **Per-dispatch captain override.** The captain can already switch their own session with `/model`; a per-Agent captain-side override is not needed.
+- **Agent-file frontmatter as a fallback source.** Shipped agents (first-officer, ensign, code-reviewer) stay model-less; workflow-declared model is the sole opt-in declared source and `Agent` parameter > agent YAML > parent inheritance remains the documented precedence on the Claude side.
 
-3. **`skills/first-officer/references/claude-first-officer-runtime.md` — `## Dispatch Adapter`.** The forwarding clause stays as-is (`subagent_type`, `name`, `team_name`, `prompt`) — the model is baked into the subagent_type rather than passed as a separate parameter. Add prose explaining that the helper may emit a materialized `subagent_type` (e.g., `spacedock:ensign-haiku`), which the FO forwards verbatim. Update the Break-Glass Manual Dispatch template with a note: "if the workflow declares `stages.defaults.model` or a per-state `model`, the break-glass path must also materialize a per-stage agent file or the declared model will be silently ignored." Keep break-glass minimal — the primary path is the helper.
+## Acceptance Criteria
 
-4. **`skills/first-officer/references/codex-first-officer-runtime.md` — `## Dispatch Adapter`.** Codex packaged workers resolve their role from the skill asset path (`~/.agents/skills/{namespace}/{name}/SKILL.md`). Document that a materialized per-model variant results in a new logical id (e.g., `spacedock:ensign-haiku`) whose skill asset resolution points to the same shared body. Codex's `fork_context=false` spawn already carries the assignment self-contained, so the per-model variant's role-definition preload is the mechanism that biases the worker toward the declared model. Document the reuse-invalidation rule: if the next stage's `effective_model` differs from the reused worker's spawn-time model, reuse is disallowed — shut down and fresh-dispatch. Do NOT claim `spawn_agent` accepts `model=` — it does not in current documentation.
+Each AC names the test that verifies it.
 
-5. **Shared core — `skills/first-officer/references/first-officer-shared-core.md`.** Add one bullet to the reuse conditions in `## Completion and Gates`: reuse requires "next stage's effective_model matches the reused worker's spawn-time model, inferred from the worker's `subagent_type` suffix (or null-null match when neither stage declares a model)." This keeps the rule runtime-agnostic.
+1. **AC-parser**: `parse_stages_with_defaults` (or the chosen parser extension) surfaces `stages.defaults.model` and `stages.states[n].model`. *Verified by* a static parser unit test on a synthetic README containing both.
+2. **AC-build-emits**: `claude-team build` emits top-level `model` in its JSON output. Value is one of `"sonnet"`, `"opus"`, `"haiku"`, or `null`. *Verified by* a static test on the helper's output (extend the existing `TestBuild`-style assertions).
+3. **AC-precedence-stage-wins**: stage-level `model:` overrides `defaults.model`. *Verified by* a parametrized test with a README declaring both, asserting `effective_model == stage_model`.
+4. **AC-precedence-defaults**: when stage has no `model:` and `defaults.model` is set, `effective_model == defaults.model`. *Verified by* the same parametrized test.
+5. **AC-null**: when neither stage nor defaults declare a model, helper emits `"model": null`. *Verified by* the same parametrized test.
+6. **AC-enum-validation**: helper errors loudly (non-zero exit, stderr message naming the offending field) on any `model:` value outside the Agent-schema enum. *Verified by* a static test with `model: claude-haiku-4-5-20251001` (wrong shape — should reject and tell the user "use one of: sonnet, opus, haiku").
+7. **AC-adapter-prose**: the Claude runtime adapter's `## Dispatch Adapter` contains prose instructing the FO to forward `output.model` as the `Agent()` `model=` parameter when present. *Verified by* a grep test asserting the prose anchor.
+8. **AC-break-glass**: break-glass template includes the conditional `model=` slot. *Verified by* the same grep test extended to the break-glass block.
+9. **AC-reuse-match**: shared-core reuse conditions include a model-match bullet. *Verified by* a grep test on `first-officer-shared-core.md`.
+10. **AC-visibility**: helper prints a one-line stderr notice when `effective_model` is non-null. *Verified by* a static test running `claude-team build` with a haiku-declared fixture and asserting stderr contains `effective_model=haiku`.
+11. **AC-live-propagation**: one live E2E that dispatches one ensign under `stages.defaults.model: haiku`, parses the ensign jsonl, and asserts `message.model` starts with `claude-haiku-`. Budget ~$0.05 / ~60s, runs once per PR on the `claude-live` job. *Required, not deferred* — static tests prove prose; only a live dispatch proves the model parameter propagates end-to-end.
 
-6. **`agents/first-officer.md` / `agents/ensign.md`.** No changes required; they stay model-less (inherit). They remain the template body used for materialization. Materialized variants live under the workflow directory's `.claude/agents/`, not under the plugin's `agents/`.
+## Test Plan
 
-7. **Dispatch-time visibility (cycle 2 new).** `claude-team build` prints a one-line stderr notice like `[build] effective_model=claude-haiku-4-5 (from defaults) → subagent_type=spacedock:ensign-claude-haiku-4-5` whenever a materialized variant is used. The FO's dispatch commit message (`dispatch: {slug} entering {next_stage}`) should optionally include the effective model as a trailer. Silent correctness is as hard to audit as silent incorrectness — this makes per-dispatch model visible at a glance.
+**Static (all sub-second):**
+- 1 parser test (AC-parser)
+- 1 helper build-output test extension (AC-build-emits)
+- 1 parametrized precedence test with 3 cases (AC-precedence-stage-wins, AC-precedence-defaults, AC-null)
+- 1 helper enum-validation test (AC-enum-validation)
+- 3 grep tests on adapter/break-glass/shared-core prose (AC-adapter-prose, AC-break-glass, AC-reuse-match)
+- 1 helper stderr test (AC-visibility)
 
-### Precedence and null semantics
+**Live (1 test, ~$0.05, ~60s):**
+- 1 live propagation E2E dispatching one ensign with haiku-declared fixture; asserts ensign jsonl `message.model` is a `claude-haiku-*` string (AC-live-propagation).
 
-The precedence list is final: per-state override > defaults > null. The cycle-2 design pins the following semantics for the null case:
-
-- **Null JSON representation (Open Question 3, resolved):** emit `"model": null` explicitly in the build output. Explicit null is clearer for adapter-prose assertions, makes the "is anything declared?" check trivial, and mirrors the default YAML behavior (`null` vs absent key).
-- **Null reuse semantics (staff gap 7, resolved):** null is a distinct value in reuse comparisons. If the completed worker was spawned from the vanilla `subagent_type` (no model materialization) and the next stage declares a model, effective_model differs and reuse is blocked. Conversely, if both the completed stage and the next stage declare the SAME non-null model, the same materialized subagent_type was used and reuse is valid. "Null matches null" and "model-X matches model-X" are both valid reuses; every other pairing invalidates reuse. Captain session model is NOT part of this comparison — only declared workflow model is.
-
-### Reuse and Refit
-
-- **Reuse identity:** the reused worker's spawn-time model is inferred from its `subagent_type` — vanilla `spacedock:ensign` means inherited/null, materialized `spacedock:ensign-haiku` means `haiku`. This avoids needing to read `~/.claude/teams/{team}/config.json` at reuse time (though `lookup_model` remains available as a cross-check and is the suggested AC verification).
-- **Refit propagation:** existing commissioned workflows that add or change `stages.defaults.model` after the fact automatically pick up the change because `claude-team build` re-reads the README every call and materializes on-demand. No `refit` update is strictly required for the runtime behavior. BUT: `refit` should be taught to regenerate the materialized `.claude/agents/*.md` files when the plugin's base `ensign.md` or `first-officer.md` body changes, so stale per-model variants don't fall behind. Treat as a follow-up refit task if complexity exceeds this task's scope; flag in Open Questions.
-
-## Out of Scope
-
-- **Per-dispatch captain override.** Captain does not get a `--model` flag at dispatch time; if they want a different model they edit the workflow README. Keeps `claude-team build` deterministic from its declared inputs.
-- **Mid-cycle model switching inside a reused agent.** Not supported by either runtime; reuse is blocked on model change and the FO fresh-dispatches.
-- **Auto-upgrade/downgrade.** No budget-driven or failure-rate-driven model selection. Static resolution only.
-- **Agent frontmatter model defaults.** `agents/ensign.md` / `agents/first-officer.md` stay model-less. Adding a fallback there is deferred; it would silently mask missing workflow declarations, which is the opposite of what this task wants.
-- **Model name validation.** `claude-team build` passes the string through verbatim. Typos produce a runtime error from Agent/spawn_agent, not a helper-side error. Matches current behavior for other frontmatter strings.
-
-## Acceptance Criteria (revised in cycle 2)
-
-Each AC below states what must be true after implementation AND how it is verified.
-
-1. **Parser surfaces stage `model`.** `parse_stages_block` (or a new sibling helper) preserves per-state `model:` on the returned stage dict, and the parsed `defaults` dict is reachable from `claude-team build`.
-   - *Verified by:* unit test in `tests/test_claude_team.py` that constructs a README with `stages.defaults.model: haiku` and `stages.states[0].model: opus`, invokes the parser, asserts both values are present in the returned structure.
-
-2. **`claude-team build` emits `model` in output JSON.** The output object always contains a `"model"` key; value is the resolved string when declared or JSON `null` otherwise. Null representation is explicit (`"model": null`), not key omission.
-   - *Verified by:* extend an existing `TestBuild*` case to assert `"model" in output` in both present and null branches, and assert `output["model"] is None` in the null branch.
-
-3. **Precedence: per-state override wins.** When both `stages.defaults.model` and `stages.states[stage].model` are declared, `output.model` equals the per-state value.
-   - *Verified by:* new `TestBuildModelPrecedence::test_per_state_override_wins`.
-
-4. **Precedence: defaults apply when per-state is absent.** When only `stages.defaults.model` is declared, `output.model` equals the defaults value.
-   - *Verified by:* new `TestBuildModelPrecedence::test_defaults_only`.
-
-5. **Precedence: null when neither is declared.** When neither is declared, `output.model` is JSON `null`.
-   - *Verified by:* new `TestBuildModelPrecedence::test_neither_declared_is_null`.
-
-6. **Default inheritance is preserved.** A workflow with no `model` declaration anywhere produces a dispatch that Agent/spawn_agent receives without any materialized variant or agent-level model override — preserving today's captain-session inheritance behavior.
-   - *Verified by:* the null-case test (AC 5) PLUS an assertion in the same test that `output["subagent_type"]` equals the vanilla stage agent (no model suffix).
-
-7. **`claude-team build` materializes a per-model agent variant and emits the materialized `subagent_type` when `effective_model` is non-null.** The materialized file lives under `{workflow_dir}/.claude/agents/{base}-{model_slug}.md`, inherits the base agent body, and sets `model: {effective_model}` in YAML frontmatter. The build output's `subagent_type` names the materialized variant (e.g., `spacedock:ensign-claude-haiku-4-5`). When `effective_model` is null, `subagent_type` equals the vanilla stage agent and no file is written. Materialization is idempotent — re-running build with the same inputs does not rewrite an existing matching file.
-   - *Verified by:* `TestBuildMaterialization::test_non_null_model_materializes_variant` (asserts file exists, body matches base, YAML contains `model:`, output's `subagent_type` names the variant), `TestBuildMaterialization::test_null_model_no_materialization` (asserts no file written, output `subagent_type` is vanilla), `TestBuildMaterialization::test_idempotent` (mtime unchanged on second invocation with same model).
-
-8. **Claude runtime adapter prose reflects materialization semantics.** `claude-first-officer-runtime.md`'s `## Dispatch Adapter` documents: (a) the helper may emit a materialized `subagent_type` like `spacedock:ensign-{model_slug}`; (b) the FO forwards it verbatim — no per-call `model=` parameter; (c) the Break-Glass Manual Dispatch template (lines 91–96 today) includes a note that bypassing the helper silently ignores any declared stage model unless the caller also materializes the variant manually.
-   - *Verified by:* static grep test asserting (a) the prose mentions "materialized subagent_type" or equivalent phrasing near the dispatch example, AND (b) the break-glass section contains a warning clause about stage-model bypass.
-
-9. **Codex runtime adapter prose reflects the same materialization model.** `codex-first-officer-runtime.md`'s `## Dispatch Adapter` documents: (a) the materialized `subagent_type` is passed to Codex's logical-id resolution unchanged; (b) the prose does NOT claim `spawn_agent` accepts a `model=` parameter (this was wrong in cycle 1's draft design); (c) reuse is blocked when the next stage's effective_model differs from the reused worker's spawn-time model.
-   - *Verified by:* static grep test asserting (a) the prose contains the materialized-subagent-type clause, AND (b) no occurrence of `spawn_agent(model=` in the dispatch example, AND (c) a reuse-invalidation clause mentioning "effective_model" or "spawn-time model."
-
-10. **Shared core reuse conditions include model match.** `first-officer-shared-core.md`'s reuse conditions (in the `## Completion and Gates` section) contain a bullet asserting "next stage's effective_model matches the reused worker's spawn-time model" (inferable from the worker's subagent_type suffix or, as a backstop, from `lookup_model(name)` on the team config).
-   - *Verified by:* static grep test on shared-core for the reuse-invalidation bullet.
-
-11. **Dispatch-time visibility on stderr.** When `effective_model` is non-null, `claude-team build` writes exactly one stderr line of the form `[build] effective_model={model} (from {defaults|state}) → subagent_type={materialized}` before exiting 0. When `effective_model` is null, no such line is written.
-   - *Verified by:* extend `TestBuildModelPrecedence::test_per_state_override_wins` and `test_defaults_only` to capture stderr and assert the notice appears with the correct source tag. `test_neither_declared_is_null` asserts stderr is silent of this notice.
-
-12. **Reuse-invalidation model-identity check uses the team config as backstop.** The Claude FO's reuse path, when comparing next-stage effective_model against a reused worker's spawn-time model, uses `lookup_model(name)` from `claude-team` (reads `~/.claude/teams/{team}/config.json` `members[].model`) as the authoritative spawn-time model. The `subagent_type` suffix is advisory; the config is authoritative.
-   - *Verified by:* static grep test on the Claude runtime adapter's reuse prose for a reference to `lookup_model` or `config.json` as the authoritative comparator. No runtime behavior change beyond the prose assertion — actual reuse enforcement is FO-judgement at dispatch time.
-
-13. **Live propagation E2E (required, not deferred).** A workflow fixture declaring `stages.defaults.model: claude-haiku-4-5` dispatches one ensign under a captain started with `--model claude-opus-4-6`; the ensign's jsonl transcript at `~/.claude/projects/.../` contains at least one `message.model` field whose value equals the declared haiku identifier (not opus). Exit on first assistant turn to bound cost.
-   - *Verified by:* new live test `tests/test_live_stage_model.py::test_stage_model_propagates` under the `test-live-claude` serial tier. Budget: ~$0.05, ~60s wallclock. Uses the existing `InteractiveSession` harness pattern. Fixture: minimal one-stage workflow with no gate, ensign writes a trivial stage report and exits.
+The fixture for AC-live-propagation places the workflow at a subdirectory of project_root (so paths-under-project-root vs workflow-dir questions don't confound the test — although with `Agent(model=)` there's no `.claude/agents/` dependency to confound anyway).
 
 ## Prior Art
 
-- **Issue source:** github.com/clkao/spacedock#95 filed 2026-04-15 after CL observed an Opus captain session dispatching Opus subagents despite the workflow declaring Haiku for those stages.
-- **Parser reality check:** `parse_stages_block` in `skills/commission/bin/status` does NOT today surface `model` — the per-state allowlist is `('feedback-to', 'agent', 'fresh')` and `defaults` is consumed for `worktree`/`concurrency` only. Earlier provisional framing claimed "just consume them" — that was wrong. Parser extension is required.
-- **Team-config precedent:** `claude-team` already reads `model` per team member in the generated team config (`lookup_model`, `extract_runtime_models`, `context_limit_for_model`) for the context-budget flow. This task adds the upstream input that should have been driving those values.
-- **Cycle-2 Agent() probe (BLOCKING R1 resolved).** Probed upstream evidence for per-dispatch `Agent(model=)` support:
-  - `grep -rn "Agent(.*model=" ~/.claude/plugins/cache` → no hits; the only `model=` occurrences in plugin code are (i) `InteractiveSession(model=...)` for captain CLI sessions, (ii) skill-creator Anthropic-SDK code using `client.messages.create(model=...)`, (iii) context-budget comparison strings. None is a per-`Agent()` parameter.
-  - `head -12` on six cached plugin `agents/*.md` files (`superpowers:code-reviewer`, `noteplan:productivity-assistant`, `plugin-dev:plugin-validator`, others). Result: `superpowers-dev/5.0.6/agents/code-reviewer.md` declares `model: inherit` in YAML frontmatter. Confirmed agent-level model selection is YAML, not runtime.
-  - Upstream `docs/plans/_archive/plugin-shipped-agents.md` (cached spacedock 0.9.1, line 94): "Agent file format: standard YAML frontmatter with `name`, `description`, and optionally `model` fields."
-  - Live team config evidence: `~/.claude/teams/test-project-rejection-pipeline/config.json` members entries contain `"model": "claude-opus-4-6"` stamped per member at join time (observed in two separate real runs). The model is captured from the agent file (or inheritance) when the member joins the team.
-  - **Conclusion:** Claude Code's `Agent()` tool does not accept `model=`. Model selection propagates via the agent file's YAML frontmatter at dispatch resolution. Cycle-2 design routes per-stage model through materialized agent file variants; AC 7 rewritten to match.
-- **Cycle-2 spawn_agent probe (BLOCKING R2 resolved).** Probed Codex `spawn_agent`:
-  - `skills/first-officer/references/codex-first-officer-runtime.md` lines 85 and 143: `spawn_agent(agent_type="worker", fork_context=false, message=...)`. No `model=` parameter anywhere in the adapter.
-  - `references/codex-tools.md` (repo) and the cached `codex-tools.md` describe `spawn_agent` as an experimental multi-agent primitive: "the model can call spawn_agent to create sub-agents in separate threads. Sub-agents run in their own sandbox context." No documented model parameter.
-  - `grep -rn "spawn_agent(" ~/.claude/plugins/cache` → only the spacedock adapter references; no external precedent for a `model=` keyword.
-  - **Conclusion:** `spawn_agent` does not accept a `model=` parameter in any documented form. Codex must rely on the packaged worker's skill asset to bias toward the declared model (same materialization pattern as the Claude side — the logical id names the variant, Codex's role-preload loads the variant's skill/agent body). AC 9 rewritten to match and to explicitly prohibit the cycle-1 `spawn_agent(model=...)` wording.
-- **Superpowers `model: inherit` precedent.** Confirms the exact YAML field name (`model:`) and a sample value (`inherit`) that agent-file materialization must use. This removes guesswork from implementation.
-- **Single chokepoint:** both `claude-first-officer-runtime.md` and `codex-first-officer-runtime.md` already route dispatch assembly through `claude-team build`. That makes the helper the right place to resolve `effective_model` exactly once.
-- **Related local tasks:** #154 / #155 touch live-dispatch cost observability; this task is their prerequisite insofar as cost controls are meaningless while declared model is inert.
+- `~/.claude/plugins/marketplace/.../superpowers-dev/*/agents/code-reviewer.md:5` carries `model: inherit` in YAML frontmatter; Agent's schema notes `model` overrides "the agent definition's model frontmatter". So the precedence is established: `Agent(model=)` > agent YAML `model:` > parent inheritance.
+- `claude-team:377-396` `lookup_model` reads `~/.claude/teams/{team}/config.json members[].model`. `model=` at spawn stamps into that record (verified live in spacedock-plans-2 on 2026-04-15: `Agent(model="haiku", subagent_type="general-purpose", ...)` produced `"model": "haiku"` in the member entry, despite general-purpose having no YAML `model:` and the captain running on opus).
+- `status --boot` already emits stage props; adding `model` to the per-state allowlist is analogous to `feedback-to` / `fresh` (existing optional keys).
 
-## Test Plan (revised for cycle 2)
+## Probe evidence (2026-04-15)
 
-### Static (required)
+Three cycles of ideation pursued wrong directions before the simple answer surfaced. This section preserves the probe evidence that nailed the correct mechanism. See `## Failed approaches` below for what went wrong and why.
 
-1. **Parser tests** — extend `tests/test_claude_team.py` with a parser-focused class asserting the per-state `model` key survives on returned stage dicts and the defaults dict is reachable from `claude-team build` callers. Covers AC 1.
-2. **Build output presence + explicit null** — augment an existing `TestBuildNormalDispatch` case (or add one) to assert both `"model"` is always a key in the emitted JSON AND `output["model"] is None` in the null branch. Covers AC 2.
-3. **Precedence parametrized** — new `TestBuildModelPrecedence` with three cases: per-state-override, defaults-only, neither. Covers AC 3, AC 4, AC 5, and the positive-side of AC 6 (null → vanilla subagent_type).
-4. **Materialization** — new `TestBuildMaterialization` with three cases: non-null materializes a variant file with correct YAML frontmatter and returns a suffixed subagent_type; null writes no file and returns vanilla subagent_type; re-running with matching model is idempotent (mtime preserved). Covers AC 7.
-5. **Runtime adapter prose — Claude** — static grep on `claude-first-officer-runtime.md` for (a) materialized-subagent-type clause, (b) break-glass stage-model-bypass warning, (c) reference to `lookup_model`/`config.json` as reuse comparator. Covers AC 8 and AC 12.
-6. **Runtime adapter prose — Codex** — static grep on `codex-first-officer-runtime.md` for (a) materialized-subagent-type clause, (b) absence of `spawn_agent(model=` pattern, (c) reuse-invalidation clause naming `effective_model`. Covers AC 9.
-7. **Runtime adapter prose — shared core** — static grep on `first-officer-shared-core.md`'s reuse conditions for the model-match bullet. Covers AC 10.
-8. **Stderr visibility** — extend the `TestBuildModelPrecedence` cases to capture stderr: per-state and defaults cases must emit the `[build] effective_model=...` notice with the correct source tag; null case must not emit it. Covers AC 11.
+- **Tool schema probe:** `ToolSearch(query="select:Agent", max_results=1)` returned the Agent tool definition with `"model": {"enum": ["sonnet", "opus", "haiku"], "description": "Optional model override for this agent. Takes precedence over the agent definition's model frontmatter. If omitted, uses the agent definition's model, or inherits from the parent."}`. This is the single most important finding — the parameter exists and is documented.
+- **Live spawn probe:** `Agent(subagent_type="general-purpose", name="probe-157-model-param", team_name="spacedock-plans-2", model="haiku", prompt="SendMessage then exit")` spawned successfully. Post-spawn team config inspection:
+  ```json
+  {"name": "probe-157-model-param", "model": "haiku"}
+  ```
+  Captain session is on opus; `general-purpose` has no YAML `model:`. The haiku stamp came from the `model="haiku"` Agent parameter. End-to-end verified.
 
-Estimated cost: negligible (all pure-Python, `tmp_path`-based, sub-second each). No new fixture directories — existing README-synthesis pattern covers everything. Adapter-prose tests 5–7 land in an existing or new `tests/test_runtime_adapter_prose.py`.
+## Failed approaches (preserved for audit)
 
-### Live (required — promoted from cycle 1)
+Three design cycles pursued wrong mechanisms before the tool schema was read directly. The root cause was a repeated probe-methodology failure: "no existing caller uses X" was taken as "X doesn't exist." All three rejections are summarized below with one-sentence why-they-are-bad notes.
 
-9. **Stage-model propagation E2E** — new `tests/test_live_stage_model.py::test_stage_model_propagates` under `test-live-claude` serial tier. Fixture: one-stage workflow with no gate, `stages.defaults.model: claude-haiku-4-5` in README, one trivial entity. Captain session started via `InteractiveSession(model="claude-opus-4-6", max_budget_usd=0.20)`; FO dispatches the ensign; test waits for completion and then parses the ensign's jsonl transcript. Assertion: at least one assistant-role entry's `message.model` string contains `haiku` (and none contain `opus`). Budget: ~$0.05, ~60s wallclock. Covers AC 13.
+### Cycle 1 — `Agent(model=...)` "doesn't exist" (REJECTED, but actually correct)
 
-### Live (still deferred)
+Ensign claimed `Agent` had no `model` parameter based on `grep 'Agent(...model=...)' ~/.claude/plugins/` finding zero callers. **Why this is bad:** grep for current callers tests usage, not existence. The tool schema (`ToolSearch`) is the authoritative source. Cycle-3's late probe reveals cycle-1 was wrong to abandon this direction — this is in fact the correct design.
 
-10. **Reuse-invalidation E2E** — two-stage workflow where stage A declares haiku and stage B declares opus; assert the FO fresh-dispatches between stages rather than reusing. Touches FO reuse decision logic, doubles the live-test cost, and is adequately covered by static AC 10 + AC 12 prose for this task's scope. Revisit if regressions appear.
+### Cycle 2 — materialize per-model agent files at `{workflow_dir}/.claude/agents/` (REJECTED, never viable)
 
-## Open Questions (remaining for captain at ideation gate)
+Ensign invented a strategy of writing a per-model agent variant file (e.g., `{workflow_dir}/.claude/agents/ensign-haiku.md` with `model: haiku` in YAML) and emitting a suffixed `subagent_type`. **Why this is bad:** `{workflow_dir}/.claude/agents/` is not a documented agent-discovery path; `skills/commission/SKILL.md:390` documents only `{project_root}/.claude/agents/`, and the 2026-04-01 plugin-shipped-runtime-assets spec deliberately moved *away* from writing under those trees. Even with the correct path it's unnecessarily complex: the `Agent(model=)` parameter makes file materialization pointless.
 
-1. **Parser helper shape.** Preferred: keep `parse_stages_block` unchanged (back-compat with `status --boot`, `--next`, etc.) and add `parse_stages_with_defaults` returning a tuple, OR change `parse_stages_block` signature to return a richer dict and migrate all callers. First option is less invasive; second is cleaner. Implementation will pick based on call-site ergonomics; captain may override.
+### Cycle 3 — pre-write `~/.claude/teams/{team}/config.json` members[].model before `Agent()` (REJECTED, live-disproven)
 
-2. **Refit regeneration of materialized variants.** When the plugin's base `ensign.md` or `first-officer.md` body is updated (e.g., via `refit`), pre-existing materialized variants in `{workflow_dir}/.claude/agents/` will have stale bodies. Should this task add a refit hook to re-materialize variants on the next `refit` run? The cycle-2 design treats it as a follow-up task; landing this cycle's work without refit integration is safe because `claude-team build` re-materializes on demand and the cycle's idempotency check only compares the YAML `model:` field, not the body. BUT — that means if a variant already exists with the right `model:` but a stale body, the stale body is used. Two options for the captain to pick: (a) file as a separate follow-up task (recommended — keeps this task small), (b) expand idempotency check to compare body hashes and regenerate on mismatch (adds ~20 lines but closes the staleness window).
+Captain's hypothesis: helper pre-populates a member entry with the declared model before the FO's `Agent()` call, so `lookup_model` returns the declared model. **Why this is bad:** live probe (FO-run on 2026-04-15 in spacedock-plans-2) showed Claude Code auto-renames colliding members on join — `Agent(name="probe-157-member", ...)` became `probe-157-member-2` with a fresh record using captain-session fallback model; the pre-written entry was left as an orphan. Pre-write is ignored, not honored.
 
-### Questions resolved in cycle 2
+### Shared methodology lesson
 
-- **Cycle 1 OQ-1 (Codex `spawn_agent` model parameter name) — RESOLVED.** `spawn_agent` does not accept `model=`. Cycle-2 design routes through agent-file materialization, same as Claude. See Prior Art probe.
-- **Cycle 1 OQ-3 (null representation) — RESOLVED.** Explicit `"model": null`. See AC 2 and "Precedence and null semantics" subsection.
-- **Staff-review gap 7 (null-next-stage reuse semantics) — RESOLVED.** Null is a distinct value; null-null matches, model-model matches, any cross is reuse-invalid. See "Precedence and null semantics" subsection.
+When checking "does tool X support Y?": read X's schema directly (via `ToolSearch` or equivalent runtime introspection) **before** greping for existing callers. Usage presence/absence is not existence evidence. This rule should land in `first-officer-shared-core.md`'s probe discipline — a likely follow-up task.
 
-## Stage Report
+## Open Questions (non-blocking — implementation resolves)
 
-**1. Read full task body via section-heading Grep — DONE.** Pulled `## Problem Statement`, `## Proposed Approach`, `## Out of Scope`, `## Acceptance Criteria`, `## Prior Art`, `## Test Plan` headings then read the full body once (65-line pre-edit state is well under the #159/#96 staleness concern since the provisional body was already concise — the larger echo risk is post-edit, which is unavoidable for ideation).
+1. **Parser helper shape** — add sibling `parse_stages_with_defaults` (less invasive, easy back-compat) vs. mutate `parse_stages_block` signature (cleaner but touches more callers). Either works; implementation picks based on call-site ergonomics.
+2. **Refit propagation** — `claude-team build` re-reads the workflow README on every call, so existing commissioned workflows pick up the change automatically on next dispatch. No refit required.
 
-**2. Read upstream issue body — DONE.** Via `gh api repos/clkao/spacedock/issues/95 --jq .body`. Confirms the proposed precedence (`stages.states[stage].model ?? stages.defaults.model ?? omit`), confirms no existing dispatch-side consumer, confirms the Opus-captain / Haiku-workflow footgun framing.
+## Deferred to follow-up tasks (filed separately when this lands)
 
-**3. Inspect plumbing — DONE.** Inspected without editing:
-   - `skills/commission/bin/claude-team` (`cmd_build`, lines 73-271): single JSON-stdin chokepoint, emits `subagent_type`/`name`/`team_name`/`prompt`. SCHEMA_VERSION=1. No model handling today.
-   - `skills/commission/bin/status` (`parse_stages_block`, lines 97-198): per-state optional allowlist is `('feedback-to', 'agent', 'fresh')` — model is NOT surfaced. `defaults` is used only for `worktree`/`concurrency` and discarded. This contradicts the provisional body's "just consume them" claim; parser update is required.
-   - `skills/first-officer/references/first-officer-shared-core.md` `## Dispatch` (line 53+): dispatch instructions reference worker assignment fields generically; no model logic today. Reuse conditions (in `## Completion and Gates`, lines 102-106) need a new bullet for model-match.
-   - `skills/first-officer/references/claude-first-officer-runtime.md` `## Dispatch Adapter` (line 38+): the forwarding clause names `subagent_type`, `name`, `team_name`, `prompt` — `model` must be added. Break-glass template needs conditional `model=`.
-   - `skills/first-officer/references/codex-first-officer-runtime.md` `## Dispatch Adapter` (line 61+): `spawn_agent(agent_type="worker", fork_context=false, message=...)` — no `model` parameter shown. Open question logged.
-   - `agents/first-officer.md`, `agents/ensign.md`: no `model:` frontmatter. Confirmed they stay model-less per scope decision.
-
-**4. Resolve three open questions — DONE (partially; one flagged for captain).**
-   - (a) JSON schema field emitted by `claude-team build`: top-level `model` key, value is string or JSON `null`, additive (no SCHEMA_VERSION bump).
-   - (b) Codex runtime pass-through: documented design is `spawn_agent(..., model=effective_model, ...)` on fresh dispatch and reuse-invalidation on model change, BUT the exact Codex parameter name is unverified. Flagged as Open Question 1.
-   - (c) Agent frontmatter fallback: stays empty. Workflow config is the sole declared source; captain-session inheritance remains the implicit fallback. No silent-default layer added.
-
-**5. Sharpen AC — DONE.** Nine concrete, testable ACs. Covers per-dispatch-path scenarios (initial Claude dispatch via AC 2/7, initial Codex dispatch via AC 8, reuse invalidation via AC 8/9), preserved default inheritance (AC 6), and precedence order (AC 3/4/5).
-
-**6. Test plan — DONE.** Static-only for required behavior: parser test, build-output-presence test, 3-case precedence test, 3 adapter-prose grep tests. Live tests deferred with explicit costs ($0.05/60s) and decision point at implementation gate.
-
-**7. Scaffolding impact call-out — DONE.** Changes touch: `skills/commission/bin/status` (parser), `skills/commission/bin/claude-team` (build output), and three adapter reference files. `refit` propagation NOT required — `claude-team build` re-reads README each call so existing commissioned workflows pick up the change on next dispatch. Break-glass template gains a conditional `model=` slot.
-
-**8. Update entity body — DONE.** Committed as `63f2eb48` with message `ideation: #157 claude-team-respect-stage-model flesh out problem, approach, AC, test plan`.
-
-**9. Stage report written — DONE** (this section).
-
-**10. Report completion via SendMessage — pending** (final action after this commit).
-
-### Summary
-
-Ideation complete. Fleshed-out problem framing, five-touchpoint approach (parser, helper, Claude adapter, Codex adapter, shared core), nine testable ACs, static-first test plan (~4 test additions, negligible cost), three open questions logged for captain. One provisional-body error corrected: `parse_stages_block` does not today surface `model` — parser extension is required. No scope creep beyond the issue's proposed precedence; no silent agent-frontmatter fallback added; per-dispatch captain override left out of scope.
-
-### Final AC List
-
-1. Parser surfaces stage `model` and defaults.
-2. `claude-team build` emits `model` in output JSON.
-3. Precedence: per-state override wins.
-4. Precedence: defaults apply when per-state absent.
-5. Precedence: null when neither declared.
-6. Default inheritance preserved (null → omit).
-7. Claude runtime adapter prose passes field through.
-8. Codex runtime adapter documents spawn-time model and reuse invalidation.
-9. Shared core reuse conditions include model match.
-
-### Final Test Plan
-
-Static, required: (a) parser test; (b) build-output presence in existing TestBuild case; (c) TestBuildModelPrecedence with 3 parametrized cases; (d) three adapter-prose grep tests (Claude, Codex, shared-core). All sub-second. Live E2E deferred to implementation gate.
-
-### Remaining Open Questions for Captain
-
-1. Codex `spawn_agent` model parameter name (probe in implementation stage if unknown now).
-2. Parser helper shape: add sibling `parse_stages_with_defaults` (less invasive) or mutate `parse_stages_block` signature (cleaner).
-3. Null representation: explicit `"model": null` vs. key-omission.
-
-### Feedback Cycles
-
-Cycle 1 — captain rejected ideation gate on 2026-04-15 accepting staff review NEEDS WORK verdict. Routing findings back to ideation ensign for another cycle (no stage transition; ideation has no `feedback-to` so the target is itself).
-
-Staff reviewer (staff-review-157) findings — blocking:
-
-1. **Un-flagged Claude runtime assumption** (staff R1): plan prescribes `Agent(model=output.model)` but `claude-first-officer-runtime.md:76-81` lists only `subagent_type`/`name`/`team_name`/`prompt`. Per-member model on the Claude path today is set via `~/.claude/teams/{team}/config.json` members (see `claude-team:377-396` `lookup_model`), NOT a runtime `Agent()` parameter. AC 7's grep test would pass while behavior silently doesn't change. Resolve by probing whether `Agent()` accepts per-dispatch `model=`, or whether the plumbing must instead write per-member model into the team config at TeamCreate time.
-2. **Codex runtime assumption** (staff R2): Open Question 1 is blocking, not deferrable. `spawn_agent(agent_type="worker", fork_context=false, message=...)` has no documented `model` parameter. Probe before entering implementation or AC 8 is a speculative prose write-up.
-3. **Live propagation test required, not deferred** (staff R3): a single live E2E dispatching one ensign under `stages.defaults.model: haiku` and asserting the ensign jsonl contains `message.model=haiku` (~$0.05, ~60s). Static tests prove prose exists; they do not prove dispatch works. Defer only reuse-invalidation E2E.
-
-Non-blocking gaps to fold into the revision:
-
-4. **Break-glass template AC**: AC 7 only greps the forwarding clause. Add an AC (or extend AC 7) asserting the manual break-glass template at `claude-first-officer-runtime.md:91-96` contains a conditional `model=` slot.
-5. **Dispatch-time visibility AC**: `claude-team build` should emit the resolved `effective_model` to stderr or in a commit-message suggestion so the captain can see one-glance what model a dispatched worker is running. Silent correctness is as hard to validate as silent incorrectness.
-6. **Captain-session model identity for reuse**: specify how the FO compares "next stage's effective_model" against "reused worker's spawn-time model" on the Claude path (probably `lookup_model` equivalent). Make it an AC, don't leave to implementation discovery.
-7. **Null next-stage semantics**: pin explicitly — does "null next stage model" match any reused worker (inherit → no invalidation) or is null a distinct value (invalidates reuse)? Pick one and add an AC.
-8. **Null JSON representation** (Open Question 3): pin at this gate, not at implementation. Adapter-prose grep targets depend on it.
-
-Still safe to defer:
-
-- Parser helper shape (Open Question 2) — implementation picks based on call-site ergonomics.
-
-Captain direction: resolve blocking items 1–3 before re-presenting at the ideation gate. Open Questions 3 must also be pinned; Open Question 1 becomes blocking item 2 above; Open Question 2 stays deferred.
-
-Cycle 2 — captain rejected ideation gate on 2026-04-15 accepting staff review UNSOUND verdict. Cycle-2 pivot correctly avoided cycle-1's mistake (unverified `Agent(model=)` / `spawn_agent(model=)`) but committed the same class of error: materialization-strategy claims rest on two unprobed runtime mechanisms.
-
-Staff reviewer (staff-review-157-v2) findings — blocking:
-
-1. **Agent discovery path almost certainly wrong**: plan targets `{workflow_dir}/.claude/agents/{base}-{model_slug}.md`. But `skills/commission/SKILL.md:390` documents discovery at `{project_root}/.claude/agents/`, and the `2026-04-01-plugin-shipped-runtime-assets-design.md:66` spec deliberately stopped commission from writing into that tree. In this repo `workflow_dir` != `project_root`. No evidence Claude Code probes under workflow_dir at dispatch. If discovery doesn't happen there, every static test passes and AC-13 fails → same silent-no-op shape as cycle 1 relocated.
-2. **Codex mechanism speculative**: `spawn_agent` has no `model=` (cycle-2 confirmed negative). Cycle-2's positive replacement claim — that materializing a skill asset "biases the worker toward the declared model" — is unprobed. Codex spawns generic `agent_type="worker"` and the worker reads a logical id's skill body; a `model:` field on a SKILL body is not documented anywhere as changing Codex's runtime model. AC 9 is speculative prose with different wording than cycle 1.
-
-Staff reviewer medium items:
-
-3. `lookup_model` → materialized variant model is un-probed. AC 12 assumes team-config member model gets stamped from the materialized variant's frontmatter at member-join time rather than captain-session-inherited — never verified.
-4. Refit staleness landmine (OQ-2): plan's idempotency check only compares the YAML `model:` field, so refit-updated base agent bodies leave materialized variants stale. Defer-to-follow-up is the wrong call.
-
-Staff reviewer non-blocking clean-up:
-
-5. AC-13 fixture must place the workflow at a subdirectory (not project root) so discovery-path behavior is actually exercised.
-6. No Codex live test — add one or explicitly accept Codex coverage as deferred with a named follow-up task.
-7. Trim redundant AC 5 + AC 6 + AC 2 null-branch into a single null-case AC.
-8. Concurrency: materialize as write-if-missing with atomic rename, or explicitly accept the same-content race as benign.
-
-Staff reviewer strengths (keep as-is):
-
-- Cycle-2's negative probes held under spot-check (zero `Agent(...model=...)`, zero `spawn_agent(...model=...)`, superpowers `code-reviewer.md` does carry `model: inherit`).
-- Null semantics + `"model": null` JSON pinning unambiguous and well-reasoned.
-- AC 13 (live propagation) is the right shape of test — just needs fixture pinning.
-
-Captain direction (cycle-3 design pivot, not yet dispatched): investigate whether `claude-team build` can emit the effective model AND write it into `~/.claude/teams/{team}/config.json` members[] before returning, so that when the FO's subsequent `Agent()` call joins the member, `lookup_model` returns the declared model. This uses documented existing plumbing (`claude-team:377-396` proves team config members carry model per member) instead of the speculative workflow-dir agent-file materialization mechanism. Codex needs a separately verified mechanism since it has no team config — most likely via `codex exec --model {effective_model}` CLI flag (cheap probe). Cycle 3 dispatch pending captain resolution of the team-config-write approach.
-
-## Stage Report — Ideation Cycle 2
-
-### Probe evidence for blocking items
-
-**Blocking R1 — Claude `Agent(model=)` probe:**
-
-- `grep -rn "Agent(.*model=" ~/.claude/plugins/cache` → no hits. The only `model=` hits in plugin code are `InteractiveSession(model=...)` (captain CLI), Anthropic SDK `client.messages.create(model=...)`, and context-budget comparison strings. No Agent-tool call site with a `model=` argument.
-- Inspected six cached plugin `agents/*.md` frontmatter blocks (`superpowers:code-reviewer`, `noteplan:productivity-assistant`, `plugin-dev:plugin-validator`, `plugin-dev:skill-reviewer`, `plugin-dev:agent-creator`, `hookify:conversation-analyzer`). Found `model: inherit` in `superpowers-marketplace/superpowers-dev/5.0.6/agents/code-reviewer.md`. Documented convention confirmed by `spacedock 0.9.1/docs/plans/_archive/plugin-shipped-agents.md:94`: "Agent file format: standard YAML frontmatter with `name`, `description`, and optionally `model` fields."
-- Live evidence: `~/.claude/teams/test-project-rejection-pipeline/config.json` and `~/.claude/teams/sparkling-rolling-adleman/config.json` show member entries with `"model": "claude-opus-4-6"` stamped per member. The model gets captured at join time from the agent-file's declared model (falling back to session inheritance if absent).
-- **Finding:** Claude Code `Agent()` does NOT accept `model=`. Architectural shift forced: per-stage model must propagate via agent-file YAML frontmatter, not via a runtime Agent-call argument.
-
-**Blocking R2 — Codex `spawn_agent(model=)` probe:**
-
-- `skills/first-officer/references/codex-first-officer-runtime.md` lines 85 and 143 both show `spawn_agent(agent_type="worker", fork_context=false, message=...)` with no `model=` parameter.
-- Repo `references/codex-tools.md:150-156` describes `spawn_agent` as experimental, with sub-agents running in their own sandbox contexts and coordinating via collab events. No model parameter mentioned.
-- `grep -rn "spawn_agent(" ~/.claude/plugins/cache` returns only spacedock's adapter references; no external precedent for a `model=` parameter.
-- **Finding:** `spawn_agent` has no documented `model=` parameter. Codex must use the same agent-file-materialization strategy as Claude — a per-model logical id (`spacedock:ensign-haiku`) whose packaged skill/agent asset declares the model in YAML.
-
-**Blocking R3 — Live propagation test:** promoted to REQUIRED. Written as AC 13 and Test Plan item 9. Budget ~$0.05, ~60s, fixture one-stage workflow, assertion on `message.model` in ensign jsonl.
-
-### Design decisions made this cycle
-
-1. **Architectural shift:** per-stage model propagates via materialized agent-file variants, not through a per-dispatch tool-call parameter. `claude-team build` writes `{workflow_dir}/.claude/agents/{base}-{model_slug}.md` and emits the suffixed `subagent_type`. Cycle-1 AC 7 (Agent forwarding) and AC 8 (Codex `spawn_agent(model=)`) were both wrong; rewritten as AC 7 (materialization), AC 8 (Claude prose for materialization), AC 9 (Codex prose for materialization with explicit prohibition on the cycle-1 wording).
-2. **Null reuse semantics pinned:** null is a distinct value. Null-null matches, X-X matches, every other pairing invalidates reuse. Added to "Precedence and null semantics" subsection and implied by AC 10.
-3. **Null JSON representation pinned:** explicit `"model": null`. AC 2 updated.
-4. **Visibility AC added:** AC 11 requires `[build] effective_model=... (from defaults|state) → subagent_type=...` stderr notice on non-null resolution. Covers staff gap 5.
-5. **Break-glass AC folded in:** AC 8 (b) asserts the break-glass section contains a warning about stage-model bypass. Covers staff gap 4.
-6. **Reuse model-identity AC added:** AC 12 requires the Claude runtime prose to point at `lookup_model`/`config.json` as the authoritative comparator. Covers staff gap 6.
-
-### Open questions that remain for captain
-
-1. Parser helper shape — sibling vs. signature change (low-stakes, implementation call).
-2. Refit regeneration of materialized variants — separate follow-up task, or add body-hash idempotency check to this task? Recommend the former to keep scope tight.
-
-### Final AC list (cycle 2)
-
-1. Parser surfaces stage `model` and defaults.
-2. `claude-team build` emits `"model"` in output JSON (explicit null when unset).
-3. Precedence: per-state override wins.
-4. Precedence: defaults apply when per-state absent.
-5. Precedence: null when neither declared.
-6. Default inheritance preserved (null → vanilla subagent_type).
-7. Build materializes per-model agent variant and emits suffixed `subagent_type` when non-null; no file and vanilla subagent_type when null; idempotent.
-8. Claude runtime adapter prose reflects materialization semantics and break-glass bypass warning.
-9. Codex runtime adapter prose reflects materialization semantics and explicitly does NOT claim `spawn_agent(model=)`.
-10. Shared core reuse conditions include model match.
-11. Stderr visibility on non-null resolution.
-12. Reuse comparator points at `lookup_model`/`config.json`.
-13. Live propagation E2E (required): ensign jsonl `message.model` matches declared haiku, not captain's opus.
-
-### Final test plan (cycle 2)
-
-Static required: parser test, build output + null, precedence (3 cases), materialization (3 cases), three adapter-prose grep tests, stderr-visibility assertions. Live required: one propagation E2E (~$0.05, ~60s). Live deferred: reuse-invalidation E2E.
-
-### Summary
-
-Resolved both blocking runtime assumptions via direct evidence probes. The cycle-1 design's Agent(model=) and spawn_agent(model=) forwarding was both wrong — corrected to agent-file materialization under `{workflow_dir}/.claude/agents/`. Added four new ACs covering staff-review gaps 4–7. Promoted propagation E2E to required. Two low-stakes open questions remain (parser helper shape, refit regeneration); neither blocks the ideation gate re-presentation.
-
-## Scope narrowing (2026-04-15)
-
-Cycle 3 narrows this task to **Claude-only**. Codex per-stage model selection is deferred to a separate follow-up task that the first officer will file after these probes land. Rationale: the cycle-2 materialization mechanism collapsed for both runtimes simultaneously, and probe evidence below shows the Claude and Codex paths require genuinely different mechanisms. Forcing a unified design in one task conflated two unrelated unknowns.
-
-## Probe Report — Cycle 3 (Claude-only, 2026-04-15)
-
-### Probe 1: member.model source
-
-Evidence from `~/.claude/teams/*/config.json` member distribution (52 teams scanned):
-
-| count | agentType | stored `model` |
-|---|---|---|
-| 29 | `team-lead` | `claude-opus-4-6[1m]` |
-| 24 | `spacedock:ensign` | `claude-opus-4-6` |
-| 10 | `ensign` | `claude-opus-4-6` |
-|  6 | `team-lead` | `claude-opus-4-6` |
-|  4 | `first-officer` | `claude-opus-4-6` |
-|  3 | `spacedock:ensign` | `opus[1m]` |
-|  3 | `first-officer` | `claude-opus-4-6[1m]` |
-|  2 | `superpowers:code-reviewer` | `inherit` |
-|  1 | `superpowers:code-reviewer` | `opus[1m]` |
-
-Cross-check against agent-file YAML frontmatter:
-
-- `~/.claude/plugins/cache/spacedock/spacedock/0.9.1/agents/ensign.md` has NO `model:` field at all. Yet every stored `spacedock:ensign` member carries a concrete opus model string — so the captain-session model is stamped when the agent YAML omits `model:`.
-- `~/.claude/plugins/cache/superpowers-marketplace/superpowers-dev/5.0.6/agents/code-reviewer.md` declares `model: inherit` literally. Stored member records split: two have `"model": "inherit"` (YAML value copied verbatim) and one has `"model": "opus[1m]"` (resolved). The split is almost certainly Claude Code version drift — older CC preserved the literal string, newer CC resolves `inherit` to the captain-session model at join time.
-
-**Finding (Probe 1):** `member.model` is written by **Claude Code itself at `Agent()` join time**, not by any external tool. The value comes from (a) the resolved agent file's `model:` YAML frontmatter if present and non-`inherit`, or (b) the captain-session's running model otherwise. `claude-team:377-396` `lookup_model` is strictly READ-only; `grep model /Users/clkao/git/spacedock/skills/commission/bin/claude-team` shows zero write sites for `member.model`. The mechanism confirmed by cycle-2 evidence holds: agent-file YAML frontmatter → member.model at join time, with captain-session fallback for missing/inherit fields.
-
-### Probe 2: subagent_type discovery paths
-
-Static evidence collected:
-
-- `skills/commission/SKILL.md:390` documents discovery at `{project_root}/.claude/agents/{agent}.md`. No mention of `{workflow_dir}/.claude/agents/`.
-- `docs/superpowers/specs/2026-04-01-plugin-shipped-runtime-assets-design.md:66` explicitly REMOVES `.claude/agents/` as a commission output: "copying first-officer and ensign into `.claude/agents/`" is a deliberately-stopped behavior. The current plugin-shipped model resolves `spacedock:ensign` from the marketplace cache (`~/.claude/plugins/cache/spacedock/spacedock/0.9.1/agents/ensign.md`), not from any project tree.
-- `docs/research-skill-tool-team-restriction.md:18` shows `subagent_type="ensign-test"` (no agent file anywhere) successfully dispatches — Claude Code does NOT error when the subagent_type is unknown; it silently falls through to `general-purpose`. This means the cycle-2 mechanism would silently no-op: if Claude Code doesn't search `{workflow_dir}/.claude/agents/`, the suffixed subagent_type would resolve to generic while every static test grep passes.
-- No evidence anywhere in `~/.claude/plugins/cache` or `/Users/clkao/git/spacedock` for `{workflow_dir}/.claude/agents/` being probed at dispatch. Every documentation reference to agent-file discovery uses `{project_root}/.claude/agents/` or plugin-namespaced IDs.
-
-**Live-probe blocker:** I attempted to dispatch a throwaway Agent with `subagent_type="probe-157-unique-haiku-test"` against a test file at `/tmp/probe-157-workflow/.claude/agents/probe-157-unique-haiku-test.md` to confirm whether `{workflow_dir}` is probed. **I lack the `Agent` tool in this ensign context** — `ToolSearch(query="+Agent")` returns only SendMessage/TaskCreate/TaskList/TaskUpdate. Team-lead-only tools (Agent, TeamCreate, TeamDelete) are not delegated to ensigns. Cycle 3 dispatch prompt asserted "you can spawn Agent() too (you have the tool)" but that's not true for this worker type.
-
-**Finding (Probe 2):** Static evidence is consistent with cycle-2 reviewer's claim that `{workflow_dir}/.claude/agents/` is NOT a discovery path. The three documented discovery paths are: (1) plugin-namespaced IDs like `spacedock:ensign` resolved from `~/.claude/plugins/cache/{marketplace}/{plugin}/{version}/agents/`, (2) `{project_root}/.claude/agents/` per `commission/SKILL.md:390`, (3) `~/.claude/agents/` (user-scope). `{workflow_dir}/.claude/agents/` has no evidentiary support. The cycle-2 materialization-strategy design is unviable for that reason.
-
-### Probe 3: pre-write vs Agent() join
-
-**Outcome: (c) IGNORED.** Live probe run by the captain (FO) on 2026-04-15T18:32Z in team `spacedock-plans-2`. Steps:
-
-1. Pre-populated `~/.claude/teams/spacedock-plans-2/config.json` members[] with a new entry: `{"agentId": "probe-157-member@spacedock-plans-2", "name": "probe-157-member", "agentType": "general-purpose", "model": "claude-haiku-4-5-20251001", ...}`. Captain session runs on `opus[1m]` — haiku is a distinctive marker.
-2. Called `Agent(subagent_type="general-purpose", name="probe-157-member", team_name="spacedock-plans-2", prompt="SendMessage + exit")`.
-3. Claude Code **auto-renamed** the spawned agent to `probe-157-member-2` (suffix `-2`) and wrote a new member entry with `model: "opus[1m]"`.
-4. The pre-populated `probe-157-member` entry was **left untouched as an orphan** with its `claude-haiku-4-5-20251001` value — but no agent is running under that name. `lookup_model("probe-157-member")` would still return haiku for an entry that isn't real.
-
-```json
-// post-spawn config .members:
-{"name": "probe-157-member",   "model": "claude-haiku-4-5-20251001"}  // our pre-write, orphaned
-{"name": "probe-157-member-2", "model": "opus[1m]"}                    // actual spawned agent
-```
-
-**Conclusion:** team-config pre-write IS LIVE-DISPROVEN. Claude Code's Agent-join handler does not reuse an existing member entry matching the requested name; it auto-suffixes and creates a fresh record using its own resolution (agent YAML → captain-session fallback for agents with no `model:`). This is the same silent-no-op failure class as cycles 1 and 2: no error surfaces, static assertions on the helper's output would pass, while the spawned worker runs the captain-session model. Design option (A) is ruled out.
-
-Historical evidence that now makes sense in light of this finding: all observed `member.model` variance in 52 existing team configs (inherit, opus[1m], captain-session models) is consistent with Claude Code always writing from scratch at join time, never honoring pre-existing data.
-
-Original fall-back note from this probe report's Recommended design: *"If Probe 3 shows pre-write is overwritten or ignored: the design requires a genuinely new mechanism (options: Claude Code feature request for per-Agent `model=`, or a wrapper Agent-file-materialization into `{project_root}/.claude/agents/{base}-{model_slug}.md` instead of `{workflow_dir}`, which at least lives on a documented discovery path)."* That fall-back is now the live design direction. See Revised recommendation below.
-
-**Original ensign findings below preserved for audit.**
-
----
-
-Indirect evidence from static inspection that supports the design hypothesis being **plausible but not proven** (superseded by live Probe 3 above):
-
-- `claude-team` only reads `members[]`. No code in the spacedock codebase writes `member.model`. Whether Claude Code preserves or overwrites a pre-populated member entry when `Agent(name=X)` joins is undocumented.
-- Observed member-record variance (literal `"inherit"` in some records, resolved `"opus[1m]"` in others; captain-session model stamped when YAML has no `model:`) is consistent with Claude Code actively rewriting the member entry at join time rather than leaving whatever was there. If Claude Code unconditionally overwrites the record with its own resolution (YAML frontmatter OR captain-session fallback), pre-write would be **silently lost** — exact same silent-no-op failure mode as cycles 1 and 2.
-- No repository precedent for pre-writing `~/.claude/teams/*/config.json` — every member record observed in 52 teams appears to have been written by Claude Code's Agent-join handler.
-
-**Finding (Probe 3):** Probe 3 CANNOT be executed from the ensign context. This is a blocking gap for cycle-3 design: the hypothesis that `claude-team build` pre-writes `member.model` and Claude Code honors it is currently unproven. Until a captain (who does have `Agent` / `TeamCreate` tools) runs the live probe, the pre-write strategy carries the same class of risk that rejected cycles 1 and 2.
-
-### Probe 4: any simpler mechanism
-
-- `ToolSearch(query="+Agent subagent dispatch", max_results=5)`: returned only SendMessage, TaskCreate, TaskList, TaskUpdate. No Agent tool, no model-related fields.
-- `ToolSearch(query="+Team create members", max_results=5)`: returned only SendMessage, TaskList. No TeamCreate tool in ensign surface.
-- `grep -nE 'model|--model' skills/commission/bin/claude-team`: every `model` hit is READ-side (`extract_runtime_models`, `lookup_model`, `context_limit_for_model`, diagnostic warnings). Zero WRITE sites for `member.model`. No undocumented flag surfaces per-member model.
-- `claude-first-officer-runtime.md` TeamCreate invocation at line 11: `TeamCreate(team_name="{project_name}-{dir_basename}")`. No per-member model parameter is documented.
-- Cross-runtime contrast: Codex `spawn_agent` has no model parameter (cycle-2 confirmed) AND has no team config to pre-write, so the team-config pre-write hypothesis is structurally Claude-only even if it were proven — hence the scope narrowing.
-
-**Finding (Probe 4):** No simpler already-exposed mechanism exists. Agent, TeamCreate, and `claude-team` command-line surface have no per-member model hooks.
-
-### Recommended cycle-3 design
-
-**Revised after live Probe 3 (2026-04-15T18:32Z, FO-run): Option (A) is DEAD. Proceed with Option (B′) — agent-file materialization at `{project_root}/.claude/agents/{base}-{model_slug}.md` (documented discovery path per `skills/commission/SKILL.md:390`).**
-
-Key differences between B′ and cycle-2's rejected Option B:
-- **Path**: `{project_root}/.claude/agents/` (documented discoverable) instead of `{workflow_dir}/.claude/agents/` (cycle-2's unverified target).
-- **Naming**: include workflow namespace in filename to avoid colliding with plugin/hand-written agents (e.g., `spacedock-{base_agent_name}-{model_slug}.md`).
-- **Idempotency**: write-if-missing with body-hash check (supersedes cycle-2's YAML-only check — resolves cycle-2 reviewer's refit-staleness landmine).
-- **Removed assumptions**: this design no longer depends on any undocumented discovery path, no per-dispatch model parameter, no team-config pre-write.
-
-Still to decide before cycle-4 ideation lands (resolve in the revision, not another probe cycle):
-- `.gitignore` handling for materialized variants under `{project_root}/.claude/agents/` — commissioned workflows should gitignore this subtree since it's generated at dispatch time. Ship commission with the gitignore entry.
-- Concurrent dispatch safety on the write-if-missing path (atomic rename).
-- Cleanup / GC: when to remove stale variants (refit, when a stage's `model:` is dropped, etc.).
-- Reuse-invalidation on Claude: now that pre-write is dead, the reuse-match check has to use `lookup_model(worker_name)` at decision time (member.model is stamped by Claude Code at join time from the materialized agent's YAML, so it WILL reflect the materialized variant's model — provided the materialization worked). This mechanism is now the only one we need to verify live, and it's essentially a corollary of Probe 3's finding.
-
-**Deferred to follow-up tasks (explicit scope):**
-- Codex per-stage model selection — entire Codex side is out of scope for this task now. File a named follow-up after Probe 3's live verdict.
-- Claude Code feature request for a per-dispatch `Agent(model=...)` parameter — would simplify everything but requires upstream. Note it, don't block on it.
-
-**Below: the original pre-Probe-3 recommendation, preserved for audit.**
-
-**Pre-probe primary recommendation: (A) team-config pre-write — DISPROVEN BY LIVE PROBE 3.**
-
-Rationale:
-
-1. Probe 2 further confirms cycle-2 reviewer's position: `{workflow_dir}/.claude/agents/` is not a documented discovery path, and the plugin-shipped-runtime-assets spec deliberately moved away from writing under project-tree `.claude/agents/` trees. Option (B) is unviable.
-2. Probe 1 proves the member.model plumbing is real and stable — `lookup_model` reads it, `assess` uses it — so hitting that surface is the correct abstraction target.
-3. Probe 3 cannot be run from the ensign context; the design is predicated on captain-run live verification BEFORE ideation gate approval. Do not approve cycle-3 ACs without the Probe 3 result. If Probe 3 shows pre-write is preserved: proceed with team-config pre-write design. If Probe 3 shows pre-write is overwritten or ignored: the design requires a genuinely new mechanism (options: Claude Code feature request for per-Agent `model=`, or a wrapper Agent-file-materialization into `{project_root}/.claude/agents/{base}-{model_slug}.md` instead of `{workflow_dir}`, which at least lives on a documented discovery path).
-4. Codex path is explicitly deferred to follow-up. Team-config pre-write is structurally Claude-only; Codex has no team config. A separate probe task is required for Codex — most likely shape is a `codex exec --model ...` CLI flag investigation, or an acceptance that Codex per-stage model selection is unsupported in the current runtime.
-
-**Blocking gate for captain before cycle-3 ACs can be written:**
-
-> **Captain action required:** run the Probe 3 live test before dispatching cycle-3 ensign. Create an isolated probe team via `TeamCreate(team_name="spacedock-probe-157-{timestamp}")`, pre-write a `member` entry with `"model": "claude-haiku-4-5-20251001"` into `~/.claude/teams/{probe team}/config.json`, then call `Agent(subagent_type="general-purpose", name="{pre-written name}", team_name="{probe team}", prompt="SendMessage(to=\"team-lead\", message=\"probe\")")`. After the agent completes, re-read the config file and diff against the pre-write. Report one of: (P-preserved) our model stuck, (O-overwritten) replaced with opus, (I-ignored) separate member entry created alongside ours. Only P unblocks the team-config pre-write design.
-
-### Checklist
-
-1. Feedback cycles grep — DONE. Cycle 1 and Cycle 2 context read at lines 239–346.
-2. Probe 1 — DONE. Evidence in `### Probe 1` above.
-3. Probe 2 — DONE (static only). Live file-based dispatch skipped because Agent tool unavailable; marked as limitation in `### Probe 2`.
-4. Probe 3 — FAILED (unrunnable from ensign context, no Agent/TeamCreate tools). Design implication flagged as blocking gate for captain.
-5. Probe 4 — DONE. No simpler mechanism. Evidence in `### Probe 4` above.
-6. Cleanup — SKIPPED (no probe team created, since Probe 3 could not be run; `/tmp/probe-157-workflow/.claude/agents/probe-157-unique-haiku-test.md` left in place as inert static file with no side effect).
-7. Scope narrowing — DONE. See `## Scope narrowing (2026-04-15)` section above.
-8. Probe report — DONE. This section.
-9. Commit — pending this edit.
-10. SendMessage — pending completion.
+- **Codex per-stage model selection.** Codex has no team config and its model selection is orthogonal (likely `codex exec --model` CLI flag on spawn). Needs its own probe + small design. Not blocked on this task; can run in parallel.
+- **Shared-core probe-methodology rule.** Capture the "read schema before greping callers" lesson in `first-officer-shared-core.md`'s ideation / probe guidance so future cycles don't repeat the failure.
