@@ -1,9 +1,10 @@
 ---
 id: 119
 title: FO dispatch Phase 1 band-aids — verify-member subcommand, required-field header, upstream issue
-status: backlog
+status: ideation
 source: anthropics/claude-code (local) issue #63 — fuzzy prose dispatch template causes silent sidechain downgrade
 score: 0.75
+started: 2026-04-15T05:18:01Z
 ---
 
 Protect the FO dispatch path against the silent sidechain downgrade failure mode described in issue #63 (the Agent tool accepts `team_name` without `name` and produces a sidechain subagent instead of a team member) by adding cheap, immediate band-aid protections in two places: a new `claude-team verify-member` subcommand (extending the helper that task 121 introduced), and documentation improvements in the runtime adapter.

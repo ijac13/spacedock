@@ -1,9 +1,9 @@
 ---
 id: 112
 title: Multi-player claim semantics for entity ownership
-status: backlog
+status: ideation
 source: CL — design discussion during 111 ideation, 2026-04-09
-started:
+started: 2026-04-15T05:18:01Z
 completed:
 verdict:
 score: 0.45

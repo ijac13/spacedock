@@ -1,9 +1,9 @@
 ---
 id: 132
 title: Codex first officer: derive reusable context/agent visibility from ~/.codex runtime state
-status: backlog
+status: ideation
 source: FO observation during tasks 130/131/117 on 2026-04-11
-started:
+started: 2026-04-15T05:18:01Z
 completed:
 verdict:
 score: 0.62

@@ -218,6 +218,39 @@ def test_codex_runtime_docs_define_human_readable_worker_labels():
     assert re.search(r"130-impl/Herschel|entity[- ]stage[- ]display", text, re.IGNORECASE)
 
 
+def test_codex_runtime_docs_require_fo_owned_label_examples_in_operator_updates():
+    text = read_text("skills/first-officer/references/codex-first-officer-runtime.md")
+
+    assert "Dispatching `001-implementation/Ensign`" in text
+    assert "Routing follow-up to `001-implementation/Ensign`" in text
+    assert "Waiting on `001-implementation/Ensign`" in text
+    assert "Shutting down `001-validation/Ensign`" in text
+    assert "nickname returned by `spawn_agent`" in text
+
+
+def test_codex_runtime_docs_define_bounded_single_entity_post_reuse_stop_sequence():
+    text = read_text("skills/first-officer/references/codex-first-officer-runtime.md")
+
+    assert re.search(r"active again.*wait_agent.*same handle", text, re.IGNORECASE | re.DOTALL)
+    assert re.search(r"shut.*down.*no longer needed.*before stopping", text, re.IGNORECASE | re.DOTALL)
+    assert re.search(r"unless .*terminal completion.*explicitly requested", text, re.IGNORECASE | re.DOTALL)
+
+
+def test_codex_runtime_docs_forbid_archive_history_search_in_bounded_single_entity_runs():
+    text = read_text("skills/first-officer/references/codex-first-officer-runtime.md")
+
+    assert re.search(r"do not browse .*docs/plans.*_archive", text, re.IGNORECASE | re.DOTALL)
+    assert re.search(r"once .*workflow.*entity.*loaded.*stop searching", text, re.IGNORECASE | re.DOTALL)
+
+
+def test_ensign_stage_report_uses_done_skipped_failed_markers():
+    text = read_text("skills/ensign/references/ensign-shared-core.md")
+    report_section = section_text(text, "## Stage Report Protocol", (r"^## Completion",))
+    assert "DONE:" in report_section
+    assert "SKIPPED:" in report_section
+    assert "FAILED:" in report_section
+
+
 def test_pr_merge_mod_copies_share_rich_body_template():
     installed = read_text("docs/plans/_mods/pr-merge.md")
     canonical = read_text("mods/pr-merge.md")
