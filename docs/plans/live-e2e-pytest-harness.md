@@ -940,6 +940,23 @@ The fix is intentionally narrow: only the Codex live targets normalize pytest ex
 
 Validation confirms the implementation report accurately describes a narrow change set centered on Codex live-tier exit normalization. The focused offline suite passed, the empty-tier behavior is fixed without masking real failures, and Claude targets remain on the original raw pytest path. The historical PR #94 Codex job also contained a genuine parallel-tier test failure, so this stage can pass the code change itself while still requiring a live rerun for end-to-end CI confirmation.
 
+## Stage Report: validation (cycle 3)
+
+- [x] Run the full local Codex live suite using the stable repo entrypoint for this branch.
+  `make test-live-codex` ran end-to-end: serial tier `329 deselected / 0 selected in 0.05s`; parallel tier `1 failed, 2 passed, 1 skipped in 630.64s (0:10:30)`; overall `make` exited 2.
+- [x] If the suite fails, identify which test(s) failed and capture the first failing test with exact output summary.
+  First failure was `[gw0] [25%] FAILED tests/test_codex_packaged_agent_e2e.py::test_codex_packaged_agent_e2e`; pytest reported `AssertionError: 7 of 25 checks failed`, including `TIMEOUT: codex first officer exceeded 420s limit`.
+- [x] Diagnose whether the failure is in scope for the narrow Codex tier fix or a separate real regression.
+  This is a separate real regression in the Codex packaged-agent feedback/reuse path, not the empty-tier wrapper: the serial empty Codex tier normalized correctly, `test_gate_guardrail.py` and `test_merge_hook_guardrail.py` passed, `test_rejection_flow.py` skipped, while the failing test's artifacts show the FO advanced into `validation`, started waiting on the validator (`item_32`), never observed a completed validation result, left `greeting.txt` as `Hello, World!`, and never applied the routed `Goodbye, World!` follow-up.
+- [ ] FAIL: Recommend closeout pass on the full local Codex suite.
+  Recommendation changes to `REJECTED`: the captain required a full local `make test-live-codex` pass before closeout, and that gate is currently red on `tests/test_codex_packaged_agent_e2e.py`.
+- [x] Append a new validation-stage report section with explicit checklist outcomes and commit it before replying.
+  This follow-up validation report is appended at the end of the entity file and committed on `spacedock-ensign/live-e2e-pytest-harness`.
+
+### Summary
+
+Fresh full-suite validation does not support closeout. The narrow tier-wrapper behavior is correct in the real entrypoint: the empty serial Codex tier no longer fails the aggregate path. But the full local Codex suite still fails on `tests/test_codex_packaged_agent_e2e.py`, where the Codex first officer times out after spawning validation and never completes the feedback/reuse cycle needed to turn `Hello, World!` into `Goodbye, World!`. Because the captain explicitly required a green full local `make test-live-codex` run before closeout, the validation recommendation is now **REJECTED** pending resolution of that separate Codex packaged-agent regression.
+
 ## Stage Report — Cycle 5 (2026-04-15) — unconditional HOME isolation for CI parallelism
 
 - **Goal:** Close the CI concurrency gap that left `/home/runner/.claude/` shared across pytest-xdist workers on PR #94 CI run 24434476800, where 19/65 `test_commission` inner checks failed identically across `claude-live` (haiku teams) and `claude-live-opus` (opus teams). The uniformity of the failure set across independent model tiers pointed at shared process-local state rather than per-model regression. The prime suspect: `scripts/test_lib.py::_isolated_claude_env` was opt-in on `~/.claude/benchmark-token` existing, and CI runners authenticate via `ANTHROPIC_API_KEY` with no token file, so CI never received isolation and parallel `claude -p` workers collided on the shared `~/.claude/` caches and state.
