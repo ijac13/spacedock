@@ -1,13 +1,13 @@
 ---
 id: 153
 title: "Codex FO: completion notifications must preempt side discussion"
-status: ideation
+status: implementation
 source: "CL direction during 2026-04-14 session after task 148 validation completion handling"
 started: 2026-04-15T04:11:21Z
 completed:
 verdict:
 score: 0.69
-worktree:
+worktree: .worktrees/spacedock-ensign-codex-completion-notifications-must-preempt-side-discussion
 issue:
 pr:
 ---
