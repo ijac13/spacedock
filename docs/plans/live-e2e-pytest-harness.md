@@ -1,7 +1,7 @@
 ---
 id: 148
 title: "Migrate live E2E tests to pytest with runtime markers"
-status: validation
+status: implementation
 source: "CL observation during 2026-04-13 session — standalone uv-run scripts cause test sprawl and boilerplate duplication"
 started: 2026-04-14T19:40:43Z
 completed:
