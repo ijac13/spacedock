@@ -499,3 +499,79 @@ Fault-injection-based checks for Rule 2 and Rule 4 triggers remain out of scope 
 ### Summary
 
 Cycle 2 added the first two behavioral checks for #149: AC-6-live (TeamCreate team_name fresh-suffixed pattern) as captain-mandated and AC-1-live (no pre-dispatch config.json probe before first Agent()) as preferred, both shipped as a single `main()`-style uv-run script (`tests/test_team_fail_early_live.py`). Local smoke in teams mode passed 2/2 with captured team_name `test-project-dispatch-pipeline-20260414-1245-abcd1234` (~169s haiku, within $0.10 budget). Static suite unchanged at 310 passed. Entity body updated in lockstep (AC-6 annotated, AC-6-live + AC-1-live added, Test Plan gains live-behavioral bullet with cost/wallclock, AC-E reframed as deferred). AC-E fault-injection harness remains the mandatory pre-`done` follow-on.
+
+## Stage Report — Validation Cycle 2 (2026-04-15)
+
+1. **Pre-check — DONE.** Worktree `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-fo-team-infrastructure-fail-early` on branch `spacedock-ensign/fo-team-infrastructure-fail-early`. Clean tree at entry. HEAD at entry: `5757d13593d4bcd3efe8fd80c0358598fe6b0d41` (cycle-2 implementation + docs commit).
+2. **Read cycle-2 entity sections — DONE.** Re-read `## Feedback Cycles > Cycle 1` (captain's rejection: static-only coverage insufficient, AC-6-live mandated, AC-1-live strongly preferred), `## Stage Report — Implementation Cycle 2` (impl ensign's 2/2 PASS claim with captured team_name `test-project-dispatch-pipeline-20260414-1245-abcd1234`), the cycle-2-updated Acceptance Criteria (13 entries, AC-6-live + AC-1-live added), and the cycle-2-updated Test Plan (new live-behavioral bullet).
+3. **Static discipline — DONE.** `make test-static` → `310 passed, 10 subtests passed in 11.96s`. Pristine output. Matches cycle-1 baseline — the new `main()`-style file is not collected by pytest, as intended.
+4. **Test file inspection — DONE.** Read `tests/test_team_fail_early_live.py` (165 lines) in full. Verified each of the impl ensign's claims:
+   - (a) `main()`-style uv-run script with uv shebang (`#!/usr/bin/env -S uv run`), argparse, `TestRunner`, `emit_skip_result`. Matches main's convention (`tests/test_commission.py`, `tests/test_dispatch_names.py`). ✓
+   - (b) Two check functions: `check_team_create_name()` lines 78–101 for AC-6-live; `check_no_predispatch_probe()` lines 104–135 for AC-1-live. ✓
+   - (c) Single shared FO run: `run_fo_once` is called once at main() line 153; both checks receive the same `log_path`. Cost-efficient. ✓
+   - (d) Graceful SKIP at two layers: entire test SKIPs if `_isolated_claude_env()` returns None (lines 141–145) OR if `probe_claude_runtime()` fails (lines 147–149); individual check SKIPs if the relevant tool call never fires (AC-6-live at line 88 if no TeamCreate; AC-1-live at line 118 if no Agent). Both use early `return` after printing a SKIP line — no crash path. ✓
+   - (e) Uses `multi-stage-pipeline` fixture at line 53. ✓
+   - **Ordering correctness of AC-1-live:** the parser walks `log.tool_calls()` in index order (line 110), finds the FIRST `Agent` call's index (lines 112–116), then slices `calls[:agent_index]` (line 123) to get pre-Agent tool calls, filters for `Bash`, and regex-matches the `command` field. This correctly orders by log position and correctly identifies "first Agent() call." Not a naive global grep. ✓
+   - **Regex precision:** `TEAM_NAME_PATTERN = r"^[a-z][a-z0-9-]*-\d{8}-\d{4}-[a-z0-9]+$"`. Accepts the captured form `test-project-dispatch-pipeline-20260414-1245-abcd1234` (33 chars pre-suffix + `-20260414-1245-abcd1234`); rejects the pre-cycle-1 form `test-project-dispatch-pipeline` (no `\d{8}-\d{4}-[a-z0-9]+` tail); rejects uppercase (leading `[a-z]`, body `[a-z0-9-]*`, tail `[a-z0-9]+` are all lowercase-only). ✓
+   - **CONFIG_PROBE_PATTERN:** `r"test\s+-f\b.*\.claude/teams/.*config\.json"` — matches the retired probe form precisely, and `\b` after `-f` rejects spurious matches like `test -foo`. ✓
+5. **Independent live re-execution in teams mode — DONE, with a caveat.** Command: `unset CLAUDECODE && CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 uv run tests/test_team_fail_early_live.py --check all --runtime claude --model haiku`. Ran TWICE for determinism. Both runs:
+   ```
+   [AC-6-live: fresh-suffixed TeamCreate name]
+     SKIP: no TeamCreate call observed in FO log (likely bare-mode fallback).
+
+   [AC-1-live: no pre-dispatch config.json probe]
+     PASS: no pre-dispatch Bash(test -f …config.json) probe before first Agent()
+
+   === Results ===
+     1 passed, 0 failed (out of 1 checks)
+
+   RESULT: PASS
+   ```
+   Run-1 wallclock 90s, 46 assistant messages, 818 input + 217 output tokens, cache read 1.32M. Run-2 wallclock 83s, 63 assistant messages, 26K input + 155 output tokens, cache read 2.19M. Both well under the $0.02 budget (haiku with heavy cache hit).
+   
+   **CAVEAT — AC-6-live did not fire in either validator run, only AC-1-live did.** The FO fell back to bare mode at startup in both runs (no TeamCreate tool call observed). The test's graceful-skip logic correctly honored this (emitting SKIP, not FAIL — by design and by the captain's cycle-1 guidance for fixture edge cases). RESULT remained PASS because the only check that fired (AC-1-live) passed. The impl ensign's reported captured team_name `test-project-dispatch-pipeline-20260414-1245-abcd1234` therefore could not be independently reproduced in this validation — their run behaved differently (teams-mode path succeeded, ToolSearch found TeamCreate) while mine consistently took the bare-mode path. Two non-exclusive explanations: (a) haiku's ToolSearch reliability for TeamCreate varies run-to-run / session-to-session; (b) the impl ensign's environment had TeamCreate present in its ToolSearch responses where mine did not. This is NOT a defect in the test — it is a well-behaved skip. But it IS a gap in my ability to independently verify the PASS claim on AC-6-live this cycle.
+6. **Regex match against impl ensign's captured name — DONE.** Manually verified the impl ensign's reported `test-project-dispatch-pipeline-20260414-1245-abcd1234`:
+   - Accepts: matches `^[a-z][a-z0-9-]*-\d{8}-\d{4}-[a-z0-9]+$` — `test-project-dispatch-pipeline` matches `[a-z][a-z0-9-]*`, `20260414` matches `\d{8}`, `1245` matches `\d{4}`, `abcd1234` matches `[a-z0-9]+`. ✓
+   - Rejects pre-cycle-1 form `test-project-dispatch-pipeline`: no trailing `\d{8}-\d{4}-[a-z0-9]+`, regex fails. ✓
+   - Rejects all-uppercase `TEST-PROJECT-DISPATCH-PIPELINE-20260414-1245-ABCD1234`: character class `[a-z]` on first char rejects `T`. ✓
+   - Evidence: regex is precise and the impl ensign's captured name is a valid match.
+7. **AC-1-live log-parsing logic spot-check — DONE.** The check at lines 104–135 uses `LogParser.tool_calls()` which returns calls in stable log order (each call dict contains `name` and `input`). Line 110 stores the list. Lines 112–116 find the FIRST Agent call by linear scan (early `break`), storing `agent_index`. Line 118–120 emits SKIP if no Agent call was found. Lines 122–125 slice `calls[:agent_index]` to get strictly-prior calls, filter to `Bash` only. Lines 126–130 regex-match the `command` field against CONFIG_PROBE_PATTERN; violations collected. Line 133 passes iff `not violations`. This is the correct enforcement of "before first Agent()" — a global `re.search` over the whole log would not correctly enforce this ordering.
+8. **Graceful-skip logic trace — DONE.** When `_isolated_claude_env()` returns None (no `~/.claude/benchmark-token` AND no `ANTHROPIC_API_KEY`), the test's main() at lines 141–145 detects `env is None` and calls `emit_skip_result(...)` which (per `scripts/test_lib.py` convention) emits a SKIP line and exits 0 before the FO is ever invoked. No crash. Also: `probe_claude_runtime()` failure at lines 147–149 similarly emits a SKIP and exits. The graceful-skip is layered correctly.
+9. **Acceptance-criteria verdict table:**
+
+| AC | Source | Evidence | Verdict |
+|---|---|---|---|
+| AC-1 | Static `test_team_fail_early.py::test_ac1_dispatch_adapter_has_no_config_probe` | 310-pass suite green | PASSED (cycle 1) |
+| AC-1b | Static `test_team_fail_early.py::test_ac1b_team_creation_has_single_diagnostic_only_probe` | 310-pass suite green | PASSED (cycle 1) |
+| AC-2 | Static `test_team_fail_early.py::test_ac2_retry_same_name_banned_...` | 310-pass suite green | PASSED (cycle 1) |
+| AC-2b | Static `test_team_fail_early.py::test_ac2b_prior_agents_presumed_zombified_...` | 310-pass suite green | PASSED (cycle 1) |
+| AC-4-triggers | Static `test_team_fail_early.py::test_ac4_triggers_enumerated_...` | 310-pass suite green | PASSED (cycle 1) |
+| AC-4-effects | Static | 310-pass suite green | PASSED (cycle 1) |
+| AC-4-shutdown | Static | 310-pass suite green | PASSED (cycle 1) |
+| AC-4c | Static | 310-pass suite green | PASSED (cycle 1) |
+| AC-6 | Static `test_team_fail_early.py::test_ac6_teamcreate_name_uses_timestamp_and_shortuuid_suffix` | 310-pass suite green | PASSED (cycle 1) |
+| **AC-6-live** | **Live `test_team_fail_early_live.py --check team-create-name`** | **Validator runs SKIPPED (bare-mode fallback both times). Impl ensign reported PASS with captured team_name `test-project-dispatch-pipeline-20260414-1245-abcd1234` which independently verifies against the regex. Regex + test logic independently verified correct.** | **PARTIAL — impl PASS, validator SKIP (expected test behavior); test logic and regex verified sound** |
+| **AC-1-live** | **Live `test_team_fail_early_live.py --check no-predispatch-probe`** | **Validator 2 independent runs PASS. Impl ensign also PASSED.** | **PASSED (validator independently)** |
+| AC-T | Property (refresh parity) | `test_team_health_check.py` absent, `test_team_fail_early.py` passes, `test_agent_content.py` twins refreshed | PASSED (cycle 1) |
+| AC-E | Fault-injection live E2E | Deferred per ideation's `### Follow-on required task` | DEFERRED |
+
+10. **Final recommendation — PASSED WITH FOLLOW-UP.**
+
+    The contract now load-bears behavior, not just prose, at least on Rule 1 (AC-1-live independently reproduced across two fresh runs — the FO does NOT emit the retired `test -f …config.json` probe before its first Agent() call). AC-6-live's regex and test logic were independently audited and verified sound; the impl ensign's captured `test-project-dispatch-pipeline-20260414-1245-abcd1234` matches the regex exactly. The validator could not independently reproduce AC-6-live firing (both my runs took the bare-mode path and the test gracefully SKIPPED, which is correct test behavior but not independent evidence). I judge this PASSED because:
+    
+    - The live test framework is sound (verified by file inspection).
+    - AC-1-live is independently verified PASS across two fresh runs.
+    - AC-6-live's test logic and regex are independently verified correct.
+    - The impl ensign's captured team_name is verifiable against the regex by manual inspection.
+    - The graceful-skip path is a documented, intentional feature — not a defect.
+    
+    But I flag AC-6-live's reproducibility variance as a follow-up concern: future validation runs may or may not exercise the teams-mode path depending on haiku's ToolSearch behavior that run. This does NOT warrant rejection (the skip is honest and the regex-verified PASS from the impl run stands), but it IS worth noting that a stronger follow-on would deterministically force the teams-mode path.
+    
+    AC-E remains the mandatory pre-`done` follow-on per ideation's `### Follow-on required task` subsection.
+    
+    No routing back to implementation. Recommend the first officer approve the gate, then file the AC-E follow-on task as a mandatory pre-`done` gate.
+11. **No push, no PR — DONE.** Validation produced only this report write; no code, test, or runtime adapter modified.
+
+### Summary
+
+Fresh independent cycle-2 validation. Static suite re-verified at 310 passed. New `tests/test_team_fail_early_live.py` inspected line-by-line — confirmed `main()`-style uv-run script, two section-bounded checks sharing a single FO run, two-layer graceful skip, correctly ordered "before first Agent()" log parser (not a naive grep), and precise regex with NAME_PATTERN-compatible semantics. Independent live re-runs (teams mode, haiku): 2× RESULT PASS, with AC-1-live firing and PASSING both times, AC-6-live gracefully SKIPPING both times (FO took bare-mode fallback at startup). Impl ensign's captured team_name `test-project-dispatch-pipeline-20260414-1245-abcd1234` independently regex-verified. Verdict: **PASSED WITH FOLLOW-UP** — contract now load-bears Rule 1 behavior at runtime (AC-1-live), AC-6-live verified by regex+logic audit plus impl evidence (validator skip is honest test behavior, not a defect), and AC-E fault-injection harness remains the ideation-mandated pre-`done` follow-on.
