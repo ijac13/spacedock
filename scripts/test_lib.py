@@ -230,6 +230,36 @@ def _clean_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
 
 
+def _isolated_claude_env() -> dict[str, str] | None:
+    """Return an env dict with an isolated HOME and OAuth token injected.
+
+    Returns None when the opt-in preconditions aren't met: the operator must
+    have placed a valid OAuth token at `~/.claude/benchmark-token` (created via
+    `claude setup-token`). When present, we point HOME at a fresh empty
+    directory and set CLAUDE_CODE_OAUTH_TOKEN so `claude -p` authenticates
+    against the API without loading the operator's personal
+    ~/.claude/CLAUDE.md, plugins, or skills.
+
+    Returns the env dict (caller is responsible for cleaning up the temp dir
+    if it tracks one) or None if the token file is missing/empty.
+    """
+    real_home = os.environ.get("HOME")
+    if not real_home:
+        return None
+    token_path = Path(real_home) / ".claude" / "benchmark-token"
+    if not token_path.is_file():
+        return None
+    token = token_path.read_text().strip()
+    if not token:
+        return None
+    clean_home = tempfile.mkdtemp(prefix="spacedock-clean-home-")
+    env = _clean_env()
+    env["HOME"] = clean_home
+    env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+    env.pop("ANTHROPIC_API_KEY", None)
+    return env
+
+
 def emit_skip_result(reason: str) -> None:
     """Print a standardized SKIP result and exit 0 for standalone uv-run scripts."""
     print(f"  SKIP: {reason}")
@@ -260,7 +290,7 @@ def probe_claude_runtime(model: str, timeout_s: int = 30) -> tuple[bool, str]:
             cmd,
             capture_output=True,
             text=True,
-            env=_clean_env(),
+            env=_isolated_claude_env() or _clean_env(),
             timeout=timeout_s,
         )
     except FileNotFoundError:
@@ -469,7 +499,15 @@ def create_test_project(runner: TestRunner, name: str = "test-project") -> Path:
 
 
 def setup_fixture(runner: TestRunner, fixture_name: str, pipeline_dir: str) -> Path:
-    """Copy a fixture from tests/fixtures/ into the test project pipeline directory."""
+    """Copy a fixture from tests/fixtures/ into the test project pipeline directory.
+
+    When the fixture registers a merge hook (`_mods/*.md` with `## Hook: merge`),
+    the fixture's stub `status` script is overwritten with the commissioned
+    Python status script from `skills/commission/bin/status`. The commissioned
+    script enforces the mod-block + merge-hook invariants the stub scripts
+    cannot implement in shell, and without it live tests would bypass those
+    mechanism-level guards by editing entity frontmatter directly.
+    """
     fixture_path = runner.repo_root / "tests" / "fixtures" / fixture_name
     dest = runner.test_project_dir / pipeline_dir
     dest.mkdir(parents=True, exist_ok=True)
@@ -482,12 +520,39 @@ def setup_fixture(runner: TestRunner, fixture_name: str, pipeline_dir: str) -> P
         else:
             shutil.copy2(item, target)
 
+    if _fixture_has_merge_hook(dest):
+        _install_commissioned_status_script(runner.repo_root, dest)
+
     # Make status script executable if present
     status = dest / "status"
     if status.exists():
         status.chmod(status.stat().st_mode | 0o111)
 
     return dest
+
+
+def _fixture_has_merge_hook(pipeline_dir: Path) -> bool:
+    """True when the fixture's _mods/ contains at least one `## Hook: merge` entry."""
+    mods_dir = pipeline_dir / "_mods"
+    if not mods_dir.is_dir():
+        return False
+    for mod_file in mods_dir.glob("*.md"):
+        for line in mod_file.read_text().splitlines():
+            if line.strip() == "## Hook: merge":
+                return True
+    return False
+
+
+def _install_commissioned_status_script(repo_root: Path, pipeline_dir: Path) -> None:
+    """Template and install the real skills/commission/bin/status into pipeline_dir."""
+    template = (repo_root / "skills" / "commission" / "bin" / "status").read_text()
+    content = template.replace("{spacedock_version}", "0.0.0-live-fixture")
+    content = content.replace("{entity_label}", "task")
+    content = content.replace(
+        "{stage1}, {stage2}, ..., {last_stage}",
+        "backlog, ideation, implementation, validation, done",
+    )
+    (pipeline_dir / "status").write_text(content)
 
 
 def install_agents(runner: TestRunner, include_ensign: bool = False) -> Path:
@@ -595,11 +660,12 @@ def run_first_officer(
     if extra_args:
         cmd.extend(extra_args)
 
+    env = _isolated_claude_env() or _clean_env()
     with open(log_path, "w") as log_file:
         try:
             result = subprocess.run(
                 cmd, stdout=log_file, stderr=subprocess.STDOUT,
-                cwd=runner.test_project_dir, env=_clean_env(), timeout=600,
+                cwd=runner.test_project_dir, env=env, timeout=600,
             )
         except subprocess.TimeoutExpired:
             print("\n  TIMEOUT: first officer exceeded 600s limit")
@@ -793,7 +859,7 @@ class LogParser:
         ]
 
     def agent_calls(self) -> list[dict]:
-        """Extract Agent() tool calls with subagent_type, name, and prompt."""
+        """Extract Agent() tool calls with subagent_type, name, team_name, and prompt."""
         calls = []
         for msg in self.assistant_messages():
             for block in msg["message"].get("content", []):
@@ -802,6 +868,7 @@ class LogParser:
                     calls.append({
                         "subagent_type": inp.get("subagent_type", ""),
                         "name": inp.get("name", ""),
+                        "team_name": inp.get("team_name", ""),
                         "prompt": inp.get("prompt", ""),
                     })
         return calls

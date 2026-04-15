@@ -872,7 +872,7 @@ def apply_filters(entities, filters):
     return filtered
 
 
-def run_archive(pipeline_dir, slug):
+def run_archive(pipeline_dir, slug, force=False):
     """Move {pipeline_dir}/{slug}.md to {pipeline_dir}/_archive/{slug}.md.
 
     Stamps `archived: <ISO-8601 UTC>` in the frontmatter before moving, using
@@ -884,6 +884,33 @@ def run_archive(pipeline_dir, slug):
     if not os.path.exists(source_path):
         print(f'Error: entity not found: {slug}.md', file=sys.stderr)
         sys.exit(1)
+
+    # Mod-block guard: refuse archival while mod-block is active
+    fields = parse_frontmatter(source_path)
+    mod_block = fields.get('mod-block', '').strip()
+    pr = fields.get('pr', '').strip()
+    if mod_block:
+        if not force:
+            print(f'Error: entity {slug} has pending mod-block ({mod_block}). '
+                  f'Use --force to override.', file=sys.stderr)
+            sys.exit(1)
+        print(f'Warning: --force overriding mod-block ({mod_block}) on entity {slug}',
+              file=sys.stderr)
+
+    # Merge-hook invariant: archival is a terminal action. When the workflow
+    # registers a merge hook, refuse archival unless the hook has run (pr set),
+    # the hook is in flight (mod-block set, already handled above), or --force.
+    if not force and not mod_block and not pr:
+        merge_hooks = scan_mods(pipeline_dir).get('merge', [])
+        if merge_hooks:
+            hook_list = ', '.join(merge_hooks)
+            print(
+                f'Error: entity {slug} cannot be archived — workflow has merge '
+                f'hook(s) [{hook_list}] that have not run (pr field is empty and '
+                f'mod-block is empty). Invoke the hook first, or use --force to bypass.',
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     archive_dir = os.path.join(pipeline_dir, '_archive')
     dest_path = os.path.join(archive_dir, slug + '.md')
@@ -1128,7 +1155,7 @@ def main():
                   file=sys.stderr)
             sys.exit(1)
 
-        run_archive(pipeline_dir, archive_slug)
+        run_archive(pipeline_dir, archive_slug, force='--force' in args)
         sys.exit(0)
 
     if set_result is not None:
@@ -1152,12 +1179,90 @@ def main():
             sys.exit(1)
 
         slug, updates = set_result
+        force = '--force' in args
         main_entity_path = os.path.join(pipeline_dir, slug + '.md')
         if not os.path.exists(main_entity_path):
             print(f'Error: entity not found: {slug}.md', file=sys.stderr)
             sys.exit(1)
         git_root = find_git_root(pipeline_dir)
         entity_path = resolve_active_entity_path(main_entity_path, git_root)
+
+        # Mod-block guard: refuse terminal transitions while mod-block is active.
+        # Also refuse terminal transitions combined with clearing mod-block in the
+        # same --set call — the two operations must be separate so the clear gets
+        # its own commit and any reviewer/session-resume can see the block was
+        # resolved before terminalization began.
+        current_fields = parse_frontmatter(entity_path)
+        mod_block = current_fields.get('mod-block', '').strip()
+        current_pr = current_fields.get('pr', '').strip()
+        clearing_mod_block = any(
+            field == 'mod-block' and value == '' for field, value in updates
+        )
+
+        readme_path = os.path.join(pipeline_dir, 'README.md')
+        stages = parse_stages_block(readme_path) if os.path.exists(readme_path) else None
+        terminal_names = {s['name'] for s in (stages or []) if s.get('terminal')}
+
+        def is_terminal_update():
+            """True when this --set applies any terminal field."""
+            for field, value in updates:
+                if field == 'status' and value in terminal_names:
+                    return True
+                if field in ('completed', 'verdict'):
+                    return True
+                if field == 'worktree' and value == '':
+                    return True
+            return False
+
+        # Resolve the post-update pr value. The current pr counts unless this
+        # --set itself sets it; `pr=` (clear) also counts as no pr.
+        post_update_pr = current_pr
+        for field, value in updates:
+            if field == 'pr':
+                post_update_pr = value.strip()
+
+        if (mod_block or clearing_mod_block) and not force:
+            if is_terminal_update():
+                if mod_block and not clearing_mod_block:
+                    reason = f'pending mod-block ({mod_block})'
+                elif clearing_mod_block:
+                    # Either the block is currently set and the caller is clearing
+                    # it in the same call, or the caller redundantly cleared an
+                    # already-empty field alongside a terminal update. Either way
+                    # the combined operation is rejected to keep the clear commit
+                    # separate from the terminal commit.
+                    reason = (
+                        f'combined mod-block clear with terminal transition '
+                        f'(current mod-block={mod_block!r})'
+                    )
+                else:
+                    reason = 'mod-block transition'
+                print(f'Error: entity {slug} has {reason}. '
+                      f'Clear mod-block in a separate --set call, or use --force.',
+                      file=sys.stderr)
+                sys.exit(1)
+
+        # Merge-hook invariant: when the workflow registers a merge hook, the
+        # terminal transition must happen *after* that hook has run. We detect
+        # hook completion by requiring a non-empty pr, a set mod-block (hook
+        # in flight), or --force. If none of those hold, the FO is trying to
+        # skip the hook entirely — refuse so the hook cannot be bypassed.
+        if not force and is_terminal_update() and not mod_block and not post_update_pr:
+            merge_hooks = scan_mods(pipeline_dir).get('merge', [])
+            if merge_hooks:
+                hook_list = ', '.join(merge_hooks)
+                print(
+                    f'Error: entity {slug} cannot advance to terminal — workflow '
+                    f'has merge hook(s) [{hook_list}] that have not run (pr field '
+                    f'is empty and mod-block is empty). Set mod-block=merge:{merge_hooks[0]} '
+                    f'and invoke the hook, or use --force to bypass.',
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+        if force and mod_block:
+            print(f'Warning: --force overriding mod-block ({mod_block}) on entity {slug}',
+                  file=sys.stderr)
 
         try:
             resolved = update_frontmatter(entity_path, updates)
