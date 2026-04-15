@@ -259,3 +259,61 @@ Still safe to defer:
 - Parser helper shape (Open Question 2) — implementation picks based on call-site ergonomics.
 
 Captain direction: resolve blocking items 1–3 before re-presenting at the ideation gate. Open Questions 3 must also be pinned; Open Question 1 becomes blocking item 2 above; Open Question 2 stays deferred.
+
+## Stage Report — Ideation Cycle 2
+
+### Probe evidence for blocking items
+
+**Blocking R1 — Claude `Agent(model=)` probe:**
+
+- `grep -rn "Agent(.*model=" ~/.claude/plugins/cache` → no hits. The only `model=` hits in plugin code are `InteractiveSession(model=...)` (captain CLI), Anthropic SDK `client.messages.create(model=...)`, and context-budget comparison strings. No Agent-tool call site with a `model=` argument.
+- Inspected six cached plugin `agents/*.md` frontmatter blocks (`superpowers:code-reviewer`, `noteplan:productivity-assistant`, `plugin-dev:plugin-validator`, `plugin-dev:skill-reviewer`, `plugin-dev:agent-creator`, `hookify:conversation-analyzer`). Found `model: inherit` in `superpowers-marketplace/superpowers-dev/5.0.6/agents/code-reviewer.md`. Documented convention confirmed by `spacedock 0.9.1/docs/plans/_archive/plugin-shipped-agents.md:94`: "Agent file format: standard YAML frontmatter with `name`, `description`, and optionally `model` fields."
+- Live evidence: `~/.claude/teams/test-project-rejection-pipeline/config.json` and `~/.claude/teams/sparkling-rolling-adleman/config.json` show member entries with `"model": "claude-opus-4-6"` stamped per member. The model gets captured at join time from the agent-file's declared model (falling back to session inheritance if absent).
+- **Finding:** Claude Code `Agent()` does NOT accept `model=`. Architectural shift forced: per-stage model must propagate via agent-file YAML frontmatter, not via a runtime Agent-call argument.
+
+**Blocking R2 — Codex `spawn_agent(model=)` probe:**
+
+- `skills/first-officer/references/codex-first-officer-runtime.md` lines 85 and 143 both show `spawn_agent(agent_type="worker", fork_context=false, message=...)` with no `model=` parameter.
+- Repo `references/codex-tools.md:150-156` describes `spawn_agent` as experimental, with sub-agents running in their own sandbox contexts and coordinating via collab events. No model parameter mentioned.
+- `grep -rn "spawn_agent(" ~/.claude/plugins/cache` returns only spacedock's adapter references; no external precedent for a `model=` parameter.
+- **Finding:** `spawn_agent` has no documented `model=` parameter. Codex must use the same agent-file-materialization strategy as Claude — a per-model logical id (`spacedock:ensign-haiku`) whose packaged skill/agent asset declares the model in YAML.
+
+**Blocking R3 — Live propagation test:** promoted to REQUIRED. Written as AC 13 and Test Plan item 9. Budget ~$0.05, ~60s, fixture one-stage workflow, assertion on `message.model` in ensign jsonl.
+
+### Design decisions made this cycle
+
+1. **Architectural shift:** per-stage model propagates via materialized agent-file variants, not through a per-dispatch tool-call parameter. `claude-team build` writes `{workflow_dir}/.claude/agents/{base}-{model_slug}.md` and emits the suffixed `subagent_type`. Cycle-1 AC 7 (Agent forwarding) and AC 8 (Codex `spawn_agent(model=)`) were both wrong; rewritten as AC 7 (materialization), AC 8 (Claude prose for materialization), AC 9 (Codex prose for materialization with explicit prohibition on the cycle-1 wording).
+2. **Null reuse semantics pinned:** null is a distinct value. Null-null matches, X-X matches, every other pairing invalidates reuse. Added to "Precedence and null semantics" subsection and implied by AC 10.
+3. **Null JSON representation pinned:** explicit `"model": null`. AC 2 updated.
+4. **Visibility AC added:** AC 11 requires `[build] effective_model=... (from defaults|state) → subagent_type=...` stderr notice on non-null resolution. Covers staff gap 5.
+5. **Break-glass AC folded in:** AC 8 (b) asserts the break-glass section contains a warning about stage-model bypass. Covers staff gap 4.
+6. **Reuse model-identity AC added:** AC 12 requires the Claude runtime prose to point at `lookup_model`/`config.json` as the authoritative comparator. Covers staff gap 6.
+
+### Open questions that remain for captain
+
+1. Parser helper shape — sibling vs. signature change (low-stakes, implementation call).
+2. Refit regeneration of materialized variants — separate follow-up task, or add body-hash idempotency check to this task? Recommend the former to keep scope tight.
+
+### Final AC list (cycle 2)
+
+1. Parser surfaces stage `model` and defaults.
+2. `claude-team build` emits `"model"` in output JSON (explicit null when unset).
+3. Precedence: per-state override wins.
+4. Precedence: defaults apply when per-state absent.
+5. Precedence: null when neither declared.
+6. Default inheritance preserved (null → vanilla subagent_type).
+7. Build materializes per-model agent variant and emits suffixed `subagent_type` when non-null; no file and vanilla subagent_type when null; idempotent.
+8. Claude runtime adapter prose reflects materialization semantics and break-glass bypass warning.
+9. Codex runtime adapter prose reflects materialization semantics and explicitly does NOT claim `spawn_agent(model=)`.
+10. Shared core reuse conditions include model match.
+11. Stderr visibility on non-null resolution.
+12. Reuse comparator points at `lookup_model`/`config.json`.
+13. Live propagation E2E (required): ensign jsonl `message.model` matches declared haiku, not captain's opus.
+
+### Final test plan (cycle 2)
+
+Static required: parser test, build output + null, precedence (3 cases), materialization (3 cases), three adapter-prose grep tests, stderr-visibility assertions. Live required: one propagation E2E (~$0.05, ~60s). Live deferred: reuse-invalidation E2E.
+
+### Summary
+
+Resolved both blocking runtime assumptions via direct evidence probes. The cycle-1 design's Agent(model=) and spawn_agent(model=) forwarding was both wrong — corrected to agent-file materialization under `{workflow_dir}/.claude/agents/`. Added four new ACs covering staff-review gaps 4–7. Promoted propagation E2E to required. Two low-stakes open questions remain (parser helper shape, refit regeneration); neither blocks the ideation gate re-presentation.
