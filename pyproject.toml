@@ -15,4 +15,6 @@ markers = [
     "live_claude: spawns a live Claude runtime (pipe or PTY)",
     "live_codex: spawns a live Codex runtime",
     "serial: must run serially (PTY, stubbed git/gh, or explicit sequencing)",
+    "teams_mode: requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 (teams dispatch path)",
+    "bare_mode: requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS unset (bare dispatch path)",
 ]

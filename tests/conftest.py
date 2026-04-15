@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import warnings
 from pathlib import Path
@@ -27,15 +28,53 @@ def pytest_addoption(parser):
                      help="Effort level for live runs (default: low).")
     parser.addoption("--budget", action="store", type=float, default=None,
                      help="Max budget in USD for a live run (optional).")
+    parser.addoption("--team-mode", action="store", default="auto",
+                     choices=["auto", "teams", "bare"],
+                     help="Filter live tests by teams_mode / bare_mode markers. "
+                          "'auto' resolves from CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS env "
+                          "('1' or 'true' → teams, else bare).")
 
 
 _LIVE_IMPORT_MARKERS = {"run_first_officer", "run_codex_first_officer"}
 
 
+def _resolve_team_mode(config) -> str:
+    """Resolve the effective team mode: 'teams' or 'bare'."""
+    value = config.getoption("--team-mode")
+    if value in ("teams", "bare"):
+        return value
+    env = os.environ.get("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "").strip().lower()
+    return "teams" if env in ("1", "true") else "bare"
+
+
 def pytest_collection_modifyitems(config, items):
-    """Advisory: warn if a test module imports run_first_officer / run_codex_first_officer
-    but none of its tests carry live_claude or live_codex markers. Does not fail collection.
+    """Apply the team-mode filter and run the live-marker advisory check.
+
+    - Items carrying BOTH teams_mode and bare_mode fail collection loudly.
+    - Items whose team-mode marker disagrees with the resolved mode get a skip marker.
+    - Advisory: warn if a module imports run_first_officer / run_codex_first_officer
+      but none of its tests carry live_claude or live_codex markers.
     """
+    resolved_mode = _resolve_team_mode(config)
+
+    for item in items:
+        has_teams = item.get_closest_marker("teams_mode") is not None
+        has_bare = item.get_closest_marker("bare_mode") is not None
+        if has_teams and has_bare:
+            raise pytest.UsageError(
+                f"{item.nodeid}: carries both @pytest.mark.teams_mode and "
+                "@pytest.mark.bare_mode — pick one. A test is pinned to one mode "
+                "or left mode-agnostic (no marker)."
+            )
+        if has_teams and resolved_mode != "teams":
+            item.add_marker(pytest.mark.skip(
+                reason=f"requires teams mode; --team-mode={resolved_mode}"
+            ))
+        elif has_bare and resolved_mode != "bare":
+            item.add_marker(pytest.mark.skip(
+                reason=f"requires bare mode; --team-mode={resolved_mode}"
+            ))
+
     by_module: dict[str, list] = {}
     for item in items:
         by_module.setdefault(item.module.__name__, []).append(item)
