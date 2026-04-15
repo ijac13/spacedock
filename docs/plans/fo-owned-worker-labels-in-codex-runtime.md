@@ -1,10 +1,10 @@
 ---
 id: 137
 title: FO-owned worker labels in Codex runtime
-status: backlog
+status: ideation
 source: FO observation during task 136 dispatch on 2026-04-12
 score: 0.58
-started:
+started: 2026-04-15T03:21:24Z
 completed:
 verdict:
 worktree:
