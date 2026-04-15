@@ -10,7 +10,7 @@ score: 0.45
 worktree: .worktrees/spacedock-ensign-workflow-readme-schema-and-fields-deduplication
 issue:
 pr: #91
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 A freshly commissioned workflow README emits two adjacent sections that describe the same per-entity fields:
