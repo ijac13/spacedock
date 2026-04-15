@@ -144,3 +144,24 @@ Recorded during this ideation session on 2026-04-15. Fixtures created under `/Us
 ### Codex probe deferred to implementation
 
 Per captain directive on scope, the Codex probe is a light verification step during implementation (AC-4), not a blocking ideation prerequisite. The Codex runtime adapter contains no file-staleness mechanism today (grep for `stale|echo|Read|full.*file` in `codex-first-officer-runtime.md` returns only unrelated `send_input` references). Default assumption: Codex has no equivalent surface; verify cheaply in implementation.
+
+## Stage Report — Ideation
+
+**Summary:** Ideation complete. Problem scope narrowed per in-session probe evidence to the Read + `status --set` pattern on medium entities, with Grep-vs-Read as the primary mitigation lever. Option 3 (sidecar frontmatter) dropped per captain. Codex scope defaulted to Claude-only with a cheap verification AC during implementation. Acceptance criteria and test plan sized to match: small prose change + small `status --set` stdout enhancement + one Codex probe.
+
+Checklist coverage:
+
+1. **Read task body via Grep on section headings** — DONE. Grepped `## Why it fires`, `## Mitigation options`, `## Scope note`, `## Acceptance criteria` on the original draft. Three mitigation options and four draft ACs identified.
+2. **Read upstream GitHub issue #96 body** — DONE. Fetched via `gh api repos/clkao/spacedock/issues/96 --jq .body`. The spec matches what `docs/plans/status-set-staleness-echo-mitigation.md` had quoted; no surprises.
+3. **Codex scope probe / decision** — DONE (decision; live probe deferred to implementation per pragmatic rationale). Claude-runtime-only prose by default. Codex runtime adapter has no equivalent mechanism today; implementation runs one `codex exec` verification (AC-4). If positive, rescope.
+4. **Grep-vs-Read empirical verification on project-tree files** — DONE. See `## Probe evidence` section 1: Grep + Bash-mutation + follow-up Bash produced no full-file echo on a 23 KB project-tree fixture. Evidence supports option-1 prose.
+5. **Diff-style reminder observation baked into problem statement** — DONE. See `## In-session observations` points 1 and 3. The full-file echo is not universal; `status --set` on a not-previously-Read entity already emits only the modified region. The mitigation targets the specific Read-then-mutation pattern.
+6. **Sidecar frontmatter deferred** — DONE. Option 3 dropped from scope with a brief rationale. Noted as future architectural follow-up, not this task.
+7. **Merge sequencing noted** — DONE. See `## Sequencing constraint`: implementation branches off `spacedock-ensign/claude-team-respect-stage-model` (the #157 branch) unless that branch has merged to `main` first.
+8. **Fleshed-out ideation content** — DONE. Problem statement, proposed approach, ACs with verifiers, test plan, scope boundary, and probe evidence all present. Body ~140 lines, within the target.
+9. **Acceptance criteria shape** — DONE. AC-1 (empirical Grep-echo), AC-2 (shared-core prose), AC-3 (`status --set` diff stdout), AC-4 (Codex verification, cheap), AC-5 (token-delta opt-in). AC-1 and AC-2 map directly to captain guidance; AC-3 chooses the `old -> new` shape; AC-4 is the Codex probe held at implementation; AC-5 is non-blocking per captain.
+10. **Test plan shape** — DONE. Static grep on prose, unit tests on `status --set` stdout, one live Grep-echo probe, one Codex probe, optional token-delta evidence. Budget: small.
+11. **Scope boundary** — DONE. ~5–10 lines shared-core prose, ~2 lines Claude-runtime pointer, ~20 lines `status --set` Python, ~40 LOC tests. Rescope clause explicit.
+12. **Commit the revised ideation content** — DONE. Committed as `ideation: #159 ...`.
+13. **Write Stage Report — Ideation** — DONE (this section). Committed as `report: #159 ideation stage report`.
+14. **SendMessage team-lead completion signal** — pending at end of turn.
