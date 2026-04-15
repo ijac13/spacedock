@@ -1,9 +1,9 @@
 ---
 id: 149
 title: "FO runtime: fail-early team-infrastructure defense (rules 1, 2, 4 of team-fragility issue)"
-status: backlog
+status: ideation
 source: "CL direction during 2026-04-14 session from /tmp/2026-04-14-team-fragility-issue.md"
-started:
+started: 2026-04-15T03:47:38Z
 completed:
 verdict:
 score: 0.82
