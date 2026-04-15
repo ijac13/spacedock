@@ -225,6 +225,10 @@ If one entity is blocked on clarification, continue dispatching other ready enti
 
 Report workflow state once when you reach idle or a gate. Do not spam status updates while waiting.
 
+## Probe and Ideation Discipline
+
+- when checking whether tool X supports Y, read X's schema directly (via ToolSearch or equivalent runtime introspection) before greping for existing callers — usage presence is not existence evidence.
+
 ## Issue Filing
 
 Do not file GitHub issues without explicit human approval.
