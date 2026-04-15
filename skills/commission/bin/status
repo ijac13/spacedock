@@ -1339,8 +1339,17 @@ def main():
             print('Error: ' + str(e), file=sys.stderr)
             sys.exit(1)
 
+        # Emit one line per resolved field in the shape `field: old -> new`
+        # so callers (including the FO) can narrate the mutation without
+        # re-reading the entity file. Re-reading via Read triggers Claude
+        # Code's file-staleness safety net, which echoes the entire current
+        # file as a system-reminder on the turn after a Bash-driven mutation
+        # (upstream #96). Clear-to-empty renders as `field: old -> ` (empty
+        # right side, no brackets). Bare-timestamp auto-fill renders as
+        # `field: -> {timestamp}` (empty left side).
         for field, value in resolved.items():
-            print(f'{field}: {value}')
+            old_value = current_fields.get(field, '')
+            print(f'{field}: {old_value} -> {value}')
         sys.exit(0)
 
     readme_path = os.path.join(pipeline_dir, 'README.md')

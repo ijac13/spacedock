@@ -1360,7 +1360,7 @@ class TestSetOption(unittest.TestCase):
             self.assertEqual(body_before, body_after)
 
     def test_set_prints_updated_fields(self):
-        """AC9: Updated fields are printed to stdout after write."""
+        """AC9: Updated fields are printed to stdout after write in `old -> new` shape."""
         with tempfile.TemporaryDirectory() as tmpdir:
             make_pipeline(tmpdir, README_WITH_STAGES, {
                 'task-a.md': entity('001', 'Task A', 'backlog', '0.80'),
@@ -1368,7 +1368,68 @@ class TestSetOption(unittest.TestCase):
             result = run_status(tmpdir, '--set', 'task-a', 'status=done',
                                 script_path=self.script_path)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn('status: done', result.stdout)
+            self.assertIn('status: backlog -> done', result.stdout)
+
+    def test_set_stdout_shape_non_empty_transition(self):
+        """AC-3 (#159): stdout for `field=new` on existing non-empty field renders `field: old -> new`."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'status=ideation',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('status: backlog -> ideation', result.stdout)
+
+    def test_set_stdout_shape_clear_to_empty(self):
+        """AC-3 (#159): clearing a populated field renders `field: old -> ` (empty right side, no brackets)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'implementation', '0.80',
+                                    worktree='.worktrees/ensign-foo'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'worktree=',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            # Raw stdout must contain `worktree: .worktrees/ensign-foo -> \n`
+            # (empty right side, no brackets, trailing space preserved).
+            self.assertIn('worktree: .worktrees/ensign-foo -> \n', result.stdout)
+            # No bracket syntax around the empty new-value
+            self.assertNotIn('<', result.stdout)
+            self.assertNotIn('empty', result.stdout.lower())
+
+    def test_set_stdout_shape_add_missing_field(self):
+        """AC-3 (#159): inserting a field absent from frontmatter renders `field:  -> new` (empty left side)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            content = textwrap.dedent("""\
+                ---
+                id: 001
+                title: Task A
+                status: backlog
+                ---
+
+                Description.
+                """)
+            make_pipeline(tmpdir, README_WITH_STAGES, {'task-a.md': content})
+            result = run_status(tmpdir, '--set', 'task-a', 'pr=#42',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('pr:  -> #42', result.stdout)
+
+    def test_set_stdout_shape_bare_timestamp_autofill(self):
+        """AC-3 (#159): bare-timestamp auto-fill on empty field renders `field:  -> {iso-ts}`."""
+        import re
+        with tempfile.TemporaryDirectory() as tmpdir:
+            make_pipeline(tmpdir, README_WITH_STAGES, {
+                'task-a.md': entity('001', 'Task A', 'backlog', '0.80'),
+            })
+            result = run_status(tmpdir, '--set', 'task-a', 'started',
+                                script_path=self.script_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertRegex(
+                result.stdout,
+                r'started:\s+->\s+\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z',
+            )
 
     def test_set_incompatible_flags(self):
         """AC10: --set is incompatible with --next, --archived, --boot, --where."""
