@@ -26,6 +26,7 @@ _spec.loader.exec_module(_status)
 
 parse_frontmatter = _status.parse_frontmatter
 parse_stages_block = _status.parse_stages_block
+parse_stages_with_defaults = _status.parse_stages_with_defaults
 load_active_entity_fields = _status.load_active_entity_fields
 find_git_root = _status.find_git_root
 
@@ -34,6 +35,8 @@ SCHEMA_VERSION = 1
 BUILD_REQUIRED_FIELDS = ('schema_version', 'entity_path', 'workflow_dir', 'stage', 'checklist')
 NAME_PATTERN = re.compile(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$')
 NAME_MAX_LEN = 200
+MODEL_ENUM = ('sonnet', 'opus', 'haiku')
+MODEL_ENUM_LIST = 'must be one of: sonnet, opus, haiku'
 
 
 def extract_stage_subsection(readme_path, stage_name):
@@ -120,8 +123,8 @@ def cmd_build(args):
     if not os.path.isfile(readme_path):
         return _build_error(f"workflow README not found at '{readme_path}'")
 
-    # Parse workflow stages
-    stages = parse_stages_block(readme_path)
+    # Parse workflow stages + defaults
+    stages, stage_defaults = parse_stages_with_defaults(readme_path)
     if stages is None:
         return _build_error(f"no stages block found in {readme_path}")
 
@@ -132,6 +135,42 @@ def cmd_build(args):
         return _build_error(f"stage '{stage}' not found in {readme_path}")
 
     stage_meta = stage_by_name[stage]
+
+    # Resolve effective_model with precedence: stage > defaults > null.
+    # Validate any declared value against the Agent-schema enum loudly.
+    stage_model_raw = stage_meta.get('model')
+    defaults_model_raw = stage_defaults.get('model') if stage_defaults else None
+
+    stage_idx = next(
+        (i for i, s in enumerate(stages) if s['name'] == stage), 0
+    )
+    if stage_model_raw is not None and stage_model_raw not in MODEL_ENUM:
+        return _build_error(
+            f"invalid model for stages.states[{stage_idx}].model: "
+            f"'{stage_model_raw}' — {MODEL_ENUM_LIST}"
+        )
+    if defaults_model_raw is not None and defaults_model_raw not in MODEL_ENUM:
+        return _build_error(
+            f"invalid model for stages.defaults.model: "
+            f"'{defaults_model_raw}' — {MODEL_ENUM_LIST}"
+        )
+
+    if stage_model_raw is not None:
+        effective_model = stage_model_raw
+        model_source = 'stage'
+    elif defaults_model_raw is not None:
+        effective_model = defaults_model_raw
+        model_source = 'defaults'
+    else:
+        effective_model = None
+        model_source = 'null'
+
+    if effective_model is not None:
+        print(
+            f'[build] effective_model={effective_model} (from {model_source}) '
+            f'\u2192 Agent model={effective_model}',
+            file=sys.stderr,
+        )
 
     # Rule 4: Worktree stage has worktree path
     entity_fields = parse_frontmatter(entity_path)
@@ -260,6 +299,7 @@ def cmd_build(args):
         'subagent_type': subagent_type,
         'description': f'{entity_title}: {stage}',
         'prompt': prompt,
+        'model': effective_model,
     }
 
     if not bare_mode:
