@@ -29,6 +29,7 @@ The Claude Code `Agent` tool accepts an optional `model` parameter with enum `"s
 3. **Claude runtime adapter** — `skills/first-officer/references/claude-first-officer-runtime.md` `## Dispatch Adapter`: forwarding clause gains `model=output.model if output.model else <omit>` alongside the existing `subagent_type` / `name` / `team_name` / `prompt`. Break-glass template gets a conditional `model=` slot.
 4. **Shared core reuse** — `skills/first-officer/references/first-officer-shared-core.md` `## Completion and Gates`: add a bullet requiring `lookup_model(worker_name) == next_stage.effective_model` (or null/null). `lookup_model` reads `~/.claude/teams/{team}/config.json members[].model`, which is stamped from `Agent(model=...)` at join time (confirmed live).
 5. **Dispatch-time visibility** — `claude-team build` prints a one-line stderr notice `[build] effective_model={resolved} (from {stage|defaults|null}) → Agent model={...|omit}` whenever a model is resolved. Silent correctness is as hard to audit as silent incorrectness.
+6. **Probe-discipline rule** — `skills/first-officer/references/first-officer-shared-core.md`'s ideation/probe guidance gains one new bullet: "when checking whether tool X supports Y, read X's schema directly (via ToolSearch or equivalent runtime introspection) before greping for existing callers — usage presence is not existence evidence." This rule would have prevented cycles 1, 2, and 3 of this task; landing it in the same PR converts a hard-won lesson into a durable guardrail. One bullet, trivial cost. Covered by AC-probe-discipline (#13).
 
 Precedence:
 
@@ -38,7 +39,7 @@ effective_model = stages.states[stage].model
               ?? null  (omit the Agent `model=` parameter entirely; Agent's default-inheritance applies)
 ```
 
-Null semantics: when `effective_model` is null, the helper emits `"model": null` in the JSON and the FO omits the `model=` argument on the `Agent()` call entirely (not passing `null`). Reuse matches null against null — a stage that doesn't declare a model is reuse-compatible with any reused worker that also joined without a model override.
+Null semantics: when `effective_model` is null, the helper emits `"model": null` in the JSON and the FO omits the `model=` argument on the `Agent()` call entirely (not passing `null`). Critically, omitting `Agent(model=)` does NOT stamp `null` into the team config — live evidence (`probe-157-member-2` spawned with `model=` omitted) shows Claude Code stamps `members[].model` with the captain-session resolved value (e.g., `"opus[1m]"`), not null. The reuse comparator accommodates this by narrowing its scope: **only compare when `next_stage.effective_model` is non-null; null-declared stages skip the comparator entirely** (preserves today's permissive reuse behavior — a null-declared stage accepts any reused worker regardless of stamped model). AC-null remains correct as written: it asserts the helper's JSON output, not the stamped `member.model`.
 
 ### Out of Scope
 
@@ -55,12 +56,14 @@ Each AC names the test that verifies it.
 3. **AC-precedence-stage-wins**: stage-level `model:` overrides `defaults.model`. *Verified by* a parametrized test with a README declaring both, asserting `effective_model == stage_model`.
 4. **AC-precedence-defaults**: when stage has no `model:` and `defaults.model` is set, `effective_model == defaults.model`. *Verified by* the same parametrized test.
 5. **AC-null**: when neither stage nor defaults declare a model, helper emits `"model": null`. *Verified by* the same parametrized test.
-6. **AC-enum-validation**: helper errors loudly (non-zero exit, stderr message naming the offending field) on any `model:` value outside the Agent-schema enum. *Verified by* a static test with `model: claude-haiku-4-5-20251001` (wrong shape — should reject and tell the user "use one of: sonnet, opus, haiku").
+6. **AC-enum-validation**: helper errors loudly (non-zero exit, stderr message naming both the offending field AND the full allowed enum list `must be one of: sonnet, opus, haiku`) on any `model:` value outside the Agent-schema enum. *Verified by* a static test with `model: claude-haiku-4-5-20251001` (wrong shape); the test MUST assert BOTH (a) the field name (e.g., `stages.defaults.model` or `stages.states[n].model`) AND (b) the literal enum list `must be one of: sonnet, opus, haiku` appear in stderr.
 7. **AC-adapter-prose**: the Claude runtime adapter's `## Dispatch Adapter` contains prose instructing the FO to forward `output.model` as the `Agent()` `model=` parameter when present. *Verified by* a grep test asserting the prose anchor.
 8. **AC-break-glass**: break-glass template includes the conditional `model=` slot. *Verified by* the same grep test extended to the break-glass block.
 9. **AC-reuse-match**: shared-core reuse conditions include a model-match bullet. *Verified by* a grep test on `first-officer-shared-core.md`.
 10. **AC-visibility**: helper prints a one-line stderr notice when `effective_model` is non-null. *Verified by* a static test running `claude-team build` with a haiku-declared fixture and asserting stderr contains `effective_model=haiku`.
 11. **AC-live-propagation**: one live E2E that dispatches one ensign under `stages.defaults.model: haiku`, parses the ensign jsonl, and asserts `message.model` starts with `claude-haiku-`. Budget ~$0.05 / ~60s, runs once per PR on the `claude-live` job. *Required, not deferred* — static tests prove prose; only a live dispatch proves the model parameter propagates end-to-end.
+12. **AC-reuse-visibility**: when the reuse comparator in `first-officer-shared-core.md` forces fresh dispatch because a reused worker's stamped model does not match `next_stage.effective_model`, the FO emits a captain-visible diagnostic of the form `reused worker {name} model {X} does not match next stage effective_model {Y} — fresh-dispatching`. Symmetric with AC-visibility but lives at the reuse layer (reuse flows through `SendMessage`, not `claude-team build`, so AC-visibility's stderr notice does not cover it). *Verified by* a grep test on `first-officer-shared-core.md` (or wherever the FO's reuse-decision prose lives) asserting the diagnostic phrase anchor `does not match next stage effective_model`.
+13. **AC-probe-discipline**: `skills/first-officer/references/first-officer-shared-core.md` contains a bullet in its ideation/probe guidance stating: "when checking whether tool X supports Y, read X's schema directly (via ToolSearch or equivalent runtime introspection) before greping for existing callers — usage presence is not existence evidence." *Verified by* a grep test asserting the phrase anchor `usage presence is not existence evidence`.
 
 ## Test Plan
 
@@ -71,6 +74,8 @@ Each AC names the test that verifies it.
 - 1 helper enum-validation test (AC-enum-validation)
 - 3 grep tests on adapter/break-glass/shared-core prose (AC-adapter-prose, AC-break-glass, AC-reuse-match)
 - 1 helper stderr test (AC-visibility)
+- 1 grep test on shared-core reuse-diagnostic prose (AC-reuse-visibility)
+- 1 grep test on shared-core probe-discipline bullet (AC-probe-discipline)
 
 **Live (1 test, ~$0.05, ~60s):**
 - 1 live propagation E2E dispatching one ensign with haiku-declared fixture; asserts ensign jsonl `message.model` is a `claude-haiku-*` string (AC-live-propagation).
@@ -87,12 +92,21 @@ The fixture for AC-live-propagation places the workflow at a subdirectory of pro
 
 Three cycles of ideation pursued wrong directions before the simple answer surfaced. This section preserves the probe evidence that nailed the correct mechanism. See `## Failed approaches` below for what went wrong and why.
 
-- **Tool schema probe:** `ToolSearch(query="select:Agent", max_results=1)` returned the Agent tool definition with `"model": {"enum": ["sonnet", "opus", "haiku"], "description": "Optional model override for this agent. Takes precedence over the agent definition's model frontmatter. If omitted, uses the agent definition's model, or inherits from the parent."}`. This is the single most important finding — the parameter exists and is documented.
-- **Live spawn probe:** `Agent(subagent_type="general-purpose", name="probe-157-model-param", team_name="spacedock-plans-2", model="haiku", prompt="SendMessage then exit")` spawned successfully. Post-spawn team config inspection:
+- **Tool schema probe** (`ToolSearch(query="select:Agent", max_results=1)`, verbatim `model` field from the returned Agent tool JSONSchema):
+  ```json
+  "model": {
+    "description": "Optional model override for this agent. Takes precedence over the agent definition's model frontmatter. If omitted, uses the agent definition's model, or inherits from the parent.",
+    "enum": ["sonnet", "opus", "haiku"],
+    "type": "string"
+  }
+  ```
+  This is the single most important finding — the parameter exists, is documented, and its enum is exactly `["sonnet", "opus", "haiku"]`.
+- **Live spawn probe (model= supplied):** `Agent(subagent_type="general-purpose", name="probe-157-model-param", team_name="spacedock-plans-2", model="haiku", prompt="SendMessage then exit")` spawned successfully. Post-spawn team config inspection:
   ```json
   {"name": "probe-157-model-param", "model": "haiku"}
   ```
   Captain session is on opus; `general-purpose` has no YAML `model:`. The haiku stamp came from the `model="haiku"` Agent parameter. End-to-end verified.
+- **Live spawn probe (model= omitted):** a prior probe `probe-157-member-2` spawned with the `Agent(model=)` parameter OMITTED produced a member entry stamped `"model": "opus[1m]"` in `~/.claude/teams/spacedock-plans-2/config.json` — the captain-session resolved value, NOT null. This is the load-bearing evidence for the null-stamp semantics rewrite (see `## Proposed Approach`): omission stamps the inherited/resolved captain model into the team config, so the reuse comparator cannot rely on "null vs null" matching.
 
 ## Failed approaches (preserved for audit)
 
@@ -104,7 +118,7 @@ Ensign claimed `Agent` had no `model` parameter based on `grep 'Agent(...model=.
 
 ### Cycle 2 — materialize per-model agent files at `{workflow_dir}/.claude/agents/` (REJECTED, never viable)
 
-Ensign invented a strategy of writing a per-model agent variant file (e.g., `{workflow_dir}/.claude/agents/ensign-haiku.md` with `model: haiku` in YAML) and emitting a suffixed `subagent_type`. **Why this is bad:** `{workflow_dir}/.claude/agents/` is not a documented agent-discovery path; `skills/commission/SKILL.md:390` documents only `{project_root}/.claude/agents/`, and the 2026-04-01 plugin-shipped-runtime-assets spec deliberately moved *away* from writing under those trees. Even with the correct path it's unnecessarily complex: the `Agent(model=)` parameter makes file materialization pointless.
+Ensign invented a strategy of writing a per-model agent variant file (e.g., `{workflow_dir}/.claude/agents/ensign-haiku.md` with `model: haiku` in YAML) and emitting a suffixed `subagent_type`. **Why this is bad:** `{workflow_dir}/.claude/agents/` is not a documented agent-discovery path — `skills/commission/SKILL.md:390` documents only `{project_root}/.claude/agents/` as the discovery root, and `docs/superpowers/specs/2026-04-01-plugin-shipped-runtime-assets-design.md:66` explicitly moves plugin-shipped runtime assets *away* from writing under project-tree `.claude/agents/` directories. Even with the correct path it's unnecessarily complex: the `Agent(model=)` parameter makes file materialization pointless.
 
 ### Cycle 3 — pre-write `~/.claude/teams/{team}/config.json` members[].model before `Agent()` (REJECTED, live-disproven)
 
@@ -112,12 +126,13 @@ Captain's hypothesis: helper pre-populates a member entry with the declared mode
 
 ### Shared methodology lesson
 
-When checking "does tool X support Y?": read X's schema directly (via `ToolSearch` or equivalent runtime introspection) **before** greping for existing callers. Usage presence/absence is not existence evidence. This rule should land in `first-officer-shared-core.md`'s probe discipline — a likely follow-up task.
+When checking "does tool X support Y?": read X's schema directly (via `ToolSearch` or equivalent runtime introspection) **before** greping for existing callers. Usage presence/absence is not existence evidence. This rule lands in `first-officer-shared-core.md`'s probe discipline **as part of this PR** (see `## Proposed Approach` touch-point 6 and AC-probe-discipline #13) — not deferred.
 
 ## Open Questions (non-blocking — implementation resolves)
 
 1. **Parser helper shape** — add sibling `parse_stages_with_defaults` (less invasive, easy back-compat) vs. mutate `parse_stages_block` signature (cleaner but touches more callers). Either works; implementation picks based on call-site ergonomics.
 2. **Refit propagation** — `claude-team build` re-reads the workflow README on every call, so existing commissioned workflows pick up the change automatically on next dispatch. No refit required.
+3. **Legacy-member transient on first reuse after merge** — members stamped pre-merge with non-enum values (e.g., `"opus[1m]"`, `"claude-opus-4-6[1m]"`, `"inherit"`) in `~/.claude/teams/{team}/config.json` will fail the reuse comparator's equality check against new enum values (`"haiku"`, `"sonnet"`, `"opus"`) and force one-time fresh dispatch. This is expected and benign — the fresh dispatch re-stamps the member with the canonical enum value, and subsequent reuses match. Documented here for auditability so operators seeing a single unexpected fresh-dispatch on the first post-merge cycle don't chase it as a bug.
 
 ## Deferred to follow-up tasks (filed separately when this lands)
 
