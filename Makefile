@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: test-static test-e2e test-live-claude test-live-claude-opus test-live-codex
+.PHONY: test-static test-e2e test-live-claude test-live-claude-opus test-live-codex test-live-claude-bare test-live-codex-bare
 
 TEST ?= tests/
 RUNTIME ?= claude
@@ -45,6 +45,29 @@ test-live-codex:
 	    -m "live_codex and serial" --runtime codex -x -v ; SEQ=$$? ; \
 	  uv run pytest tests/ --ignore=tests/fixtures \
 	    -m "live_codex and not serial" --runtime codex \
+	    -n $(LIVE_CODEX_WORKERS) -v ; PAR=$$? ; \
+	  test $$SEQ -eq 0 -a $$PAR -eq 0 ; \
+	}
+
+# Bare-mode variant of test-live-claude. Runs with CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+# unset and --team-mode=bare, so tests pinned to teams_mode are auto-skipped and
+# tests pinned to bare_mode run; mode-agnostic tests run under the bare dispatch path.
+test-live-claude-bare:
+	unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && { \
+	  uv run pytest tests/ --ignore=tests/fixtures \
+	    -m "live_claude and serial" --runtime claude --team-mode=bare -x -v ; SEQ=$$? ; \
+	  uv run pytest tests/ --ignore=tests/fixtures \
+	    -m "live_claude and not serial" --runtime claude --team-mode=bare \
+	    -n $(LIVE_CLAUDE_WORKERS) -v ; PAR=$$? ; \
+	  test $$SEQ -eq 0 -a $$PAR -eq 0 ; \
+	}
+
+test-live-codex-bare:
+	unset CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && { \
+	  uv run pytest tests/ --ignore=tests/fixtures \
+	    -m "live_codex and serial" --runtime codex --team-mode=bare -x -v ; SEQ=$$? ; \
+	  uv run pytest tests/ --ignore=tests/fixtures \
+	    -m "live_codex and not serial" --runtime codex --team-mode=bare \
 	    -n $(LIVE_CODEX_WORKERS) -v ; PAR=$$? ; \
 	  test $$SEQ -eq 0 -a $$PAR -eq 0 ; \
 	}
