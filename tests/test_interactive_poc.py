@@ -40,7 +40,10 @@ def test_interactive_poc_offline():
         assert InteractiveSession().get_subagent_logs(td) == {}
 
 
-@pytest.mark.skip(reason="requires real TTY; CI runners are headless — see #155")
+@pytest.mark.skipif(
+    not sys.stdin.isatty(),
+    reason="requires real TTY; CI runners are headless — see #155",
+)
 @pytest.mark.live_claude
 @pytest.mark.serial
 def test_interactive_poc_live(model):
