@@ -16,6 +16,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (
     TestRunner,
+    _isolated_claude_env,
     bash_command_targets_write,
     emit_skip_result,
     prepare_codex_skill_home,
@@ -144,3 +145,47 @@ def test_prepare_codex_skill_home_creates_writable_codex_home_when_real_home_mis
     assert codex_home.exists()
     assert codex_home.is_dir()
     assert not codex_home.is_symlink()
+
+
+def test_isolated_claude_env_injects_oauth_token_when_token_file_present(monkeypatch, tmp_path):
+    fake_home = tmp_path / "real-home"
+    claude_dir = fake_home / ".claude"
+    claude_dir.mkdir(parents=True)
+    (claude_dir / "benchmark-token").write_text("sk-oauth-test-token\n")
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-api-should-be-dropped")
+
+    env = _isolated_claude_env()
+
+    assert env is not None
+    assert env["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-oauth-test-token"
+    assert "ANTHROPIC_API_KEY" not in env
+    assert env["HOME"] != str(fake_home)
+    assert Path(env["HOME"]).is_dir()
+
+
+def test_isolated_claude_env_preserves_api_key_when_no_token_file(monkeypatch, tmp_path):
+    fake_home = tmp_path / "real-home"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ci-api-key")
+
+    env = _isolated_claude_env()
+
+    assert env is not None
+    assert env["ANTHROPIC_API_KEY"] == "sk-ci-api-key"
+    assert "CLAUDE_CODE_OAUTH_TOKEN" not in env
+    assert env["HOME"] != str(fake_home)
+    assert Path(env["HOME"]).is_dir()
+
+
+def test_isolated_claude_env_returns_none_when_no_auth_available(monkeypatch, tmp_path):
+    fake_home = tmp_path / "real-home"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+
+    env = _isolated_claude_env()
+
+    assert env is None
