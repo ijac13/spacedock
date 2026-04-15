@@ -1,15 +1,16 @@
 ---
 id: 148
 title: "Migrate live E2E tests to pytest with runtime markers"
-status: validation
+status: done
 source: "CL observation during 2026-04-13 session — standalone uv-run scripts cause test sprawl and boilerplate duplication"
 started: 2026-04-14T19:40:43Z
-completed:
-verdict:
+completed: 2026-04-15T17:41:12Z
+verdict: PASSED
 score: 0.70
-worktree: .worktrees/spacedock-ensign-live-e2e-pytest-harness
+worktree: 
 issue:
-pr:
+pr: #94
+archived: 2026-04-15T17:41:14Z
 ---
 
 Each live E2E test is a standalone `uv run` script with its own `main()`, `argparse` setup, `TestRunner` instantiation, project scaffolding, FO invocation, log parsing, and result reporting. Adding a new test means copying 60+ lines of boilerplate. The Makefile must list each test by path, and the CI workflow must keep that list in sync.
