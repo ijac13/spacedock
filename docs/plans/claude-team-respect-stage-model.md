@@ -189,3 +189,27 @@ Static, required: (a) parser test; (b) build-output presence in existing TestBui
 1. Codex `spawn_agent` model parameter name (probe in implementation stage if unknown now).
 2. Parser helper shape: add sibling `parse_stages_with_defaults` (less invasive) or mutate `parse_stages_block` signature (cleaner).
 3. Null representation: explicit `"model": null` vs. key-omission.
+
+### Feedback Cycles
+
+Cycle 1 — captain rejected ideation gate on 2026-04-15 accepting staff review NEEDS WORK verdict. Routing findings back to ideation ensign for another cycle (no stage transition; ideation has no `feedback-to` so the target is itself).
+
+Staff reviewer (staff-review-157) findings — blocking:
+
+1. **Un-flagged Claude runtime assumption** (staff R1): plan prescribes `Agent(model=output.model)` but `claude-first-officer-runtime.md:76-81` lists only `subagent_type`/`name`/`team_name`/`prompt`. Per-member model on the Claude path today is set via `~/.claude/teams/{team}/config.json` members (see `claude-team:377-396` `lookup_model`), NOT a runtime `Agent()` parameter. AC 7's grep test would pass while behavior silently doesn't change. Resolve by probing whether `Agent()` accepts per-dispatch `model=`, or whether the plumbing must instead write per-member model into the team config at TeamCreate time.
+2. **Codex runtime assumption** (staff R2): Open Question 1 is blocking, not deferrable. `spawn_agent(agent_type="worker", fork_context=false, message=...)` has no documented `model` parameter. Probe before entering implementation or AC 8 is a speculative prose write-up.
+3. **Live propagation test required, not deferred** (staff R3): a single live E2E dispatching one ensign under `stages.defaults.model: haiku` and asserting the ensign jsonl contains `message.model=haiku` (~$0.05, ~60s). Static tests prove prose exists; they do not prove dispatch works. Defer only reuse-invalidation E2E.
+
+Non-blocking gaps to fold into the revision:
+
+4. **Break-glass template AC**: AC 7 only greps the forwarding clause. Add an AC (or extend AC 7) asserting the manual break-glass template at `claude-first-officer-runtime.md:91-96` contains a conditional `model=` slot.
+5. **Dispatch-time visibility AC**: `claude-team build` should emit the resolved `effective_model` to stderr or in a commit-message suggestion so the captain can see one-glance what model a dispatched worker is running. Silent correctness is as hard to validate as silent incorrectness.
+6. **Captain-session model identity for reuse**: specify how the FO compares "next stage's effective_model" against "reused worker's spawn-time model" on the Claude path (probably `lookup_model` equivalent). Make it an AC, don't leave to implementation discovery.
+7. **Null next-stage semantics**: pin explicitly — does "null next stage model" match any reused worker (inherit → no invalidation) or is null a distinct value (invalidates reuse)? Pick one and add an AC.
+8. **Null JSON representation** (Open Question 3): pin at this gate, not at implementation. Adapter-prose grep targets depend on it.
+
+Still safe to defer:
+
+- Parser helper shape (Open Question 2) — implementation picks based on call-site ergonomics.
+
+Captain direction: resolve blocking items 1–3 before re-presenting at the ideation gate. Open Questions 3 must also be pinned; Open Question 1 becomes blocking item 2 above; Open Question 2 stays deferred.
