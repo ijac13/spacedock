@@ -122,4 +122,38 @@ When checking "does tool X support Y?": read X's schema directly (via `ToolSearc
 ## Deferred to follow-up tasks (filed separately when this lands)
 
 - **Codex per-stage model selection.** Codex has no team config and its model selection is orthogonal (likely `codex exec --model` CLI flag on spawn). Needs its own probe + small design. Not blocked on this task; can run in parallel.
-- **Shared-core probe-methodology rule.** Capture the "read schema before greping callers" lesson in `first-officer-shared-core.md`'s ideation / probe guidance so future cycles don't repeat the failure.
+
+## Feedback Cycles
+
+Cycle 3 — captain rejected ideation gate on 2026-04-15 (post-cleanup) accepting staff review NEEDS WORK verdict (staff-review-157-v3). Reviewer confirmed the mechanism is sound (5 plumbing claims verified independently) but flagged two critical gaps and five non-blocking refinements. Routing back for cycle 4 — additive, not a rewrite.
+
+### Cycle 4 — blocking items
+
+1. **Null-stamp semantics are wrong as written.** The plan says `Agent(model=)` omitted → `member.model` null, reuse matches null-against-null. Live evidence in `spacedock-plans-2/config.json` contradicts this: members spawned without `model=` get stamped with the captain-session resolved value (e.g., `opus[1m]`), not null. Confirmed by prior Probe 3 run where `probe-157-member-2` spawned with no `model=` parameter → stamped `"model": "opus[1m]"`. Rewrite the null-semantics paragraph to match observed behavior. **Recommended resolution** (reviewer's, adopted): reuse-match only compares when `next_stage.effective_model` is non-null; null-declared stages skip the comparator entirely (matches today's permissive behavior).
+
+2. **Reuse-path visibility gap.** Reuse advances through `SendMessage` (`first-officer-shared-core.md:110`, `claude-first-officer-runtime.md:87`), NOT `claude-team build`. AC-visibility's stderr notice only fires on initial dispatch. Add **AC-reuse-visibility**: when the reuse comparator forces fresh dispatch because of model mismatch, the FO emits a brief captain-visible diagnostic naming both models (e.g., `reused worker {name} model {X} does not match next stage effective_model {Y} — fresh-dispatching`). Converts silent degradation into audit.
+
+### Cycle 4 — non-blocking refinements to fold in
+
+3. **Paste raw Agent schema JSON** into `## Probe evidence` from a fresh `ToolSearch(query="select:Agent", max_results=1)` run. Reviewer couldn't re-verify from the code-reviewer subagent context (Agent not in that tool surface). Locks the load-bearing fact auditably. Verbatim text of the `model` field is:
+   ```json
+   "model": {
+     "description": "Optional model override for this agent. Takes precedence over the agent definition's model frontmatter. If omitted, uses the agent definition's model, or inherits from the parent.",
+     "enum": ["sonnet", "opus", "haiku"],
+     "type": "string"
+   }
+   ```
+4. **Strengthen AC-enum-validation wording**: stderr message must list allowed enum values (`must be one of: sonnet, opus, haiku`), not just name the offending field. Test asserts both the enum list AND the field name appear in stderr.
+5. **Land the probe-discipline bullet** in `first-officer-shared-core.md` **in the same PR** — not as a follow-up. Add a bullet to the ideation/probe guidance: "when checking whether tool X supports Y, read X's schema directly (via ToolSearch or equivalent runtime introspection) before greping for existing callers — usage presence is not existence evidence." This rule would have saved cycles 1, 2, 3. One bullet, trivial cost, prevents the same class of failure next time. Remove the corresponding item from `## Deferred to follow-up tasks`.
+6. **Beef up the cycle-2 entry** in `## Failed approaches` with specific path-discovery evidence: cite `skills/commission/SKILL.md:390` (documents only `{project_root}/.claude/agents/`) and the 2026-04-01 plugin-shipped-runtime-assets spec's explicit move away from writing under those trees. Makes the rejection auditable in 6 months without reconstruction.
+7. **Document the legacy-member transient** in `## Open Questions` or as a comment on the reuse comparator AC: members stamped pre-merge with non-enum values (e.g., `"opus[1m]"`, `"claude-opus-4-6[1m]"`, `"inherit"`) will force one-time fresh dispatch when compared against new enum values. Expected and benign, but undocumented.
+
+### What the cycle 4 ensign must NOT change
+
+- The core design (Agent model parameter, claude-team build emits it, FO forwards it).
+- The 5 touch-point structure (parser, helper, Claude adapter, shared core, visibility).
+- The precedence rule (stage > defaults > null).
+- Scope: Claude-only; Codex deferred.
+- The 3 ## Failed approaches entries, except cycle 2's evidence beef-up (item 6).
+
+Cycle 4 is a targeted refinement pass. Ensign commits as `ideation: #157 cycle 4 refinement — fix null semantics, add reuse-visibility AC, strengthen enum message, land probe-discipline rule, beef up cycle-2 note, document legacy transient` and a `## Stage Report — Ideation Cycle 4` report. Staff review will fire again (score 0.8 + scaffolding).
