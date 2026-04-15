@@ -9,7 +9,7 @@ verdict:
 score: 0.70
 worktree: .worktrees/spacedock-ensign-live-e2e-pytest-harness
 issue:
-pr:
+pr: #94
 ---
 
 Each live E2E test is a standalone `uv run` script with its own `main()`, `argparse` setup, `TestRunner` instantiation, project scaffolding, FO invocation, log parsing, and result reporting. Adding a new test means copying 60+ lines of boilerplate. The Makefile must list each test by path, and the CI workflow must keep that list in sync.
