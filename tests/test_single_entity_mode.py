@@ -96,6 +96,10 @@ def _start_with_trust_handling(session: InteractiveSession, ready_timeout: float
     raise TimeoutError(f"Session did not become ready within {ready_timeout}s")
 
 
+@pytest.mark.skipif(
+    not sys.stdin.isatty(),
+    reason="requires real TTY; CI runners are headless — see #155",
+)
 @pytest.mark.live_claude
 @pytest.mark.serial
 @pytest.mark.bare_mode
