@@ -1017,3 +1017,23 @@ Fresh full-suite validation does not support closeout. The narrow tier-wrapper b
 - **Files changed (1):** `tests/test_single_entity_mode.py` — added `@pytest.mark.skipif(not sys.stdin.isatty(), reason="requires real TTY; CI runners are headless — see #155")` as the outermost decorator above the existing `live_claude` + `serial` + `bare_mode` markers on `test_single_entity_mode`. `import sys` was already present at line 10. Only this single function modified; no other test, conftest, Makefile, or CI workflow touched.
 - **Static result:** `320 passed, 21 deselected, 10 subtests passed in 6.55s`. Sanity: `uv run pytest tests/test_single_entity_mode.py::test_single_entity_mode -rs -v` → `SKIPPED [1] tests/test_single_entity_mode.py:99: requires real TTY; CI runners are headless — see #155` — predicate fires and reason string matches the cycle-7b touchpoint byte-for-byte.
 - **Recommendation:** PASSED — cycle-9 deliverable is this one-decorator addition plus the stage report. Forward-pointer remains #155; removing the skipif from both `test_interactive_poc_live` (line 43) and `test_single_entity_mode` (line 99) is a single follow-up when #155 lands.
+
+## Stage Report — Implementation Cycle 11 (xfail + worker bump, 2026-04-15)
+
+- **Goal:** Per captain direction (2026-04-15 session, FO-relayed): PR #94 claude-live CI fails only on `tests/test_rebase_branch_before_push.py::test_rebase_branch_before_push` (2/10 internal checks: "other-PR commit is ancestor of branch" and "remote branch contains other-pr-merged.txt"). Root cause is behavioral drift in the pr-merge merge hook under haiku, tracked independently as #158 (`docs/plans/pr-merge-hook-haiku-skips-rebase.md`). Captain decision: xfail the test (strict=False, so a future pass is a soft signal, not a CI break), bump live-test workers from 2→4 since tests are API-bound not CPU-bound, push, and stop. Explicit captain quote: "update pr, and no need to rerun".
+- **Files touched (2):**
+  1. `tests/test_rebase_branch_before_push.py` — added one decorator above `def test_rebase_branch_before_push`:
+     ```
+     @pytest.mark.xfail(strict=False, reason="pending #158 — pr-merge hook haiku skips rebase; see docs/plans/pr-merge-hook-haiku-skips-rebase.md")
+     ```
+     Placed after the existing `live_claude` / `serial` / `teams_mode` markers. No assertions, test logic, or fixture calls altered.
+  2. `Makefile` — flipped both default worker counts from 2 to 4, preserving the `?=` override syntax so CI env can still override:
+     ```
+     -LIVE_CLAUDE_WORKERS ?= 2
+     -LIVE_CODEX_WORKERS ?= 2
+     +LIVE_CLAUDE_WORKERS ?= 4
+     +LIVE_CODEX_WORKERS ?= 4
+     ```
+- **`make test-static` result:** `324 passed, 21 deselected, 10 subtests passed in 6.94s`. Output pristine; no warnings or stray errors. The xfail decorator does not affect static collection because the test is gated by `live_claude` and excluded by the static `-m "not live_claude and not live_codex"` selector.
+- **Commit SHA:** `3936c3252723869717954c16d90ebfc53fca2ed9` — `fix: #148 cycle 11 — xfail test_rebase_branch_before_push pending #158, bump LIVE_*_WORKERS to 4` (2 files changed, 3 insertions, 2 deletions).
+- **Push result:** `git push origin spacedock-ensign/live-e2e-pytest-harness` succeeded — remote advanced `081c68e5..3936c325`. PR #94 is updated on origin. Per captain's explicit direction ("no need to rerun"), CI was NOT re-triggered manually and this worker did NOT wait for or poll the claude-live re-run.
