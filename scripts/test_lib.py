@@ -21,6 +21,30 @@ from datetime import datetime
 from pathlib import Path
 
 
+def _agent_targets_stage(agent_input: dict, stage: str) -> bool:
+    """Check whether an Agent() call targets a given stage.
+
+    Checks both the name field (which should contain the stage when the FO
+    follows the naming convention) and the prompt field, which contains a
+    'Stage: {stage}' header. The header appears in two formats depending on
+    whether the FO uses the claude-team build helper or hand-assembles the
+    prompt:
+
+    - plain (helper): ``Stage: implementation``
+    - markdown-bold (hand-assembled by haiku): ``**Stage:** implementation``
+
+    Both forms are accepted.
+    """
+    name_lower = agent_input.get("name", "").lower()
+    if stage in name_lower:
+        return True
+    prompt = agent_input.get("prompt", "")
+    pattern = rf"(?m)^\*{{0,2}}Stage:?\*{{0,2}}\s+\*{{0,2}}{re.escape(stage)}\*{{0,2}}\s*$"
+    if re.search(pattern, prompt):
+        return True
+    return False
+
+
 def _codex_skill_namespace_root(home_dir: Path) -> Path:
     return home_dir / ".agents" / "skills" / "spacedock"
 
@@ -231,33 +255,54 @@ def _clean_env() -> dict[str, str]:
 
 
 def _isolated_claude_env() -> dict[str, str] | None:
-    """Return an env dict with an isolated HOME and OAuth token injected.
+    """Return an env dict with an isolated HOME whenever any auth mechanism is available.
 
-    Returns None when the opt-in preconditions aren't met: the operator must
-    have placed a valid OAuth token at `~/.claude/benchmark-token` (created via
-    `claude setup-token`). When present, we point HOME at a fresh empty
-    directory and set CLAUDE_CODE_OAUTH_TOKEN so `claude -p` authenticates
-    against the API without loading the operator's personal
-    ~/.claude/CLAUDE.md, plugins, or skills.
+    Isolation is unconditional as long as the process can authenticate to the
+    Claude API. Parallel `claude -p` subprocesses spawned by pytest-xdist all
+    write to `$HOME/.claude/` (caches, state, telemetry); sharing that
+    directory across workers causes concurrent-write collisions that surface
+    as flaky, correlated inner-check failures. Giving each invocation a fresh
+    empty HOME eliminates that coupling.
+
+    Decision tree:
+
+    (a) `~/.claude/benchmark-token` exists and is non-empty → create a fresh
+        HOME tmpdir, inject `CLAUDE_CODE_OAUTH_TOKEN`, and drop
+        `ANTHROPIC_API_KEY` so the token is the authoritative credential.
+        This is the operator-local path (`claude setup-token`).
+
+    (b) No token file, but `ANTHROPIC_API_KEY` is present in the environment
+        → create a fresh HOME tmpdir and pass `ANTHROPIC_API_KEY` through.
+        This is the CI path: GitHub Actions runners authenticate via that
+        env var and never have a benchmark-token on disk, but they still
+        need HOME isolation for the same concurrency reason.
+
+    (c) Neither credential is available → return None so the caller can
+        fall back to `_clean_env()` without claiming isolation.
 
     Returns the env dict (caller is responsible for cleaning up the temp dir
-    if it tracks one) or None if the token file is missing/empty.
+    if it tracks one) or None when no auth mechanism is available.
     """
     real_home = os.environ.get("HOME")
     if not real_home:
         return None
     token_path = Path(real_home) / ".claude" / "benchmark-token"
-    if not token_path.is_file():
-        return None
-    token = token_path.read_text().strip()
-    if not token:
-        return None
-    clean_home = tempfile.mkdtemp(prefix="spacedock-clean-home-")
-    env = _clean_env()
-    env["HOME"] = clean_home
-    env["CLAUDE_CODE_OAUTH_TOKEN"] = token
-    env.pop("ANTHROPIC_API_KEY", None)
-    return env
+    token = ""
+    if token_path.is_file():
+        token = token_path.read_text().strip()
+    if token:
+        clean_home = tempfile.mkdtemp(prefix="spacedock-clean-home-")
+        env = _clean_env()
+        env["HOME"] = clean_home
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+        env.pop("ANTHROPIC_API_KEY", None)
+        return env
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        clean_home = tempfile.mkdtemp(prefix="spacedock-clean-home-")
+        env = _clean_env()
+        env["HOME"] = clean_home
+        return env
+    return None
 
 
 def emit_skip_result(reason: str) -> None:
@@ -464,7 +509,19 @@ class TestRunner:
             return False
 
     def results(self):
-        """Print summary and exit with appropriate code."""
+        """Print summary and exit with appropriate code. Legacy entrypoint for uv-run scripts."""
+        self._print_summary()
+        sys.exit(1 if self.failures > 0 else 0)
+
+    def finish(self):
+        """Print summary and raise AssertionError if any checks failed. Pytest entrypoint."""
+        self._print_summary()
+        if self.failures > 0:
+            raise AssertionError(
+                f"{self.failures} of {self.passes + self.failures} checks failed in {self.test_name}"
+            )
+
+    def _print_summary(self):
         print()
         print("=== Results ===")
         total = self.passes + self.failures
@@ -480,10 +537,8 @@ class TestRunner:
                 print(f"  Log:        {f}")
             # Preserve test dir on failure
             self.keep_test_dir = True
-            sys.exit(1)
         else:
             print("RESULT: PASS")
-            sys.exit(0)
 
 
 def create_test_project(runner: TestRunner, name: str = "test-project") -> Path:
@@ -961,28 +1016,42 @@ class CodexLogParser:
                     texts.append(text)
         return "\n".join(texts)
 
-    def spawn_count(self) -> int:
-        count = 0
+    def collab_tool_calls(self, tool: str | None = None) -> list[dict]:
+        calls: list[dict] = []
         for entry in self.json_entries:
             item = entry.get("item", {})
             if not isinstance(item, dict):
                 continue
             if item.get("type") != "collab_tool_call":
                 continue
+            if tool is not None and item.get("tool") != tool:
+                continue
+            calls.append(item)
+        return calls
+
+    def agent_message_texts(self) -> list[str]:
+        texts: list[str] = []
+        for entry in self.json_entries:
+            item = entry.get("item", {})
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") != "agent_message":
+                continue
+            text = item.get("text")
+            if text:
+                texts.append(str(text))
+        return texts
+
+    def spawn_count(self) -> int:
+        count = 0
+        for item in self.collab_tool_calls():
             if item.get("tool") in {"spawn", "spawn_agent"}:
                 count += 1
         return count
 
     def completed_agent_messages(self) -> list[str]:
         messages: list[str] = []
-        for entry in self.json_entries:
-            item = entry.get("item", {})
-            if not isinstance(item, dict):
-                continue
-            if item.get("type") != "collab_tool_call":
-                continue
-            if item.get("tool") != "wait":
-                continue
+        for item in self.collab_tool_calls("wait"):
             states = item.get("agents_states", {})
             if not isinstance(states, dict):
                 continue

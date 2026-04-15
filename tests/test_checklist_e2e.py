@@ -1,60 +1,48 @@
-#!/usr/bin/env -S uv run
-# /// script
-# requires-python = ">=3.10"
-# ///
 # ABOUTME: E2E test for the checklist protocol in the first-officer template.
 # ABOUTME: Commissions a workflow, runs the first officer, validates ensign checklist compliance.
 
 from __future__ import annotations
 
-import argparse
 import os
 import re
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_lib import (
-    TestRunner, LogParser, create_test_project, run_commission,
-    run_first_officer, git_add_commit, extract_stats,
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+from test_lib import (  # noqa: E402
+    LogParser,
+    git_add_commit,
+    run_commission,
+    run_first_officer,
 )
 
 
-def parse_args() -> tuple[argparse.Namespace, list[str]]:
-    parser = argparse.ArgumentParser(description="Checklist protocol E2E test")
-    parser.add_argument("--from-snapshot", default=None, help="Use a snapshot dir instead of commissioning")
-    parser.add_argument("--model", default="opus", help="Model to use (default: opus)")
-    parser.add_argument("--effort", default="low", help="Effort level (default: low)")
-    return parser.parse_known_args()
+@pytest.mark.xfail(reason="pending #154 — test assertions target `agents/first-officer.md` but post-#085 skill-preload the content lives in the skill/references layer", strict=False)
+@pytest.mark.live_claude
+def test_checklist_e2e(test_project, model, effort):
+    """Commissions a full workflow then runs FO to verify ensign checklist compliance."""
+    t = test_project
+    snapshot = os.environ.get("CHECKLIST_SNAPSHOT") or None
+    # test_checklist historically defaulted to opus; respect it unless model is overridden from haiku.
+    model_for_run = model if model != "haiku" else "opus"
 
-
-def main():
-    args, extra_args = parse_args()
-    t = TestRunner("Checklist Protocol E2E Test")
-
-    if args.from_snapshot:
-        # --- Snapshot mode: copy snapshot into test dir ---
+    if snapshot:
         print("--- Phase 1: Loading from snapshot (skipping commission) ---")
-        snapshot = Path(args.from_snapshot)
-        # Copy snapshot contents into test dir
-        shutil.copytree(snapshot, t.test_dir, dirs_exist_ok=True)
+        snap_path = Path(snapshot)
+        shutil.copytree(snap_path, t.test_dir, dirs_exist_ok=True)
         t.test_project_dir = t.test_dir / "test-project"
 
-        # Verify snapshot has the expected structure
         workflow_dir = None
         for d in t.test_project_dir.iterdir():
             if d.is_dir() and (d / "README.md").is_file() and d.name != ".claude" and d.name != ".git":
                 workflow_dir = d
                 break
 
-        if workflow_dir is None:
-            t.fail("snapshot contains a workflow directory")
-            t.results()
-            return
+        assert workflow_dir is not None, "snapshot must contain a workflow directory"
 
-        # Add acceptance criteria to first entity (matching non-snapshot behavior)
         for entity_file in sorted(workflow_dir.glob("*.md")):
             if entity_file.name == "README.md":
                 continue
@@ -72,11 +60,7 @@ def main():
         t.pass_("loaded snapshot")
         print()
     else:
-        # --- Phase 1: Commission a test workflow ---
         print("--- Phase 1: Commission test workflow (this takes ~30-60s) ---")
-
-        create_test_project(t)
-
         prompt = """/spacedock:commission
 
 All inputs for this workflow:
@@ -90,23 +74,14 @@ All inputs for this workflow:
 
 Skip interactive questions and confirmation — use these inputs directly. Make reasonable assumptions for anything not specified. Do NOT run the pilot phase — just generate the files and stop."""
 
-        extra = list(extra_args)
-        extra.extend(["--model", args.model, "--effort", args.effort])
-        run_commission(t, prompt, extra_args=extra)
+        run_commission(t, prompt, extra_args=["--model", model_for_run, "--effort", effort])
 
         print("[Commission Output]")
         entity_file = t.test_project_dir / "checklist-test" / "test-checklist.md"
-        if not entity_file.is_file():
-            t.fail("commission produced test-checklist.md")
-            print("  FATAL: Cannot proceed without commissioned workflow. Aborting.")
-            t.results()
-            return
-        else:
-            t.pass_("commission produced test-checklist.md")
-
+        assert entity_file.is_file(), "commission must produce test-checklist.md"
+        t.pass_("commission produced test-checklist.md")
         t.pass_("first-officer agent ships with plugin (no local copy needed)")
 
-        # Add acceptance criteria to the test entity
         with open(entity_file, "a") as f:
             f.write("""
 
@@ -115,32 +90,18 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
 1. The output file contains the word "hello"
 2. The output file is valid UTF-8
 """)
-
-        # Commit so the first officer has a clean working tree
         git_add_commit(t.test_project_dir, "commission: initial workflow with acceptance criteria")
         print()
 
-    # --- Phase 2: Run the first officer ---
-
     print("--- Phase 2: Run first officer (this takes ~60-120s) ---")
-
-    extra_fo = ["--max-budget-usd", "2.00"]
-    extra_fo.extend(["--model", args.model, "--effort", args.effort])
-    extra_fo.extend(extra_args)
-
     run_first_officer(
         t,
         "Process all entities through the workflow. Process one entity through one stage, then stop.",
-        extra_args=extra_fo,
+        extra_args=["--max-budget-usd", "2.00", "--model", model_for_run, "--effort", effort],
     )
 
-    # --- Phase 3: Validate from the stream-json log ---
-
     print("--- Phase 3: Validation ---")
-
     log = LogParser(t.log_dir / "fo-log.jsonl")
-
-    # Write extracted data for debug inspection
     log.write_agent_prompt(t.log_dir / "agent-prompt.txt")
     log.write_fo_texts(t.log_dir / "fo-texts.txt")
 
@@ -149,42 +110,24 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
 
     print()
     print("[Ensign Dispatch Prompt]")
-
-    # Check 1: Dispatch prompt contains Completion checklist section
     t.check("dispatch prompt contains Completion checklist section",
             bool(re.search(r"Completion checklist|completion checklist", agent_prompt, re.IGNORECASE)))
-
-    # Check 2: Dispatch prompt contains DONE/SKIPPED/FAILED instructions
     t.check("dispatch prompt has DONE/SKIPPED/FAILED instructions",
             bool(re.search(r"DONE.*SKIPPED.*FAILED|Mark each.*DONE", agent_prompt, re.IGNORECASE)))
-
-    # Check 3: Dispatch prompt includes entity acceptance criteria items
     t.check("dispatch prompt includes entity acceptance criteria",
             bool(re.search(r"hello|UTF-8", agent_prompt, re.IGNORECASE)))
-
-    # Check 4: Dispatch prompt includes stage requirement items
     t.check("dispatch prompt includes stage requirement items",
             bool(re.search(r"deliverable|summary", agent_prompt, re.IGNORECASE)))
 
     print()
     print("[First Officer Checklist Review]")
-
-    # Check 5: First officer performed checklist review
     t.check("first officer performed checklist review",
             bool(re.search(r"checklist review|checklist.*complete|all.*items.*DONE|items reported",
                            fo_text, re.IGNORECASE)))
-
-    # Check 6: First officer mentions DONE/SKIPPED/FAILED
     t.check("first officer review references item statuses",
             bool(re.search(r"DONE|SKIPPED|FAILED", fo_text, re.IGNORECASE)))
-
-    # Check 7: Dispatch prompt has structured completion message template
     t.check("dispatch prompt has structured completion message template",
             bool(re.search(r"### Checklist|### Summary", agent_prompt, re.IGNORECASE)))
 
-    # --- Results ---
-    t.results()
+    t.finish()
 
-
-if __name__ == "__main__":
-    main()
