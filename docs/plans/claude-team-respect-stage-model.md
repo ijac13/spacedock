@@ -10,6 +10,7 @@ score: 0.80
 worktree: .worktrees/spacedock-ensign-claude-team-respect-stage-model
 issue: "#95"
 pr:
+mod-block: merge:pr-merge
 ---
 
 Workflow READMEs accept `stages.defaults.model` and per-state `model:` overrides, but the plugin never reads them. Subagents unconditionally inherit the captain session's model, so a workflow author declaring `model: haiku` for routine stages still gets opus subagents whenever the captain is running opus.
