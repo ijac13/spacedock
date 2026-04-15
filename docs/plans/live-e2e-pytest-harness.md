@@ -648,3 +648,72 @@ Estimated implementation cost: single dispatch cycle; one live-claude-bare run o
 ### Summary
 
 Cycle 2 rebased #148 onto #114 tip `173619cf` and designed the team-flag matrix. Pre-rebase HEAD `e0c933cb`, post-rebase HEAD `5c572c86`. One conflict (`tests/test_dispatch_completion_signal.py`) resolved by keeping both the cycle-5 mode-aware assertion and the #148 pytest-function structure. `uv.lock` expired-pin drift reverted to HEAD (no commit). `make test-static` green at 301 passed / 21 deselected / 10 subtests. Design proposes two additive markers (`teams_mode`, `bare_mode`) with a `--team-mode={auto,teams,bare}` pytest option, one new Makefile target (`test-live-claude-bare`), and one new CI job (`claude-live-bare`). **Requesting captain review of the team-flag-matrix design before entering implementation.**
+
+## Stage Report — Cycle 2 Implementation (2026-04-15)
+
+Captain approved the design. Matrix implementation landed per the checklist below, with one blocker surfaced at step 9 and a clean STOP-and-report per the dispatch instruction.
+
+### Checklist
+
+1. **conftest.py — --team-mode option + resolution**: DONE — `tests/conftest.py` now registers `--team-mode` with choices `{auto, teams, bare}` (default `auto`). `pytest_collection_modifyitems` (a) raises `pytest.UsageError` when an item carries both `teams_mode` and `bare_mode` markers (fail loud), (b) resolves `auto` by reading `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` (treats `"1"` / `"true"` as teams, else bare), and (c) adds an explicit `pytest.mark.skip(reason=...)` to items whose marker disagrees with the resolved mode. The existing `live`-imports-without-`live_*`-marker advisory warning path is preserved unchanged.
+
+2. **pyproject.toml — marker registration**: DONE — two new marker rows added under `[tool.pytest.ini_options] markers`: `teams_mode: requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 (teams dispatch path)` and `bare_mode: requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS unset (bare dispatch path)`.
+
+3. **Apply markers to 6 tests**: DONE.
+   - `tests/test_single_entity_team_skip.py` → `@pytest.mark.bare_mode`
+   - `tests/test_single_entity_mode.py` → `@pytest.mark.bare_mode`
+   - `tests/test_rebase_branch_before_push.py` → `@pytest.mark.teams_mode`
+   - `tests/test_push_main_before_pr.py` → `@pytest.mark.teams_mode` (existing `@pytest.mark.skip` preserved)
+   - `tests/test_team_health_check.py` → `@pytest.mark.teams_mode`
+   - `tests/test_team_dispatch_sequencing.py` → `@pytest.mark.teams_mode`
+   - `tests/test_dispatch_completion_signal.py` left agnostic (no marker) per the design.
+
+4. **Makefile — test-live-claude-bare + test-live-codex-bare**: DONE. Both new targets `unset CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` and pass `--team-mode=bare` to pytest. The serial / parallel two-tier shape from cycle 1 is preserved. `.PHONY` line updated to include the two new targets. Existing `test-live-claude` / `test-live-claude-opus` / `test-live-codex` targets are unchanged (teams-mode default — CI cycle-6 shape).
+
+5. **.github/workflows/runtime-live-e2e.yml — claude-live-bare job**: DONE. Added as the second job block (between `claude-live` and `claude-live-opus`). Mirrors the `claude-live` job's shape: `runs-on: ubuntu-latest`, `environment: name: CI-E2E, deployment: false`, `ANTHROPIC_API_KEY` scoped, same provenance / secret-check / git identity / tool-version / artifact-preservation steps. Two deltas: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0"` (explicit, not absent — defensive) and `run: make test-live-claude-bare`. Artifact name `runtime-live-e2e-claude-live-bare`, env `CI-E2E` (shares approval gate with `claude-live` — same cost tier, both haiku; captain directive was to reuse CI-E2E unless gating semantics required otherwise, and they do not).
+
+6. **tests/test_runtime_live_e2e_workflow.py — extended static checks**: DONE. Added `claude-live-bare` into the three existing job-structure tests: (a) `test_runtime_live_e2e_workflow_has_expected_runtime_jobs` asserts the block exists and uses `CI-E2E` + `deployment: false`; (b) `test_runtime_live_e2e_workflow_preserves_and_uploads_live_test_dirs` asserts `KEEP_TEST_DIR` + artifact upload naming `runtime-live-e2e-claude-live-bare`; (c) `test_runtime_live_e2e_workflow_scopes_secrets_to_the_matching_job` asserts `ANTHROPIC_API_KEY` is scoped and `OPENAI_API_KEY` does not leak; (d) `test_runtime_live_e2e_workflow_uses_stable_make_targets_and_provenance_fields` asserts `make test-live-claude-bare` is the run command and the three teams jobs set the env to `"1"` while the bare job sets it to `"0"`.
+
+7. **tests/README.md — matrix documentation**: DONE. Added `--team-mode` to the CLI-flags table; added `teams_mode` / `bare_mode` to the marker list with the mutual-exclusion note and a paragraph explaining why most tests stay mode-agnostic. Added `make test-live-claude-bare` and `make test-live-codex-bare` to the Makefile-targets table. Updated the "PR Runtime Live E2E" prose to list four jobs (claude-live, claude-live-bare, claude-live-opus, codex-live), note that `CI-E2E` now gates both the teams and bare haiku jobs, list both in the secrets section, and add `runtime-live-e2e-claude-live-bare` to the artifact list. Added a mode-pin note to File Requirements.
+
+8. **make test-static**: DONE — green. Output (pristine, last line):
+   > `301 passed, 21 deselected, 10 subtests passed in 6.39s`
+
+   Same pass count as cycle 1 post-rebase (no regressions introduced by the matrix).
+
+9. **Local teams-mode repro of test_rebase_branch_before_push**: **FAILED at the application layer, not at the harness layer**, per the STOP-and-report directive.
+   - Command: `unset CLAUDECODE && CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 uv run pytest tests/test_rebase_branch_before_push.py -m "live_claude and serial" --runtime claude --team-mode=teams -v`
+   - Wallclock: **143.44s** (the FO itself wallclocked 133s per its stats block).
+   - `_isolated_claude_env` activated (benchmark token at `~/.claude/benchmark-token` is present and non-empty, 108 bytes).
+   - Result: `1 failed in 143.44s`. Inner check counts: **8 passed, 2 failed** out of 10 checks.
+   - Passing: fixture setup, status script runs, FO exited cleanly, FO ran to terminal, entity was archived, git push log exists, `git push origin main` present, `git push origin {branch}` present, **main pushed BEFORE branch** (Phase 5 all three checks green), gh `pr create` was called, PR targets main, entity `pr` field was set.
+   - Failing: Phase 6 — "remote: other-PR commit is ancestor of branch (rebased before push)" and "remote branch contains other-pr-merged.txt (from main via rebase)". The test harness hits these assertions by inspecting the feature branch on the `remote.git` bare repo. At the time of assertion the branch has already been **deleted by `gh pr merge 99 --merge`** (the stub), so the merge-base / file-contents probes return no branch. Remote bare repo shows only `main`; the PR-merge commit `08a4cc6 Merge branch 'spacedock-ensign/push-main-entity' into main` contains the other-PR content on main, but the pre-merge feature-branch snapshot is gone.
+   - Artifacts preserved at `/var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmpvy_6r1oz/` (fo-log.jsonl, git-push-log.txt, gh-calls.log, remote.git/).
+   - Diagnosis not attempted per instruction — this is either (a) a genuine rebase-before-push regression, (b) a harness race where the remote-inspection phase runs after `gh pr merge` has deleted the branch, or (c) behavior that has always been red under teams-mode and cycle 5's `_isolated_claude_env` surfaces it locally. Reporting to captain for disposition.
+
+10. **Bare-mode skip validation**: DONE.
+    - Command: `unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && uv run pytest tests/test_rebase_branch_before_push.py --team-mode=bare -v -rs`
+    - Output (short summary, exact):
+      > `SKIPPED [1] tests/test_rebase_branch_before_push.py:72: requires teams mode; --team-mode=bare`
+      > `1 skipped in 0.02s`
+    - The marker-driven skip fires with the expected reason string.
+
+11. **Mutual-exclusion evidence**: DONE. Created a throwaway `tests/_scratch_both_modes.py` carrying both `@pytest.mark.teams_mode` and `@pytest.mark.bare_mode` on a trivial function. Invocation output (exact):
+    > `ERROR: tests/_scratch_both_modes.py::test_should_never_collect: carries both @pytest.mark.teams_mode and @pytest.mark.bare_mode — pick one. A test is pinned to one mode or left mode-agnostic (no marker).`
+    > `no tests ran in 0.03s`
+
+    `pytest.UsageError` surfaces at collection with the expected prose. Scratch file deleted immediately; `git status --short` empty confirms no leak into the branch.
+
+12. **Commits — one per concern**: DONE.
+    - `f55e310a tests: #148 cycle 2 — add teams_mode/bare_mode markers + conftest resolution`
+    - `f53f8320 tests: #148 cycle 2 — pin 6 tests to teams_mode or bare_mode`
+    - `7ed6d649 build: #148 cycle 2 — test-live-claude-bare + test-live-codex-bare Makefile targets`
+    - `f09193b4 ci: #148 cycle 2 — claude-live-bare job in runtime-live-e2e workflow + static assertions`
+    - `9997a8ae docs: #148 cycle 2 — document team-flag matrix in tests/README`
+    - (This stage report will land as `report: #148 cycle 2 implementation — team-flag matrix landed`.)
+
+13. **Do not push**: HELD — no PR exists for #148; branch stays local pending captain review.
+
+### Summary
+
+Team-flag matrix implementation landed per the approved design: two new markers (`teams_mode` / `bare_mode`), one new pytest option (`--team-mode`), one new conftest resolution + mutual-exclusion hook, six tests pinned to a specific mode, two new Makefile targets (`test-live-claude-bare`, `test-live-codex-bare`), one new CI job (`claude-live-bare` on the existing `CI-E2E` environment), and four new static-workflow assertions. `make test-static` green at 301 passed / 21 deselected / 10 subtests — no regressions. Bare-mode deselection of `test_rebase_branch_before_push` confirmed (skip reason `requires teams mode; --team-mode=bare`). Mutual-exclusion check confirmed (`pytest.UsageError` at collection time when a test carries both markers). **Local teams-mode run of `test_rebase_branch_before_push` failed 2 of 10 inner checks** in Phase 6 ("rebase before push" merge-base / file-contents probes on the remote branch after `gh pr merge` has deleted it). Per dispatch instruction, I STOPPED and did not patch — reporting to captain for disposition. All other checklist items are DONE. Branch is local at HEAD `9997a8ae` (commit SHAs listed in item 12 above); no push.
