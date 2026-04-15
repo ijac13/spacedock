@@ -121,6 +121,7 @@ def _packaged_reuse_stop_ready(log_path: Path) -> bool:
 
 
 @pytest.mark.live_codex
+@pytest.mark.xfail(strict=False, reason="pending #161 — codex reused-wait text drift on routed-feedback-fix case (25/26 pass); see docs/plans/codex-reused-wait-text-drift.md")
 def test_codex_packaged_agent_e2e(test_project):
     """Codex FO reuses packaged workers and honors explicit shutdown."""
     t = test_project

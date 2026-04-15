@@ -8,18 +8,22 @@ At startup (after reading the README, before dispatch):
 
 1. Derive the project name from `basename $(git rev-parse --show-toplevel)` and the directory basename from the workflow directory path.
 2. Probe for team support: `ToolSearch(query="select:TeamCreate", max_results=1)`.
-3. If the result contains a TeamCreate definition, run `TeamCreate(team_name="{project_name}-{dir_basename}")`.
+3. If the result contains a TeamCreate definition, run `TeamCreate(team_name="{project_name}-{dir_basename}-{YYYYMMDD-HHMM}-{shortuuid}")`. The timestamp token must be lowercase and hyphen-separated — avoid uppercase letters and colons so the name stays compatible with Claude Code's NAME_PATTERN and with the `claude-team` helper's derived-name rules. `{shortuuid}` is eight lowercase alphanumeric characters (the shortuuid default).
    - **IMPORTANT:** TeamCreate may return a different `team_name` than requested. Always store the returned `team_name` and use it for all subsequent calls.
    - **NEVER delete existing team directories** (`rm -rf ~/.claude/teams/...`) — stale directories belong to other sessions.
 4. If ToolSearch returns no match, enter **bare mode**: dispatch is sequential (one subagent at a time), completions return inline, and feedback cycles are sequential re-dispatches. Report the mode to the captain. All workflow functionality is preserved.
 
-**TeamCreate recovery procedure:** Call TeamDelete in its own message (no other tool calls). Wait for the result. Then call TeamCreate in a subsequent message. Store the returned `team_name` (it may differ). Do NOT combine TeamDelete, TeamCreate, or Agent dispatch in the same message — Claude Code executes all tool calls in a message in parallel, so dependent calls will race.
+**Diagnostic-only startup probe:** At startup the FO MAY inspect `~/.claude/teams/` with `ls` or `test -f ~/.claude/teams/{project_name}-{dir_basename}*/config.json` to REPORT existing on-disk team directories from prior sessions to the captain in the boot summary. This probe is DIAGNOSTIC-ONLY. Its result does NOT gate, short-circuit, or skip `TeamCreate` — `TeamCreate` always runs with the fresh-suffixed name above regardless of what the probe reports. On-disk state is not evidence of team health (Claude Code bug anthropics/claude-code#36806 leaves config files on disk after the in-memory registry desyncs). Deletion of any such directory is STILL forbidden per the NEVER-delete constraint above — the probe only surfaces their existence so the captain knows stale directories exist; it does not authorize removal. No such probe belongs in the `## Dispatch Adapter` pre-dispatch path.
 
-**TeamCreate failure recovery:** If TeamCreate fails mid-session:
+**TeamCreate recovery procedure:** Call TeamDelete in its own message (no other tool calls). Wait for the result. Then call TeamCreate in a subsequent message. Store the returned `team_name` (it may differ). Do NOT combine TeamDelete, TeamCreate, or Agent dispatch in the same message — Claude Code executes all tool calls in a message in parallel, so dependent calls will race. This procedure applies ONLY to the narrow "Already leading team" case at startup (where Claude Code's in-memory slot holds a team the FO wants to replace cleanly). It is NOT a mid-session failure recovery and MUST NOT be invoked in response to "Team does not exist" or any other registry-desync signal — see Degraded Mode below.
 
-- **"Already leading team" error:** Follow the recovery procedure above.
-- **Other errors (quota, internal):** Fall back to bare mode for the remainder of the session. Report the failure and mode change to the captain.
-- **Block all Agent dispatch** until team setup resolves (either TeamCreate succeeds or bare mode is entered). Never dispatch agents while team state is uncertain.
+**TeamCreate failure recovery (priority-ordered ladder):** If TeamCreate or any subsequent `Agent()` dispatch surfaces "Team does not exist" or any equivalent registry-desync signal mid-session, follow this ladder in order — do NOT retry within the same tier:
+
+1. **Fresh-suffixed TeamCreate.** Attempt a single new `TeamCreate` with a fresh name of the form `{project_name}-{dir_basename}-{YYYYMMDD-HHMM}-{shortuuid}` computed at call time (new timestamp, new shortuuid, different from any name used earlier in this session). Retry to the same team name is banned. Do NOT call `TeamDelete` on the failed team — the registry is already desynced and another `TeamDelete → TeamCreate` cycle will re-contaminate the same slot per anthropics/claude-code#36806. Store the returned `team_name` and dispatch from entity frontmatter state. All prior agent names are presumed zombified. Do not SendMessage them; re-dispatch from entity frontmatter.
+2. **Fall back to Degraded Mode per the Degraded Mode section below.** A second dispatch failure (including a failure of the tier-1 fresh-suffixed TeamCreate, or a second "Team does not exist" at any point in the session) trips Degraded Mode immediately.
+3. **Surface to captain** with an explicit recovery prompt if tiers 1 and 2 both fail (e.g., TeamCreate itself errors with quota or internal failure on the fresh name, AND Degraded Mode cannot be entered for some reason such as `Agent` itself being unavailable). Do not silently retry. Do not block indefinitely — report the failure, name the tiers attempted, and wait for captain direction.
+
+**Block all Agent dispatch** until team setup resolves (either tier-1 fresh-suffixed TeamCreate succeeds or Degraded Mode is entered). Never dispatch agents while team state is uncertain.
 
 In single-entity mode, skip team creation entirely. Use bare-mode dispatch for all agent spawning — the Agent tool without `team_name` blocks until the subagent completes, which prevents premature session termination in `-p` mode.
 
@@ -41,9 +45,7 @@ Use the Agent tool to spawn each worker. **Use Agent() for initial dispatch** �
 
 **Sequencing rule:** Team lifecycle calls (TeamCreate, TeamDelete) and Agent dispatch calls must NEVER appear in the same tool-call message — parallel execution causes races (see recovery procedure above). Always resolve team state in one message, then dispatch agents in a subsequent message.
 
-**REQUIRED — Team health check (not in bare mode or single-entity mode):**
-
-**STOP. Do NOT call Agent() until you have verified the team is healthy.** Run `test -f ~/.claude/teams/{team_name}/config.json` via the Bash tool. You MUST do this before every Agent dispatch batch. If the command succeeds, proceed to dispatch. If the file is missing, the team's on-disk state has been corrupted — STOP and follow the TeamCreate recovery procedure above. If recovery fails, fall back to bare mode.
+**No pre-dispatch filesystem probe.** Do NOT run any filesystem check against `~/.claude/teams/{team_name}/` before `Agent()` in the normal dispatch path. The on-disk check is a guaranteed false positive under registry-desync (anthropics/claude-code#36806 leaves on-disk state intact even when the in-memory team slot is invalidated). Trust the in-memory team handle returned by `TeamCreate` and let `Agent()` itself surface any registry-desync error. On such an error, follow the TeamCreate failure recovery ladder (Team Creation section) and Degraded Mode semantics below — do NOT reintroduce a pre-dispatch probe.
 
 **MANDATORY — Dispatch assembly via `claude-team build`:**
 
@@ -96,6 +98,38 @@ Agent(
 )
 ```
 The break-glass template omits worktree instructions, feedback context, and scope notes. Use only when the helper is unavailable.
+
+## Degraded Mode
+
+Degraded Mode is an explicit, session-wide mid-session transition. Once entered, it persists until the session ends — there is no recovery back to teams mode in the same session.
+
+### Triggers
+
+Any one of the following trips Degraded Mode:
+
+- First "Team does not exist" error (or equivalent registry-desync signal) surfaced by `Agent()` or any team-registry tool.
+- Any SECOND dispatch failure within the session (any second failure regardless of timing — no time window, no durable counter). The stricter, counter-free rule is deliberate: the FO has no reliable way to track failure timestamps across context pressure and idle notifications, so "second failure anywhere in the session" is the fail-early trigger.
+- Captain command `/spacedock bare` (explicit operator-initiated degrade).
+
+### Effects
+
+Once Degraded Mode is active, the following invariants hold for the remainder of the session:
+
+- No `team_name` parameter on any subsequent `Agent()` dispatch. The dispatch input JSON sets `team_name: null` and `bare_mode: true`, and `claude-team build` emits the bare-mode Agent call with the `name` and `team_name` fields absent.
+- Every stage dispatches fresh and blocks until completion. Concurrent dispatch is no longer available; the FO processes one entity through one stage at a time.
+- No SendMessage reuse of prior agent names. Stage advancement is always a fresh `Agent()` dispatch seeded from entity frontmatter; `SendMessage(to="{ensign_name}")` against any pre-degrade name is forbidden.
+
+### Captain Report Template
+
+On Degraded Mode entry, the FO emits the following sentence verbatim to the captain (direct text output, not SendMessage):
+
+> Falling back to bare mode for the remainder of this session due to team-infrastructure failure. Prior team agents are presumed-zombified; I will not route work to them or through the team registry. If you want to escalate: restart the session to retry team mode with a fresh name, or let me continue — every stage will still complete, just without concurrent dispatch.
+
+### Cooperative Shutdown Sweep
+
+On Degraded Mode entry, perform a single-pass cooperative shutdown sweep of every known agent name from session memory: one `SendMessage(to="{ensign_name}", message="shutdown_request")` per name. Ignore failures — the sweep is best-effort, not transactional. Do not retry. Do not track responses. Do not block on the sweep's outcome; proceed immediately to the first fresh bare-mode dispatch after the sweep is issued.
+
+Exempt from the sweep any agent whose entity is currently in an active feedback-cycle state (tracked via a `### Feedback Cycles` subsection in the entity body). Those reviewers may still hold load-bearing context from the prior cycle that re-dispatch cannot reconstruct. Sweep feedback-cycle reviewers only on explicit captain confirmation.
 
 ## Context Budget and Dead Ensign Handling
 

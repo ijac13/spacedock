@@ -323,44 +323,53 @@ def test_assembled_claude_first_officer_has_teamcreate_failure_recovery():
     t = TestRunner("agent content", keep_test_dir=False)
     assembled = assembled_agent_content(t, "first-officer")
 
-    # AC1: "Already leading team" recovery path
+    # "Already leading team" stays as a narrow startup-only recovery case.
     assert "Already leading team" in assembled
-    assert re.search(r"TeamDelete.*its own message", assembled)
-    assert re.search(r"TeamCreate.*subsequent message", assembled)
+    # Fail-early ladder: fresh-suffixed TeamCreate as tier 1.
+    assert re.search(r"fresh[-\s]?suffixed", assembled, re.IGNORECASE), (
+        "Recovery ladder must call for a fresh-suffixed TeamCreate."
+    )
+    assert "Retry to the same team name is banned" in assembled
 
-    # AC2: Bare mode fallback for non-"Already leading" errors
-    assert re.search(r"Other errors.*bare mode", assembled, re.IGNORECASE | re.DOTALL)
-
-    # AC3: Block agent dispatch while team state is uncertain
+    # Block Agent dispatch while team state is uncertain.
     assert re.search(r"Block all Agent dispatch", assembled)
     assert re.search(r"never dispatch.*while team", assembled, re.IGNORECASE)
 
-    # AC4: Sequencing rule in Dispatch Adapter
+    # Sequencing rule in Dispatch Adapter is preserved.
     assert re.search(
         r"Sequencing rule.*Team lifecycle.*Agent.*NEVER.*same tool-call message",
         assembled, re.IGNORECASE | re.DOTALL,
     )
 
 
-def test_assembled_claude_first_officer_has_team_health_check():
+def test_assembled_claude_first_officer_has_no_predispatch_health_check():
+    """Rule 1 of the team-fragility issue: the pre-dispatch
+    `test -f config.json` probe must not appear in the runtime adapter's
+    dispatch path. See tests/test_team_fail_early.py for section-anchored
+    coverage of the full fail-early contract."""
     t = TestRunner("agent content", keep_test_dir=False)
     assembled = assembled_agent_content(t, "first-officer")
 
-    # AC1: Health check paragraph with test -f verification
-    assert "Team health check" in assembled
-    assert "test -f ~/.claude/teams/" in assembled
-
-    # AC2: Recovery sequence — TeamDelete alone, then TeamCreate alone, then dispatch
-    assert re.search(
-        r"TeamDelete.*its own message.*TeamCreate.*subsequent message",
-        assembled, re.DOTALL,
+    # The retired pre-dispatch probe imperatives must be gone. Section-anchored
+    # checks for the Dispatch Adapter section live in
+    # tests/test_team_fail_early.py; this file guards a few whole-file markers
+    # that the old REQUIRED probe paragraph carried.
+    assert "Team health check" not in assembled, (
+        "Retired 'Team health check' imperative must not appear in the assembled "
+        "first-officer contract."
+    )
+    assert "verified the team is healthy" not in assembled, (
+        "Retired 'verified the team is healthy' imperative must not appear."
+    )
+    assert not re.search(r"not in bare mode or single-entity mode", assembled), (
+        "Retired 'skipped in bare mode or single-entity mode' health-check clause "
+        "must be gone."
     )
 
-    # AC3: Bare mode fallback if TeamCreate fails during recovery
-    assert "fall back to bare mode" in assembled
-
-    # AC4: Health check skipped in bare mode and single-entity mode
-    assert re.search(r"not in bare mode or single-entity mode", assembled)
+    # Degraded Mode must be declared as a first-class section.
+    assert "## Degraded Mode" in assembled, (
+        "Assembled contract must declare the `## Degraded Mode` section."
+    )
 
 
 def test_assembled_claude_first_officer_has_dispatch_idle_guardrail():
