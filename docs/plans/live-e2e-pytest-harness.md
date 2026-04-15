@@ -484,3 +484,167 @@ The revised design registers three pytest markers — `live_claude`, `live_codex
 ### Summary
 
 Landed the full migration of the live E2E suite from standalone `uv run` scripts to pytest with tier markers. 21 live tests converted to pytest functions, 2 spike files deleted, 1 test relocated from `scripts/` to `tests/`, and the `_agent_targets_stage` helper moved into `scripts/test_lib.py`. The Makefile now runs the serial tier first (`-x`) and the parallel tier always (`-n $LIVE_{CLAUDE,CODEX}_WORKERS`) with explicit exit-code aggregation, so CI signal stays honest when either tier fails. `make test-static` preserved at 271 passed. Parallel path empirically validated: 4 live Claude tests ran concurrently at `-n 4` in 349s wallclock. One live test (`test_gate_guardrail`) surfaces an FO-behavior regression on haiku (self-approval language) that is a genuine code issue to triage in validation — the harness itself is correctly detecting and reporting it.
+
+## Stage Report — Cycle 2 Rebase + Team-Flag Matrix Design (2026-04-15)
+
+### Checklist
+
+1. **Worktree / branch confirmation**: DONE — worktree `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-live-e2e-pytest-harness` on branch `spacedock-ensign/live-e2e-pytest-harness`. Pre-rebase HEAD: `e0c933cb`. `git status` before rebase: `modified: uv.lock` (the `exclude-newer = "2026-04-07T22:01:20.452199Z"` block was dropped by a local `uv sync`; the pin expired on 2026-04-14).
+2. **uv.lock decision**: DONE — **option (a): `git checkout -- uv.lock` to restore the expired `exclude-newer` pin.** Rationale: the pin expired only today; the diff carries no dependency-content churn; #148 does not own this drift and should not mint a commit to record it. A later, intentional refresh on main (or #114) can refresh the pin deliberately.
+3. **Rebase onto #114 tip**: DONE — `git rebase 173619cf`. 18 previously-applied commits auto-skipped (cherry-pick detection). Of the 30 re-applied commits exactly **one conflict** surfaced, in `tests/test_dispatch_completion_signal.py`. Resolution: kept both sides — cycle 5's mode-aware `last_team_mode_prompt` assertion landed on top of #148's pytest-function structure. The `agent_calls` dict-with-`team_name` field (cycle 5 added it to `scripts/test_lib.py`) merged cleanly with #148 step 8's `_agent_targets_stage` helper — both live in `scripts/test_lib.py` now (lines 24 and 896, non-overlapping). The CI workflow cycle-6 addition of `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"` on the `claude-live` and `claude-live-opus` env blocks, the cycle-5 `_isolated_claude_env` helper, and the migrated `tests/test_rebase_branch_before_push.py` / `tests/test_push_main_before_pr.py` pytest skeletons all merged without conflict. Post-rebase HEAD: `5c572c86`.
+4. **`make test-static`**: DONE — `301 passed, 21 deselected, 10 subtests passed in 16.60s`. Green. Count advanced from cycle 1's 271 because #114 added tests on top; no rebase-induced regressions.
+5. **Team-flag matrix design**: DONE — see `### Design — team flag matrix (2026-04-15)` below.
+6. **Captain review presentation**: PENDING — design section written; this stage report is the presentation. **Awaiting captain sign-off before implementation.**
+7. **Amend entity body**: DONE — this Cycle 2 stage report is the amendment.
+8. **Commits**: DONE — uv.lock decision required no commit (reverted to HEAD). The rebase replayed #148's existing 30 commits atomically. The design + stage report will land as a single `docs: #148 cycle 2 — rebase onto #114 tip + team-flag-matrix design` commit after this report is written out.
+9. **Do not push**: HELD — branch is local pending captain sign-off. No PR exists for #148.
+10. **Final report**: see Summary below.
+
+### Design — team flag matrix (2026-04-15)
+
+**Context.** Cycle 6 on #114 landed `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"` on both `claude-live` (haiku) and `claude-live-opus` CI jobs. CI therefore now runs teams-mode only. The 2026-04-14 debrief flagged that (a) CI had historically run bare-mode and (b) `test_rebase_branch_before_push` / `test_push_main_before_pr` only passed locally under teams-mode. The real invariant the FO surfaces is: some code paths are mode-sensitive (single-entity bootstrap, completion-signal semantics, dispatch-name collision, rebase/push ordering) and we need CI signal for both modes of both.
+
+**Goals.**
+
+- A: preserve teams-mode coverage on the existing haiku + opus jobs (cycle 6 is the default).
+- B: add explicit bare-mode coverage so bare code paths get CI signal.
+- C: let a test pin itself to exactly one mode when its invariant is mode-specific (e.g. `test_single_entity_team_skip` is bare-only; `test_dispatch_completion_signal` with team-mode assertion is teams-only).
+- D: keep `make test-static` untouched and keep the existing serial/parallel tier machinery intact. This design is additive to cycle 1's three-marker scheme.
+
+**Proposal.** Two new markers, one pytest option, one CI job, minimal Makefile surface.
+
+#### Markers (additive — two new markers joining the cycle-1 three)
+
+| Marker | Meaning | Selection semantics |
+|--------|---------|---------------------|
+| `teams_mode` | Test requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. | Collected only when `--team-mode=teams` (or `auto` + env already set). Skipped with reason when `--team-mode=bare`. |
+| `bare_mode` | Test requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` unset. | Collected only when `--team-mode=bare`. Skipped with reason when `--team-mode=teams`. |
+| (neither) | Mode-agnostic. Runs under whichever mode the job sets. | Always collected. |
+
+Mutual exclusion: a test may carry **at most one** of `teams_mode` / `bare_mode`. `pytest_collection_modifyitems` rejects collection if both are present (fail loud). Most tests carry neither.
+
+Why two markers rather than one (e.g. `teams_mode` + absence = bare-ok)?
+
+- A default-teams, bare-ok-by-absence scheme loses the ability to express "bare-only". We have at least one bare-only test (`test_single_entity_team_skip` asserts `TeamCreate` absent), and tests like `test_rebase_branch_before_push` that only pass locally under teams-mode need an explicit marker to skip cleanly when a future bare job runs them.
+- Symmetrical markers also document intent at the test site — reader does not have to know the CI default to reason about which mode the test is pinned to.
+
+#### Pytest option + auto-detect
+
+Add to `tests/conftest.py`:
+
+```python
+def pytest_addoption(parser):
+    ...
+    parser.addoption("--team-mode", action="store",
+                     default="auto",
+                     choices=["auto", "teams", "bare"],
+                     help="Filter live tests by team-mode marker. "
+                          "'auto' infers from CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS env.")
+```
+
+Resolution rule in `pytest_collection_modifyitems`:
+
+- `auto`: read `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`; treat `"1"` / `"true"` as `teams`, everything else as `bare`.
+- `teams`: deselect items carrying `bare_mode` (with `skip(reason="requires bare mode; team-mode=teams")`).
+- `bare`: deselect items carrying `teams_mode` (symmetrical skip).
+
+Mode-agnostic tests (no marker) pass through in either mode. This keeps the day-to-day case — "I want to run the suite; let me just run it" — zero-config.
+
+#### Initial test classifications
+
+From inspection of the cycle-1 migration and the #114 cycle-5 findings:
+
+| Test | Marker (cycle 2) | Rationale |
+|------|------------------|-----------|
+| `test_single_entity_team_skip.py` | `bare_mode` | Asserts `TeamCreate` absent and Agent calls carry no `team_name`. Cannot pass with teams-mode enabled. |
+| `test_single_entity_mode.py` | `bare_mode` | PTY counterpart of the above — same invariant. |
+| `test_rebase_branch_before_push.py` | `teams_mode` | Per the 2026-04-14 debrief: only passes locally under teams-mode. Pin explicitly pending root-cause; a follow-up task can downgrade to agnostic once bare-mode behavior is fixed. |
+| `test_push_main_before_pr.py` | `teams_mode` | Sibling of the above, same fixture/stub strategy. Carries a `skip(reason=...)` already so the marker only takes effect if the skip is lifted. |
+| `test_team_health_check.py` | `teams_mode` | Asserts `test -f config.json` preflight before first Agent dispatch — config.json is a team-config artifact. |
+| `test_team_dispatch_sequencing.py` | `teams_mode` | Asserts `TeamCreate`/`TeamDelete` not batched with Agent dispatch — team lifecycle only exists in teams mode. |
+| `test_dispatch_completion_signal.py` | none (agnostic) | Post-cycle-5 the assertion is mode-aware: in bare mode it passes with a note, in teams mode it validates the SendMessage instruction. Leave the marker off so both jobs exercise it. |
+| Every other live test | none | Exercises FO behavior orthogonal to team mode. |
+
+These assignments are the starting set — validation of the matrix will refine it.
+
+#### Makefile targets
+
+Add one bare-mode shell target per runtime, mirroring the existing teams-mode targets. Keep the existing `test-live-claude` / `test-live-claude-opus` / `test-live-codex` targets as the teams-mode defaults (cycle 6's CI shape).
+
+```makefile
+# Existing targets keep running teams-mode (CI default since cycle 6).
+test-live-claude:             # teams-mode (existing, unchanged)
+test-live-claude-opus:        # teams-mode (existing, unchanged)
+test-live-codex:              # teams-mode (existing, unchanged)
+
+# New bare-mode targets. Differences from the teams-mode version:
+#   1. `--team-mode=bare` — pytest deselects teams-pinned tests with a skip reason.
+#   2. No `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` env set (absence is bare-mode).
+test-live-claude-bare:
+    unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && { \
+      uv run pytest tests/ --ignore=tests/fixtures \
+        -m "live_claude and serial" --runtime claude --team-mode=bare -x -v ; SEQ=$$? ; \
+      uv run pytest tests/ --ignore=tests/fixtures \
+        -m "live_claude and not serial" --runtime claude --team-mode=bare \
+        -n $(LIVE_CLAUDE_WORKERS) -v ; PAR=$$? ; \
+      test $$SEQ -eq 0 -a $$PAR -eq 0 ; \
+    }
+
+test-live-codex-bare:  # symmetrical
+    ...
+```
+
+Why a separate Makefile target rather than an env-variable toggle on the existing target?
+
+- Two targets make CI job intent explicit at the job-definition site (`run: make test-live-claude-bare` vs `run: make test-live-claude`).
+- An env toggle (`TEAM_MODE=bare make test-live-claude`) hides the mode inside a variable, which the `claude-live` job YAML already sets via `env:`. CI auditors then have to read three places (job env, Makefile, pytest conftest) to know which mode ran. Separate targets compress this to one.
+- Opus stays teams-mode-only for now — an opus bare job can land once the haiku bare job has produced green signal.
+
+#### CI job layout
+
+Add one bare-mode haiku job to `.github/workflows/runtime-live-e2e.yml`, matching the shape of `claude-live` but:
+
+1. `env: CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0"` (explicit `0` rather than absent — defensive; conftest `auto` resolution treats `!= "1"` as bare).
+2. `run: make test-live-claude-bare`.
+3. Job name: `claude-live-bare` (sits alongside `claude-live` and `claude-live-opus`).
+
+Keep `claude-live` (teams haiku) + `claude-live-opus` (teams opus) exactly as cycle 6 left them. The final CI matrix is therefore:
+
+| Job | Runtime | Model | Mode | Trigger |
+|-----|---------|-------|------|---------|
+| `claude-live` | claude | haiku | teams | existing (PR approval) |
+| `claude-live-opus` | claude | opus | teams | existing |
+| `claude-live-bare` (new) | claude | haiku | bare | PR approval, same as haiku |
+| `codex-live` | codex | n/a | teams | existing |
+| `codex-live-bare` (optional, later) | codex | n/a | bare | deferred |
+
+Opening "codex-live-bare" is deferred — codex has smaller blast radius and the cycle-1 migration validates the bare path already runs there locally. File a follow-up task if bare codex signal becomes necessary.
+
+#### Default collection
+
+`pytest tests/` with no options invokes `auto`, which reads the environment. A developer working locally without setting the env var collects the bare-mode subset by default; a developer running under `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 pytest tests/` collects the teams-mode subset. Both flows explicitly surface the deselected tests in the pytest `-rs` summary so the developer can see what was skipped and why.
+
+#### Alternatives considered
+
+- **Single `teams_mode` marker, bare-default**: rejected (cannot express bare-only invariants like `test_single_entity_team_skip`).
+- **Pytest parametrize over modes on each test**: rejected — doubles collection cost on mode-agnostic tests, and team-pinned tests would emit `@pytest.mark.skip_if` clutter. Markers + conftest resolution keep the per-test surface at one decorator.
+- **Env toggle on the existing Makefile target**: rejected — see "why separate target" above.
+- **Sequentially run both modes inside one CI job**: rejected — doubles wall-clock, hides mode-specific failures in an aggregated result, and the cycle-1 Makefile's two-tier shape is already doing enough multiplexing.
+
+#### Implementation sketch (for a later cycle)
+
+1. `tests/conftest.py`: add `--team-mode` option, add `pytest_collection_modifyitems` resolution + the mutual-exclusion check.
+2. `pyproject.toml`: register `teams_mode` and `bare_mode` markers.
+3. Apply markers to the 5 files listed in the classification table. Each test file is a one-decorator edit.
+4. `Makefile`: add `test-live-claude-bare` + `test-live-codex-bare` targets.
+5. `.github/workflows/runtime-live-e2e.yml`: add `claude-live-bare` job.
+6. `tests/README.md`: document the new markers and the two Makefile targets.
+7. Run `make test-static` + each live target to validate.
+
+Estimated implementation cost: single dispatch cycle; one live-claude-bare run on haiku (~$0.30) to validate the new CI job, one teams-mode smoke on haiku (~$0.30) to validate non-regression.
+
+**Awaiting captain review of this design before implementation.**
+
+### Summary
+
+Cycle 2 rebased #148 onto #114 tip `173619cf` and designed the team-flag matrix. Pre-rebase HEAD `e0c933cb`, post-rebase HEAD `5c572c86`. One conflict (`tests/test_dispatch_completion_signal.py`) resolved by keeping both the cycle-5 mode-aware assertion and the #148 pytest-function structure. `uv.lock` expired-pin drift reverted to HEAD (no commit). `make test-static` green at 301 passed / 21 deselected / 10 subtests. Design proposes two additive markers (`teams_mode`, `bare_mode`) with a `--team-mode={auto,teams,bare}` pytest option, one new Makefile target (`test-live-claude-bare`), and one new CI job (`claude-live-bare`). **Requesting captain review of the team-flag-matrix design before entering implementation.**
