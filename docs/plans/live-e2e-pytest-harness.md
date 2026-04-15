@@ -988,3 +988,14 @@ Fresh full-suite validation does not support closeout. The narrow tier-wrapper b
 - **Static result:** `308 passed, 21 deselected, 10 subtests passed in 7.50s`. Collection counts unchanged — xfail only affects live selection.
 - **Forward pointer:** When #154 lands and refreshes the nine tests' assertions to target the skill/references layer, these xfail decorators are removed in the same commit. Grep for `#154` to find them all.
 - **Recommendation:** PASSED — narrow cycle-6 deliverable is exactly the nine-line xfail addition plus this stage report.
+
+## Stage Report — Cycle 7 (2026-04-15) — skip test_interactive_poc_live pending #155
+
+- **Goal:** Unblock PR #94 merge by unconditionally skipping `test_interactive_poc_live`, which fails in CI because `ubuntu-latest` runners have no real TTY. PR #94 cycle-6 CI showed 4/5 jobs green and three claude jobs red with identical `AssertionError: turn 1 did not echo ALPHA_MARKER` — a PTY/TTY headless-runner issue distinct from the assertion drift handled by #154.
+- **Root cause reference:** Task #155 (just filed on main) — the `InteractiveSession` PTY smoke requires a real controlling terminal which GitHub's `ubuntu-latest` runner does not provide. Grep for `#155` to find the skip touchpoint when the task is resolved.
+- **Files changed (1):**
+  - `tests/test_interactive_poc.py` — added `@pytest.mark.skip(reason="requires real TTY; CI runners are headless — see #155")` as the outermost decorator on `test_interactive_poc_live`; preserved existing `live_claude` and `serial` markers; `test_interactive_poc_offline` untouched.
+- **Scope discipline:** Single-file edit, one-line addition. No changes to `test_interactive_poc_offline`, conftest, Makefile, CI workflow, or any other test. The skip reason string uses EXACTLY `"requires real TTY; CI runners are headless — see #155"` so a future grep for `#155` locates this decorator.
+- **Static result:** `311 passed, 21 deselected, 10 subtests passed in 9.30s`. Skip is invisible to static because `live_claude` already deselected the live-only test.
+- **Forward pointer:** When #155 lands (e.g., gating on `sys.stdin.isatty()` or moving PTY tests to a self-hosted runner), this decorator is removed. One grep of `#155` across the tree finds it.
+- **Recommendation:** PASSED — narrow cycle-7 deliverable is exactly the one-line skip addition plus this stage report.
