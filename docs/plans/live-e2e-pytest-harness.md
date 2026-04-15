@@ -744,6 +744,67 @@ SKIPPED [1] tests/test_rejection_flow.py:143: pending #141 — reviewer keepaliv
 6. `make test-static` stays green at 301 passed / 21 deselected / 10 subtests — DONE. Exact line matched baseline.
 7. Verify pytest reports the skip cleanly — DONE. Skip line paste above.
 8. Append stage report to entity file — DONE (this section).
-9. Commit as one commit `tests: #148 cycle 2 follow-up — skip test_rejection_flow pending #141` — IN PROGRESS (next action after writing this report).
+9. Commit as one commit `tests: #148 cycle 2 follow-up — skip test_rejection_flow pending #141` — DONE.
 10. Do not push — HELD. No push performed.
-11. Final report — IN PROGRESS (SendMessage at end).
+11. Final report — DONE (SendMessage at end).
+
+## Stage Report — Cycle 3 Rebase onto Merged Main (2026-04-15)
+
+**Goal**: Rebase `spacedock-ensign/live-e2e-pytest-harness` (#148) onto merged `main` now that #114 has landed, resolve the expected `tests/test_rejection_flow.py` conflict in favor of the pytest-marker skip form, and smoke-check that static discipline and marker-driven selection still behave correctly. No live suite runs in this cycle — validation owns that.
+
+**Pre-HEAD**: `2b7c614b` (cycle 2 follow-up skip for #141)
+**Post-HEAD**: `20e42926` (cycle 2 follow-up skip for #141, replayed on new base)
+**Rebase base**: `31609513` (main tip — archive: #114)
+**Pre-rebase divergence**: 38 ahead / 4 behind main.
+
+**Commits applied vs skipped**: All 38 commits were replayed — none were detected as duplicates of cycle-5/6/7 commits on merged #114, because the two branches evolved distinct sets of changes (one worked on pytest harness, the other on core FO/relay fixes). Post-rebase branch is 38 ahead / 0 behind main.
+
+**Conflicts** (2, both in `tests/test_rejection_flow.py`, both resolved per the dispatch spec):
+
+1. **Commit 16/38 — `010937eb tests: #148 migrate test_rejection_flow to pytest`**: Main's `__main__` block tail had the cycle-7 change `emit_skip_result("pending #141 — ...")` (replacing `sys.exit(main())`); our migration commit replaced the whole `__main__` block with `sys.exit(pytest.main([__file__, "-v"]))`. **Resolution**: dropped the entire `__main__` block, per spec — the pytest-marker `@pytest.mark.skip(reason="pending #141 — ...")` at the test function (applied one commit earlier as part of cycle 2 follow-up, which is still further ahead in the rebase todo) is the durable mechanism post-migration. Removed the `if __name__ == "__main__":` stanza entirely. `emit_skip_result` import retained because it is still used inside the test (live_claude probe path at line 176).
+
+2. **Commit 28/38 — `0868a7eb tests: #148 step 9 — drop __main__ pytest.main shims from migrated tests`**: Trivial trailing-newline conflict — both sides already had no `__main__` block, but HEAD had exactly `t.finish()\n` and incoming side had `t.finish()\n\n`. **Resolution**: kept HEAD (single trailing newline).
+
+No other conflicts occurred across the 38 commits. Rebase completed cleanly through to commit 38/38.
+
+**Static result**: `make test-static` → `301 passed, 21 deselected, 10 subtests passed in 6.58s` — green, unchanged from cycle 2 baseline. No regressions.
+
+**Smoke checks** (marker behavior):
+
+1. `uv run pytest tests/test_rejection_flow.py -v -rs` →
+   ```
+   tests/test_rejection_flow.py::test_rejection_flow SKIPPED (pending #...) [100%]
+   SKIPPED [1] tests/test_rejection_flow.py:143: pending #141 — reviewer keepalive across feedback cycles — FO correctly reuses the same-stage reviewer for re-review after rejection, test's ensign_count>=3 assertion does not yet accommodate this
+   ```
+   Pytest-marker skip fires cleanly at collection time with the full reason string intact — confirms the rebase preserved the cycle 2 follow-up skip and the `__main__` block drop did not inadvertently remove the decorator.
+
+2. `unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && uv run pytest tests/test_single_entity_team_skip.py --team-mode=bare -v` →
+   ```
+   tests/test_single_entity_team_skip.py::test_single_entity_team_skip PASSED [100%]
+   1 passed in 97.24s (0:01:37)
+   ```
+   bare_mode marker collects this test under `--team-mode=bare` and the test runs to completion (bare-mode behavior) — no marker-resolution regression.
+
+3. `unset CLAUDECODE && uv run pytest tests/test_single_entity_team_skip.py --team-mode=teams -v -rs` →
+   ```
+   tests/test_single_entity_team_skip.py::test_single_entity_team_skip SKIPPED [100%]
+   SKIPPED [1] tests/test_single_entity_team_skip.py:21: requires bare mode; --team-mode=teams
+   ```
+   teams-mode deselects with the marker-driven skip reason `requires bare mode; --team-mode=teams` — conftest resolution hook still wires `bare_mode` → teams-mode skip correctly.
+
+**Checklist**:
+1. Pre-check — DONE. Pre-HEAD `2b7c614b`, main `31609513`, 38 ahead / 4 behind, clean tree.
+2. Rebase — DONE. `git rebase main` ran through 38 commits.
+3. `test_rejection_flow.py` conflict resolution — DONE. Dropped `__main__` block entirely, kept pytest-marker form.
+4. Other conflicts — DONE. One additional trivial trailing-newline conflict in the same file on commit 28/38; resolved by keeping HEAD.
+5. `make test-static` green — DONE. `301 passed, 21 deselected, 10 subtests`.
+6. Final smoke checks — DONE. All three marker behaviors confirmed.
+7. No live suite re-run — HELD, per spec.
+8. Report — DONE (this section).
+9. No push — HELD. Post-rebase HEAD `20e42926` stays local.
+
+**Files touched in this cycle** (beyond rebase replay): none net-new. The two rebase conflicts were resolved inside already-replayed migration commits; no new commits were added.
+
+### Summary
+
+Rebase of `spacedock-ensign/live-e2e-pytest-harness` (#148) onto merged main (`31609513`, archive: #114) completed with 38 commits replayed and 2 conflicts resolved — both in `tests/test_rejection_flow.py`, both resolved in favor of the durable pytest-marker skip form per spec. No `__main__` block remains. Static stays green at `301 passed / 21 deselected / 10 subtests`. All three smoke-level marker checks pass: pytest skip reason fires on `test_rejection_flow`, bare_mode marker collects + runs under `--team-mode=bare` (97s full run to completion), teams_mode marker deselects cleanly under `--team-mode=teams`. Post-rebase HEAD `20e42926` held locally; no push. Ready for validation.
