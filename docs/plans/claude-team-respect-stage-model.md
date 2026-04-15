@@ -197,3 +197,49 @@ Targeted refinement pass applied to the cleaned-up entity body (no rewrite). Evi
 **AC count.** Went from 11 to 13 (added #12 AC-reuse-visibility and #13 AC-probe-discipline). Matches dispatch scope cap of "2 new, total 13."
 
 **Scope guards respected.** Core design (Agent model parameter, claude-team build emits it, FO forwards it) unchanged. Precedence rule (stage > defaults > null) unchanged. Codex stays deferred. All 3 `## Failed approaches` entries preserved; only cycle-2's evidence beefed up per item 6. Existing ACs 1-11 kept their numbering; new ACs appended as 12, 13.
+
+## Stage Report — Implementation (2026-04-15)
+
+1. **Read entity body via targeted Grep — DONE.** Used `Grep` on section headings (`## Problem Statement`, `## Proposed Approach`, `## Acceptance Criteria`, `## Test Plan`, `### Feedback Cycles`) to orient on the final spec; read the 13 ACs and the 6 plumbing touch points without a full-file read. #96 discipline held.
+
+2. **Parser surface stages model + defaults — DONE.** Extended `parse_stages_block` allowlist with `'model'` (skills/commission/bin/status:193). Added sibling `parse_stages_with_defaults(filepath)` returning `(stages_list, defaults_dict)`; back-compat preserved for existing `--boot`/`--next` callers. Static test `TestParseStagesWithDefaultsModel.test_parse_stages_with_defaults_surfaces_model` covers AC-parser. Commit `b09080dd`.
+
+3. **claude-team build emit effective_model with enum validation + stderr visibility — DONE.** `cmd_build` (skills/commission/bin/claude-team) now calls `parse_stages_with_defaults`, computes `effective_model` via precedence (stage > defaults > null), validates against the `MODEL_ENUM = ('sonnet', 'opus', 'haiku')` tuple, emits top-level `model` in the output JSON (`string` or `null`), and prints `[build] effective_model={X} (from {stage|defaults|null}) → Agent model={X}` to stderr whenever non-null. Enum violations exit non-zero with stderr naming BOTH the offending field (`stages.states[{idx}].model` or `stages.defaults.model`) AND the literal `must be one of: sonnet, opus, haiku`. Covers AC-build-emits, AC-precedence-stage-wins, AC-precedence-defaults, AC-null, AC-enum-validation (stage + defaults), AC-visibility. Static tests: `TestBuildEmitsModel` (4 tests), `TestBuildEnumValidation` (2 tests), `TestBuildVisibilityStderr` (2 tests). Commit `4868323f`.
+
+4. **Claude runtime adapter forwards model + break-glass slot — DONE.** Updated `skills/first-officer/references/claude-first-officer-runtime.md ## Dispatch Adapter`: emitted-fields enumeration now lists `model`; forwarding clause says `model=output.model` with a conditional-omit caveat when `output.model` is null; break-glass template gained a `model="{effective_model}"` slot with documented conditional usage. Covers AC-adapter-prose, AC-break-glass. Static tests: `TestRuntimeAdapterModelProse` (2 tests). Commit `7d7fbb9b`.
+
+5. **Shared-core reuse model-match bullet + reuse-mismatch diagnostic — DONE.** Added reuse condition #4 to `skills/first-officer/references/first-officer-shared-core.md ## Completion and Gates` requiring `lookup_model(worker_name) == next_stage.effective_model` with the null-skip caveat (null-declared stages skip the comparator entirely). Paired the bullet with the captain-visible diagnostic directive anchored on `reused worker {name} model {X} does not match next stage effective_model {Y} — fresh-dispatching`. Landing the diagnostic next to the rule it governs keeps the comparator and its audit obligation in one place. Covers AC-reuse-match and AC-reuse-visibility. Static tests: `TestSharedCoreReuseModelMatch` (2 tests). Commit `927ffa62`.
+
+6. **FO emits reuse-mismatch diagnostic on model change — DONE.** Folded into commit `927ffa62` (see item 5). The diagnostic directive lives in shared-core adjacent to the reuse comparator it describes; the dispatch allowed either the Claude runtime adapter or wherever reuse-decision prose lives, and shared-core owns the reuse conditions on both runtimes.
+
+7. **Shared-core probe-discipline rule — DONE.** Added a new `## Probe and Ideation Discipline` section to `skills/first-officer/references/first-officer-shared-core.md` with one bullet anchored on `usage presence is not existence evidence`. Covers AC-probe-discipline. Static test: `TestSharedCoreProbeDiscipline`. Commit `714fc5f7`.
+
+8. **Live propagation E2E — DONE.** New test `tests/test_claude_per_stage_model.py` + fixture `tests/fixtures/per-stage-model/` (workflow in subdir, `stages.defaults.model: haiku`, single `work` stage with trivial deliverable, captain pinned to opus to make the haiku stamp observable). The test runs the FO end-to-end through one dispatch and scans `fo-log.jsonl` (which folds in every subagent's assistant messages with the stamped runtime model) for any `claude-haiku-*` model string. Covers AC-live-propagation. Commits `fa233ec6` (initial) and `2f70385d` (switch from ephemeral `~/.claude/projects/` resolution to the durable FO stream-json log).
+
+9. **`make test-static` pristine — DONE.** Baseline 333 → now **347 passed**, 21 deselected, 10 subtests passed. Delta: **+14 static tests** (14 new test methods across the seven new `Test*` classes; split beyond the dispatch's "~8" because parametrized-style precedence cases landed as separate methods for clarity). Run wallclock ~8s. No existing test regressed.
+
+10. **Live propagation smoke locally — DONE.** `unset CLAUDECODE && uv run pytest tests/test_claude_per_stage_model.py -v --runtime claude` passed. Wallclock 102.89s (first green run), 79.98s (repeat with `KEEP_TEST_DIR=1`). FO stats from the preserved run show `Model delegation: claude-haiku-4-5-20251001: 5, claude-opus-4-6: 25` — captain ran on opus (25 assistant messages) and the dispatched ensign ran on haiku (5 assistant messages). This is the acceptance-proof: under the old code path the ensign would have inherited opus from the captain session; with the new code path `stages.defaults.model: haiku` propagates through `claude-team build` → `Agent(model="haiku", ...)` → stamped haiku in the ensign's runtime.
+
+### Files touched
+
+- `skills/commission/bin/status` — parse_stages_block allowlist + new parse_stages_with_defaults helper
+- `skills/commission/bin/claude-team` — cmd_build effective_model resolution + enum validation + stderr notice + output JSON model field
+- `skills/first-officer/references/claude-first-officer-runtime.md` — Dispatch Adapter emitted-fields + forwarding clause + break-glass slot
+- `skills/first-officer/references/first-officer-shared-core.md` — reuse model-match bullet + reuse-mismatch diagnostic + new Probe and Ideation Discipline section
+- `tests/test_claude_team.py` — +14 static tests across seven new `Test*` classes
+- `tests/test_claude_per_stage_model.py` — new live E2E test (AC-live-propagation)
+- `tests/fixtures/per-stage-model/{README.md,per-stage-model-task.md,status}` — new live-test fixture
+
+### Commit SHAs
+
+- `b09080dd` — status parser surface stages model + defaults
+- `4868323f` — claude-team build emit effective_model with enum validation + stderr visibility
+- `7d7fbb9b` — Claude runtime adapter forwards model + break-glass slot
+- `927ffa62` — shared-core reuse model-match bullet + reuse-mismatch diagnostic
+- `714fc5f7` — shared-core probe-discipline rule
+- `fa233ec6` — live propagation E2E (haiku defaults stamp on dispatched ensign)
+- `2f70385d` — live propagation reads FO stream-json log for haiku evidence
+
+### Summary
+
+Shipped the 5 plumbing touch points + 1 shared-core probe-discipline bullet defined in `## Proposed Approach`. 13 ACs covered: 12 by static tests (14 test methods total; static suite 333 → 347), 1 by a single live E2E (wallclock ~80-103s, captain-opus + ensign-haiku observed in FO stats). All required commits landed on `spacedock-ensign/claude-team-respect-stage-model`. Scope guards held: Claude-only (Codex deferred), frontmatter untouched, agents/references plugin scaffolding untouched except for the two authored reference files named in the dispatch.
