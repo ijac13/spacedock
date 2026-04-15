@@ -9,7 +9,7 @@ verdict:
 score: 0.80
 worktree: .worktrees/spacedock-ensign-claude-team-respect-stage-model
 issue: "#95"
-pr:
+pr: #100
 mod-block: merge:pr-merge
 ---
 
