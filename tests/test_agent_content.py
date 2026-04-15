@@ -616,5 +616,36 @@ def test_assembled_claude_first_officer_has_bare_mode_guardrail():
     )
 
 
+def test_shared_core_grep_over_read_discipline_for_entity_body():
+    """AC-2 (#159): shared-core `## Probe and Ideation Discipline` carries the Grep-over-Read
+    rule for entity-body inspection and warns about the Claude-Code Read + `status --set`
+    full-file staleness echo.
+    """
+    text = read_text("skills/first-officer/references/first-officer-shared-core.md")
+    discipline = section_text(text, "## Probe and Ideation Discipline", (r"^## ",))
+
+    # Grep-over-Read anchor for entity-body inspection
+    assert re.search(r"prefer Grep over Read for targeted entity-body inspection", discipline, re.IGNORECASE), (
+        "Probe and Ideation Discipline must prefer Grep over Read for entity-body inspection"
+    )
+
+    # Explicit warning about Read + status --set echoing the full file
+    assert "status --set" in discipline
+    assert re.search(r"file-staleness", discipline, re.IGNORECASE)
+    assert re.search(r"system-reminder|echoes the entire current file", discipline, re.IGNORECASE)
+
+    # `status --set` stdout narration affordance is called out
+    assert "field: old -> new" in discipline
+
+
+def test_claude_runtime_points_to_shared_core_entity_body_inspection_rule():
+    """AC-2 (#159): the Claude runtime adapter carries a short pointer to the shared-core rule."""
+    text = read_text("skills/first-officer/references/claude-first-officer-runtime.md")
+    assert "## Probe and Ideation Discipline" in text, (
+        "Claude runtime must point to the shared-core `## Probe and Ideation Discipline` section"
+    )
+    assert "status --set" in text
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__]))
