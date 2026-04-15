@@ -260,6 +260,33 @@ Still safe to defer:
 
 Captain direction: resolve blocking items 1–3 before re-presenting at the ideation gate. Open Questions 3 must also be pinned; Open Question 1 becomes blocking item 2 above; Open Question 2 stays deferred.
 
+Cycle 2 — captain rejected ideation gate on 2026-04-15 accepting staff review UNSOUND verdict. Cycle-2 pivot correctly avoided cycle-1's mistake (unverified `Agent(model=)` / `spawn_agent(model=)`) but committed the same class of error: materialization-strategy claims rest on two unprobed runtime mechanisms.
+
+Staff reviewer (staff-review-157-v2) findings — blocking:
+
+1. **Agent discovery path almost certainly wrong**: plan targets `{workflow_dir}/.claude/agents/{base}-{model_slug}.md`. But `skills/commission/SKILL.md:390` documents discovery at `{project_root}/.claude/agents/`, and the `2026-04-01-plugin-shipped-runtime-assets-design.md:66` spec deliberately stopped commission from writing into that tree. In this repo `workflow_dir` != `project_root`. No evidence Claude Code probes under workflow_dir at dispatch. If discovery doesn't happen there, every static test passes and AC-13 fails → same silent-no-op shape as cycle 1 relocated.
+2. **Codex mechanism speculative**: `spawn_agent` has no `model=` (cycle-2 confirmed negative). Cycle-2's positive replacement claim — that materializing a skill asset "biases the worker toward the declared model" — is unprobed. Codex spawns generic `agent_type="worker"` and the worker reads a logical id's skill body; a `model:` field on a SKILL body is not documented anywhere as changing Codex's runtime model. AC 9 is speculative prose with different wording than cycle 1.
+
+Staff reviewer medium items:
+
+3. `lookup_model` → materialized variant model is un-probed. AC 12 assumes team-config member model gets stamped from the materialized variant's frontmatter at member-join time rather than captain-session-inherited — never verified.
+4. Refit staleness landmine (OQ-2): plan's idempotency check only compares the YAML `model:` field, so refit-updated base agent bodies leave materialized variants stale. Defer-to-follow-up is the wrong call.
+
+Staff reviewer non-blocking clean-up:
+
+5. AC-13 fixture must place the workflow at a subdirectory (not project root) so discovery-path behavior is actually exercised.
+6. No Codex live test — add one or explicitly accept Codex coverage as deferred with a named follow-up task.
+7. Trim redundant AC 5 + AC 6 + AC 2 null-branch into a single null-case AC.
+8. Concurrency: materialize as write-if-missing with atomic rename, or explicitly accept the same-content race as benign.
+
+Staff reviewer strengths (keep as-is):
+
+- Cycle-2's negative probes held under spot-check (zero `Agent(...model=...)`, zero `spawn_agent(...model=...)`, superpowers `code-reviewer.md` does carry `model: inherit`).
+- Null semantics + `"model": null` JSON pinning unambiguous and well-reasoned.
+- AC 13 (live propagation) is the right shape of test — just needs fixture pinning.
+
+Captain direction (cycle-3 design pivot, not yet dispatched): investigate whether `claude-team build` can emit the effective model AND write it into `~/.claude/teams/{team}/config.json` members[] before returning, so that when the FO's subsequent `Agent()` call joins the member, `lookup_model` returns the declared model. This uses documented existing plumbing (`claude-team:377-396` proves team config members carry model per member) instead of the speculative workflow-dir agent-file materialization mechanism. Codex needs a separately verified mechanism since it has no team config — most likely via `codex exec --model {effective_model}` CLI flag (cheap probe). Cycle 3 dispatch pending captain resolution of the team-config-write approach.
+
 ## Stage Report — Ideation Cycle 2
 
 ### Probe evidence for blocking items
