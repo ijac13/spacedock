@@ -389,9 +389,30 @@ Static evidence collected:
 
 ### Probe 3: pre-write vs Agent() join
 
-**Not run.** This probe requires `TeamCreate`, `TeamDelete`, and `Agent` tools. None are available in the ensign tool surface (confirmed via `ToolSearch(query="+Team")` and `ToolSearch(query="+Agent")`). The dispatch prompt's assumption that an ensign can spawn `Agent(subagent_type="general-purpose", team_name=...)` against a hand-managed probe team is false in this environment.
+**Outcome: (c) IGNORED.** Live probe run by the captain (FO) on 2026-04-15T18:32Z in team `spacedock-plans-2`. Steps:
 
-Indirect evidence from static inspection supports the design hypothesis being **plausible but not proven**:
+1. Pre-populated `~/.claude/teams/spacedock-plans-2/config.json` members[] with a new entry: `{"agentId": "probe-157-member@spacedock-plans-2", "name": "probe-157-member", "agentType": "general-purpose", "model": "claude-haiku-4-5-20251001", ...}`. Captain session runs on `opus[1m]` — haiku is a distinctive marker.
+2. Called `Agent(subagent_type="general-purpose", name="probe-157-member", team_name="spacedock-plans-2", prompt="SendMessage + exit")`.
+3. Claude Code **auto-renamed** the spawned agent to `probe-157-member-2` (suffix `-2`) and wrote a new member entry with `model: "opus[1m]"`.
+4. The pre-populated `probe-157-member` entry was **left untouched as an orphan** with its `claude-haiku-4-5-20251001` value — but no agent is running under that name. `lookup_model("probe-157-member")` would still return haiku for an entry that isn't real.
+
+```json
+// post-spawn config .members:
+{"name": "probe-157-member",   "model": "claude-haiku-4-5-20251001"}  // our pre-write, orphaned
+{"name": "probe-157-member-2", "model": "opus[1m]"}                    // actual spawned agent
+```
+
+**Conclusion:** team-config pre-write IS LIVE-DISPROVEN. Claude Code's Agent-join handler does not reuse an existing member entry matching the requested name; it auto-suffixes and creates a fresh record using its own resolution (agent YAML → captain-session fallback for agents with no `model:`). This is the same silent-no-op failure class as cycles 1 and 2: no error surfaces, static assertions on the helper's output would pass, while the spawned worker runs the captain-session model. Design option (A) is ruled out.
+
+Historical evidence that now makes sense in light of this finding: all observed `member.model` variance in 52 existing team configs (inherit, opus[1m], captain-session models) is consistent with Claude Code always writing from scratch at join time, never honoring pre-existing data.
+
+Original fall-back note from this probe report's Recommended design: *"If Probe 3 shows pre-write is overwritten or ignored: the design requires a genuinely new mechanism (options: Claude Code feature request for per-Agent `model=`, or a wrapper Agent-file-materialization into `{project_root}/.claude/agents/{base}-{model_slug}.md` instead of `{workflow_dir}`, which at least lives on a documented discovery path)."* That fall-back is now the live design direction. See Revised recommendation below.
+
+**Original ensign findings below preserved for audit.**
+
+---
+
+Indirect evidence from static inspection that supports the design hypothesis being **plausible but not proven** (superseded by live Probe 3 above):
 
 - `claude-team` only reads `members[]`. No code in the spacedock codebase writes `member.model`. Whether Claude Code preserves or overwrites a pre-populated member entry when `Agent(name=X)` joins is undocumented.
 - Observed member-record variance (literal `"inherit"` in some records, resolved `"opus[1m]"` in others; captain-session model stamped when YAML has no `model:`) is consistent with Claude Code actively rewriting the member entry at join time rather than leaving whatever was there. If Claude Code unconditionally overwrites the record with its own resolution (YAML frontmatter OR captain-session fallback), pre-write would be **silently lost** — exact same silent-no-op failure mode as cycles 1 and 2.
@@ -411,7 +432,27 @@ Indirect evidence from static inspection supports the design hypothesis being **
 
 ### Recommended cycle-3 design
 
-**Primary recommendation: (A) team-config pre-write, PENDING Probe 3 live verification by captain.**
+**Revised after live Probe 3 (2026-04-15T18:32Z, FO-run): Option (A) is DEAD. Proceed with Option (B′) — agent-file materialization at `{project_root}/.claude/agents/{base}-{model_slug}.md` (documented discovery path per `skills/commission/SKILL.md:390`).**
+
+Key differences between B′ and cycle-2's rejected Option B:
+- **Path**: `{project_root}/.claude/agents/` (documented discoverable) instead of `{workflow_dir}/.claude/agents/` (cycle-2's unverified target).
+- **Naming**: include workflow namespace in filename to avoid colliding with plugin/hand-written agents (e.g., `spacedock-{base_agent_name}-{model_slug}.md`).
+- **Idempotency**: write-if-missing with body-hash check (supersedes cycle-2's YAML-only check — resolves cycle-2 reviewer's refit-staleness landmine).
+- **Removed assumptions**: this design no longer depends on any undocumented discovery path, no per-dispatch model parameter, no team-config pre-write.
+
+Still to decide before cycle-4 ideation lands (resolve in the revision, not another probe cycle):
+- `.gitignore` handling for materialized variants under `{project_root}/.claude/agents/` — commissioned workflows should gitignore this subtree since it's generated at dispatch time. Ship commission with the gitignore entry.
+- Concurrent dispatch safety on the write-if-missing path (atomic rename).
+- Cleanup / GC: when to remove stale variants (refit, when a stage's `model:` is dropped, etc.).
+- Reuse-invalidation on Claude: now that pre-write is dead, the reuse-match check has to use `lookup_model(worker_name)` at decision time (member.model is stamped by Claude Code at join time from the materialized agent's YAML, so it WILL reflect the materialized variant's model — provided the materialization worked). This mechanism is now the only one we need to verify live, and it's essentially a corollary of Probe 3's finding.
+
+**Deferred to follow-up tasks (explicit scope):**
+- Codex per-stage model selection — entire Codex side is out of scope for this task now. File a named follow-up after Probe 3's live verdict.
+- Claude Code feature request for a per-dispatch `Agent(model=...)` parameter — would simplify everything but requires upstream. Note it, don't block on it.
+
+**Below: the original pre-Probe-3 recommendation, preserved for audit.**
+
+**Pre-probe primary recommendation: (A) team-config pre-write — DISPROVEN BY LIVE PROBE 3.**
 
 Rationale:
 
