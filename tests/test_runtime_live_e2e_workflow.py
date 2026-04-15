@@ -195,6 +195,19 @@ def test_live_makefile_uses_pytest_markers_not_raw_script_chains():
             assert "#114" in body
 
 
+def test_codex_makefile_targets_allow_empty_tiers_without_masking_failures():
+    text = read_makefile()
+
+    assert text.count("scripts/run_pytest_tier.py --allow-no-tests --") == 4
+    assert '-m "live_codex and serial" --runtime codex -x -v' in text
+    assert '-m "live_codex and not serial" --runtime codex' in text
+    assert '-m "live_codex and serial" --runtime codex --team-mode=bare -x -v' in text
+    assert '-m "live_codex and not serial" --runtime codex --team-mode=bare' in text
+    assert text.count("scripts/run_pytest_tier.py --allow-no-tests --") == text.count(
+        'live_codex and serial" --runtime codex'
+    ) + text.count('live_codex and not serial" --runtime codex')
+
+
 def test_tests_readme_documents_runtime_live_e2e_workflow():
     text = read_readme()
 

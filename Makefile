@@ -41,9 +41,11 @@ test-live-claude-opus:
 
 test-live-codex:
 	{ \
-	  uv run pytest tests/ --ignore=tests/fixtures \
+	  uv run python scripts/run_pytest_tier.py --allow-no-tests -- \
+	    uv run pytest tests/ --ignore=tests/fixtures \
 	    -m "live_codex and serial" --runtime codex -x -v ; SEQ=$$? ; \
-	  uv run pytest tests/ --ignore=tests/fixtures \
+	  uv run python scripts/run_pytest_tier.py --allow-no-tests -- \
+	    uv run pytest tests/ --ignore=tests/fixtures \
 	    -m "live_codex and not serial" --runtime codex \
 	    -n $(LIVE_CODEX_WORKERS) -v ; PAR=$$? ; \
 	  test $$SEQ -eq 0 -a $$PAR -eq 0 ; \
@@ -64,9 +66,11 @@ test-live-claude-bare:
 
 test-live-codex-bare:
 	unset CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && { \
-	  uv run pytest tests/ --ignore=tests/fixtures \
+	  uv run python scripts/run_pytest_tier.py --allow-no-tests -- \
+	    uv run pytest tests/ --ignore=tests/fixtures \
 	    -m "live_codex and serial" --runtime codex --team-mode=bare -x -v ; SEQ=$$? ; \
-	  uv run pytest tests/ --ignore=tests/fixtures \
+	  uv run python scripts/run_pytest_tier.py --allow-no-tests -- \
+	    uv run pytest tests/ --ignore=tests/fixtures \
 	    -m "live_codex and not serial" --runtime codex --team-mode=bare \
 	    -n $(LIVE_CODEX_WORKERS) -v ; PAR=$$? ; \
 	  test $$SEQ -eq 0 -a $$PAR -eq 0 ; \
