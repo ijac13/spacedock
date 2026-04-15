@@ -1206,5 +1206,281 @@ class TestBuildBreakGlassFallback:
         assert tree.body.func.id == "Agent"
 
 
+def _load_status_lib():
+    import importlib.machinery
+    loader = importlib.machinery.SourceFileLoader("_status_lib", str(STATUS_PATH))
+    spec = importlib.util.spec_from_file_location("_status_lib", str(STATUS_PATH), loader=loader)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestParseStagesWithDefaultsModel:
+    """AC-parser: parse_stages_with_defaults surfaces model on stages + defaults."""
+
+    def test_parse_stages_with_defaults_surfaces_model(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "---\n"
+            "commissioned-by: spacedock@test\n"
+            "stages:\n"
+            "  defaults:\n"
+            "    worktree: false\n"
+            "    model: haiku\n"
+            "  states:\n"
+            "    - name: backlog\n"
+            "      initial: true\n"
+            "    - name: work\n"
+            "      model: opus\n"
+            "    - name: done\n"
+            "      terminal: true\n"
+            "---\n"
+        )
+        mod = _load_status_lib()
+        stages, defaults = mod.parse_stages_with_defaults(str(readme))
+        assert defaults.get("model") == "haiku"
+        stage_by_name = {s["name"]: s for s in stages}
+        assert stage_by_name["work"].get("model") == "opus"
+        # A stage without a declared model must not carry the key.
+        assert "model" not in stage_by_name["backlog"]
+        assert "model" not in stage_by_name["done"]
+
+
+def _make_model_fixture(tmp_path: Path, defaults_model: str | None, stage_model: str | None, stage_name: str = "work") -> tuple[Path, Path]:
+    """Create a workflow fixture with optional defaults.model and stage.model."""
+    wf_dir = tmp_path / "workflow"
+    wf_dir.mkdir(exist_ok=True)
+    defaults_block = "    worktree: false\n    concurrency: 2\n"
+    if defaults_model is not None:
+        defaults_block += f"    model: {defaults_model}\n"
+    stage_block = (
+        "    - name: backlog\n"
+        "      initial: true\n"
+        f"    - name: {stage_name}\n"
+    )
+    if stage_model is not None:
+        stage_block += f"      model: {stage_model}\n"
+    stage_block += "    - name: done\n      terminal: true\n"
+    (wf_dir / "README.md").write_text(
+        "---\n"
+        "commissioned-by: spacedock@test\n"
+        "entity-label: task\n"
+        "stages:\n"
+        "  defaults:\n"
+        f"{defaults_block}"
+        "  states:\n"
+        f"{stage_block}"
+        "---\n"
+        "\n"
+        "## Stages\n\n"
+        "### `backlog`\n\nHold.\n\n"
+        f"### `{stage_name}`\n\nWork.\n\n"
+        "### `done`\n\nTerminal.\n"
+    )
+    entity = wf_dir / "task.md"
+    entity.write_text(
+        "---\n"
+        "id: 001\n"
+        "title: Model task\n"
+        "status: backlog\n"
+        "worktree:\n"
+        "---\n"
+    )
+    return wf_dir, entity
+
+
+class TestBuildEmitsModel:
+    """AC-build-emits, AC-precedence, AC-null: top-level model field in output JSON."""
+
+    def test_build_emits_model_from_stage(self, tmp_path):
+        wf_dir, entity = _make_model_fixture(tmp_path, defaults_model="opus", stage_model="haiku")
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "work",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert "model" in out
+        assert out["model"] == "haiku"
+
+    def test_build_precedence_stage_wins(self, tmp_path):
+        wf_dir, entity = _make_model_fixture(tmp_path, defaults_model="opus", stage_model="sonnet")
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "work",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert out["model"] == "sonnet"
+
+    def test_build_precedence_defaults(self, tmp_path):
+        wf_dir, entity = _make_model_fixture(tmp_path, defaults_model="haiku", stage_model=None)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "work",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert out["model"] == "haiku"
+
+    def test_build_precedence_null(self, tmp_path):
+        wf_dir, entity = _make_model_fixture(tmp_path, defaults_model=None, stage_model=None)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "work",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert "model" in out
+        assert out["model"] is None
+
+
+class TestBuildEnumValidation:
+    """AC-enum-validation: reject non-enum model values with field + enum list in stderr."""
+
+    def test_build_rejects_non_enum_stage_model(self, tmp_path):
+        wf_dir, entity = _make_model_fixture(
+            tmp_path, defaults_model=None, stage_model="claude-haiku-4-5-20251001"
+        )
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "work",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode != 0
+        assert "stages.states[" in result.stderr
+        assert ".model" in result.stderr
+        assert "must be one of: sonnet, opus, haiku" in result.stderr
+
+    def test_build_rejects_non_enum_defaults_model(self, tmp_path):
+        wf_dir, entity = _make_model_fixture(
+            tmp_path, defaults_model="bogus", stage_model=None
+        )
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "work",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode != 0
+        assert "stages.defaults.model" in result.stderr
+        assert "must be one of: sonnet, opus, haiku" in result.stderr
+
+
+class TestBuildVisibilityStderr:
+    """AC-visibility: helper prints a one-line stderr notice when effective_model non-null."""
+
+    def test_build_stderr_notice_on_haiku_defaults(self, tmp_path):
+        wf_dir, entity = _make_model_fixture(tmp_path, defaults_model="haiku", stage_model=None)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "work",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        assert "[build] effective_model=haiku" in result.stderr
+        assert "from defaults" in result.stderr
+
+    def test_build_no_stderr_notice_when_null(self, tmp_path):
+        wf_dir, entity = _make_model_fixture(tmp_path, defaults_model=None, stage_model=None)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "work",
+            "checklist": ["1. Item"],
+            "team_name": "t",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        assert "effective_model=" not in result.stderr
+
+
+class TestRuntimeAdapterModelProse:
+    """AC-adapter-prose + AC-break-glass: Claude runtime adapter forwards model."""
+
+    def test_claude_runtime_adapter_forwards_model(self):
+        runtime_path = REPO_ROOT / "skills" / "first-officer" / "references" / "claude-first-officer-runtime.md"
+        text = runtime_path.read_text()
+        # Emitted-fields enumeration includes `model`.
+        assert "`model`" in text
+        # Forwarding clause instructs FO to forward output.model as Agent model=.
+        assert "output.model" in text
+        assert "model=" in text
+
+    def test_break_glass_template_has_conditional_model_slot(self):
+        runtime_path = REPO_ROOT / "skills" / "first-officer" / "references" / "claude-first-officer-runtime.md"
+        text = runtime_path.read_text()
+        # Locate the break-glass code block and assert the model= slot appears inside.
+        marker = "Break-Glass Manual Dispatch"
+        idx = text.index(marker)
+        block = text[idx:idx + 4000]
+        assert "model=" in block
+        # Conditional wording anchor — the slot must be documented as conditional.
+        assert "conditional" in block.lower() or "omit" in block.lower()
+
+
+class TestSharedCoreReuseModelMatch:
+    """AC-reuse-match + AC-reuse-visibility: shared-core carries the reuse bullet and diagnostic."""
+
+    def test_shared_core_has_reuse_model_match_bullet(self):
+        shared_path = REPO_ROOT / "skills" / "first-officer" / "references" / "first-officer-shared-core.md"
+        text = shared_path.read_text()
+        assert "lookup_model(worker_name) == next_stage.effective_model" in text
+
+    def test_shared_core_has_reuse_mismatch_diagnostic_anchor(self):
+        shared_path = REPO_ROOT / "skills" / "first-officer" / "references" / "first-officer-shared-core.md"
+        text = shared_path.read_text()
+        assert "does not match next stage effective_model" in text
+
+
+class TestSharedCoreProbeDiscipline:
+    """AC-probe-discipline: shared-core carries the schema-first probe rule."""
+
+    def test_shared_core_has_probe_discipline_anchor(self):
+        shared_path = REPO_ROOT / "skills" / "first-officer" / "references" / "first-officer-shared-core.md"
+        text = shared_path.read_text()
+        assert "usage presence is not existence evidence" in text
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__]))

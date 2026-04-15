@@ -49,7 +49,7 @@ Use the Agent tool to spawn each worker. **Use Agent() for initial dispatch** �
 
 **MANDATORY — Dispatch assembly via `claude-team build`:**
 
-Do NOT assemble `Agent()` prompts manually. Do NOT construct the `prompt` string yourself. Do NOT invent `name` values. ALWAYS pipe input through `claude-team build` first and forward its output to `Agent()` verbatim. The key fields that MUST come from the helper output are `subagent_type`, `name`, `team_name`, and `prompt` (which contains the completion signal). Assembling these manually is a protocol violation except in the documented break-glass fallback below.
+Do NOT assemble `Agent()` prompts manually. Do NOT construct the `prompt` string yourself. Do NOT invent `name` values. ALWAYS pipe input through `claude-team build` first and forward its output to `Agent()` verbatim. The key fields that MUST come from the helper output are `subagent_type`, `name`, `team_name`, `model`, and `prompt` (which contains the completion signal). Assembling these manually is a protocol violation except in the documented break-glass fallback below.
 
 The only permitted path for initial `Agent()` dispatch is:
 
@@ -73,12 +73,13 @@ The only permitted path for initial `Agent()` dispatch is:
    ```
    echo '<json>' | {spacedock_plugin_dir}/skills/commission/bin/claude-team build --workflow-dir {workflow_dir}
    ```
-3. **REQUIRED — On exit 0, parse the stdout JSON and call `Agent()` with the emitted fields verbatim.** The `name` and `prompt` fields MUST be taken from the helper output unchanged. The `prompt` already contains the team-mode `SendMessage(to="team-lead", ...)` completion signal — do not strip it, do not rewrite it:
+3. **REQUIRED — On exit 0, parse the stdout JSON and call `Agent()` with the emitted fields verbatim.** The `name`, `prompt`, and `model` fields MUST be taken from the helper output unchanged. The `prompt` already contains the team-mode `SendMessage(to="team-lead", ...)` completion signal — do not strip it, do not rewrite it. Forward `output.model` as the `Agent()` `model=` parameter when present; when `output.model` is null, OMIT the `model=` argument entirely (do NOT pass `model=None` — the Agent tool's default-inheritance only applies when the argument is absent):
    ```
    Agent(
        subagent_type=output.subagent_type,
        name=output.name,           // omit if bare mode (field absent)
        team_name=output.team_name, // omit if bare mode (field absent)
+       model=output.model,         // omit when output.model is null
        prompt=output.prompt
    )
    ```
@@ -94,10 +95,11 @@ Agent(
     subagent_type="{dispatch_agent_id}",
     name="{worker_key}-{slug}-{stage}",
     team_name="{team_name}",
+    model="{effective_model}",
     prompt="You are working on: {entity title}\n\nStage: {stage}\n\n### Stage definition:\n\n{copy stage subsection from README verbatim}\n\nRead the entity file at {entity_file_path}.\n\n### Completion checklist\n\n{numbered checklist}\n\n### Completion Signal\n\nSendMessage(to=\"team-lead\", message=\"Done: {entity title} completed {stage}. Report written to {entity_file_path}.\")"
 )
 ```
-The break-glass template omits worktree instructions, feedback context, and scope notes. Use only when the helper is unavailable.
+The break-glass template omits worktree instructions, feedback context, and scope notes. The `model=` slot is conditional — include it only when the stage (or `stages.defaults`) declares a model from the enum `sonnet | opus | haiku`; omit the entire `model=` argument when no model is declared. Use only when the helper is unavailable.
 
 ## Degraded Mode
 

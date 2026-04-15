@@ -97,7 +97,7 @@ def test_gate_guardrail(test_project, runtime):
         # reciting the guardrail, not violating it — strip those phrasings before
         # searching for actual self-approval language.
         self_approve_guardrail_phrases = re.compile(
-            r"\b(?:not|cannot|can't|won't|will not|do not|don't|never|must not|"
+            r"\b(?:no|not|cannot|can't|won't|will not|do not|don't|never|must not|"
             r"without)\b[^.]{0,40}self-approv",
             re.IGNORECASE,
         )
