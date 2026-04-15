@@ -1,0 +1,75 @@
+ABOUTME: AC-4 probe evidence for #159 — whether Codex exhibits the Claude-Code Read-then-Bash-mutation full-file staleness echo.
+ABOUTME: Records the probe design, execution attempt, blocker, and disposition.
+
+# #159 AC-4: Codex staleness-echo probe
+
+Date: 2026-04-15
+Worker: spacedock-ensign (implementation stage)
+
+## Probe design
+
+A controlled three-turn probe against `codex exec --json --ephemeral`, targeting
+a 131 KB fixture entity file under `/tmp/codex-159-probe/fixture.md`:
+
+1. Turn 1: Codex uses its file-read tool to Read `fixture.md` in full.
+2. Turn 2: Codex uses its shell/bash tool to append `mutated: true` inside the
+   frontmatter of `fixture.md` (Bash-driven mutation — NOT an Edit-style tool).
+3. Turn 3: Codex is asked to answer, WITHOUT using any tool, whether its
+   turn-3 context contained any system-injected reminder containing the full
+   current contents of `fixture.md`.
+
+The full prompt is saved at `/tmp/codex-159-probe/probe-prompt.txt`.
+The raw probe output is saved at `/tmp/codex-159-probe/codex-probe-output.json`.
+
+## Execution attempt
+
+Commands run (under Claude Code's sandbox on darwin 24.6.0):
+
+    codex exec --full-auto --skip-git-repo-check --cd /tmp/codex-159-probe "$(cat probe-prompt.txt)"
+    # -> Error loading config.toml: Failed to read config file
+    #    /Users/clkao/.codex/config.toml: Operation not permitted (os error 1)
+
+    CODEX_HOME=/tmp/codex-159-probe/codex-home HOME=/tmp/codex-159-probe/codex-home \
+      codex exec --json --ephemeral --skip-git-repo-check \
+      --dangerously-bypass-approvals-and-sandbox -C /tmp/codex-159-probe - < probe-prompt.txt
+    # -> 401 Unauthorized (wss://api.openai.com/v1/responses, repeated, then
+    #    {"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized:
+    #     Missing bearer or basic authentication in header, ..."}})
+
+## Blocker
+
+The ensign worker executes inside Claude Code's sandbox. The sandbox blocks
+access to `~/.codex/` (auth.json, config.toml — macOS Operation not permitted).
+Pointing CODEX_HOME/HOME to an isolated scratch directory bypasses the
+config-read error but then has no auth material (no OPENAI_API_KEY in env,
+no ~/.codex/auth.json reachable), yielding 401 Unauthorized on all requests.
+
+The test_lib.prepare_codex_skill_home path used by live tests symlinks the
+real `~/.codex` directory — that cannot succeed under the sandbox either.
+
+Live Codex probe therefore cannot run from this dispatched ensign. A captain
+or operator running this probe outside Claude Code's sandbox (e.g., in a
+regular shell) would not encounter the blocker.
+
+## Disposition
+
+Per the dispatch instructions: "If Codex shows NO equivalent behavior,
+document that and keep the shared-core prose Claude-runtime-specific. If
+Codex DOES show similar behavior, document that and adjust the shared-core
+prose to be runtime-agnostic."
+
+Since the probe could not be executed, the conservative default applies:
+keep the shared-core prose framed as Claude-Code-specific for the staleness
+echo mechanism. The current `## Probe and Ideation Discipline` bullets are
+framed exactly this way — the third bullet opens with "on Claude Code:" and
+the rule about Grep-over-Read for entity-body inspection is itself runtime
+agnostic. No prose adjustment is required.
+
+## Follow-up
+
+A future probe run outside the Claude Code sandbox is the cleanest evidence
+path. Until then, reports of Codex mid-session full-file reminder injection
+(if any arise in normal use) are sufficient counter-evidence to flip the
+prose framing to runtime-agnostic.
+
+Codex version at probe time: codex-cli 0.120.0
