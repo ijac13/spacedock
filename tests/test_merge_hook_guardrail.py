@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 from typing import Callable
 
@@ -22,8 +21,6 @@ from test_lib import (  # noqa: E402
     run_first_officer,
     setup_fixture,
 )
-
-
 def _run_merge_case(
     t: TestRunner,
     runtime: str,
@@ -246,4 +243,3 @@ def test_merge_hook_guardrail(test_project, runtime, model, effort):
     )
 
     t.finish()
-

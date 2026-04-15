@@ -14,6 +14,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "runtime-live-e2e.yml"
 README_PATH = REPO_ROOT / "tests" / "README.md"
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
+GATE_GUARDRAIL_PATH = REPO_ROOT / "tests" / "test_gate_guardrail.py"
+CODEX_PACKAGED_AGENT_PATH = REPO_ROOT / "tests" / "test_codex_packaged_agent_e2e.py"
+MERGE_HOOK_GUARDRAIL_PATH = REPO_ROOT / "tests" / "test_merge_hook_guardrail.py"
 
 
 def read_workflow() -> str:
@@ -26,6 +29,18 @@ def read_readme() -> str:
 
 def read_makefile() -> str:
     return MAKEFILE_PATH.read_text()
+
+
+def read_gate_guardrail() -> str:
+    return GATE_GUARDRAIL_PATH.read_text()
+
+
+def read_codex_packaged_agent() -> str:
+    return CODEX_PACKAGED_AGENT_PATH.read_text()
+
+
+def read_merge_hook_guardrail() -> str:
+    return MERGE_HOOK_GUARDRAIL_PATH.read_text()
 
 
 def section(text: str, heading: str) -> str:
@@ -206,6 +221,37 @@ def test_codex_makefile_targets_allow_empty_tiers_without_masking_failures():
     assert text.count("scripts/run_pytest_tier.py --allow-no-tests --") == text.count(
         'live_codex and serial" --runtime codex'
     ) + text.count('live_codex and not serial" --runtime codex')
+
+
+def test_gate_guardrail_is_the_shared_serial_live_preflight():
+    text = read_gate_guardrail()
+
+    assert "@pytest.mark.live_claude" in text
+    assert "@pytest.mark.live_codex" in text
+    assert "@pytest.mark.serial" in text
+
+
+def test_codex_packaged_agent_stays_in_parallel_live_tier():
+    text = read_codex_packaged_agent()
+
+    assert "@pytest.mark.live_codex" in text
+    assert "@pytest.mark.serial" not in text
+
+
+def test_merge_hook_guardrail_is_not_locally_xfailed_or_moved_to_serial_tier():
+    text = read_merge_hook_guardrail()
+
+    assert "@pytest.mark.live_codex" in text
+    assert "@pytest.mark.serial" not in text
+    assert "@pytest.mark.xfail" not in text
+
+
+def test_tests_readme_documents_codex_preflight_before_parallel_tier():
+    text = read_readme()
+
+    assert "test_gate_guardrail.py --runtime codex" in text
+    assert "before burning the expensive parallel tier" in text
+    assert "shared runtime pilot" in text
 
 
 def test_tests_readme_documents_runtime_live_e2e_workflow():

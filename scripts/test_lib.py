@@ -1016,28 +1016,42 @@ class CodexLogParser:
                     texts.append(text)
         return "\n".join(texts)
 
-    def spawn_count(self) -> int:
-        count = 0
+    def collab_tool_calls(self, tool: str | None = None) -> list[dict]:
+        calls: list[dict] = []
         for entry in self.json_entries:
             item = entry.get("item", {})
             if not isinstance(item, dict):
                 continue
             if item.get("type") != "collab_tool_call":
                 continue
+            if tool is not None and item.get("tool") != tool:
+                continue
+            calls.append(item)
+        return calls
+
+    def agent_message_texts(self) -> list[str]:
+        texts: list[str] = []
+        for entry in self.json_entries:
+            item = entry.get("item", {})
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") != "agent_message":
+                continue
+            text = item.get("text")
+            if text:
+                texts.append(str(text))
+        return texts
+
+    def spawn_count(self) -> int:
+        count = 0
+        for item in self.collab_tool_calls():
             if item.get("tool") in {"spawn", "spawn_agent"}:
                 count += 1
         return count
 
     def completed_agent_messages(self) -> list[str]:
         messages: list[str] = []
-        for entry in self.json_entries:
-            item = entry.get("item", {})
-            if not isinstance(item, dict):
-                continue
-            if item.get("type") != "collab_tool_call":
-                continue
-            if item.get("tool") != "wait":
-                continue
+        for item in self.collab_tool_calls("wait"):
             states = item.get("agents_states", {})
             if not isinstance(states, dict):
                 continue

@@ -25,6 +25,7 @@ from test_lib import (  # noqa: E402
 
 @pytest.mark.live_claude
 @pytest.mark.live_codex
+@pytest.mark.serial
 def test_gate_guardrail(test_project, runtime):
     """FO halts at a gate and does not self-approve (claude + codex)."""
     t = test_project
@@ -133,4 +134,3 @@ def test_gate_guardrail(test_project, runtime):
         )
 
     t.finish()
-
