@@ -344,3 +344,95 @@ Static required: parser test, build output + null, precedence (3 cases), materia
 ### Summary
 
 Resolved both blocking runtime assumptions via direct evidence probes. The cycle-1 design's Agent(model=) and spawn_agent(model=) forwarding was both wrong — corrected to agent-file materialization under `{workflow_dir}/.claude/agents/`. Added four new ACs covering staff-review gaps 4–7. Promoted propagation E2E to required. Two low-stakes open questions remain (parser helper shape, refit regeneration); neither blocks the ideation gate re-presentation.
+
+## Scope narrowing (2026-04-15)
+
+Cycle 3 narrows this task to **Claude-only**. Codex per-stage model selection is deferred to a separate follow-up task that the first officer will file after these probes land. Rationale: the cycle-2 materialization mechanism collapsed for both runtimes simultaneously, and probe evidence below shows the Claude and Codex paths require genuinely different mechanisms. Forcing a unified design in one task conflated two unrelated unknowns.
+
+## Probe Report — Cycle 3 (Claude-only, 2026-04-15)
+
+### Probe 1: member.model source
+
+Evidence from `~/.claude/teams/*/config.json` member distribution (52 teams scanned):
+
+| count | agentType | stored `model` |
+|---|---|---|
+| 29 | `team-lead` | `claude-opus-4-6[1m]` |
+| 24 | `spacedock:ensign` | `claude-opus-4-6` |
+| 10 | `ensign` | `claude-opus-4-6` |
+|  6 | `team-lead` | `claude-opus-4-6` |
+|  4 | `first-officer` | `claude-opus-4-6` |
+|  3 | `spacedock:ensign` | `opus[1m]` |
+|  3 | `first-officer` | `claude-opus-4-6[1m]` |
+|  2 | `superpowers:code-reviewer` | `inherit` |
+|  1 | `superpowers:code-reviewer` | `opus[1m]` |
+
+Cross-check against agent-file YAML frontmatter:
+
+- `~/.claude/plugins/cache/spacedock/spacedock/0.9.1/agents/ensign.md` has NO `model:` field at all. Yet every stored `spacedock:ensign` member carries a concrete opus model string — so the captain-session model is stamped when the agent YAML omits `model:`.
+- `~/.claude/plugins/cache/superpowers-marketplace/superpowers-dev/5.0.6/agents/code-reviewer.md` declares `model: inherit` literally. Stored member records split: two have `"model": "inherit"` (YAML value copied verbatim) and one has `"model": "opus[1m]"` (resolved). The split is almost certainly Claude Code version drift — older CC preserved the literal string, newer CC resolves `inherit` to the captain-session model at join time.
+
+**Finding (Probe 1):** `member.model` is written by **Claude Code itself at `Agent()` join time**, not by any external tool. The value comes from (a) the resolved agent file's `model:` YAML frontmatter if present and non-`inherit`, or (b) the captain-session's running model otherwise. `claude-team:377-396` `lookup_model` is strictly READ-only; `grep model /Users/clkao/git/spacedock/skills/commission/bin/claude-team` shows zero write sites for `member.model`. The mechanism confirmed by cycle-2 evidence holds: agent-file YAML frontmatter → member.model at join time, with captain-session fallback for missing/inherit fields.
+
+### Probe 2: subagent_type discovery paths
+
+Static evidence collected:
+
+- `skills/commission/SKILL.md:390` documents discovery at `{project_root}/.claude/agents/{agent}.md`. No mention of `{workflow_dir}/.claude/agents/`.
+- `docs/superpowers/specs/2026-04-01-plugin-shipped-runtime-assets-design.md:66` explicitly REMOVES `.claude/agents/` as a commission output: "copying first-officer and ensign into `.claude/agents/`" is a deliberately-stopped behavior. The current plugin-shipped model resolves `spacedock:ensign` from the marketplace cache (`~/.claude/plugins/cache/spacedock/spacedock/0.9.1/agents/ensign.md`), not from any project tree.
+- `docs/research-skill-tool-team-restriction.md:18` shows `subagent_type="ensign-test"` (no agent file anywhere) successfully dispatches — Claude Code does NOT error when the subagent_type is unknown; it silently falls through to `general-purpose`. This means the cycle-2 mechanism would silently no-op: if Claude Code doesn't search `{workflow_dir}/.claude/agents/`, the suffixed subagent_type would resolve to generic while every static test grep passes.
+- No evidence anywhere in `~/.claude/plugins/cache` or `/Users/clkao/git/spacedock` for `{workflow_dir}/.claude/agents/` being probed at dispatch. Every documentation reference to agent-file discovery uses `{project_root}/.claude/agents/` or plugin-namespaced IDs.
+
+**Live-probe blocker:** I attempted to dispatch a throwaway Agent with `subagent_type="probe-157-unique-haiku-test"` against a test file at `/tmp/probe-157-workflow/.claude/agents/probe-157-unique-haiku-test.md` to confirm whether `{workflow_dir}` is probed. **I lack the `Agent` tool in this ensign context** — `ToolSearch(query="+Agent")` returns only SendMessage/TaskCreate/TaskList/TaskUpdate. Team-lead-only tools (Agent, TeamCreate, TeamDelete) are not delegated to ensigns. Cycle 3 dispatch prompt asserted "you can spawn Agent() too (you have the tool)" but that's not true for this worker type.
+
+**Finding (Probe 2):** Static evidence is consistent with cycle-2 reviewer's claim that `{workflow_dir}/.claude/agents/` is NOT a discovery path. The three documented discovery paths are: (1) plugin-namespaced IDs like `spacedock:ensign` resolved from `~/.claude/plugins/cache/{marketplace}/{plugin}/{version}/agents/`, (2) `{project_root}/.claude/agents/` per `commission/SKILL.md:390`, (3) `~/.claude/agents/` (user-scope). `{workflow_dir}/.claude/agents/` has no evidentiary support. The cycle-2 materialization-strategy design is unviable for that reason.
+
+### Probe 3: pre-write vs Agent() join
+
+**Not run.** This probe requires `TeamCreate`, `TeamDelete`, and `Agent` tools. None are available in the ensign tool surface (confirmed via `ToolSearch(query="+Team")` and `ToolSearch(query="+Agent")`). The dispatch prompt's assumption that an ensign can spawn `Agent(subagent_type="general-purpose", team_name=...)` against a hand-managed probe team is false in this environment.
+
+Indirect evidence from static inspection supports the design hypothesis being **plausible but not proven**:
+
+- `claude-team` only reads `members[]`. No code in the spacedock codebase writes `member.model`. Whether Claude Code preserves or overwrites a pre-populated member entry when `Agent(name=X)` joins is undocumented.
+- Observed member-record variance (literal `"inherit"` in some records, resolved `"opus[1m]"` in others; captain-session model stamped when YAML has no `model:`) is consistent with Claude Code actively rewriting the member entry at join time rather than leaving whatever was there. If Claude Code unconditionally overwrites the record with its own resolution (YAML frontmatter OR captain-session fallback), pre-write would be **silently lost** — exact same silent-no-op failure mode as cycles 1 and 2.
+- No repository precedent for pre-writing `~/.claude/teams/*/config.json` — every member record observed in 52 teams appears to have been written by Claude Code's Agent-join handler.
+
+**Finding (Probe 3):** Probe 3 CANNOT be executed from the ensign context. This is a blocking gap for cycle-3 design: the hypothesis that `claude-team build` pre-writes `member.model` and Claude Code honors it is currently unproven. Until a captain (who does have `Agent` / `TeamCreate` tools) runs the live probe, the pre-write strategy carries the same class of risk that rejected cycles 1 and 2.
+
+### Probe 4: any simpler mechanism
+
+- `ToolSearch(query="+Agent subagent dispatch", max_results=5)`: returned only SendMessage, TaskCreate, TaskList, TaskUpdate. No Agent tool, no model-related fields.
+- `ToolSearch(query="+Team create members", max_results=5)`: returned only SendMessage, TaskList. No TeamCreate tool in ensign surface.
+- `grep -nE 'model|--model' skills/commission/bin/claude-team`: every `model` hit is READ-side (`extract_runtime_models`, `lookup_model`, `context_limit_for_model`, diagnostic warnings). Zero WRITE sites for `member.model`. No undocumented flag surfaces per-member model.
+- `claude-first-officer-runtime.md` TeamCreate invocation at line 11: `TeamCreate(team_name="{project_name}-{dir_basename}")`. No per-member model parameter is documented.
+- Cross-runtime contrast: Codex `spawn_agent` has no model parameter (cycle-2 confirmed) AND has no team config to pre-write, so the team-config pre-write hypothesis is structurally Claude-only even if it were proven — hence the scope narrowing.
+
+**Finding (Probe 4):** No simpler already-exposed mechanism exists. Agent, TeamCreate, and `claude-team` command-line surface have no per-member model hooks.
+
+### Recommended cycle-3 design
+
+**Primary recommendation: (A) team-config pre-write, PENDING Probe 3 live verification by captain.**
+
+Rationale:
+
+1. Probe 2 further confirms cycle-2 reviewer's position: `{workflow_dir}/.claude/agents/` is not a documented discovery path, and the plugin-shipped-runtime-assets spec deliberately moved away from writing under project-tree `.claude/agents/` trees. Option (B) is unviable.
+2. Probe 1 proves the member.model plumbing is real and stable — `lookup_model` reads it, `assess` uses it — so hitting that surface is the correct abstraction target.
+3. Probe 3 cannot be run from the ensign context; the design is predicated on captain-run live verification BEFORE ideation gate approval. Do not approve cycle-3 ACs without the Probe 3 result. If Probe 3 shows pre-write is preserved: proceed with team-config pre-write design. If Probe 3 shows pre-write is overwritten or ignored: the design requires a genuinely new mechanism (options: Claude Code feature request for per-Agent `model=`, or a wrapper Agent-file-materialization into `{project_root}/.claude/agents/{base}-{model_slug}.md` instead of `{workflow_dir}`, which at least lives on a documented discovery path).
+4. Codex path is explicitly deferred to follow-up. Team-config pre-write is structurally Claude-only; Codex has no team config. A separate probe task is required for Codex — most likely shape is a `codex exec --model ...` CLI flag investigation, or an acceptance that Codex per-stage model selection is unsupported in the current runtime.
+
+**Blocking gate for captain before cycle-3 ACs can be written:**
+
+> **Captain action required:** run the Probe 3 live test before dispatching cycle-3 ensign. Create an isolated probe team via `TeamCreate(team_name="spacedock-probe-157-{timestamp}")`, pre-write a `member` entry with `"model": "claude-haiku-4-5-20251001"` into `~/.claude/teams/{probe team}/config.json`, then call `Agent(subagent_type="general-purpose", name="{pre-written name}", team_name="{probe team}", prompt="SendMessage(to=\"team-lead\", message=\"probe\")")`. After the agent completes, re-read the config file and diff against the pre-write. Report one of: (P-preserved) our model stuck, (O-overwritten) replaced with opus, (I-ignored) separate member entry created alongside ours. Only P unblocks the team-config pre-write design.
+
+### Checklist
+
+1. Feedback cycles grep — DONE. Cycle 1 and Cycle 2 context read at lines 239–346.
+2. Probe 1 — DONE. Evidence in `### Probe 1` above.
+3. Probe 2 — DONE (static only). Live file-based dispatch skipped because Agent tool unavailable; marked as limitation in `### Probe 2`.
+4. Probe 3 — FAILED (unrunnable from ensign context, no Agent/TeamCreate tools). Design implication flagged as blocking gate for captain.
+5. Probe 4 — DONE. No simpler mechanism. Evidence in `### Probe 4` above.
+6. Cleanup — SKIPPED (no probe team created, since Probe 3 could not be run; `/tmp/probe-157-workflow/.claude/agents/probe-157-unique-haiku-test.md` left in place as inert static file with no side effect).
+7. Scope narrowing — DONE. See `## Scope narrowing (2026-04-15)` section above.
+8. Probe report — DONE. This section.
+9. Commit — pending this edit.
+10. SendMessage — pending completion.
