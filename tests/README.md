@@ -162,7 +162,7 @@ make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex   # single-file ov
 ```
 
 - `make test-static` runs `pytest tests/ --ignore=tests/fixtures -m "not live_claude and not live_codex"`. `tests/fixtures/` contains runnable fixture payloads and is excluded from collection.
-- `make test-live-claude` runs the serial tier first (`-m "live_claude and serial" -x`), then the parallel tier (`-m "live_claude and not serial" -n $LIVE_CLAUDE_WORKERS`) regardless of the serial tier's outcome, and fails overall if either tier failed. `make test-live-codex` uses the same split with `LIVE_CODEX_WORKERS`, but tolerates an empty marker tier while still failing on real test failures.
+- `make test-live-claude` runs the serial tier first (`-m "live_claude and serial" -x`), then the parallel tier (`-m "live_claude and not serial" -n $LIVE_CLAUDE_WORKERS`) regardless of the serial tier's outcome, and fails overall if either tier failed. `make test-live-codex` uses the same split with `LIVE_CODEX_WORKERS`; its cheap shared-runtime preflight is `test_gate_guardrail.py`, and the wrapper still tolerates any intentionally empty marker tier without masking real test failures.
 - `make test-live-claude-opus` is the same shape with `--model opus --effort low` overrides.
 - `make test-e2e` is the single-file override — pass `TEST=...` for the target file and `RUNTIME=claude|codex` for the runtime. This replaces the old `test-e2e-commission` target (use `TEST=tests/test_commission.py`).
 - Do not invoke bare `pytest tests/` as the suite entrypoint unless you intentionally want pytest to recurse into `tests/fixtures/`.
@@ -183,7 +183,7 @@ unset CLAUDECODE && uv run pytest tests/ -m "live_claude and not serial" -n 2 --
 
 ### Quick local smoke before pushing
 
-Before pushing a PR — especially one that touches dispatch, commission, scaffolding, or the runtime adapters — run two cheap checks locally:
+Before pushing a PR — especially one that touches dispatch, commission, scaffolding, or the runtime adapters — run three cheap checks locally:
 
 ```bash
 # 1) static discipline: ~6s, free
@@ -191,26 +191,34 @@ make test-static
 
 # 2) cheapest live signal: ~60s, ~$0.02 haiku
 unset CLAUDECODE && uv run pytest tests/test_gate_guardrail.py --runtime claude --model haiku -v
+
+# 3) Codex shared-runtime pilot: ~60s, low-cost fail-fast preflight
+unset CLAUDECODE && uv run pytest tests/test_gate_guardrail.py --runtime codex -v
 ```
 
-`test_gate_guardrail.py` is the pilot live test — smallest fixture, single gate transition, fails loudly on any FO-level regression (self-approval, wrong status, early archive). If both pass locally, the CI haiku jobs usually pass too.
+`test_gate_guardrail.py` is the shared runtime pilot live test — smallest fixture, single gate transition, fails loudly on any FO-level regression (self-approval, wrong status, early archive). The Claude invocation is the cheapest Anthropic smoke; the Codex invocation is the cheap Codex preflight before burning the expensive parallel tier. If both pass locally, the CI live jobs usually pass too.
 
 For a serial-tier fail-fast sweep before burning the expensive parallel tier:
 
 ```bash
-# Bare-mode serial tier — matches claude-live-bare's first phase
+# Claude bare-mode serial tier — matches claude-live-bare's first phase
 unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && \
   uv run pytest tests/ --ignore=tests/fixtures \
     -m "live_claude and serial" --runtime claude --team-mode=bare -x -v
+
+# Codex serial tier — matches codex-live's first phase
+unset CLAUDECODE && \
+  uv run pytest tests/ --ignore=tests/fixtures \
+    -m "live_codex and serial" --runtime codex -x -v
 ```
 
-Stops on the first serial-tier failure in ~90s. The `-x` flag is the fail-fast lever; removing it runs all serial tests regardless.
+Stops on the first serial-tier failure in ~90s. The `-x` flag is the fail-fast lever; removing it runs all serial tests regardless. `test_gate_guardrail` carries both `live_claude` and `live_codex` + `serial`, so it runs first in both tiers — if it fails you see the regression in the cheapest possible window before the expensive parallel tests start.
 
 ### Known xfail / skip state
 
 Some live tests are currently marked `xfail` or `skipif` on the `#148` branch — normal, not a regression of your change:
 
-- **`@pytest.mark.xfail(reason="pending #154 ...")`** — applied to nine tests whose assertions target `agents/first-officer.md` for tokens that moved into `skills/first-officer/SKILL.md` and the reference files during the #085 skill-preload refactor. Surfaces as `XFAIL` in the pytest summary. Affected tests: `test_commission`, `test_agent_captain_interaction`, `test_output_format`, `test_reuse_dispatch`, `test_team_health_check`, `test_repo_edit_guardrail`, `test_dispatch_completion_signal`, `test_checklist_e2e`, `test_codex_packaged_agent_e2e`. Some show `XPASS` under bare mode because the drift only bites teams-mode paths — `strict=False` makes xpass silently OK. When #154 lands, these markers come off.
+- **`@pytest.mark.xfail(reason="pending #154 ...")`** — applied to eight tests whose assertions target `agents/first-officer.md` for tokens that moved into `skills/first-officer/SKILL.md` and the reference files during the #085 skill-preload refactor. Surfaces as `XFAIL` in the pytest summary. Affected tests: `test_commission`, `test_agent_captain_interaction`, `test_output_format`, `test_reuse_dispatch`, `test_team_health_check`, `test_repo_edit_guardrail`, `test_dispatch_completion_signal`, `test_checklist_e2e`. Some show `XPASS` under bare mode because the drift only bites teams-mode paths — `strict=False` makes xpass silently OK. When #154 lands, these markers come off.
 - **`@pytest.mark.skipif(not sys.stdin.isatty(), reason="requires real TTY; ... see #155")`** — applied to the two PTY-using tests (`test_interactive_poc_live`, `test_single_entity_mode`). Skips under headless CI, runs locally from a real terminal.
 - **`@pytest.mark.skip(reason="pending #141 ...")`** — applied to `test_rejection_flow` (same-stage reviewer reuse during feedback cycles is correct behavior #141 will formalize; the test's current `ensign_count >= 3` assertion is bare-mode-biased).
 
