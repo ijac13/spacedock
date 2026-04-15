@@ -9,7 +9,7 @@ verdict:
 score: 0.82
 worktree: .worktrees/spacedock-ensign-fo-team-infrastructure-fail-early
 issue:
-pr:
+pr: #97
 ---
 
 The Claude Code `Agent`/`Team*` tooling has compounding bugs that cause the FO to spawn untracked zombie ensigns and duplicate work whenever a session is interrupted (rate-limit re-auth, long idle at a gate, or any event that desyncs the in-memory team registry). Upstream: anthropics/claude-code #45683, #36806, #35355, #25131.
