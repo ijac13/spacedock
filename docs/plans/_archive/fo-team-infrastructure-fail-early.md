@@ -1,15 +1,16 @@
 ---
 id: 149
 title: "FO runtime: fail-early team-infrastructure defense (rules 1, 2, 4 of team-fragility issue)"
-status: validation
+status: done
 source: "CL direction during 2026-04-14 session from /tmp/2026-04-14-team-fragility-issue.md"
 started: 2026-04-15T03:47:38Z
-completed:
-verdict:
+completed: 2026-04-15T20:13:54Z
+verdict: PASSED
 score: 0.82
-worktree: .worktrees/spacedock-ensign-fo-team-infrastructure-fail-early
+worktree: 
 issue:
 pr: #97
+archived: 2026-04-15T20:14:00Z
 ---
 
 The Claude Code `Agent`/`Team*` tooling has compounding bugs that cause the FO to spawn untracked zombie ensigns and duplicate work whenever a session is interrupted (rate-limit re-auth, long idle at a gate, or any event that desyncs the in-memory team registry). Upstream: anthropics/claude-code #45683, #36806, #35355, #25131.
