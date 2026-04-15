@@ -777,3 +777,29 @@ Root cause: FO (haiku) takes the bare-mode path for single-task workflows and th
 ### Forward pointer
 
 Task #148 (live E2E pytest harness) will introduce a proper bare-vs-teams marker matrix so both modes are exercised in CI going forward. Until then, CI matches the locally-green teams-mode path and the remaining branch-delete behavior in `test_rebase_branch_before_push.py` is out of scope for this cycle.
+
+## Stage Report — Cycle 7
+
+**Goal:** Unblock PR #92 opus job by skipping `tests/test_rejection_flow.py` pending task #141 (reviewer keepalive across feedback cycles). The opus FO correctly reused the same-stage validation ensign for the re-review after rejection, which is the behavior #141 proposes to formalize. The test's `ensign_count >= 3` assertion is bare-mode-biased and treats reviewer reuse as a missing fix dispatch — not a regression, a test expectation that predates #141.
+
+**Pre-change HEAD:** `173619cf399aa13178592999fdec11eef9f3f527` (cycle 6 head, reported at start).
+
+**Clarification exchange with team-lead:** The original directive placed the skip at module scope "AFTER the imports, BEFORE the `parse_args` function". That broke `make test-static` because `emit_skip_result` raises `SystemExit(0)` unconditionally, which pytest treats as an INTERNALERROR during module import. Flagged this as a conflict with checklist item 3 ("static must stay green"). Team-lead approved Option 1: place the skip inside `if __name__ == "__main__":`, replacing the existing `main()` call. Under pytest, `__name__ == "test_rejection_flow"` so the guard does not fire and the file continues to be collected as zero tests (it has no pytest-collectable `test_*` functions). Under `uv run`, `__name__ == "__main__"` so the skip fires immediately for all three live runtime invocations.
+
+**Checklist results:**
+
+1. DONE: Branch `spacedock-ensign/fo-enforce-mod-blocking-at-runtime`, worktree clean, pre-change HEAD `173619cf399aa13178592999fdec11eef9f3f527`.
+2. DONE (per team-lead Option 1 approval): Replaced `main()` call with `emit_skip_result(...)` inside `if __name__ == "__main__":` at the bottom of `tests/test_rejection_flow.py`. Skip reason matches the team-lead directive verbatim. Test body unchanged; Makefile untouched.
+3. DONE: `make test-static` -> **301 passed, 10 subtests passed** in 12.40s.
+4. DONE: `unset CLAUDECODE && uv run tests/test_rejection_flow.py --runtime claude` -> `RESULT: SKIP`, `0 passed, 0 failed, 1 skipped`, exit 0. Skip line matches the directive verbatim.
+5. DONE: Commit on existing branch (see checklist item 7).
+6. DONE: Pushed to origin (see checklist item 7).
+7. Final report captured in the section below.
+
+### Files changed (Cycle 7)
+
+- `tests/test_rejection_flow.py` — replaced `main()` call inside `if __name__ == "__main__":` with `emit_skip_result(...)` citing pending task #141. The skip fires only when the file is executed as a script (the three `uv run` invocations in the live Makefile); pytest collection is unaffected since the guard does not fire under import and the file has no pytest-collectable `test_*` functions.
+
+### Forward pointer
+
+Task #141 (reviewer keepalive across feedback cycles) will formalize the same-stage reviewer-reuse behavior that the opus FO exhibits today and update `test_rejection_flow.py` to no longer assume fresh Agent dispatch per rejection cycle. When #141 lands, remove this skip guard and restore the `main()` call.
