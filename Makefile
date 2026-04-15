@@ -4,8 +4,8 @@ SHELL := /bin/bash
 
 TEST ?= tests/
 RUNTIME ?= claude
-LIVE_CLAUDE_WORKERS ?= 2
-LIVE_CODEX_WORKERS ?= 2
+LIVE_CLAUDE_WORKERS ?= 4
+LIVE_CODEX_WORKERS ?= 4
 
 test-static:
 	unset CLAUDECODE && uv run pytest tests/ --ignore=tests/fixtures \
