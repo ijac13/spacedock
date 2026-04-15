@@ -1,16 +1,16 @@
 ---
 id: 157
 title: "claude-team build: resolve and emit per-stage model, runtime adapters pass it through on dispatch"
-status: validation
+status: done
 source: "github.com/clkao/spacedock#95 — stages.defaults.model accepted in workflow READMEs but ignored at dispatch; subagents unconditionally inherit captain-session model"
 started: 2026-04-15T17:42:36Z
-completed:
-verdict:
+completed: 2026-04-15T23:06:29Z
+verdict: PASSED
 score: 0.80
-worktree: .worktrees/spacedock-ensign-claude-team-respect-stage-model
+worktree: 
 issue: "#95"
 pr: #100
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 Workflow READMEs accept `stages.defaults.model` and per-state `model:` overrides, but the plugin never reads them. Subagents unconditionally inherit the captain session's model, so a workflow author declaring `model: haiku` for routine stages still gets opus subagents whenever the captain is running opus.
