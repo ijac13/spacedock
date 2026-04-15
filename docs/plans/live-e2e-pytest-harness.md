@@ -897,3 +897,24 @@ PR #94's first push exposed a latent CI workflow drift: the static-offline job r
 
 ### Summary
 One-commit cycle-4 fix for PR #94 CI drift. Workflow now delegates to `make test-static` so the marker filter is always applied; test assertion updated to enforce the new shape and forbid regression. Static suite still green with identical counts. Awaiting re-triggered CI on PR #94.
+
+## Stage Report: implementation
+
+- [x] Reproduce the Codex-path regression locally and confirm the exact failing assumption.
+  `uv run pytest tests/ --ignore=tests/fixtures -m 'live_codex and serial' --runtime codex --collect-only -q` returned `no tests collected (322 deselected)` with exit 5; the old two-tier shell aggregation treated that as a hard failure even though the parallel tier collected 4 tests.
+- [x] Implement the narrowest fix so `make test-live-codex` and `make test-live-codex-bare` do not fail merely because one selected tier has zero collected tests.
+  Commit `d023e572` adds `scripts/run_pytest_tier.py` and wires only the two Codex live targets in `Makefile` through `--allow-no-tests`.
+- [x] Preserve the intended semantics for real failures: actual test failures must still fail the target, and existing Claude behavior must remain intact.
+  `tests/test_run_pytest_tier.py` proves exit 3 still propagates, and `tests/test_runtime_live_e2e_workflow.py` confirms only the Codex targets use the wrapper while Claude targets keep their existing raw `pytest` path.
+- [x] Add or update offline regression coverage so this empty-tier Codex case is caught without running live Codex.
+  Added `tests/test_run_pytest_tier.py`; `uv run pytest tests/test_run_pytest_tier.py tests/test_runtime_live_e2e_workflow.py -q` completed with `12 passed in 0.30s`.
+- [x] Update docs or comments only where needed to reflect the corrected semantics.
+  `tests/README.md` now states that the Codex live split tolerates an empty marker tier while still failing on real test failures.
+- [x] Run focused verification relevant to the change and record exact outputs in the entity file stage report.
+  Helper-wrapped collect-only reproduction now exits cleanly: serial tier `no tests collected (326 deselected) in 0.04s`, parallel tier `4/326 tests collected (322 deselected) in 0.03s`, combined shell exit 0.
+- [x] Commit your changes on the worktree branch before reporting completion.
+  Implementation commit created on `spacedock-ensign/live-e2e-pytest-harness`: `d023e572` (`Handle empty codex live pytest tiers`).
+
+### Summary
+
+The fix is intentionally narrow: only the Codex live targets normalize pytest exit 5 from an empty marker tier, using a tiny wrapper script that still propagates real failures unchanged. Offline regression coverage now locks both the wrapper behavior and the Makefile wiring, and the collect-only reproduction of the original failure mode now succeeds.
