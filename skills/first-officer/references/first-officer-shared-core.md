@@ -104,6 +104,9 @@ If the worker completed but is no longer addressable, treat reuse as failed and 
 1. Not in bare mode (teams available)
 2. Next stage does NOT have `fresh: true`
 3. Next stage has the same `worktree` mode as the completed stage
+4. `lookup_model(worker_name) == next_stage.effective_model` — the reused worker's stamped model must match the next stage's declared model. Skip this comparison when `next_stage.effective_model` is null (null-declared stages accept any reused worker, preserving today's permissive behavior). Members stamped with captain-session fallback values (e.g., `"opus[1m]"`) will never match declared enum values (`sonnet`, `opus`, `haiku`) and will correctly force a one-time fresh dispatch that re-stamps the canonical enum value.
+
+When this comparator forces fresh dispatch because of a model mismatch, the FO MUST emit a captain-visible diagnostic of the form: `reused worker {name} model {X} does not match next stage effective_model {Y} — fresh-dispatching`. This converts silent degradation into audit. The anchor phrase `does not match next stage effective_model` must appear verbatim in that diagnostic.
 
 **If reuse:** Keep the agent alive. Update frontmatter on main (`status --workflow-dir {workflow_dir} --set {slug} status={next_stage}`, commit: `advance: {slug} entering {next_stage}`). Send the agent its next assignment:
 
