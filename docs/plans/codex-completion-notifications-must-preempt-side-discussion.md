@@ -1,9 +1,9 @@
 ---
 id: 153
 title: "Codex FO: completion notifications must preempt side discussion"
-status: backlog
+status: ideation
 source: "CL direction during 2026-04-14 session after task 148 validation completion handling"
-started:
+started: 2026-04-15T04:11:21Z
 completed:
 verdict:
 score: 0.69
