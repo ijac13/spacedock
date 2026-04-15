@@ -11,6 +11,7 @@ worktree:
 issue: "#95"
 pr: #100
 mod-block: 
+archived: 2026-04-15T23:06:36Z
 ---
 
 Workflow READMEs accept `stages.defaults.model` and per-state `model:` overrides, but the plugin never reads them. Subagents unconditionally inherit the captain session's model, so a workflow author declaring `model: haiku` for routine stages still gets opus subagents whenever the captain is running opus.
