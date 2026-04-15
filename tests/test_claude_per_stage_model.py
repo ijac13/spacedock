@@ -19,43 +19,9 @@ from test_lib import (  # noqa: E402
 )
 
 
-def _latest_ensign_jsonl(project_dir: Path) -> Path | None:
-    """Find the most recent ensign jsonl under ~/.claude/projects/ for this project."""
-    claude_dir = Path.home() / ".claude" / "projects"
-    if not claude_dir.is_dir():
-        return None
-    project_slug = str(project_dir.resolve()).replace("/", "-")
-    if not project_slug.startswith("-"):
-        project_slug = "-" + project_slug
-
-    best: Path | None = None
-    best_mtime = 0.0
-    for session_dir in claude_dir.glob(f"{project_slug}*"):
-        if not session_dir.is_dir():
-            continue
-        for subagents_dir in session_dir.rglob("subagents"):
-            if not subagents_dir.is_dir():
-                continue
-            for meta_path in subagents_dir.glob("agent-*.meta.json"):
-                try:
-                    meta = json.loads(meta_path.read_text())
-                except (json.JSONDecodeError, OSError):
-                    continue
-                agent_type = meta.get("agentType", "")
-                if "ensign" not in agent_type and "general-purpose" not in agent_type:
-                    continue
-                jsonl_path = meta_path.with_suffix("").with_suffix(".jsonl")
-                if not jsonl_path.is_file():
-                    continue
-                mtime = jsonl_path.stat().st_mtime
-                if mtime > best_mtime:
-                    best_mtime = mtime
-                    best = jsonl_path
-    return best
-
-
-def _first_assistant_model(jsonl_path: Path) -> str | None:
-    """Return the first non-empty assistant message.model string in the jsonl."""
+def _assistant_models(jsonl_path: Path) -> dict[str, int]:
+    """Count distinct assistant message.model values in a stream-json log."""
+    counts: dict[str, int] = {}
     with jsonl_path.open("r") as f:
         for line in f:
             line = line.strip()
@@ -72,8 +38,8 @@ def _first_assistant_model(jsonl_path: Path) -> str | None:
                 continue
             model = msg.get("model")
             if model:
-                return model
-    return None
+                counts[model] = counts.get(model, 0) + 1
+    return counts
 
 
 @pytest.mark.live_claude
@@ -120,20 +86,18 @@ def test_per_stage_model_haiku_propagates(test_project, effort):
         "FO dispatched no ensigns; cannot verify per-stage model propagation."
     )
 
-    # AC-live-propagation: parse the ensign jsonl and assert message.model starts
-    # with claude-haiku-.
-    ensign_jsonl = _latest_ensign_jsonl(t.test_project_dir)
-    assert ensign_jsonl is not None, (
-        "No ensign jsonl found under ~/.claude/projects/*/subagents/."
+    # AC-live-propagation: the FO stream-json log folds in every subagent's
+    # assistant messages with their stamped runtime model. Under the target
+    # precedence (stages.defaults.model: haiku) the dispatched ensign MUST
+    # run on a claude-haiku-* model even though the captain is pinned to opus.
+    fo_log = t.log_dir / "fo-log.jsonl"
+    assert fo_log.is_file(), f"FO log not found at {fo_log}"
+    models = _assistant_models(fo_log)
+    haiku_models = [m for m in models if m.startswith("claude-haiku-")]
+    assert haiku_models, (
+        f"No claude-haiku-* assistant messages found in {fo_log}. "
+        f"Models seen: {sorted(models.keys())}. "
+        "This means the per-stage model did not propagate to the ensign; "
+        "the ensign inherited the captain's opus model instead."
     )
-
-    model = _first_assistant_model(ensign_jsonl)
-    assert model is not None, (
-        f"No assistant message.model found in {ensign_jsonl}."
-    )
-    assert model.startswith("claude-haiku-"), (
-        f"Ensign ran on model {model!r}; expected a claude-haiku-* model per "
-        f"stages.defaults.model: haiku. Jsonl: {ensign_jsonl}"
-    )
-
-    print(f"[OK] ensign runtime model: {model}")
+    print(f"[OK] haiku assistant messages in FO log: {haiku_models}")
