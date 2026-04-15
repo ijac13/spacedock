@@ -1,7 +1,7 @@
 ---
 id: 148
 title: "Migrate live E2E tests to pytest with runtime markers"
-status: validation
+status: implementation
 source: "CL observation during 2026-04-13 session — standalone uv-run scripts cause test sprawl and boilerplate duplication"
 started: 2026-04-14T19:40:43Z
 completed:
@@ -109,3 +109,18 @@ This guarantees every parallel test runs regardless of sequential failures, whil
 - Every live test carries exactly one tier marker (`sequential` or `parallel`).
 - The CI summary clearly shows how many tests were collected, ran, passed, and failed — distinct from whether the suite short-circuited.
 - The Makefile does not use `&&` to chain individual test invocations.
+
+### Feedback Cycles
+
+Cycle: 1
+
+- 2026-04-14: Full local `make test-live-codex` rerun in validation reported `REJECTED` in worktree commit `d4552162`.
+- The empty serial-tier regression is resolved: `329 deselected / 0 selected in 0.05s` no longer fails the suite.
+- The remaining red state is the packaged-agent Codex path:
+  - `tests/test_codex_packaged_agent_e2e.py::test_codex_packaged_agent_e2e`
+  - local result: `1 failed, 2 passed, 1 skipped in 630.64s`
+  - matching CI: Actions run `24435674557`, job `71389275463`
+- Findings routed back to implementation:
+  1. Update the reused-completion assertion to parse the current completion evidence (`Commit hash: ...`), not only the older `committed ... at \`sha\`` phrasing.
+  2. Detect replacement dispatch from structured collab events instead of grepping the entire FO transcript, which false-positives on runtime contract text.
+  3. Implement FO-owned worker labels on the Codex path so the packaged-agent E2E can see labels like `{entity_id}-{stage_key}/{display_name}` per task `137`.
