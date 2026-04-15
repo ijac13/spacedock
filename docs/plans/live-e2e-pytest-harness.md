@@ -918,3 +918,24 @@ One-commit cycle-4 fix for PR #94 CI drift. Workflow now delegates to `make test
 ### Summary
 
 The fix is intentionally narrow: only the Codex live targets normalize pytest exit 5 from an empty marker tier, using a tiny wrapper script that still propagates real failures unchanged. Offline regression coverage now locks both the wrapper behavior and the Makefile wiring, and the collect-only reproduction of the original failure mode now succeeds.
+
+## Stage Report: validation (cycle 2)
+
+- [x] Read the latest implementation stage report at the end of the entity file and validate its claims against the actual changes.
+  The last implementation report maps to commit `d023e572`; `git show --name-only d023e572` lists exactly `Makefile`, `scripts/run_pytest_tier.py`, `tests/README.md`, `tests/test_run_pytest_tier.py`, and `tests/test_runtime_live_e2e_workflow.py`.
+- [x] Verify the changed files actually match the narrow-fix claim.
+  `git diff d023e572^ d023e572` shows only Codex targets wrapped in `scripts/run_pytest_tier.py --allow-no-tests`, one new helper, one new unit test file, one added workflow assertion, and one one-line README note.
+- [x] Run focused offline verification appropriate for this regression.
+  `uv run pytest tests/test_run_pytest_tier.py tests/test_runtime_live_e2e_workflow.py -q` passed: `12 passed in 0.33s`.
+- [x] Independently verify the critical behavior split.
+  Raw serial collect-only Codex tier exits 5 with `no tests collected (326 deselected)`; the helper-wrapped serial+parallel aggregate exits 0 while still collecting 4 parallel Codex tests; `uv run python scripts/run_pytest_tier.py --allow-no-tests -- python -c 'import sys; sys.exit(3)'` exits 3; Claude targets at `Makefile` lines 19-40 and 57-64 still call raw `uv run pytest`.
+- [x] Assess whether the implementation provides sufficient evidence for CI job `71385627731` and whether a live rerun is required.
+  GitHub job `71385627731` (`codex-live`, run `24434476800`, head `f81cab61`) shows both the empty serial Codex tier and a real parallel-tier failure in `tests/test_codex_packaged_agent_e2e.py`; this implementation is sufficient evidence for the empty-tier fix itself, but a live Codex rerun is still required before treating PR #94's end-to-end job as green.
+- [x] Append a validation stage report with explicit checklist outcomes and a PASSED or REJECTED recommendation.
+  Recommendation: `PASSED` for the narrow Codex tier-handling fix; the implementation matches the claim and the focused offline regression evidence is solid.
+- [x] Commit the stage report before sending the completion message.
+  This report is committed on `spacedock-ensign/live-e2e-pytest-harness` before completion is signaled.
+
+### Summary
+
+Validation confirms the implementation report accurately describes a narrow change set centered on Codex live-tier exit normalization. The focused offline suite passed, the empty-tier behavior is fixed without masking real failures, and Claude targets remain on the original raw pytest path. The historical PR #94 Codex job also contained a genuine parallel-tier test failure, so this stage can pass the code change itself while still requiring a live rerun for end-to-end CI confirmation.
