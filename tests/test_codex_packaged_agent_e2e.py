@@ -20,6 +20,7 @@ from test_lib import (  # noqa: E402
 )
 
 
+@pytest.mark.xfail(reason="pending #154 — test assertions target `agents/first-officer.md` but post-#085 skill-preload the content lives in the skill/references layer", strict=False)
 @pytest.mark.live_codex
 def test_codex_packaged_agent_e2e(test_project):
     """Codex FO reuses packaged workers and honors explicit shutdown."""

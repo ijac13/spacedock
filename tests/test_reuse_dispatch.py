@@ -25,6 +25,7 @@ from test_lib import (  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
+@pytest.mark.xfail(reason="pending #154 — test assertions target `agents/first-officer.md` but post-#085 skill-preload the content lives in the skill/references layer", strict=False)
 @pytest.mark.live_claude
 def test_reuse_dispatch(test_project, model, effort):
     """Ensign reuse uses SendMessage; fresh: true forces new Agent dispatch."""

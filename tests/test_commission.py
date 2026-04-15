@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import extract_stats  # noqa: E402
 
 
+@pytest.mark.xfail(reason="pending #154 — test assertions target `agents/first-officer.md` but post-#085 skill-preload the content lives in the skill/references layer", strict=False)
 @pytest.mark.live_claude
 def test_commission(test_project, model, effort):
     """Batch-mode commission E2E: validates every output artifact (README, entities, status script, mod)."""

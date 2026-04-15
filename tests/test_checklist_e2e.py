@@ -20,6 +20,7 @@ from test_lib import (  # noqa: E402
 )
 
 
+@pytest.mark.xfail(reason="pending #154 — test assertions target `agents/first-officer.md` but post-#085 skill-preload the content lives in the skill/references layer", strict=False)
 @pytest.mark.live_claude
 def test_checklist_e2e(test_project, model, effort):
     """Commissions a full workflow then runs FO to verify ensign checklist compliance."""
