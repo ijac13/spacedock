@@ -1,7 +1,7 @@
 ---
 id: 159
 title: "FO shared-core: avoid full-file staleness echoes from Read + `status --set` pattern"
-status: implementation
+status: validation
 source: "github.com/clkao/spacedock#96 — `status --set` triggers full-file staleness echoes when FO has Read the entity body; Claude Code dumps entire current file as a system-reminder on the turn after a Bash-driven mutation"
 started: 2026-04-15T20:37:50Z
 completed:
