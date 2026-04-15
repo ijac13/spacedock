@@ -717,3 +717,33 @@ Captain approved the design. Matrix implementation landed per the checklist belo
 ### Summary
 
 Team-flag matrix implementation landed per the approved design: two new markers (`teams_mode` / `bare_mode`), one new pytest option (`--team-mode`), one new conftest resolution + mutual-exclusion hook, six tests pinned to a specific mode, two new Makefile targets (`test-live-claude-bare`, `test-live-codex-bare`), one new CI job (`claude-live-bare` on the existing `CI-E2E` environment), and four new static-workflow assertions. `make test-static` green at 301 passed / 21 deselected / 10 subtests — no regressions. Bare-mode deselection of `test_rebase_branch_before_push` confirmed (skip reason `requires teams mode; --team-mode=bare`). Mutual-exclusion check confirmed (`pytest.UsageError` at collection time when a test carries both markers). **Local teams-mode run of `test_rebase_branch_before_push` failed 2 of 10 inner checks** in Phase 6 ("rebase before push" merge-base / file-contents probes on the remote branch after `gh pr merge` has deleted it). Per dispatch instruction, I STOPPED and did not patch — reporting to captain for disposition. All other checklist items are DONE. Branch is local at HEAD `9997a8ae` (commit SHAs listed in item 12 above); no push.
+
+## Stage Report — Cycle 2 follow-up (2026-04-15) — test_rejection_flow skip pending #141
+
+**Goal**: Acknowledge that FO reusing the same-stage reviewer across feedback cycles is correct behavior (tracked at #141 — "reviewer keepalive across feedback cycles"), and skip `tests/test_rejection_flow.py::test_rejection_flow` until #141 lands. The existing assertion `ensign_count >= 3` does not yet accommodate reviewer reuse, so the test fails on a behavior that is now intended rather than broken. Skipping at the pytest-marker layer is the right place for the #148 branch because this test has already migrated to pytest here.
+
+**Linkage**: PR #92 (opus cycle 7 on the #114 branch) added the equivalent skip at the file top in the pre-pytest uv-run form of this same test. Both skips are expected to coexist until #148 rebases onto merged #114 — at that point the pre-pytest skip goes away naturally (the uv-run form is deleted by the pytest migration) and the pytest-marker form wins. Next rebase will likely surface a conflict in `test_rejection_flow.py`; resolution is to keep the pytest `@pytest.mark.skip(...)` decorator form and drop the file-top early-return block from #114.
+
+**Files changed**:
+1. `tests/test_rejection_flow.py` — added `@pytest.mark.skip(reason="pending #141 — ...")` as outermost decorator above `@pytest.mark.live_claude` / `@pytest.mark.live_codex` on `test_rejection_flow` (one top-level test function in this file; no parametrize decorator on this test). Existing `live_claude` / `live_codex` markers preserved so the matrix logic still applies when #141 lands and the skip is removed. No `teams_mode` / `bare_mode` marker added — this is a pending-feature question, not a mode question, per the cycle 2 design note.
+
+**Static result**: `make test-static` → `301 passed, 21 deselected, 10 subtests passed` (unchanged from cycle 2 post-report baseline — as expected, since static discipline does not run the live test; the skip only takes effect under live selection).
+
+**Skip visibility**: `uv run pytest tests/test_rejection_flow.py -v -rs` reports:
+```
+tests/test_rejection_flow.py::test_rejection_flow SKIPPED (pending #...) [100%]
+SKIPPED [1] tests/test_rejection_flow.py:143: pending #141 — reviewer keepalive across feedback cycles — FO correctly reuses the same-stage reviewer for re-review after rejection, test's ensign_count>=3 assertion does not yet accommodate this
+```
+
+**Checklist**:
+1. Worktree confirmation — DONE. `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-live-e2e-pytest-harness` on branch `spacedock-ensign/live-e2e-pytest-harness`, clean tree, HEAD `b664a099` (cycle 2 impl report) pre-change.
+2. Read current pytest-migrated shape of `test_rejection_flow.py` — DONE. Confirmed one top-level function `test_rejection_flow` already pytest-style (fixture args `test_project, runtime, model, effort`), with existing `@pytest.mark.live_claude` and `@pytest.mark.live_codex` markers, no parametrize decorator, no pre-existing skip.
+3. Add `@pytest.mark.skip(reason="pending #141 — ...")` decorator above the existing markers — DONE. Placed as outermost decorator on line 143.
+4. Do not remove or alter existing markers — DONE. `live_claude` / `live_codex` preserved.
+5. Do not add `teams_mode` / `bare_mode` marker — DONE. No mode marker added.
+6. `make test-static` stays green at 301 passed / 21 deselected / 10 subtests — DONE. Exact line matched baseline.
+7. Verify pytest reports the skip cleanly — DONE. Skip line paste above.
+8. Append stage report to entity file — DONE (this section).
+9. Commit as one commit `tests: #148 cycle 2 follow-up — skip test_rejection_flow pending #141` — IN PROGRESS (next action after writing this report).
+10. Do not push — HELD. No push performed.
+11. Final report — IN PROGRESS (SendMessage at end).
