@@ -871,3 +871,29 @@ Recommend approve.
 ### Summary
 
 Fresh validation of the pytest migration + team-flag matrix at HEAD `516e1572`. Static green (301 passed / 21 deselected / 10 subtests). Five registered markers exactly — 3 cycle-1 + 2 cycle-2. Team-mode routing verified both directions (`bare_mode` skips under teams, `teams_mode` skips under bare). Mutual-exclusion emits `pytest.UsageError` on a test carrying both markers. CI workflow static assertions pass (8/8 including `claude-live-bare`). `test_rejection_flow` skips with `pending #141` reason. Two live spot-checks both passed cleanly: `test_gate_guardrail` (78.81s, all inner checks green) and `test_rebase_branch_before_push` (180.75s, all 10 inner checks green including Phase 6). Prior cycle's Phase 6 failure did not reproduce. Harness ships as-is. **PASSED — recommend approve.**
+
+## Stage Report — Cycle 4 (2026-04-15) — fix CI static workflow drift
+
+**Status:** DONE — narrow workflow-drift fix; ready for merge once CI confirms green.
+
+### Goal
+PR #94's first push exposed a latent CI workflow drift: the static-offline job ran bare pytest without the `-m 'not live_claude and not live_codex'` filter, collecting the now-pytest-discoverable live tests and failing them on the CI runner (no git user.email / user.name configured for the `test_project` fixture's `git commit --allow-empty -m init`). Result: `2 failed, 301 passed, 6 skipped, 13 errors` on run 24434233493 / job 71384861342. Validation missed this because local `make test-static` masked it.
+
+### Root cause
+- `.github/workflows/ci-static.yml` step `Run offline static suite` invoked `uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q` directly — bypassing the Makefile's `test-static` target that correctly applies `-m "not live_claude and not live_codex"`.
+- Pre-migration the live tests were shebang uv-run scripts with no pytest-collectable `test_*` functions, so the missing `-m` filter was invisible. Post-migration they became first-class pytest tests and CI eagerly collected them.
+- `test_project` fixture's `git commit --allow-empty -m init` legitimately fails on a fresh CI runner where user.email / user.name are not set. Fine — the fix is to never let those fixtures run under the static target, which is exactly what the Makefile already guaranteed locally.
+
+### Files changed
+- `.github/workflows/ci-static.yml:20-21` — replaced bare `uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q` with `make test-static`. Kept `astral-sh/setup-uv@v6` step (required by `uv run` inside the Makefile target). No git-config step added — the Makefile's `-m` filter deselects every fixture that would call `git commit --allow-empty`, so the commit never fires.
+- `tests/test_ci_static_workflow.py:29-36` — rewrote `test_ci_static_workflow_uses_stable_offline_suite_entrypoint` to assert `run: make test-static` is present and to forbid the bare `pytest tests/ --ignore=tests/fixtures` form. This prevents the exact drift we just hit from silently reappearing.
+
+### Local verification
+- `make test-static` → `301 passed, 21 deselected, 10 subtests passed in 6.75s`. Matches cycle-3 validation baseline exactly.
+- `unset CLAUDECODE && uv run pytest tests/test_ci_static_workflow.py -v` → `3 passed in 0.02s` (all three workflow checks, including the new `make test-static` assertion).
+
+### Forward pointer
+`test_ci_static_workflow.py` now guards both directions: it positively requires `run: make test-static` AND negatively forbids the bare `pytest tests/ --ignore=tests/fixtures` invocation. Any future contributor who refactors CI by inlining the pytest command will fail this test before the workflow lands.
+
+### Summary
+One-commit cycle-4 fix for PR #94 CI drift. Workflow now delegates to `make test-static` so the marker filter is always applied; test assertion updated to enforce the new shape and forbid regression. Static suite still green with identical counts. Awaiting re-triggered CI on PR #94.
