@@ -64,6 +64,7 @@ All E2E tests read their runtime configuration from pytest CLI options registere
 | `--model` | `haiku` | Model for the test run. |
 | `--effort` | `low` | Effort level (non-interactive tests). |
 | `--budget` | `None` | Max budget in USD (optional). |
+| `--team-mode` | `auto` | `auto` / `teams` / `bare`. Filters tests pinned to `teams_mode` or `bare_mode`. `auto` reads `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` (`"1"` or `"true"` → teams, else bare). |
 
 Tests receive these values via the matching `runtime`, `model`, `effort`, `budget` fixtures. A `test_project` fixture yields a `TestRunner` with a tmpdir + git init; a `fo_run` factory fixture exposes a runtime-aware wrapper around `run_first_officer` / `run_codex_first_officer`.
 
@@ -72,7 +73,11 @@ Tier membership is declared with pytest markers:
 - `@pytest.mark.live_claude` — spawns a live Claude runtime (pipe or PTY).
 - `@pytest.mark.live_codex` — spawns a live Codex runtime.
 - `@pytest.mark.serial` — must run serially (PTY, stubbed git/gh, or explicit sequencing). Parallel tests carry no `serial` marker.
+- `@pytest.mark.teams_mode` — test requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. Auto-skipped when running with `--team-mode=bare`.
+- `@pytest.mark.bare_mode` — test requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` unset (or `"0"`). Auto-skipped when running with `--team-mode=teams`. Mutually exclusive with `teams_mode`; a test carrying both fails collection loudly.
 - No marker = implicit static/unit — collected by `make test-static`.
+
+Most live tests are mode-agnostic (no team-mode marker) and run under whichever mode the CI job or local invocation selects. Pin a test to a mode only when its invariant is mode-specific — e.g. `test_single_entity_team_skip` asserts the absence of a team, so it must run under `bare_mode`; `test_team_dispatch_sequencing` inspects `TeamCreate`/`TeamDelete` ordering, so it must run under `teams_mode`.
 
 ## When to Use Which Harness
 
@@ -178,25 +183,26 @@ unset CLAUDECODE && uv run pytest tests/ -m "live_claude and not serial" -n 2 --
 
 The expensive runtime-backed PR suite lives in `.github/workflows/runtime-live-e2e.yml`. It triggers on `pull_request` so the runtime jobs show up on the PR alongside Static CI, and it still supports `workflow_dispatch` for targeted reruns.
 
-The default PR-triggered path is intentionally fixed. When a PR opens, GitHub creates three live jobs:
+The default PR-triggered path is intentionally fixed. When a PR opens, GitHub creates four live jobs:
 
-- `claude-live`
-- `claude-live-opus`
+- `claude-live` (teams mode, haiku)
+- `claude-live-bare` (bare mode, haiku)
+- `claude-live-opus` (teams mode, opus)
 - `codex-live`
 
 Those jobs are not parameterized at approval time. The environment review UI only releases already-defined jobs; it does not collect `workflow_dispatch` inputs such as model selection or matrix expansion.
 
 GitHub still presents the approval flow through the deployment review UI, even though the jobs set `deployment: false`. The current environment split is:
 
-- `CI-E2E` for `claude-live`
+- `CI-E2E` for `claude-live` and `claude-live-bare` (same cost tier — both haiku — share the approval gate)
 - `CI-E2E-OPUS` for `claude-live-opus`
 - `CI-E2E-CODEX` for `codex-live`
 
-Each environment has its own approval gate, so `claude-live-opus` can be released independently from `claude-live` — useful when a haiku run flakes in a way that may be model-specific, or when extra signal is wanted before merging a dispatch-prose change. Until an approved reviewer releases the relevant environment, that job stays pending and cannot access the environment-scoped API key.
+Each environment has its own approval gate, so `claude-live-opus` can be released independently from `claude-live` — useful when a haiku run flakes in a way that may be model-specific, or when extra signal is wanted before merging a dispatch-prose change. `claude-live-bare` shares the `CI-E2E` gate with `claude-live` since both are haiku; releasing `CI-E2E` releases both jobs. Until an approved reviewer releases the relevant environment, that job stays pending and cannot access the environment-scoped API key.
 
 ### Operator flow
 
-1. **Push a PR** — The workflow triggers automatically. The `claude-live`, `claude-live-opus`, and `codex-live` jobs appear on the PR status as pending review, with a "waiting for environment approval" banner in Actions. `make test-static` runs immediately without approval and reports back like any normal CI job.
+1. **Push a PR** — The workflow triggers automatically. The `claude-live`, `claude-live-bare`, `claude-live-opus`, and `codex-live` jobs appear on the PR status as pending review, with a "waiting for environment approval" banner in Actions. `make test-static` runs immediately without approval and reports back like any normal CI job.
 2. **Captain decides the PR is ready for live validation.** Typical triggers: static CI is green, the PR description matches the diff, and the cost of burning live-runtime budget is justified.
 3. **Approve the environment deployment.** Either through the GitHub UI (the PR's "pending review" banner → "Review deployments" → approve `CI-E2E`, `CI-E2E-OPUS`, and/or `CI-E2E-CODEX`), or via the CLI:
    ```bash
@@ -211,9 +217,11 @@ Each environment has its own approval gate, so `claude-live-opus` can be release
 
 | Target | Model | When to use |
 |--------|-------|-------------|
-| `make test-live-claude` | haiku (default) | The primary CI signal. Runs on the `CI-E2E` environment via `runtime-live-e2e.yml`. Cheap, fast, catches most regressions. |
-| `make test-live-claude-opus` | opus with `--effort low` | Stronger-model variant of the same suite. Runs on the `CI-E2E-OPUS` environment via `runtime-live-e2e.yml`. Separately approvable from the haiku job, so it can be released when a haiku run flakes in a way that may be model-specific, or when a dispatch-prose change needs a second signal. |
+| `make test-live-claude` | haiku (default) | The primary CI signal. Runs on the `CI-E2E` environment via `runtime-live-e2e.yml`. Cheap, fast, catches most regressions. Teams-mode (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). |
+| `make test-live-claude-bare` | haiku (default) | Bare-mode variant of the haiku suite. Also runs on `CI-E2E`. Unsets `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` and passes `--team-mode=bare`, so tests pinned to `teams_mode` are auto-skipped and tests pinned to `bare_mode` run; mode-agnostic tests exercise the bare dispatch code path. |
+| `make test-live-claude-opus` | opus with `--effort low` | Stronger-model variant of the haiku suite. Runs on the `CI-E2E-OPUS` environment via `runtime-live-e2e.yml`. Separately approvable from the haiku job, so it can be released when a haiku run flakes in a way that may be model-specific, or when a dispatch-prose change needs a second signal. Teams-mode. |
 | `make test-live-codex` | codex default | Codex-runtime equivalent. Runs on the `CI-E2E-CODEX` environment. |
+| `make test-live-codex-bare` | codex default | Bare-mode Codex variant. Local-only today; no dedicated CI job. File a follow-up if bare-codex signal becomes necessary. |
 
 Open a PR and then approve the pending environment review to release the live runtime checks. For targeted reruns, API-driven launches, or future release-branch matrix runs, invoke the workflow manually from Actions or with:
 
@@ -225,7 +233,7 @@ gh workflow run runtime-live-e2e.yml --ref <pr-branch> -f pr_number=<N>
 
 Required environment secrets:
 
-- `CI-E2E`: `ANTHROPIC_API_KEY` for `claude-live`
+- `CI-E2E`: `ANTHROPIC_API_KEY` for `claude-live` and `claude-live-bare`
 - `CI-E2E-OPUS`: `ANTHROPIC_API_KEY` for `claude-live-opus`
 - `CI-E2E-CODEX`: `OPENAI_API_KEY` for `codex-live`
 
@@ -245,6 +253,7 @@ Operators should expect each job summary to show the run provenance explicitly:
 The live workflow sets `KEEP_TEST_DIR=1` automatically and uploads each job's preserved temp dirs as GitHub Actions artifacts:
 
 - `runtime-live-e2e-claude-live`
+- `runtime-live-e2e-claude-live-bare`
 - `runtime-live-e2e-claude-live-opus`
 - `runtime-live-e2e-codex-live`
 
@@ -256,7 +265,7 @@ Every test file must:
 
 1. Have two `# ABOUTME:` comment lines at the top explaining what the test does.
 2. Expose one or more `test_*` functions collected by pytest.
-3. Carry the appropriate tier marker(s) — `@pytest.mark.live_claude`, `@pytest.mark.live_codex`, and/or `@pytest.mark.serial` — or no marker for static/unit tests.
+3. Carry the appropriate tier marker(s) — `@pytest.mark.live_claude`, `@pytest.mark.live_codex`, and/or `@pytest.mark.serial` — or no marker for static/unit tests. Optionally pin to a team mode with `@pytest.mark.teams_mode` or `@pytest.mark.bare_mode` when the test's invariant is mode-specific; leave both off to stay mode-agnostic.
 4. Use pytest assertions for pass/fail. Tests that drive a `TestRunner` for log parsing should call `t.finish()` at the end; `finish()` raises `AssertionError` if any `t.check` calls failed.
 
 Example skeleton:
