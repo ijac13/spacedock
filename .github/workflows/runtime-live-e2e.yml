@@ -26,6 +26,7 @@ jobs:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"
     steps:
       - name: Check required secret
         run: |
@@ -142,6 +143,7 @@ jobs:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"
     steps:
       - name: Check required secret
         run: |

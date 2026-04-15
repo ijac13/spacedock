@@ -749,3 +749,31 @@ The entity-advancement checks (lines 113-125 of the test) remain unconditional �
 ### Summary
 
 Root cause: FO (haiku) takes the bare-mode path for single-task workflows and the helper correctly suppresses the completion signal in bare mode — the test asserted a team-mode behavior but the FO never entered team mode. Cycle 4 prose was not the cause. Fix: trimmed the redundant cycle 4 prose that warned about paraphrasing (not the actual failure mode), and made the test's SendMessage-in-prompt check conditional on finding a team-mode Agent dispatch. Also added opt-in clean-auth isolation in the harness so local live reproductions match CI's no-operator-context environment when the operator has placed a benchmark OAuth token at `~/.claude/benchmark-token`. Local haiku run confirms PASS 5/5; the end-to-end entity-advancement checks in the test remain unconditional and still catch the original pre-fix hang scenario.
+
+## Stage Report — Cycle 6
+
+**Goal:** Enable Claude agent teams on the two claude-live CI jobs so CI runs under the same mode the tests pass under locally, aligning CI with the known-green local path. Defer the proper bare-vs-teams marker matrix to task #148 (live E2E pytest harness).
+
+**Failing run:** https://github.com/clkao/spacedock/actions/runs/24428162140 — `tests/test_rebase_branch_before_push.py` Phase 6. The FO push log showed the sequence `push origin main` -> `push origin <branch>` -> `push origin main` -> `push origin --delete <branch>` -> `push origin main`; the branch was deleted from the remote before the assertion could validate its contents.
+
+**Root cause hypothesis:** CI runs in bare mode today. Per the 2026-04-14 debrief late-additions bullet, every FO `init` on CI listed zero team tools — meaning `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is not set in the runner environment, so `claude -p` takes the bare-mode path. Locally the same test passed on haiku (12/12) and opus low (13/13) per cycle 4's results table, where teams are enabled in the operator shell. Enabling teams on CI for the two claude-live jobs should align CI with the passing local path. This cycle deliberately does not attempt a broader FO fix for the branch-delete behavior — that belongs to task #148's bare/teams matrix work.
+
+**Checklist results:**
+
+1. DONE: Worktree clean, HEAD `38c50e80f06b5dbb3e87e4e90ebb9f6bc282cbf4`, branch `spacedock-ensign/fo-enforce-mod-blocking-at-runtime`.
+2. DONE: Read `.github/workflows/runtime-live-e2e.yml`; located env blocks at lines 22–28 (claude-live) and 138–144 (claude-live-opus).
+3. DONE: Added `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"` to both `claude-live` and `claude-live-opus` env blocks. Not added to `codex-live` (unrelated to Claude teams).
+4. DONE: Grepped `tests/test_runtime_live_e2e_workflow.py`. The existing assertions check for specific keys (`ANTHROPIC_API_KEY`, `KEEP_TEST_DIR: "1"`, provenance fields) but do not pin the full env block or forbid additional keys. Adding a new env var does not break any assertion; no test updates needed.
+5. DONE: `make test-static` -> **301 passed, 10 subtests passed** in 19.76s. Output pristine.
+6. DONE: This stage report.
+7. DONE: Commit on the existing branch (see checklist item 9).
+8. DONE: Pushed to origin to re-trigger CI on existing PR #92 (see checklist item 9).
+9. Final report captured in the section below.
+
+### Files changed (Cycle 6)
+
+- `.github/workflows/runtime-live-e2e.yml` — added `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"` to the `claude-live` and `claude-live-opus` env blocks. Single-line addition to each block; surrounding formatting preserved.
+
+### Forward pointer
+
+Task #148 (live E2E pytest harness) will introduce a proper bare-vs-teams marker matrix so both modes are exercised in CI going forward. Until then, CI matches the locally-green teams-mode path and the remaining branch-delete behavior in `test_rebase_branch_before_push.py` is out of scope for this cycle.
