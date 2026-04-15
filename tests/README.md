@@ -56,27 +56,28 @@ Key class:
 
 ## Standard CLI Flags
 
-All E2E tests should accept these flags via `argparse`:
+All E2E tests read their runtime configuration from pytest CLI options registered in `tests/conftest.py`:
 
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--runtime` | `choices=["claude"]` or `choices=["claude", "codex"]` | `"claude"` | Which runtime to test. Use `["claude"]` for interactive-only tests. |
-| `--agent` | `str` | `"spacedock:first-officer"` | Agent id to invoke |
-| `--model` | `str` | `"haiku"` | Model for the test run |
-| `--effort` | `str` | `"low"` | Effort level (non-interactive tests) |
-| `--budget` | `float` | varies | Max budget in USD |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--runtime` | `claude` | Which runtime to test (`claude` or `codex`). |
+| `--model` | `haiku` | Model for the test run. |
+| `--effort` | `low` | Effort level (non-interactive tests). |
+| `--budget` | `None` | Max budget in USD (optional). |
+| `--team-mode` | `auto` | `auto` / `teams` / `bare`. Filters tests pinned to `teams_mode` or `bare_mode`. `auto` reads `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` (`"1"` or `"true"` → teams, else bare). |
 
-Tests should run by default without special flags. Do not gate tests behind a `--live` flag.
+Tests receive these values via the matching `runtime`, `model`, `effort`, `budget` fixtures. A `test_project` fixture yields a `TestRunner` with a tmpdir + git init; a `fo_run` factory fixture exposes a runtime-aware wrapper around `run_first_officer` / `run_codex_first_officer`.
 
-Use `parse_known_args()` to pass extra CLI args through to the claude/codex invocation:
+Tier membership is declared with pytest markers:
 
-```python
-def parse_args() -> tuple[argparse.Namespace, list[str]]:
-    parser = argparse.ArgumentParser(description="My E2E test")
-    parser.add_argument("--runtime", choices=["claude", "codex"], default="claude")
-    parser.add_argument("--model", default="haiku")
-    return parser.parse_known_args()
-```
+- `@pytest.mark.live_claude` — spawns a live Claude runtime (pipe or PTY).
+- `@pytest.mark.live_codex` — spawns a live Codex runtime.
+- `@pytest.mark.serial` — must run serially (PTY, stubbed git/gh, or explicit sequencing). Parallel tests carry no `serial` marker.
+- `@pytest.mark.teams_mode` — test requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. Auto-skipped when running with `--team-mode=bare`.
+- `@pytest.mark.bare_mode` — test requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` unset (or `"0"`). Auto-skipped when running with `--team-mode=teams`. Mutually exclusive with `teams_mode`; a test carrying both fails collection loudly.
+- No marker = implicit static/unit — collected by `make test-static`.
+
+Most live tests are mode-agnostic (no team-mode marker) and run under whichever mode the CI job or local invocation selects. Pin a test to a mode only when its invariant is mode-specific — e.g. `test_single_entity_team_skip` asserts the absence of a team, so it must run under `bare_mode`; `test_team_dispatch_sequencing` inspects `TeamCreate`/`TeamDelete` ordering, so it must run under `teams_mode`.
 
 ## When to Use Which Harness
 
@@ -107,6 +108,8 @@ When a test exercises Codex first-officer behavior:
 Use only when the behavior under test requires an interactive session — multi-turn conversation, skill invocations, team member switching, or behavior that differs between interactive and pipe mode.
 
 Examples: `test_interactive_poc.py`, `test_single_entity_mode.py`.
+
+**Headless-CI behavior.** Both PTY tests carry `@pytest.mark.skipif(not sys.stdin.isatty(), reason="requires real TTY; CI runners are headless — see #155")`. They SKIP on GitHub Actions ubuntu-latest runners (no attached TTY) and RUN locally when invoked from a real terminal. See task #155 for the long-term plan (CI-detection vs test-split vs PTY-harness fix).
 
 ### Purely offline (no claude/codex)
 
@@ -147,73 +150,102 @@ Existing fixtures and their purposes:
 
 ## Running Tests
 
-Tests use `uv run`. When running from inside a Claude Code session (including from dispatched team agents / ensigns), unset `CLAUDECODE` first — Claude Code refuses to launch as a subprocess when this variable is set. The `unset CLAUDECODE &&` prefix is the escape hatch:
-
-```bash
-unset CLAUDECODE && uv run tests/test_agent_content.py
-```
-
-This works from any context: your terminal, the FO session, a dispatched ensign's Bash tool call, or a CI runner. The spawned `claude -p` subprocess gets its own isolated home directory with the project's OAuth token, so authentication is handled automatically.
+The whole suite runs under pytest. When invoking from inside a Claude Code session (including from dispatched team agents / ensigns), unset `CLAUDECODE` first — Claude Code refuses to launch as a subprocess when that variable is set. The `unset CLAUDECODE &&` prefix is the escape hatch and is already baked into the Makefile targets.
 
 Stable repo-level entrypoints:
 
 ```bash
+make test-static                                      # offline suite, no live marker
+make test-live-claude                                 # all live_claude tests (serial first, parallel second)
+make test-live-codex                                  # all live_codex tests
+make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex   # single-file override
+```
+
+- `make test-static` runs `pytest tests/ --ignore=tests/fixtures -m "not live_claude and not live_codex"`. `tests/fixtures/` contains runnable fixture payloads and is excluded from collection.
+- `make test-live-claude` runs the serial tier first (`-m "live_claude and serial" -x`), then the parallel tier (`-m "live_claude and not serial" -n $LIVE_CLAUDE_WORKERS`) regardless of the serial tier's outcome, and fails overall if either tier failed. `make test-live-codex` uses the same split with `LIVE_CODEX_WORKERS`; its cheap shared-runtime preflight is `test_gate_guardrail.py`, and the wrapper still tolerates any intentionally empty marker tier without masking real test failures.
+- `make test-live-claude-opus` is the same shape with `--model opus --effort low` overrides.
+- `make test-e2e` is the single-file override — pass `TEST=...` for the target file and `RUNTIME=claude|codex` for the runtime. This replaces the old `test-e2e-commission` target (use `TEST=tests/test_commission.py`).
+- Do not invoke bare `pytest tests/` as the suite entrypoint unless you intentionally want pytest to recurse into `tests/fixtures/`.
+
+Parallel worker count defaults are conservative because `claude -p` / `codex exec` share host runtime state:
+
+```bash
+LIVE_CLAUDE_WORKERS=4 make test-live-claude           # raise when stable
+LIVE_CODEX_WORKERS=2 make test-live-codex
+```
+
+Direct pytest invocation for ad-hoc runs:
+
+```bash
+unset CLAUDECODE && uv run pytest tests/test_gate_guardrail.py --runtime claude --model haiku -v
+unset CLAUDECODE && uv run pytest tests/ -m "live_claude and not serial" -n 2 --runtime claude
+```
+
+### Quick local smoke before pushing
+
+Before pushing a PR — especially one that touches dispatch, commission, scaffolding, or the runtime adapters — run three cheap checks locally:
+
+```bash
+# 1) static discipline: ~6s, free
 make test-static
-make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex
+
+# 2) cheapest live signal: ~60s, ~$0.02 haiku
+unset CLAUDECODE && uv run pytest tests/test_gate_guardrail.py --runtime claude --model haiku -v
+
+# 3) Codex shared-runtime pilot: ~60s, low-cost fail-fast preflight
+unset CLAUDECODE && uv run pytest tests/test_gate_guardrail.py --runtime codex -v
 ```
 
-- `make test-static` is the canonical offline repo suite. It runs `pytest tests/ --ignore=tests/fixtures` because `tests/fixtures/` contains runnable fixture payloads for harness tests, not repo-level suite modules.
-- `make test-e2e` is the canonical live harness entrypoint. Override `TEST=...` to choose the E2E script and `RUNTIME=claude|codex` to select the runtime.
-- Do not use bare repo-wide `pytest tests/` as the suite entrypoint unless you intentionally want pytest to recurse into `tests/fixtures/`.
+`test_gate_guardrail.py` is the shared runtime pilot live test — smallest fixture, single gate transition, fails loudly on any FO-level regression (self-approval, wrong status, early archive). The Claude invocation is the cheapest Anthropic smoke; the Codex invocation is the cheap Codex preflight before burning the expensive parallel tier. If both pass locally, the CI live jobs usually pass too.
 
-Static tests (no live session needed):
+For a serial-tier fail-fast sweep before burning the expensive parallel tier:
 
 ```bash
-make test-static
-uv run tests/test_agent_content.py
-uv run tests/test_codex_packaged_agent_ids.py
-uv run tests/test_stats_extraction.py
-uv run tests/test_status_script.py
+# Claude bare-mode serial tier — matches claude-live-bare's first phase
+unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && \
+  uv run pytest tests/ --ignore=tests/fixtures \
+    -m "live_claude and serial" --runtime claude --team-mode=bare -x -v
+
+# Codex serial tier — matches codex-live's first phase
+unset CLAUDECODE && \
+  uv run pytest tests/ --ignore=tests/fixtures \
+    -m "live_codex and serial" --runtime codex -x -v
 ```
 
-E2E tests (require live claude, cost varies):
+Stops on the first serial-tier failure in ~90s. The `-x` flag is the fail-fast lever; removing it runs all serial tests regardless. `test_gate_guardrail` carries both `live_claude` and `live_codex` + `serial`, so it runs first in both tiers — if it fails you see the regression in the cheapest possible window before the expensive parallel tests start.
 
-```bash
-make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=claude
-unset CLAUDECODE && uv run tests/test_gate_guardrail.py --model haiku
-unset CLAUDECODE && uv run tests/test_single_entity_mode.py --model haiku
-```
+### Known xfail / skip state
 
-With Codex runtime:
+Some live tests are currently marked `xfail` or `skipif` on the `#148` branch — normal, not a regression of your change:
 
-```bash
-make test-e2e TEST=tests/test_gate_guardrail.py RUNTIME=codex
-uv run tests/test_gate_guardrail.py --runtime codex
-```
+- **`@pytest.mark.xfail(reason="pending #154 ...")`** — applied to eight tests whose assertions target `agents/first-officer.md` for tokens that moved into `skills/first-officer/SKILL.md` and the reference files during the #085 skill-preload refactor. Surfaces as `XFAIL` in the pytest summary. Affected tests: `test_commission`, `test_agent_captain_interaction`, `test_output_format`, `test_reuse_dispatch`, `test_team_health_check`, `test_repo_edit_guardrail`, `test_dispatch_completion_signal`, `test_checklist_e2e`. Some show `XPASS` under bare mode because the drift only bites teams-mode paths — `strict=False` makes xpass silently OK. When #154 lands, these markers come off.
+- **`@pytest.mark.skipif(not sys.stdin.isatty(), reason="requires real TTY; ... see #155")`** — applied to the two PTY-using tests (`test_interactive_poc_live`, `test_single_entity_mode`). Skips under headless CI, runs locally from a real terminal.
+- **`@pytest.mark.skip(reason="pending #141 ...")`** — applied to `test_rejection_flow` (same-stage reviewer reuse during feedback cycles is correct behavior #141 will formalize; the test's current `ensign_count >= 3` assertion is bare-mode-biased).
 
 ## PR Runtime Live E2E
 
 The expensive runtime-backed PR suite lives in `.github/workflows/runtime-live-e2e.yml`. It triggers on `pull_request` so the runtime jobs show up on the PR alongside Static CI, and it still supports `workflow_dispatch` for targeted reruns.
 
-The default PR-triggered path is intentionally fixed. When a PR opens, GitHub creates three live jobs:
+The default PR-triggered path is intentionally fixed. When a PR opens, GitHub creates four live jobs:
 
-- `claude-live`
-- `claude-live-opus`
+- `claude-live` (teams mode, haiku)
+- `claude-live-bare` (bare mode, haiku)
+- `claude-live-opus` (teams mode, opus)
 - `codex-live`
 
 Those jobs are not parameterized at approval time. The environment review UI only releases already-defined jobs; it does not collect `workflow_dispatch` inputs such as model selection or matrix expansion.
 
 GitHub still presents the approval flow through the deployment review UI, even though the jobs set `deployment: false`. The current environment split is:
 
-- `CI-E2E` for `claude-live`
+- `CI-E2E` for `claude-live` and `claude-live-bare` (same cost tier — both haiku — share the approval gate)
 - `CI-E2E-OPUS` for `claude-live-opus`
 - `CI-E2E-CODEX` for `codex-live`
 
-Each environment has its own approval gate, so `claude-live-opus` can be released independently from `claude-live` — useful when a haiku run flakes in a way that may be model-specific, or when extra signal is wanted before merging a dispatch-prose change. Until an approved reviewer releases the relevant environment, that job stays pending and cannot access the environment-scoped API key.
+Each environment has its own approval gate, so `claude-live-opus` can be released independently from `claude-live` — useful when a haiku run flakes in a way that may be model-specific, or when extra signal is wanted before merging a dispatch-prose change. `claude-live-bare` shares the `CI-E2E` gate with `claude-live` since both are haiku; releasing `CI-E2E` releases both jobs. Until an approved reviewer releases the relevant environment, that job stays pending and cannot access the environment-scoped API key.
 
 ### Operator flow
 
-1. **Push a PR** — The workflow triggers automatically. The `claude-live`, `claude-live-opus`, and `codex-live` jobs appear on the PR status as pending review, with a "waiting for environment approval" banner in Actions. `make test-static` runs immediately without approval and reports back like any normal CI job.
+1. **Push a PR** — The workflow triggers automatically. The `claude-live`, `claude-live-bare`, `claude-live-opus`, and `codex-live` jobs appear on the PR status as pending review, with a "waiting for environment approval" banner in Actions. `make test-static` runs immediately without approval and reports back like any normal CI job.
 2. **Captain decides the PR is ready for live validation.** Typical triggers: static CI is green, the PR description matches the diff, and the cost of burning live-runtime budget is justified.
 3. **Approve the environment deployment.** Either through the GitHub UI (the PR's "pending review" banner → "Review deployments" → approve `CI-E2E`, `CI-E2E-OPUS`, and/or `CI-E2E-CODEX`), or via the CLI:
    ```bash
@@ -228,9 +260,11 @@ Each environment has its own approval gate, so `claude-live-opus` can be release
 
 | Target | Model | When to use |
 |--------|-------|-------------|
-| `make test-live-claude` | haiku (default) | The primary CI signal. Runs on the `CI-E2E` environment via `runtime-live-e2e.yml`. Cheap, fast, catches most regressions. |
-| `make test-live-claude-opus` | opus with `--effort low` | Stronger-model variant of the same suite. Runs on the `CI-E2E-OPUS` environment via `runtime-live-e2e.yml`. Separately approvable from the haiku job, so it can be released when a haiku run flakes in a way that may be model-specific, or when a dispatch-prose change needs a second signal. |
+| `make test-live-claude` | haiku (default) | The primary CI signal. Runs on the `CI-E2E` environment via `runtime-live-e2e.yml`. Cheap, fast, catches most regressions. Teams-mode (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). |
+| `make test-live-claude-bare` | haiku (default) | Bare-mode variant of the haiku suite. Also runs on `CI-E2E`. Unsets `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` and passes `--team-mode=bare`, so tests pinned to `teams_mode` are auto-skipped and tests pinned to `bare_mode` run; mode-agnostic tests exercise the bare dispatch code path. |
+| `make test-live-claude-opus` | opus with `--effort low` | Stronger-model variant of the haiku suite. Runs on the `CI-E2E-OPUS` environment via `runtime-live-e2e.yml`. Separately approvable from the haiku job, so it can be released when a haiku run flakes in a way that may be model-specific, or when a dispatch-prose change needs a second signal. Teams-mode. |
 | `make test-live-codex` | codex default | Codex-runtime equivalent. Runs on the `CI-E2E-CODEX` environment. |
+| `make test-live-codex-bare` | codex default | Bare-mode Codex variant. Local-only today; no dedicated CI job. File a follow-up if bare-codex signal becomes necessary. |
 
 Open a PR and then approve the pending environment review to release the live runtime checks. For targeted reruns, API-driven launches, or future release-branch matrix runs, invoke the workflow manually from Actions or with:
 
@@ -242,7 +276,7 @@ gh workflow run runtime-live-e2e.yml --ref <pr-branch> -f pr_number=<N>
 
 Required environment secrets:
 
-- `CI-E2E`: `ANTHROPIC_API_KEY` for `claude-live`
+- `CI-E2E`: `ANTHROPIC_API_KEY` for `claude-live` and `claude-live-bare`
 - `CI-E2E-OPUS`: `ANTHROPIC_API_KEY` for `claude-live-opus`
 - `CI-E2E-CODEX`: `OPENAI_API_KEY` for `codex-live`
 
@@ -262,6 +296,7 @@ Operators should expect each job summary to show the run provenance explicitly:
 The live workflow sets `KEEP_TEST_DIR=1` automatically and uploads each job's preserved temp dirs as GitHub Actions artifacts:
 
 - `runtime-live-e2e-claude-live`
+- `runtime-live-e2e-claude-live-bare`
 - `runtime-live-e2e-claude-live-opus`
 - `runtime-live-e2e-codex-live`
 
@@ -271,18 +306,23 @@ For local debugging, set `KEEP_TEST_DIR=1` to preserve temp directories after te
 
 Every test file must:
 
-1. Start with `#!/usr/bin/env -S uv run` and `# /// script` / `# ///` header for `uv run` compatibility
-2. Have two `# ABOUTME:` comment lines explaining what the test does
-3. Use `argparse` with standard CLI flags
-4. Print `RESULT: PASS` or `RESULT: FAIL` and exit with appropriate code
+1. Have two `# ABOUTME:` comment lines at the top explaining what the test does.
+2. Expose one or more `test_*` functions collected by pytest.
+3. Carry the appropriate tier marker(s) — `@pytest.mark.live_claude`, `@pytest.mark.live_codex`, and/or `@pytest.mark.serial` — or no marker for static/unit tests. Optionally pin to a team mode with `@pytest.mark.teams_mode` or `@pytest.mark.bare_mode` when the test's invariant is mode-specific; leave both off to stay mode-agnostic.
+4. Use pytest assertions for pass/fail. Tests that drive a `TestRunner` for log parsing should call `t.finish()` at the end; `finish()` raises `AssertionError` if any `t.check` calls failed.
 
-Example header:
+Example skeleton:
 
 ```python
-#!/usr/bin/env -S uv run
-# /// script
-# requires-python = ">=3.10"
-# ///
 # ABOUTME: E2E test for feature X in the first-officer template.
 # ABOUTME: Verifies behavior Y using fixture Z.
+
+import pytest
+
+
+@pytest.mark.live_claude
+def test_feature_x(test_project, model, effort):
+    t = test_project
+    # ... setup_fixture, install_agents, run_first_officer, etc.
+    t.finish()
 ```

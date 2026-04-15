@@ -14,6 +14,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "runtime-live-e2e.yml"
 README_PATH = REPO_ROOT / "tests" / "README.md"
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
+GATE_GUARDRAIL_PATH = REPO_ROOT / "tests" / "test_gate_guardrail.py"
+CODEX_PACKAGED_AGENT_PATH = REPO_ROOT / "tests" / "test_codex_packaged_agent_e2e.py"
+MERGE_HOOK_GUARDRAIL_PATH = REPO_ROOT / "tests" / "test_merge_hook_guardrail.py"
 
 
 def read_workflow() -> str:
@@ -26,6 +29,18 @@ def read_readme() -> str:
 
 def read_makefile() -> str:
     return MAKEFILE_PATH.read_text()
+
+
+def read_gate_guardrail() -> str:
+    return GATE_GUARDRAIL_PATH.read_text()
+
+
+def read_codex_packaged_agent() -> str:
+    return CODEX_PACKAGED_AGENT_PATH.read_text()
+
+
+def read_merge_hook_guardrail() -> str:
+    return MERGE_HOOK_GUARDRAIL_PATH.read_text()
 
 
 def section(text: str, heading: str) -> str:
@@ -51,15 +66,20 @@ def test_runtime_live_e2e_workflow_supports_pr_and_manual_triggers():
 def test_runtime_live_e2e_workflow_has_expected_runtime_jobs():
     text = read_workflow()
     claude_section = section(text, "  claude-live")
+    claude_bare_section = section(text, "  claude-live-bare")
     claude_opus_section = section(text, "  claude-live-opus")
     codex_section = section(text, "  codex-live")
 
     assert "\n  claude-live:\n" in text
+    assert "\n  claude-live-bare:\n" in text
     assert "\n  claude-live-opus:\n" in text
     assert "\n  codex-live:\n" in text
     assert "environment:" in claude_section
     assert "name: CI-E2E" in claude_section
     assert "deployment: false" in claude_section
+    assert "environment:" in claude_bare_section
+    assert "name: CI-E2E" in claude_bare_section
+    assert "deployment: false" in claude_bare_section
     assert "environment:" in claude_opus_section
     assert "name: CI-E2E-OPUS" in claude_opus_section
     assert "deployment: false" in claude_opus_section
@@ -74,11 +94,13 @@ def test_runtime_live_e2e_workflow_has_expected_runtime_jobs():
 def test_runtime_live_e2e_workflow_preserves_and_uploads_live_test_dirs():
     text = read_workflow()
     claude_section = section(text, "  claude-live")
+    claude_bare_section = section(text, "  claude-live-bare")
     claude_opus_section = section(text, "  claude-live-opus")
     codex_section = section(text, "  codex-live")
 
     for job_section, artifact_name in (
         (claude_section, "runtime-live-e2e-claude-live"),
+        (claude_bare_section, "runtime-live-e2e-claude-live-bare"),
         (claude_opus_section, "runtime-live-e2e-claude-live-opus"),
         (codex_section, "runtime-live-e2e-codex-live"),
     ):
@@ -98,29 +120,44 @@ def test_runtime_live_e2e_workflow_preserves_and_uploads_live_test_dirs():
 def test_runtime_live_e2e_workflow_scopes_secrets_to_the_matching_job():
     text = read_workflow()
     claude_section = section(text, "  claude-live")
+    claude_bare_section = section(text, "  claude-live-bare")
     claude_opus_section = section(text, "  claude-live-opus")
     codex_section = section(text, "  codex-live")
 
     assert "ANTHROPIC_API_KEY" in claude_section
     assert "OPENAI_API_KEY" not in claude_section
+    assert "ANTHROPIC_API_KEY" in claude_bare_section
+    assert "OPENAI_API_KEY" not in claude_bare_section
     assert "ANTHROPIC_API_KEY" in claude_opus_section
     assert "OPENAI_API_KEY" not in claude_opus_section
     assert "OPENAI_API_KEY" in codex_section
     assert "ANTHROPIC_API_KEY" not in codex_section
     assert "is required for claude-live." in claude_section
+    assert "is required for claude-live-bare." in claude_bare_section
     assert "is required for claude-live-opus." in claude_opus_section
     assert "is required for codex-live" in codex_section
 
 
 def test_runtime_live_e2e_workflow_uses_stable_make_targets_and_provenance_fields():
     text = read_workflow()
+    claude_section = section(text, "  claude-live")
+    claude_bare_section = section(text, "  claude-live-bare")
     claude_opus_section = section(text, "  claude-live-opus")
 
     assert "make test-live-claude" in text, "claude-live job should call make test-live-claude"
+    assert "make test-live-claude-bare" in claude_bare_section, (
+        "claude-live-bare job should call make test-live-claude-bare"
+    )
     assert "make test-live-claude-opus" in claude_opus_section, (
         "claude-live-opus job should call make test-live-claude-opus"
     )
     assert "make test-live-codex" in text, "codex-live job should call make test-live-codex"
+
+    # Team-flag matrix: teams-mode jobs set the env var to "1"; the bare job
+    # explicitly sets it to "0" so the pytest conftest auto-resolution picks bare.
+    assert 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"' in claude_section
+    assert 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"' in claude_opus_section
+    assert 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0"' in claude_bare_section
 
     for field in (
         "PR number",
@@ -151,16 +188,70 @@ def test_live_makefile_targets_do_not_require_bash_without_declaring_it():
         assert "SHELL := /bin/bash" in text
 
 
-def test_live_makefile_runs_mod_block_enforced_tests():
+def test_live_makefile_uses_pytest_markers_not_raw_script_chains():
+    """Post #148 migration: the Makefile uses pytest marker filters
+    (live_claude + serial / not serial) instead of raw `uv run tests/*.py` chains.
+    Any per-test skip lives as a decorator on the test file, not a Makefile comment."""
     text = read_makefile()
 
-    # After #114 landed, these tests run as part of `test-live-claude` instead of being skipped.
-    assert "\n\tuv run tests/test_push_main_before_pr.py" in text
-    assert "\n\tuv run tests/test_rebase_branch_before_push.py" in text
-    assert "\n\tuv run tests/test_dispatch_completion_signal.py --runtime claude" in text
-    assert "# SKIPPED: test_push_main_before_pr.py" not in text
-    assert "# SKIPPED: test_rebase_branch_before_push.py" not in text
-    assert "# SKIPPED: test_dispatch_completion_signal.py" not in text
+    # Raw script invocations are gone — pytest with marker filter replaces them.
+    assert "\n\tuv run tests/test_push_main_before_pr.py" not in text
+    assert "\n\tuv run tests/test_rebase_branch_before_push.py" not in text
+    assert "\n\tuv run tests/test_dispatch_completion_signal.py --runtime claude" not in text
+    assert '-m "live_claude and serial"' in text
+    assert '-m "live_claude and not serial"' in text
+
+    test_path = Path(__file__).resolve().parent / "test_push_main_before_pr.py"
+    if test_path.exists():
+        body = test_path.read_text()
+        # Once migrated to pytest the skip moves into a decorator on the test function.
+        if "import pytest" in body:
+            assert "pytest.mark.skip" in body
+            assert "#114" in body
+
+
+def test_codex_makefile_targets_allow_empty_tiers_without_masking_failures():
+    text = read_makefile()
+
+    assert text.count("scripts/run_pytest_tier.py --allow-no-tests --") == 4
+    assert '-m "live_codex and serial" --runtime codex -x -v' in text
+    assert '-m "live_codex and not serial" --runtime codex' in text
+    assert '-m "live_codex and serial" --runtime codex --team-mode=bare -x -v' in text
+    assert '-m "live_codex and not serial" --runtime codex --team-mode=bare' in text
+    assert text.count("scripts/run_pytest_tier.py --allow-no-tests --") == text.count(
+        'live_codex and serial" --runtime codex'
+    ) + text.count('live_codex and not serial" --runtime codex')
+
+
+def test_gate_guardrail_is_the_shared_serial_live_preflight():
+    text = read_gate_guardrail()
+
+    assert "@pytest.mark.live_claude" in text
+    assert "@pytest.mark.live_codex" in text
+    assert "@pytest.mark.serial" in text
+
+
+def test_codex_packaged_agent_stays_in_parallel_live_tier():
+    text = read_codex_packaged_agent()
+
+    assert "@pytest.mark.live_codex" in text
+    assert "@pytest.mark.serial" not in text
+
+
+def test_merge_hook_guardrail_is_not_locally_xfailed_or_moved_to_serial_tier():
+    text = read_merge_hook_guardrail()
+
+    assert "@pytest.mark.live_codex" in text
+    assert "@pytest.mark.serial" not in text
+    assert "@pytest.mark.xfail" not in text
+
+
+def test_tests_readme_documents_codex_preflight_before_parallel_tier():
+    text = read_readme()
+
+    assert "test_gate_guardrail.py --runtime codex" in text
+    assert "before burning the expensive parallel tier" in text
+    assert "shared runtime pilot" in text
 
 
 def test_tests_readme_documents_runtime_live_e2e_workflow():

@@ -47,6 +47,17 @@ Split worker identity into:
 
 For operator-facing status updates and routed follow-up messages, also keep a human-readable worker label. Use a stable `{entity_id}-{stage_key}/{display_name}` convention such as `130-impl/Herschel` or `130-validation/Herschel`. Report that label alongside the logical id or thread handle; do not rely on opaque agent ids or incidental nicknames alone.
 
+Every operator-facing dispatch, reuse, wait, and shutdown update must lead with the FO-owned worker label rather than a generic phrase like `the implementation worker`.
+
+Use patterns like:
+- `Dispatching `001-implementation/Ensign` (spacedock:ensign, handle: item_23) into the implementation worktree.`
+- `Routing follow-up to `001-implementation/Ensign` on existing handle item_23.`
+- ``001-implementation/Ensign` is active again on handle item_23; the routed follow-up is now this entity's critical path.`
+- `Waiting on `001-implementation/Ensign` (handle item_23) for the feedback-cycle completion.`
+- `Shutting down `001-validation/Ensign` (handle item_32); no later routing remains.`
+
+If Codex returns an incidental nickname such as `Leibniz`, treat it as secondary metadata only. Do not lead with or rely on the nickname returned by `spawn_agent`.
+
 ## Dispatch Adapter
 
 Codex does not natively spawn packaged names like `spacedock:ensign`.
@@ -65,6 +76,7 @@ Avoid these wasteful actions unless a real blocker forces them:
 - reading the source code of `{workflow_dir}/status` instead of running it
 - scanning unrelated entities when the run is scoped to one entity
 - reading large files past the specific stage/entity sections you need
+- browsing `docs/plans/` or `docs/plans/_archive/` for historical context during a bounded live workflow run
 
 For each dispatch:
 1. Resolve the logical id into a safe `worker_key`.
@@ -109,6 +121,7 @@ For routed advancement or `feedback-to` follow-up:
 - do not treat the immediate `send_input` tool result as proof that the reused cycle is complete; it can still reflect the worker's prior completed state until `wait_agent` observes the new completion
 - after critical-path reuse, the next completion evidence must come from `wait_agent` on that same handle, not from the stale completion echoed by `send_input`
 - for `feedback-to` reuse, that next completion evidence should describe the actual follow-up fix or report update, including any new commit, not just receipt of the rejection
+- after `send_input`, emit an operator-facing status update that the reused worker is active again on that same handle before you move on to the wait or stop decision
 
 Explicit shutdown is required when a worker is no longer needed:
 - after a fresh replacement takes over and the old worker will not receive later routing
@@ -183,6 +196,9 @@ For the current Codex spike:
 - if a validation result is `REJECTED` and the stage defines `feedback-to`, route the reroute immediately in interactive Codex mode through the existing worker handle when it is still addressable; do not leave the rejection sitting behind unrelated conversation
 - when the run is explicitly in single-entity mode, prefer the shared single-entity termination/output rules over generic status summaries
 - if the requested bounded outcome includes a routed reuse or feedback bounce, the generic early-stop bullets above do not apply until `wait_agent` returns the reused worker's actual follow-up completion evidence
+- in a bounded single-entity run that only names an entity to process, once `wait_agent` returns the reused worker's actual follow-up completion evidence, treat that as the bounded stop condition unless terminal completion, re-review, or another later stage was explicitly requested
+- before stopping from that bounded routed-reuse outcome, explicitly shut down any worker that is no longer needed for later routing or gate handling and surface that shutdown in an operator-facing update
+- once the active workflow README, status output, and in-scope entity are loaded, stop searching for historical precedent; do not browse `docs/plans/`, `docs/plans/_archive/`, or unrelated design history during that run
 
 For a bounded run, once the stop condition is satisfied:
 - send one concise final response

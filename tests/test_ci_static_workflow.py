@@ -29,7 +29,8 @@ def test_ci_static_workflow_targets_pull_requests_to_main():
 def test_ci_static_workflow_uses_stable_offline_suite_entrypoint():
     text = read_workflow()
 
-    assert "uv run --with pytest python -m pytest tests/ --ignore=tests/fixtures -q" in text
+    assert "run: make test-static" in text
+    assert "pytest tests/ --ignore=tests/fixtures" not in text
     assert "run_codex_first_officer" not in text
     assert "run_first_officer" not in text
     assert "InteractiveSession" not in text

@@ -38,11 +38,11 @@ Append a `## Stage Report: {stage_name}` section at the end of the entity file u
 ```markdown
 ## Stage Report: {stage_name}
 
-- [x] {item text}
+- DONE: {item text}
   {one-line evidence or reference}
-- [ ] SKIP: {item text}
+- SKIPPED: {item text}
   {one-line rationale}
-- [ ] FAIL: {item text}
+- FAILED: {item text}
   {one-line details}
 
 ### Summary
@@ -53,10 +53,11 @@ Append a `## Stage Report: {stage_name}` section at the end of the entity file u
 Size guideline: stage reports should be 30-50 lines maximum. One-line evidence per checklist item. Do not paste before/after diffs inline — the git log is the diff; include commit SHAs instead. Do not paste full test output — `5/5 passed` is sufficient.
 
 Rules:
-- `[x]` means complete
-- `[ ] SKIP:` means intentionally skipped with rationale
-- `[ ] FAIL:` means attempted and failed with concrete details
+- `DONE:` means complete
+- `SKIPPED:` means intentionally skipped with rationale
+- `FAILED:` means attempted and failed with concrete details
 - every checklist item must appear
+- do not use markdown checkbox markers in stage reports
 - append the report at the end of the entity file — do not read the entire entity body to find an insertion point
 - if redoing a stage after rejection, append a new `## Stage Report: {stage_name} (cycle N)` section at the end rather than locating and overwriting the prior report — the latest report is always the last one in the file
 
