@@ -1,7 +1,7 @@
 ---
 id: 157
 title: "claude-team build: resolve and emit per-stage model, runtime adapters pass it through on dispatch"
-status: implementation
+status: validation
 source: "github.com/clkao/spacedock#95 — stages.defaults.model accepted in workflow READMEs but ignored at dispatch; subagents unconditionally inherit captain-session model"
 started: 2026-04-15T17:42:36Z
 completed:
