@@ -132,3 +132,60 @@ Both live tests are deferred to implementation stage; they are not required to l
 1. **Codex `spawn_agent` model parameter name.** The current codex adapter example uses `spawn_agent(agent_type="worker", fork_context=false, message=...)` with no `model` parameter shown. Is the parameter `model=`, `agent_model=`, or does Codex require a different pass-through mechanism? If unknown, implementation stage should probe Codex's actual API before wiring AC 8.
 2. **Parser helper shape.** Preferred: keep `parse_stages_block` unchanged (back-compat) and add `parse_stages_with_defaults` returning a tuple, OR change `parse_stages_block` to return a richer dict and migrate callers. First option is less invasive; second is cleaner. Captain call.
 3. **Null representation in JSON.** Emit `"model": null` explicitly, or omit the key entirely when unset? Explicit null is clearer for the adapter-prose "omit the parameter when null" instruction. Recommend explicit null; captain may prefer omission to match other optional fields.
+
+## Stage Report
+
+**1. Read full task body via section-heading Grep — DONE.** Pulled `## Problem Statement`, `## Proposed Approach`, `## Out of Scope`, `## Acceptance Criteria`, `## Prior Art`, `## Test Plan` headings then read the full body once (65-line pre-edit state is well under the #159/#96 staleness concern since the provisional body was already concise — the larger echo risk is post-edit, which is unavoidable for ideation).
+
+**2. Read upstream issue body — DONE.** Via `gh api repos/clkao/spacedock/issues/95 --jq .body`. Confirms the proposed precedence (`stages.states[stage].model ?? stages.defaults.model ?? omit`), confirms no existing dispatch-side consumer, confirms the Opus-captain / Haiku-workflow footgun framing.
+
+**3. Inspect plumbing — DONE.** Inspected without editing:
+   - `skills/commission/bin/claude-team` (`cmd_build`, lines 73-271): single JSON-stdin chokepoint, emits `subagent_type`/`name`/`team_name`/`prompt`. SCHEMA_VERSION=1. No model handling today.
+   - `skills/commission/bin/status` (`parse_stages_block`, lines 97-198): per-state optional allowlist is `('feedback-to', 'agent', 'fresh')` — model is NOT surfaced. `defaults` is used only for `worktree`/`concurrency` and discarded. This contradicts the provisional body's "just consume them" claim; parser update is required.
+   - `skills/first-officer/references/first-officer-shared-core.md` `## Dispatch` (line 53+): dispatch instructions reference worker assignment fields generically; no model logic today. Reuse conditions (in `## Completion and Gates`, lines 102-106) need a new bullet for model-match.
+   - `skills/first-officer/references/claude-first-officer-runtime.md` `## Dispatch Adapter` (line 38+): the forwarding clause names `subagent_type`, `name`, `team_name`, `prompt` — `model` must be added. Break-glass template needs conditional `model=`.
+   - `skills/first-officer/references/codex-first-officer-runtime.md` `## Dispatch Adapter` (line 61+): `spawn_agent(agent_type="worker", fork_context=false, message=...)` — no `model` parameter shown. Open question logged.
+   - `agents/first-officer.md`, `agents/ensign.md`: no `model:` frontmatter. Confirmed they stay model-less per scope decision.
+
+**4. Resolve three open questions — DONE (partially; one flagged for captain).**
+   - (a) JSON schema field emitted by `claude-team build`: top-level `model` key, value is string or JSON `null`, additive (no SCHEMA_VERSION bump).
+   - (b) Codex runtime pass-through: documented design is `spawn_agent(..., model=effective_model, ...)` on fresh dispatch and reuse-invalidation on model change, BUT the exact Codex parameter name is unverified. Flagged as Open Question 1.
+   - (c) Agent frontmatter fallback: stays empty. Workflow config is the sole declared source; captain-session inheritance remains the implicit fallback. No silent-default layer added.
+
+**5. Sharpen AC — DONE.** Nine concrete, testable ACs. Covers per-dispatch-path scenarios (initial Claude dispatch via AC 2/7, initial Codex dispatch via AC 8, reuse invalidation via AC 8/9), preserved default inheritance (AC 6), and precedence order (AC 3/4/5).
+
+**6. Test plan — DONE.** Static-only for required behavior: parser test, build-output-presence test, 3-case precedence test, 3 adapter-prose grep tests. Live tests deferred with explicit costs ($0.05/60s) and decision point at implementation gate.
+
+**7. Scaffolding impact call-out — DONE.** Changes touch: `skills/commission/bin/status` (parser), `skills/commission/bin/claude-team` (build output), and three adapter reference files. `refit` propagation NOT required — `claude-team build` re-reads README each call so existing commissioned workflows pick up the change on next dispatch. Break-glass template gains a conditional `model=` slot.
+
+**8. Update entity body — DONE.** Committed as `63f2eb48` with message `ideation: #157 claude-team-respect-stage-model flesh out problem, approach, AC, test plan`.
+
+**9. Stage report written — DONE** (this section).
+
+**10. Report completion via SendMessage — pending** (final action after this commit).
+
+### Summary
+
+Ideation complete. Fleshed-out problem framing, five-touchpoint approach (parser, helper, Claude adapter, Codex adapter, shared core), nine testable ACs, static-first test plan (~4 test additions, negligible cost), three open questions logged for captain. One provisional-body error corrected: `parse_stages_block` does not today surface `model` — parser extension is required. No scope creep beyond the issue's proposed precedence; no silent agent-frontmatter fallback added; per-dispatch captain override left out of scope.
+
+### Final AC List
+
+1. Parser surfaces stage `model` and defaults.
+2. `claude-team build` emits `model` in output JSON.
+3. Precedence: per-state override wins.
+4. Precedence: defaults apply when per-state absent.
+5. Precedence: null when neither declared.
+6. Default inheritance preserved (null → omit).
+7. Claude runtime adapter prose passes field through.
+8. Codex runtime adapter documents spawn-time model and reuse invalidation.
+9. Shared core reuse conditions include model match.
+
+### Final Test Plan
+
+Static, required: (a) parser test; (b) build-output presence in existing TestBuild case; (c) TestBuildModelPrecedence with 3 parametrized cases; (d) three adapter-prose grep tests (Claude, Codex, shared-core). All sub-second. Live E2E deferred to implementation gate.
+
+### Remaining Open Questions for Captain
+
+1. Codex `spawn_agent` model parameter name (probe in implementation stage if unknown now).
+2. Parser helper shape: add sibling `parse_stages_with_defaults` (less invasive) or mutate `parse_stages_block` signature (cleaner).
+3. Null representation: explicit `"model": null` vs. key-omission.
