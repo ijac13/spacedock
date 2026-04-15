@@ -71,6 +71,7 @@ def _create_gh_stub(test_dir: Path) -> Path:
 
 @pytest.mark.live_claude
 @pytest.mark.serial
+@pytest.mark.teams_mode
 def test_rebase_branch_before_push(test_project, model, effort):
     """pr-merge mod rebases branch onto main via bare-repo remote before push."""
     t = test_project

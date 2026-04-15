@@ -24,6 +24,7 @@ TEAM_LIFECYCLE = {"TeamCreate", "TeamDelete"}
 
 
 @pytest.mark.live_claude
+@pytest.mark.teams_mode
 def test_team_dispatch_sequencing(test_project, model, effort):
     """No assistant message mixes TeamCreate/TeamDelete with Agent dispatch."""
     t = test_project

@@ -19,6 +19,7 @@ from test_lib import (  # noqa: E402
 
 
 @pytest.mark.live_claude
+@pytest.mark.bare_mode
 def test_single_entity_team_skip(test_project, model, effort):
     """Single-entity mode skips team creation; Agent dispatch has no team_name."""
     t = test_project

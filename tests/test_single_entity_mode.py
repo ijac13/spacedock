@@ -98,6 +98,7 @@ def _start_with_trust_handling(session: InteractiveSession, ready_timeout: float
 
 @pytest.mark.live_claude
 @pytest.mark.serial
+@pytest.mark.bare_mode
 def test_single_entity_mode(model, budget):
     """Interactive FO in single-entity mode does NOT create a team."""
     print("=== Single-Entity Mode Interactive Regression Test ===")

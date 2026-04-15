@@ -21,6 +21,7 @@ from test_lib import (  # noqa: E402
 
 
 @pytest.mark.live_claude
+@pytest.mark.teams_mode
 def test_team_health_check(test_project, model, effort):
     """FO performs `test -f config.json` before first Agent dispatch."""
     t = test_project

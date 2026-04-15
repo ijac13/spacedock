@@ -71,6 +71,7 @@ def _create_gh_stub(test_dir: Path) -> Path:
 
 @pytest.mark.live_claude
 @pytest.mark.serial
+@pytest.mark.teams_mode
 @pytest.mark.skip(reason="FO still archives past pr-merge without persisting pr state. Track: #114")
 def test_push_main_before_pr(test_project, model, effort):
     """pr-merge mod pushes `main` before the branch; gh stub sees `gh pr create`."""
