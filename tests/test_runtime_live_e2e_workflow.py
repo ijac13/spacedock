@@ -51,15 +51,20 @@ def test_runtime_live_e2e_workflow_supports_pr_and_manual_triggers():
 def test_runtime_live_e2e_workflow_has_expected_runtime_jobs():
     text = read_workflow()
     claude_section = section(text, "  claude-live")
+    claude_bare_section = section(text, "  claude-live-bare")
     claude_opus_section = section(text, "  claude-live-opus")
     codex_section = section(text, "  codex-live")
 
     assert "\n  claude-live:\n" in text
+    assert "\n  claude-live-bare:\n" in text
     assert "\n  claude-live-opus:\n" in text
     assert "\n  codex-live:\n" in text
     assert "environment:" in claude_section
     assert "name: CI-E2E" in claude_section
     assert "deployment: false" in claude_section
+    assert "environment:" in claude_bare_section
+    assert "name: CI-E2E" in claude_bare_section
+    assert "deployment: false" in claude_bare_section
     assert "environment:" in claude_opus_section
     assert "name: CI-E2E-OPUS" in claude_opus_section
     assert "deployment: false" in claude_opus_section
@@ -74,11 +79,13 @@ def test_runtime_live_e2e_workflow_has_expected_runtime_jobs():
 def test_runtime_live_e2e_workflow_preserves_and_uploads_live_test_dirs():
     text = read_workflow()
     claude_section = section(text, "  claude-live")
+    claude_bare_section = section(text, "  claude-live-bare")
     claude_opus_section = section(text, "  claude-live-opus")
     codex_section = section(text, "  codex-live")
 
     for job_section, artifact_name in (
         (claude_section, "runtime-live-e2e-claude-live"),
+        (claude_bare_section, "runtime-live-e2e-claude-live-bare"),
         (claude_opus_section, "runtime-live-e2e-claude-live-opus"),
         (codex_section, "runtime-live-e2e-codex-live"),
     ):
@@ -98,29 +105,44 @@ def test_runtime_live_e2e_workflow_preserves_and_uploads_live_test_dirs():
 def test_runtime_live_e2e_workflow_scopes_secrets_to_the_matching_job():
     text = read_workflow()
     claude_section = section(text, "  claude-live")
+    claude_bare_section = section(text, "  claude-live-bare")
     claude_opus_section = section(text, "  claude-live-opus")
     codex_section = section(text, "  codex-live")
 
     assert "ANTHROPIC_API_KEY" in claude_section
     assert "OPENAI_API_KEY" not in claude_section
+    assert "ANTHROPIC_API_KEY" in claude_bare_section
+    assert "OPENAI_API_KEY" not in claude_bare_section
     assert "ANTHROPIC_API_KEY" in claude_opus_section
     assert "OPENAI_API_KEY" not in claude_opus_section
     assert "OPENAI_API_KEY" in codex_section
     assert "ANTHROPIC_API_KEY" not in codex_section
     assert "is required for claude-live." in claude_section
+    assert "is required for claude-live-bare." in claude_bare_section
     assert "is required for claude-live-opus." in claude_opus_section
     assert "is required for codex-live" in codex_section
 
 
 def test_runtime_live_e2e_workflow_uses_stable_make_targets_and_provenance_fields():
     text = read_workflow()
+    claude_section = section(text, "  claude-live")
+    claude_bare_section = section(text, "  claude-live-bare")
     claude_opus_section = section(text, "  claude-live-opus")
 
     assert "make test-live-claude" in text, "claude-live job should call make test-live-claude"
+    assert "make test-live-claude-bare" in claude_bare_section, (
+        "claude-live-bare job should call make test-live-claude-bare"
+    )
     assert "make test-live-claude-opus" in claude_opus_section, (
         "claude-live-opus job should call make test-live-claude-opus"
     )
     assert "make test-live-codex" in text, "codex-live job should call make test-live-codex"
+
+    # Team-flag matrix: teams-mode jobs set the env var to "1"; the bare job
+    # explicitly sets it to "0" so the pytest conftest auto-resolution picks bare.
+    assert 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"' in claude_section
+    assert 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"' in claude_opus_section
+    assert 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0"' in claude_bare_section
 
     for field in (
         "PR number",
