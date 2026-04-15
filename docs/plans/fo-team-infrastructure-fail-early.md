@@ -1,7 +1,7 @@
 ---
 id: 149
 title: "FO runtime: fail-early team-infrastructure defense (rules 1, 2, 4 of team-fragility issue)"
-status: validation
+status: implementation
 source: "CL direction during 2026-04-14 session from /tmp/2026-04-14-team-fragility-issue.md"
 started: 2026-04-15T03:47:38Z
 completed:
@@ -285,3 +285,21 @@ Items not blocking gate but worth a line in the ideation: (i) audit `agents/firs
 ### Summary
 
 Applied all 3 blocking revisions and 3 non-blocking flags from the staff review (commit 343f451d). Revisions landed on the entity body only; YAML frontmatter and the staff-review section are untouched. The ideation now specifies (a) a counter-free "any second dispatch failure" trigger, (b) three section-anchored AC-4-* assertions plus a parse-sections helper requirement, (c) explicit resolution of the session-restart / Rule-1b-probe tension (diagnostic-only, never short-circuits `TeamCreate`), (d) a captain-report sentence with three concrete next steps, (e) a Step-0 audit of `agents/first-officer.md` (executed during this revision — no duplication found, scope stays 2 files), (f) an active-feedback-cycle exemption on the cooperative shutdown sweep, and (g) an explicit follow-on flag for AC-E. Ready for gate re-review.
+
+## Feedback Cycles
+
+### Cycle 1 — 2026-04-15 — captain rejection after gate approval on static-only coverage
+
+**Trigger:** Captain initially approved the validation gate, then on re-reading the shipped test set asked: "am i reading a bunch for content grepping instead of behavioral tests?" The staff review had already flagged this in §4 ("Test plan realism") — every one of the 9 ACs in `tests/test_team_fail_early.py` is a section-anchored prose grep; zero verify the FO actually follows the rules at runtime. Captain's retroactive rejection of the gate.
+
+**Finding:** Shipping #149 with only static prose assertions gives the harness the same shape as the bug it's defending against — the existing adapter told the FO to do `test -f`, the FO did, and the cascade happened. Prose-grep assertions verify the words are written; they do not verify the model attends to them. At least one behavioral check must ship in v1.
+
+**Routed back to implementation with scope:**
+
+Add at least one behavioral test that observes the FO ACTUALLY behaves differently under the new rules. Minimum acceptable shape: run the FO against a trivial single-entity workflow (no failure injection required), parse the FO's tool-call log, and assert the `TeamCreate` call's `team_name` argument matches the new `{project_name}-{dir_basename}-{YYYYMMDD-HHMM}-{shortuuid}` pattern. That is the cheapest behavioral check — no fault-injection harness needed — and it load-bears the Rule 6 change. Call it AC-6-live. This COMPLEMENTS the existing prose AC-6; it does not replace it.
+
+If AC-6-live ships cleanly and the implementation ensign has budget, also add AC-1-live: observe that the FO does NOT emit a `Bash(test -f ~/.claude/teams/.../config.json)` call before its first `Agent()` dispatch. This requires no fault injection either — pure log inspection against the already-passing normal dispatch path. Not mandatory but strongly preferred.
+
+Fault-injection-based checks for Rule 2 and Rule 4 triggers remain out of scope (AC-E stays a filed follow-on task, unfiled as of this reroute).
+
+**Worktree:** unchanged — `.worktrees/spacedock-ensign-fo-team-infrastructure-fail-early` still present on branch `spacedock-ensign/fo-team-infrastructure-fail-early` at HEAD `d1b63919` (the cycle-1 implementation report). Fresh implementation ensign will branch work from there.
