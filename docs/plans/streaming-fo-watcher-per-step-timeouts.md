@@ -399,10 +399,12 @@ Each AC lists test strategy (offline unit vs live E2E) and rationale.
 
 12. **Watcher failure messages include a log tail (last ~20 lines) and the step label.** Test strategy: offline unit test that asserts error message content. This is the user-facing payoff of the whole task — a bad failure message defeats the purpose of per-step timeouts.
 
+13. **Context manager terminates within ~10s when an exception propagates through the `with` block** (added cycle 1). On exception-driven exit — `StepTimeout`, `StepFailure`, or any test-body assertion — the subprocess must be killed via a short fixed grace period (5s) before terminate+kill escalation, not by waiting out the remainder of `hard_cap_s`. Test strategy: offline unit test — launch `sh -c 'sleep 60'` with `hard_cap_s=600`, raise an exception inside the `with`, assert total wallclock `< 15s`. Reuses the `_REAL_POPEN` monkeypatch pattern already in `tests/test_fo_stream_watcher.py`.
+
 ## Test Plan
 
 Offline unit tests (cheap, always run in CI):
-- New file `tests/test_fo_stream_watcher.py`. ~150 lines. Covers ACs 1-8, 11, 12. Uses `subprocess.Popen` against `sh -c` for subprocess plumbing tests; no claude calls. Runs in under 5 seconds total.
+- New file `tests/test_fo_stream_watcher.py`. Covers ACs 1-8, 11, 12, 13. Uses `subprocess.Popen` against `sh -c` for subprocess plumbing tests; no claude calls. Runs in ~12 seconds total (AC-13's 5s grace + ~7s from the other tests).
 
 Live E2E tests (expensive, gated by `live_claude` marker):
 - Covers ACs 9-10. Two tests, both already in the live-claude matrix. Net wallclock impact on a green CI run: unchanged (tests pass in ~3-5 min whether watcher-instrumented or not). Net wallclock impact on a red CI run: 24m+ saved per failure (the actual motivation).
@@ -492,3 +494,20 @@ NOT RUN as part of validation — this is a deferred manual captain step per the
 Evidence: 12/12 ACs verified (ACs 9-10 on static-only grounds per the dispatch brief; AC-14 prompt-section matched-entry pattern verified); `make test-static` green (425/425 + 10 subtests, 17.74s); six focused commits with no out-of-scope edits; `run_first_officer` / `LogParser` public surface untouched. Two follow-up items for the captain (not blocking this validation):
 - Manual AC-9 fails-fast verification (temporarily patch fixture, run live, confirm <180s StepTimeout at milestone 4).
 - Live-run the migrated pilots on `claude-live-opus` to confirm the wall-clock improvement (~180s vs. 24m38s) in practice — this is the feature's real payoff and should be measured once post-merge.
+
+## Stage Report (implementation — cycle 2)
+
+1. Read `### Feedback Cycles` section — DONE. Cycle 1 rejection summary: StepTimeout fired correctly at the SendMessage milestone, but `run_first_officer_streaming.__exit__` waited the remainder of `hard_cap_s` for the hung FO subprocess, pushing pytest wallclock to 600.16s vs. the promised ~180s.
+2. Locate the finally block in `run_first_officer_streaming` — DONE. `scripts/test_lib.py:787-812` (original). The finally called `proc.wait(timeout=max(hard_cap_s - elapsed, 1))` regardless of exit path.
+3. Implement exception-vs-normal grace-period split — DONE. Added `exception_exit` flag via a bare `except BaseException: exception_exit = True; raise` wrapping the `yield`. Finally now picks `grace_s = 5` on exception exit or `max(hard_cap_s - elapsed, 1)` on normal exit, then falls through to the same terminate+kill escalation. `scripts/test_lib.py:786-822`. Commit `be946306`.
+4. Add AC-13 offline unit test — DONE. `tests/test_fo_stream_watcher.py::test_context_manager_terminates_fast_on_exception_exit` launches `sh -c 'sleep 60'` with `hard_cap_s=600`, raises `_Boom` inside the `with`, asserts subprocess dead and total wallclock `< 15s`. Docstring cites AC-13. Commit `eb01f949`.
+5. Update `## Acceptance Criteria` with AC-13 — DONE. New numbered entry added after AC-12 describing the exception-exit fast-terminate requirement, the 5s grace contract, and the `sh -c 'sleep 60'` / `hard_cap_s=600` / `<15s` test strategy.
+6. Update `## Test Plan` to reference AC-13 — DONE. Offline-unit-tests paragraph now lists ACs 1-8, 11, 12, 13 and notes the ~12s total runtime (AC-13 adds the 5s grace wait).
+7. Run `make test-static` — DONE. **426 passed (+1 from cycle 1), 22 deselected, 10 subtests passed in 19.63s.** New AC-13 test picked up automatically; no regressions.
+8. Append `## Stage Report (implementation — cycle 2)` — DONE (this section). Cycle 1 report at line 433 is preserved verbatim.
+9. Focused commits on the existing branch — DONE. Three commits on `spacedock-ensign/streaming-fo-watcher-per-step-timeouts`: (i) `61283845` cherry-picked the main-branch reject commit to surface `### Feedback Cycles` in the worktree, (ii) `be946306` fast-terminate fix in `run_first_officer_streaming.__exit__`, (iii) `eb01f949` AC-13 regression test. This stage-report commit will be the fourth.
+10. Send completion SendMessage — pending (next tool call).
+
+### Summary
+
+Fixed the cycle-1 defect: `run_first_officer_streaming` now terminates the claude subprocess within ~5s on any exception-driven exit (StepTimeout / StepFailure / test-body AssertionError) instead of waiting out the remainder of `hard_cap_s`. The normal `expect_exit`-path keeps its existing hard-cap behavior. Added AC-13 + regression test; all 426 offline tests green. Pilot tests, `LogParser`, and `run_first_officer` untouched. Recommend re-entry to **validation**.
