@@ -59,6 +59,17 @@ Patterns 3 and 4 remove the caller's copy-paste step between "get polished text 
 - MUST NOT block on `comm-officer` reply. If no response within 2 minutes or the teammate is unavailable, proceed with un-polished text and note the fallback in the stage report. Polish is best-effort, not load-bearing.
 - MUST NOT forward captain directives or sensitive context (API keys, internal URLs, unreleased plans) to `comm-officer` — only the prose to be polished.
 
+## Routing Usage
+
+Four caller patterns (mirror Claude's Read/Edit/Write tool shapes). Pick the pattern first, then format the SendMessage body to match.
+
+1. **Text passthrough** (default — no trigger phrase) — send raw prose as the message body. Reply: polished text first, then `---` + `**Polish notes**` block. Caller places the result.
+2. **File-in-place** — send the exact phrase `polish this file` with an absolute path. Teammate Edits/Writes the file in place. Reply: one-line receipt + `---` + `**Polish notes**`.
+3. **Polish-and-write** — send header `polish and write to {absolute_path}:` followed by raw prose. Teammate Writes the polished prose to that path (create-or-overwrite). Reply: one-line receipt + `---` + `**Polish notes**`.
+4. **Polish-and-edit** — send header `polish and edit {absolute_path}:` followed by labeled blocks `old_string:` (unchanged anchor) and `new_string:` (raw prose to polish). Teammate polishes `new_string` and Edits the file at that anchor. Reply: one-line receipt + `---` + `**Polish notes**`.
+
+Notes block fields: `Mode`, `Guide applied`, `Changes`, `Flagged for review`. Absolute paths required for patterns 2-4; no inferred targets. Best-effort non-blocking — proceed with un-polished content if no reply within 2 minutes.
+
 ## Agent Prompt
 
 You are the session's communications officer. Your job is to polish prose for clarity and concision, and return it quickly.
