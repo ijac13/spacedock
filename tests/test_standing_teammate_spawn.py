@@ -115,3 +115,40 @@ def test_standing_teammate_spawns_and_roundtrips(test_project, effort):
         "The standing teammate did not round-trip the ping within the test window."
     )
     print("[OK] ECHO: ping reply observed in session trace")
+
+    # AC-14 (cycle-2 extension): dispatched worker prompts must contain the
+    # `### Standing teammates available in your team` section listing
+    # echo-agent. This proves that `claude-team build` injected the section
+    # at dispatch time so ensigns discover standing teammates without the FO
+    # having to surface them per-dispatch.
+    ensign_agent_calls = [c for c in agent_calls if c.get("name") != "echo-agent"]
+    assert ensign_agent_calls, (
+        "No stage-worker Agent() dispatches observed (only echo-agent spawn). "
+        "Cycle-2 prompt-injection assertion requires at least one ensign dispatch."
+    )
+    prompts_with_section = [
+        c for c in ensign_agent_calls
+        if "### Standing teammates available in your team" in c.get("prompt", "")
+    ]
+    assert prompts_with_section, (
+        "No dispatched ensign prompt contained the "
+        "`### Standing teammates available in your team` section. "
+        f"Ensign Agent() prompts seen: "
+        f"{[(c.get('name'), c.get('prompt', '')[:120]) for c in ensign_agent_calls]}"
+    )
+    print(
+        f"[OK] Standing-teammates section present in "
+        f"{len(prompts_with_section)}/{len(ensign_agent_calls)} ensign dispatch prompt(s)"
+    )
+    prompts_listing_echo = [
+        c for c in prompts_with_section
+        if "echo-agent" in c.get("prompt", "")
+    ]
+    assert prompts_listing_echo, (
+        "Standing-teammates section present but did not list `echo-agent` by name. "
+        "Auto-enumeration failed to cross-reference the alive team member."
+    )
+    print(
+        f"[OK] echo-agent listed by name in "
+        f"{len(prompts_listing_echo)}/{len(prompts_with_section)} section-bearing prompt(s)"
+    )
