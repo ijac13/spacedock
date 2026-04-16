@@ -297,6 +297,45 @@ def test_context_manager_enforces_hard_cap(tmp_path, monkeypatch):
     assert elapsed < 6.0, f"hard cap should fire inside ~3s, took {elapsed:.2f}s"
 
 
+def test_context_manager_terminates_fast_on_exception_exit(tmp_path, monkeypatch):
+    """AC-13: context manager terminates within ~10s when an exception propagates.
+
+    Regression guard for cycle-1 feedback: on exception-driven exit the
+    finally must use a short grace period (5s) instead of waiting out
+    ``hard_cap_s - elapsed`` for a hung subprocess to exit on its own.
+    """
+    holder: dict = {}
+
+    def fake_popen(cmd, **kwargs):
+        kwargs.pop("env", None)
+        proc = _REAL_POPEN(["sh", "-c", "sleep 60"], **kwargs)
+        holder["proc"] = proc
+        return proc
+
+    import test_lib
+
+    monkeypatch.setattr(test_lib.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(test_lib, "extract_stats", lambda *a, **k: {})
+
+    runner = _fake_runner(tmp_path)
+    start = time.monotonic()
+
+    class _Boom(RuntimeError):
+        pass
+
+    with pytest.raises(_Boom):
+        with run_first_officer_streaming(runner, prompt="noop", hard_cap_s=600):
+            raise _Boom("assertion failed deep in the test body")
+
+    elapsed = time.monotonic() - start
+    proc = holder["proc"]
+    assert proc.poll() is not None, "subprocess must be dead after exception exit"
+    assert elapsed < 15.0, (
+        f"exception exit must fast-terminate in <15s regardless of hard_cap_s; "
+        f"took {elapsed:.2f}s"
+    )
+
+
 def test_tool_use_matches_covers_all_tool_shapes():
     """AC-8: tool_use_matches identifies Bash/Agent/SendMessage entries with substring input."""
     bash_entry = _assistant_tool_use("Bash", command="claude-team spawn-standing --all")
