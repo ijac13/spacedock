@@ -1,13 +1,13 @@
 ---
 id: 175
 title: "Migrate remaining live E2E tests to streaming watcher"
-status: backlog
+status: implementation
 source: "CL directive during 2026-04-16 session — #173 shipped FOStreamWatcher + two pilot migrations; extending to 4 high-value + 2 medium-value tests completes the cohort and unlocks fast-fail CI signals across the live suite."
-started:
+started: 2026-04-16T22:53:47Z
 completed:
 verdict:
 score: 0.6
-worktree:
+worktree: .worktrees/spacedock-ensign-migrate-live-tests-to-streaming-watcher
 issue:
 pr:
 ---
