@@ -28,7 +28,7 @@ The implementation should:
 - Include `interface.displayName`, `category`, `policy.installation`, and `policy.authentication` in the marketplace entry, using the schema's allowed values (`policy.installation`: `NOT_AVAILABLE`, `AVAILABLE`, or `INSTALLED_BY_DEFAULT`; `policy.authentication`: `ON_INSTALL` or `ON_USE`)
 - Add `.agents/plugins/marketplace.json` so Codex can discover the local repo install without a manual file copy, with `source.path: "./plugins/spacedock"` and a checked-in symlink at `plugins/spacedock` that resolves to the repo root
 - Update README install docs to explain the Codex install path first, while explicitly labeling the symlink path and `.claude-plugin` surfaces as legacy migration support
-- Update `skills/commission/SKILL.md`, `skills/refit/SKILL.md`, `skills/debrief/SKILL.md`, and `scripts/release.sh` to treat `.codex-plugin/plugin.json` as the release source of truth, while reading or regenerating the `.claude-plugin` compatibility mirrors where they currently read `.claude-plugin`
+- Update `skills/commission/SKILL.md`, `skills/refit/SKILL.md`, `skills/debrief/SKILL.md`, and `scripts/release.sh` to treat `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json` as the release source of truth, while reading or regenerating the `.claude-plugin` compatibility mirrors where they currently read `.claude-plugin`
 - Require a synchronized compatibility copy at `.claude-plugin/plugin.json` that mirrors `.codex-plugin/plugin.json` so legacy consumers continue to resolve the version source during migration
 - Require `.claude-plugin/marketplace.json` to be a generated mirror of `.agents/plugins/marketplace.json`, regenerated from the Codex marketplace surface rather than maintained independently
 
@@ -49,14 +49,14 @@ If the root-vs-subdirectory decision changes, the task must also update `source.
    - Test: confirm the docs either retain the symlink-era path as fallback or explicitly mark it deprecated with a migration note, confirm `.claude-plugin/plugin.json` is a synchronized compatibility copy of `.codex-plugin/plugin.json`, and confirm `.claude-plugin/marketplace.json` is a generated mirror of `.agents/plugins/marketplace.json` that legacy consumers in `skills/refit/SKILL.md`, `skills/debrief/SKILL.md`, and `scripts/release.sh` can continue to read.
 
 5. The package can be discovered and installed by Codex through the local marketplace.
-   - Test: run a scripted, noninteractive contract check that parses `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, `.agents/plugins/marketplace.json`, and `.claude-plugin/marketplace.json`, verifies the manifests are synchronized where intended, verifies the marketplace enum values, confirms `plugins/spacedock` resolves to the repo root, and confirms `scripts/release.sh` reads `.codex-plugin/plugin.json` as authoritative while regenerating the `.claude-plugin` mirrors. Separately, perform the manual Codex smoke path with explicit prerequisites: Codex is restarted, `/plugins` is opened, the local marketplace entry appears, Spacedock is installed, and the plugin loads.
+   - Test: run a scripted, noninteractive contract check that parses `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, `.agents/plugins/marketplace.json`, and `.claude-plugin/marketplace.json`, verifies the manifests are synchronized where intended, verifies the marketplace enum values, confirms `plugins/spacedock` resolves to the repo root, and confirms `scripts/release.sh` reads `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json` as authoritative while regenerating the `.claude-plugin` mirrors. Separately, perform the manual Codex smoke path with explicit prerequisites: Codex is restarted, `/plugins` is opened, the local marketplace entry appears, Spacedock is installed, and the plugin loads.
 
 ## Test Plan
 
 - Static validation of JSON shape and required fields is low cost and should be automated.
 - Add a scripted noninteractive check for manifest and marketplace shape so the contract is reproducible without opening Codex.
 - Add a scripted noninteractive check that `plugins/spacedock` is a symlink to the repo root and that `.claude-plugin/plugin.json` matches `.codex-plugin/plugin.json` byte-for-byte or by normalized JSON comparison.
-- Add a scripted noninteractive check that `.claude-plugin/marketplace.json` is regenerated from `.agents/plugins/marketplace.json` and that `scripts/release.sh` uses `.codex-plugin/plugin.json` as the authoritative release manifest.
+- Add a scripted noninteractive check that `.claude-plugin/marketplace.json` is regenerated from `.agents/plugins/marketplace.json`, that `.claude-plugin/plugin.json` matches `.codex-plugin/plugin.json`, and that `scripts/release.sh` uses `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json` as the authoritative release inputs.
 - Doc/README checks are low cost and can be covered with targeted text assertions.
 - The Codex smoke path is higher cost because it requires an interactive restart and plugin UI flow, but it is necessary because the user-visible install experience is the point of the change.
 - No E2E workflow-runtime tests are needed; the scope stops at packaging and install experience, not runtime behavior or stage execution.
@@ -67,6 +67,6 @@ If the root-vs-subdirectory decision changes, the task must also update `source.
 - [DONE] Repo-layout decision is explicit: Spacedock stays at the repo root as the source of truth, `plugins/spacedock` is a checked-in symlink to the root, and the marketplace path is `./plugins/spacedock`.
 - [DONE] Coexistence and migration are addressed with `.claude-plugin/plugin.json` as a synchronized copy, `.claude-plugin/marketplace.json` as a generated mirror of the Codex marketplace, and the existing README/install-doc migration notes and legacy helper consumers.
 - [DONE] Acceptance criteria enumerate the intended keys and values for `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, `.agents/plugins/marketplace.json`, and `.claude-plugin/marketplace.json`, and directly verify the symlinked plugin path.
-- [DONE] Test plan separates the scripted contract checks from the manual Codex smoke path, with explicit prerequisites for restart, `/plugins`, install, load verification, and release-tooling behavior.
+- [DONE] Test plan separates the scripted contract checks from the manual Codex smoke path, with explicit prerequisites for restart, `/plugins`, install, load verification, and release-tooling regeneration behavior.
 - [DONE] Scope is constrained to packaging and install experience; runtime behavior changes are out of scope.
 - [SKIPPED] Frontmatter changes are out of scope for this stage refresh.
