@@ -1,16 +1,17 @@
 ---
 id: 162
 title: "Standing-teammate mod pattern — `standing: true` hook + `claude-team spawn-standing` helper + FO routing"
-status: implementation
+status: done
 source: "CL design discussion 2026-04-16 after recce-session proposal + in-session pilot of docs/plans/_mods/comm-officer.md"
 started: 2026-04-16T05:19:30Z
-completed:
-verdict:
+completed: 2026-04-16T15:57:59Z
+verdict: PASSED
 score: 0.65
-worktree: .worktrees/spacedock-ensign-standing-teammate-mod-hook
+worktree: 
 issue:
 pr: #102
 mod-block: 
+archived: 2026-04-16T15:58:01Z
 ---
 
 Ship the **"standing teammate" pattern** so Spacedock workflows can declare long-lived specialist agents (prose polishers, science officers, code reviewers, language translators) via a mod file. The FO spawns each declared standing teammate once per captain session (first-boot-wins across multiple workflows sharing a team), keeps it alive until session teardown, and routes drafts destined for the captain through it.
