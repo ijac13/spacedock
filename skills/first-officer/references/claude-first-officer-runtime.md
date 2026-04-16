@@ -29,6 +29,19 @@ In single-entity mode, skip team creation entirely. Use bare-mode dispatch for a
 
 When filing a new task, use `status --next-id` to fetch only the next sequential ID. Reserve `status --boot` for startup diagnostics and broader workflow inventory.
 
+### Standing teammate spawn pass
+
+After team creation succeeds — after the TeamCreate-recovery ladder has resolved and the returned `team_name` is known — and BEFORE entering the normal dispatch event loop, run the standing-teammate spawn pass:
+
+1. Enumerate `_mods/*.md` whose frontmatter has `standing: true`. A cheap way to list them is to grep each mod file for `standing: true` between the frontmatter delimiters; authoritative parsing is deferred to the helper.
+2. For each mod, run `claude-team spawn-standing --mod {abs_path_to_mod} --team {team_name}`.
+3. If the helper emits a JSON object with a top-level `status: "already-alive"` field, log the reported `name` and skip to the next mod. The standing teammate is first-boot-wins across the captain session; subsequent workflows sharing the team pick up the live member rather than respawning it.
+4. Otherwise the helper emits an Agent() call spec JSON with keys `subagent_type`, `name`, `team_name`, `model`, `prompt`. **Forward that spec verbatim** to the Agent tool — copy each field into the corresponding Agent() argument without paraphrasing the prompt, rewriting the name, or substituting the team. Same "forward verbatim" discipline as `claude-team build` output.
+5. The spawn is fire-and-forget. Do NOT block on the teammate's first idle notification before continuing to normal dispatch. Ensigns route to the teammate on demand; if a SendMessage arrives before the teammate is ready, Claude Code queues the message and the teammate picks it up on its first turn.
+6. If the helper exits non-zero on any mod (missing Agent Prompt section, invalid model enum, convention-violating trailing heading), surface the error to the captain and continue with the remaining mods. A broken mod does not block the rest of the workflow — report and proceed.
+
+In single-entity (bare) mode and in Degraded Mode, skip the standing teammate spawn pass entirely. Standing teammates are a team-scope concept; without a live team they have no lifecycle anchor. Observed round-trip latency for a prose-polish SendMessage can reach several minutes when the teammate is handling a long draft, which is well inside the 2-minute fallback convention for interactive polish and the longer budgets allowed for deliberate draft work — ensigns and the FO MUST treat polish routing as non-blocking regardless of how long a given round trip takes.
+
 ## Worker Resolution
 
 The default `dispatch_agent_id` is `spacedock:ensign`. When a stage defines `agent: {name}` in the README, use that value as the dispatch agent id.

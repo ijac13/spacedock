@@ -94,6 +94,74 @@ def parse_frontmatter(filepath):
     return fields
 
 
+def parse_mod_metadata(filepath):
+    """Parse a mod-file's frontmatter + Agent Prompt body.
+
+    Mod frontmatter is a flat top-level key/value shape (e.g.
+    `standing: true`), distinct from README's nested `stages:` tree.
+    This is a sibling of parse_stages_block, not an extension of it.
+
+    Returns a dict with:
+      - `name`: the mod's frontmatter `name` (string, may be empty)
+      - `standing`: bool (True iff frontmatter has `standing: true`; False otherwise)
+      - `frontmatter`: the full parsed frontmatter dict
+      - `agent_prompt`: the verbatim body of the `## Agent Prompt` section
+                       (everything from the line AFTER the heading to EOF), or
+                       None when the section is absent.
+
+    Raises ValueError when the mod file contains any `^## ` heading STRICTLY
+    AFTER the `## Agent Prompt` heading (convention violation). The error
+    message names the offending heading text so the author can move or
+    delete it. Nested `##` inside code fences or inline emphasis within the
+    Agent Prompt body is preserved unchanged — the regex matches only lines
+    that start with a literal `## ` at the left margin. Whether a `##` line
+    appears inside a fenced code block is determined by walking the body
+    and toggling a fence flag on ```` ``` ```` opens/closes so content
+    inside fences is never treated as a heading.
+    """
+    frontmatter = parse_frontmatter(filepath)
+    standing_raw = frontmatter.get('standing', '')
+    standing = standing_raw.lower() == 'true'
+
+    with open(filepath, 'r') as f:
+        content = f.read()
+
+    lines = content.split('\n')
+
+    agent_prompt_line = None
+    for i, line in enumerate(lines):
+        if line == '## Agent Prompt':
+            agent_prompt_line = i
+            break
+
+    agent_prompt = None
+    if agent_prompt_line is not None:
+        body_lines = lines[agent_prompt_line + 1:]
+        in_fence = False
+        for offset, line in enumerate(body_lines):
+            stripped_left = line.lstrip()
+            if stripped_left.startswith('```'):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
+            if line.startswith('## '):
+                raise ValueError(
+                    f"mod file {filepath}: found trailing top-level heading "
+                    f"{line!r} after '## Agent Prompt' — move the section "
+                    f"above '## Agent Prompt' or remove it. Everything after "
+                    f"'## Agent Prompt' is treated as the prompt body."
+                )
+        agent_prompt = '\n'.join(body_lines)
+
+    return {
+        'name': frontmatter.get('name', ''),
+        'standing': standing,
+        'frontmatter': frontmatter,
+        'agent_prompt': agent_prompt,
+    }
+
+
 def parse_stages_block(filepath):
     """Parse the stages block from README frontmatter."""
     lines = []
