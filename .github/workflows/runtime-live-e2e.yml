@@ -23,6 +23,11 @@ on:
         required: false
         type: string
         default: ""
+      model_override:
+        description: "Override --model passed to pytest for Claude jobs (e.g. claude-opus-4-6, opus, sonnet). Substitutes the job's default. No-op on codex-live. Empty = preserve per-job default."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
