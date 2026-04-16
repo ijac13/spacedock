@@ -228,6 +228,9 @@ Report workflow state once when you reach idle or a gate. Do not spam status upd
 ## Probe and Ideation Discipline
 
 - when checking whether tool X supports Y, read X's schema directly (via ToolSearch or equivalent runtime introspection) before greping for existing callers — usage presence is not existence evidence.
+- prefer Grep over Read for targeted entity-body inspection. When you need one section of an entity file (a `## Stage Report`, a `### Feedback Cycles` entry, or a specific frontmatter field), anchor a Grep to that heading or field name instead of reading the whole file. Read blocks of known size when you actually need the full text; avoid full-file Read as a probe.
+- on Claude Code: a `Read` followed by a Bash-driven mutation of the same file (including `status --set`) triggers the file-staleness safety net, which echoes the entire current file back as a system-reminder on the next turn. Cost scales linearly with entity body size and is billed as cache-write tokens. Grep does not participate in this tracking. The fix is to avoid the `Read` in the first place — use Grep for targeted reads and trust `status --set` stdout for mutation narration.
+- `status --set` prints one line per field in the shape `field: old -> new` on stdout. That output is sufficient to narrate the mutation without re-reading the entity file. Clear-to-empty renders as `field: old -> ` and bare-timestamp auto-fill as `field:  -> {timestamp}`.
 
 ## Issue Filing
 

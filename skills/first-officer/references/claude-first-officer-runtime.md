@@ -215,3 +215,7 @@ If the captain tells you to back off an agent, stop coordinating it until told t
 **DISPATCH IDLE GUARDRAIL:** After dispatching an agent, keep waiting until an explicit completion message arrives. Idle notifications are normal between-turn state for team agents — they are not a reason to tear down the team, and they usually mean the agent is waiting for input from the captain or another agent. Only shut down a dispatched agent when: (1) it sends a completion message, (2) the captain explicitly requests shutdown, or (3) you are transitioning the entity to a new stage. Never interpret idle notifications as "stuck" or "unresponsive."
 
 **IDLE HALLUCINATION GUARDRAIL:** After acknowledging idle notifications once (e.g., "Ensign still available, standing by"), produce ZERO output for all subsequent idle notifications until a real human message arrives. Do not generate text, invoke tools, or take any action in response to repeated idle notifications. This prevents a known failure mode where the model hallucinates a user instruction (e.g., "Human: let's wrap up") after a long sequence of system-generated idle messages and then acts on the fabricated instruction.
+
+## Entity-Body Inspection
+
+See `## Probe and Ideation Discipline` in the shared core for the Grep-over-Read rule. The Claude Code runtime is where the Read-then-Bash-mutation staleness echo fires: avoid full-file Read for targeted section lookups and trust `status --set` stdout (now `field: old -> new`) for mutation narration.

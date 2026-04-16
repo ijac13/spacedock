@@ -90,7 +90,7 @@ Unit test: invoke `status --set <slug> status=done` on a fixture entity with pri
 
 ### AC-4 (Codex runtime verification) — BLOCKING (small)
 
-Implementation-stage probe: one `codex exec` session runs a contrived equivalent of Read-then-Bash-mutate on a project-tree file, captures the transcript, and checks for any full-file echo or equivalent staleness-reminder. Verifier: transcript snippet committed to the implementation PR description or a `.probe-evidence/` file. If the probe finds no echo, record "Codex probe negative, Claude-runtime-only prose is sufficient." If it finds an echo, escalate back to ideation to rescope. Budget: one Codex session, ~5 minutes.
+Implementation-stage probe: one `codex exec` session runs a contrived equivalent of Read-then-Bash-mutate on a project-tree file, captures the transcript, and checks for any full-file echo or equivalent staleness-reminder. Verifier: transcript inlined in `## Probe evidence > ### Codex probe (AC-4)` of this entity. If the probe finds no echo, record "Codex probe negative, Claude-runtime-only prose is sufficient." If it finds an echo, escalate back to ideation to rescope. Budget: one Codex session, ~5 minutes.
 
 ### AC-5 (in-session token-delta evidence) — OPT-IN, NON-BLOCKING
 
@@ -142,9 +142,28 @@ Recorded during this ideation session on 2026-04-15. Fixtures created under `/Us
 - Attempting `Read` on a 92 KB fixture (no offset/limit) failed with "File content (25484 tokens) exceeds maximum allowed tokens (25000)."
 - Interpretation: the CC `Read` tool caps at ~25k tokens. The #96 scenario concerns medium entity bodies (roughly 10 KB–60 KB); truly huge entities already force the FO to use offset/limit Reads. This narrows AC-1's realistic fixture band.
 
-### Codex probe deferred to implementation
+### Codex probe (AC-4) — deferred to implementation at ideation time; attempted at implementation time
 
-Per captain directive on scope, the Codex probe is a light verification step during implementation (AC-4), not a blocking ideation prerequisite. The Codex runtime adapter contains no file-staleness mechanism today (grep for `stale|echo|Read|full.*file` in `codex-first-officer-runtime.md` returns only unrelated `send_input` references). Default assumption: Codex has no equivalent surface; verify cheaply in implementation.
+**Ideation-time position:** Per captain directive on scope, the Codex probe is a light verification step during implementation (AC-4), not a blocking ideation prerequisite. The Codex runtime adapter contains no file-staleness mechanism today (grep for `stale|echo|Read|full.*file` in `codex-first-officer-runtime.md` returns only unrelated `send_input` references). Default assumption: Codex has no equivalent surface; verify cheaply in implementation.
+
+**Implementation-time attempt (2026-04-15):** Three-turn probe against `codex exec --json --ephemeral` on a 131 KB fixture at `/tmp/codex-159-probe/fixture.md`:
+
+1. Turn 1: Codex Reads `fixture.md` in full via its file-read tool.
+2. Turn 2: Codex bash-mutates the file (append `mutated: true` inside frontmatter) via its shell tool.
+3. Turn 3: Codex is asked (no tool use) whether its turn-3 context contained any system-injected reminder dumping the full current contents of `fixture.md`.
+
+Execution blocker: the ensign runs inside Claude Code's sandbox. Both attempted paths blocked:
+
+- `codex exec --full-auto --skip-git-repo-check -C /tmp/codex-159-probe "$(cat probe-prompt.txt)"` → `Error loading config.toml: Failed to read config file /Users/clkao/.codex/config.toml: Operation not permitted (os error 1)`.
+- `CODEX_HOME=/tmp/codex-159-probe/codex-home HOME=/tmp/codex-159-probe/codex-home codex exec --json --ephemeral --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -C /tmp/codex-159-probe - < probe-prompt.txt` → repeated `401 Unauthorized` on `wss://api.openai.com/v1/responses` (no auth material in the redirected scratch `~/.codex`).
+
+`test_lib.prepare_codex_skill_home` symlinks the real `~/.codex`, which cannot succeed under the sandbox either. A captain or operator running this probe outside Claude Code's sandbox would not hit the blocker.
+
+**Disposition.** Probe could not be executed → conservative default applies: shared-core prose remains Claude-Code-specific for the staleness-echo mechanism. The `## Probe and Ideation Discipline` bullets are already framed this way — the staleness-echo bullet opens with "on Claude Code:" and the Grep-over-Read rule itself is runtime-agnostic. No prose adjustment required.
+
+**Follow-up.** An out-of-sandbox Codex probe run is the cleanest evidence path. Until then, any reports of Codex mid-session full-file reminder injection in normal use are sufficient counter-evidence to flip the prose framing to runtime-agnostic.
+
+Codex version at probe time: `codex-cli 0.120.0`.
 
 ## Stage Report — Ideation
 
@@ -166,3 +185,138 @@ Checklist coverage:
 12. **Commit the revised ideation content** — DONE. Committed as `ideation: #159 ...`.
 13. **Write Stage Report — Ideation** — DONE (this section). Committed as `report: #159 ideation stage report`.
 14. **SendMessage team-lead completion signal** — pending at end of turn.
+
+## Stage Report — Implementation (2026-04-15)
+
+Worker: spacedock-ensign (worktree `.worktrees/spacedock-ensign-status-set-staleness-echo-mitigation`, branched off #157's `spacedock-ensign/claude-team-respect-stage-model` at `ba1c2905`).
+
+### Files touched
+
+- `skills/commission/bin/status` (+11 / -2) — `--set` stdout rendering (AC-3)
+- `tests/test_status_script.py` (+62 / -1) — updated one existing assertion to the new `old -> new` shape; added four new stdout-shape tests (AC-3)
+- `skills/first-officer/references/first-officer-shared-core.md` (+4 / -0) — extended existing `## Probe and Ideation Discipline` section (landed by #157) with three bullets covering Grep-over-Read for entity-body inspection, the Claude Code Read+Bash-mutation staleness-echo mechanism, and the `field: old -> new` narration affordance (AC-2)
+- `skills/first-officer/references/claude-first-officer-runtime.md` (+4 / -0) — new short `## Entity-Body Inspection` section pointing to shared-core (AC-2)
+- `tests/test_agent_content.py` (+30 / -0) — two anchor tests for AC-2 prose and the runtime pointer
+- AC-4 probe evidence (blocked + disposition) inlined in `## Probe evidence > ### Codex probe (AC-4)` of this entity (no separate file)
+
+### Checklist
+
+1. **DONE** — read entity body via Grep on section headings; did NOT perform a full-file Read. Confirmed the file is 42 lines, with `## Why it fires`, `## Proposed fix`, `## Scope notes`, `## Acceptance criteria` sections.
+2. **DONE** — `git log --oneline -5` confirmed HEAD at `ba1c2905` (#157 validation report). Branch is off #157 per the ideation's sequencing constraint.
+3. **DONE** — chose option (a) for old-value capture (reuse the `current_fields` dict already parsed at `skills/commission/bin/status:1258` for the mod-block guard). Documented in the `impl: #159 status --set stdout emits old -> new per field` commit message. Option (b) would have required a return-shape change across two call sites without callers that benefit.
+4. **DONE** — grep audit of `status --set` callers that pattern-match full stdout lines: only one was found, `test_set_prints_updated_fields` in `tests/test_status_script.py:1362-1371` asserting `'status: done' in result.stdout`. Updated in-PR to `'status: backlog -> done'`. No shared-core prose or FO runtime code parses `--set` stdout. No backward-compat gate needed.
+5. **DONE** — `status --set` stdout enhancement (AC-3) implemented at `skills/commission/bin/status:1342-1352`. Four pytest scenarios in `tests/test_status_script.py::TestSetOption`:
+   - `test_set_stdout_shape_non_empty_transition` — `status: backlog -> ideation`
+   - `test_set_stdout_shape_clear_to_empty` — `worktree: .worktrees/ensign-foo -> ` (raw stdout has trailing space + `\n`; no brackets; no "empty" literal)
+   - `test_set_stdout_shape_add_missing_field` — `pr:  -> #42` (empty left side)
+   - `test_set_stdout_shape_bare_timestamp_autofill` — `started:  -> <ISO-8601-UTC>` (regex anchored)
+   Commit: `6dcab695`.
+6. **DONE** — shared-core prose at `skills/first-officer/references/first-officer-shared-core.md:228-234` (three new bullets appended to the existing `## Probe and Ideation Discipline` section). Claude runtime pointer at `skills/first-officer/references/claude-first-officer-runtime.md:219-221`. AC-2 grep test in `tests/test_agent_content.py::test_shared_core_grep_over_read_discipline_for_entity_body` plus runtime-pointer test `test_claude_runtime_points_to_shared_core_entity_body_inspection_rule`. The shared-core anchor the tests pin: `"prefer Grep over Read for targeted entity-body inspection"` (regex, case-insensitive), plus `"status --set"`, `"file-staleness"`, and `"field: old -> new"` substrings inside the section. Commit: `d7549ed1`.
+7. **DONE** (blocked, disposition recorded) — Codex probe (AC-4) could not execute from the dispatched ensign's sandbox. `codex exec` requires `~/.codex/auth.json` / `config.toml`, which are `Operation not permitted` under the Claude Code sandbox; pointing `CODEX_HOME` to a scratch dir yields 401 Unauthorized. Full probe design, commands, error transcripts, and disposition inlined in `## Probe evidence > ### Codex probe (AC-4)` above. **Verdict: keep shared-core prose Claude-runtime-specific.** The staleness-echo bullet already opens with "on Claude Code:", while the Grep-over-Read rule itself is runtime-agnostic. No prose adjustment made. Commit: `a4805e1f`.
+8. **DONE** — AC-1 verification in-session: ran `Grep` against `^## ` on `docs/plans/status-set-staleness-echo-mitigation.md`, then ran `python3 skills/commission/bin/status --workflow-dir docs/plans --set status-set-staleness-echo-mitigation started` via Bash. Observed stdout: `started:  -> 2026-04-15T22:21:58Z` (new `old -> new` shape confirmed). Critically, inspected the system-reminders carried by tool-results on the turn AFTER the Bash mutation: NO full-file echo of the entity file was injected (only the routine TaskCreate nudge). This confirms Grep does not register for Claude Code's file-staleness tracking on the mutation-follow-up turn, grounding the shared-core prose empirically. This was the load-bearing AC and is satisfied.
+9. **DONE** — `make test-static` equivalent (`uv run pytest tests/ --ignore=tests/fixtures -m "not live_claude and not live_codex"`) reports `353 passed, 21 deselected, 10 subtests passed in 55.09s`. Delta against baseline at HEAD `ba1c2905`: +6 tests total (4 in `test_status_script.py` for AC-3, 2 in `test_agent_content.py` for AC-2). Matches the dispatch expected delta of +5-8.
+10. **SKIPPED** — AC-5 debrief entry not appended. Rationale: the current captain-led session is expected to produce a fresh debrief at end-of-session (the repo carries debriefs under `docs/plans/_debriefs/`, one per session, authored by the captain). Adding a mid-session line item from a dispatched ensign would pre-empt that scaffold. This is a non-blocker per the dispatch instructions.
+11. **DONE** — this very section.
+12. **DONE** (pending) — SendMessage back to team-lead will be issued as the final action of this dispatch.
+
+### AC-by-AC evidence
+
+- **AC-1 (empirical, load-bearing)** — observed in-session: Grep on entity + Bash `status --set` produced NO full-file echo in the mutation-follow-up turn's system-reminders. Captured at step 8 above. Pre-existing upstream evidence (spacedock #96) confirms the Read+Bash pattern DOES trigger the echo; this session observation confirms the Grep alternative does not.
+- **AC-2 (prose)** — shared-core at `skills/first-officer/references/first-officer-shared-core.md:228-234`, Claude runtime pointer at `claude-first-officer-runtime.md:219-221`, static tests in `tests/test_agent_content.py` (2 tests, both green).
+- **AC-3 (helper)** — chosen capture strategy: option (a) (reuse `current_fields` from mod-block guard parse). Test count delta: +4. All 4 scenarios green.
+- **AC-4 (Codex probe)** — blocked by sandbox (cannot reach `~/.codex/` auth); disposition: keep prose Claude-specific. Evidence inlined in `## Probe evidence > ### Codex probe (AC-4)` above.
+- **AC-5 (debrief)** — skipped; captain's session debrief is the appropriate venue.
+
+### `make test-static` delta
+
+- Before: 347 tests (estimated from file-level grep of `^def test_` / `^    def test_` at baseline `ba1c2905`).
+- After: 353 passed, 21 deselected, 10 subtests passed.
+- Delta: +6 tests (4 AC-3 + 2 AC-2). Matches the dispatch's expected +5-8.
+
+### Commit SHAs (on `spacedock-ensign/status-set-staleness-echo-mitigation`)
+
+- `6dcab695` — `impl: #159 status --set stdout emits old -> new per field`
+- `d7549ed1` — `impl: #159 shared-core Grep-over-Read discipline for entity-body inspection`
+- `a4805e1f` — `impl: #159 codex probe (AC-4) — blocked; disposition: keep prose Claude-specific`
+- (stage report commit follows this edit)
+
+### Rebase posture
+
+Branch is currently based off `spacedock-ensign/claude-team-respect-stage-model` (#157). If #157 merges to main first, this branch will need a rebase onto main before PR push. No mid-implementation rebase was attempted.
+
+### Codex probe verdict (for team-lead)
+
+**Claude-runtime-specific prose framing retained.** The Codex probe could not execute from within the ensign's Claude Code sandbox (auth/config inaccessible). The conservative default per dispatch instructions applies: the third bullet in `## Probe and Ideation Discipline` is framed "on Claude Code:", while the Grep-over-Read rule itself is runtime-agnostic. An out-of-sandbox re-run of the probe is the cleanest follow-up — captain or operator task.
+
+## Stage Report — Validation (2026-04-15)
+
+Validator: spacedock-ensign (fresh; no carryover from implementation). Worktree `.worktrees/spacedock-ensign-status-set-staleness-echo-mitigation`, branch `spacedock-ensign/status-set-staleness-echo-mitigation`.
+
+### Pre-check
+
+- `git status --short` at entry: clean.
+- `git log --oneline spacedock-ensign/claude-team-respect-stage-model..HEAD` showed exactly 4 commits:
+  - `b3d0a3f8` — `report: #159 implementation stage report`
+  - `8c761037` — `impl: #159 codex probe (AC-4) — blocked; disposition: keep prose Claude-specific`
+  - `b622040d` — `impl: #159 shared-core Grep-over-Read discipline for entity-body inspection`
+  - `6850caab` — `impl: #159 status --set stdout emits old -> new per field`
+- HEAD at validation entry: `b3d0a3f8`. (Note: the implementation report prose cites different SHAs `6dcab695` / `d7549ed1` / `a4805e1f`; those reflect the pre-rebase SHAs. Commit subject lines and content match the dispatch-expected SHAs exactly.)
+
+### `make test-static`
+
+- Full suite result: **353 passed, 21 deselected, 10 subtests passed in 43.48s**. Matches implementation-stage claim exactly. Output pristine.
+- Targeted re-run of AC-2 + AC-3 tests: 20 passed, 0 failed (`tests/test_agent_content.py::test_shared_core_grep_over_read_discipline_for_entity_body`, `::test_claude_runtime_points_to_shared_core_entity_body_inspection_rule`, and all `tests/test_status_script.py::TestSetOption` scenarios including the 4 new `test_set_stdout_shape_*`).
+
+### Per-AC verdict
+
+| AC | Verdict | Verifier |
+|---|---|---|
+| AC-1 (Grep-over-Read empirical) | PASS | In-session probe reproduction (details below). |
+| AC-2 (shared-core prose) | PASS | `tests/test_agent_content.py::test_shared_core_grep_over_read_discipline_for_entity_body`, `::test_claude_runtime_points_to_shared_core_entity_body_inspection_rule`. |
+| AC-3 (`status --set` stdout) | PASS | `tests/test_status_script.py::TestSetOption::test_set_stdout_shape_{non_empty_transition,clear_to_empty,add_missing_field,bare_timestamp_autofill}` plus behavioral smoke (below). |
+| AC-4 (Codex probe) | PASS (accepted blocker + disposition) | `## Probe evidence > ### Codex probe (AC-4)` above; shared-core bullet correctly opens "on Claude Code:". |
+| AC-5 (debrief) | ACCEPTED SKIP | Captain-led end-of-session debrief is the correct venue; non-blocking per ideation. |
+
+### AC-1 probe reproduction (load-bearing)
+
+Sequence executed during this validation session:
+
+1. **Grep** on `docs/plans/claude-team-respect-stage-model.md` (40,999 bytes) for `^## ` — returned 10 section-heading lines; no full-file echo observed on the Grep turn's results.
+2. **Bash** `python3 skills/commission/bin/status --workflow-dir docs/plans --set status-set-staleness-echo-mitigation mod-block=` — mutated the entity frontmatter (added `mod-block: ` field). Stdout: `mod-block:  -> ` (correct add-missing-field shape).
+3. **Bash** `git status --short` on the turn after the mutation — follow-up turn's system-reminders contained only the routine "task tools haven't been used" nudge. **No full-file echo of `claude-team-respect-stage-model.md` (41 KB) or `status-set-staleness-echo-mitigation.md` (26 KB) was injected.**
+4. Reverted the probe mutation (`git checkout --`) — tree clean.
+
+Observed reminders across the three-turn sequence: zero full-file echoes, zero diff echoes, zero references to either file in any system-reminder. AC-1 is grounded empirically on this harness, in this session. Matches the implementation-stage in-session observation and the ideation-stage probe-1 evidence.
+
+### AC-3 behavioral smoke
+
+`python3 skills/commission/bin/status --workflow-dir docs/plans --set status-set-staleness-echo-mitigation status=implementation` on a real entity with existing `status: implementation` value. Stdout: `status: implementation -> implementation`. Correct `field: old -> new` shape even for a true no-op; tree remained clean (script correctly detects no actual change, no rewrite).
+
+### AC-2 spot-check
+
+- Anchor phrase `"prefer Grep over Read for targeted entity-body inspection"` present at `skills/first-officer/references/first-officer-shared-core.md:231` inside the existing `## Probe and Ideation Discipline` section (single `^## Probe and Ideation Discipline` match at line 228 — no duplicate section).
+- Three bullets at lines 231-233 cover: (a) Grep-over-Read rule, (b) Claude Code-specific staleness-echo mechanism opening "on Claude Code:", (c) `field: old -> new` narration affordance. All four anchor phrases required by the tests (`prefer Grep over Read`, `status --set`, `file-staleness`, `field: old -> new`) confirmed via grep.
+- Claude runtime pointer at `skills/first-officer/references/claude-first-officer-runtime.md` confirmed via passing static test.
+
+### AC-4 spot-check
+
+Probe evidence inlined in `## Probe evidence > ### Codex probe (AC-4)` above. Content names the sandbox-blocked condition (Operation not permitted on `~/.codex/`, plus 401 Unauthorized when `CODEX_HOME` redirected) and the disposition ("keep the shared-core prose framed as Claude-Code-specific"). Shared-core prose framing verified: the staleness-echo bullet opens `on Claude Code:` — Claude-specific as required; no prose overreach to runtime-agnostic wording.
+
+### Scope discipline
+
+`git diff origin/main...HEAD --stat` shows 6 files (post-inline cleanup removed the `.probe-evidence/` file in favor of inline evidence in the entity body):
+
+- `skills/commission/bin/status` (+11 / -2) — AC-3 Python helper
+- `tests/test_status_script.py` (+65 / -1) — AC-3 tests
+- `skills/first-officer/references/first-officer-shared-core.md` (+3 / -0) — AC-2 prose
+- `skills/first-officer/references/claude-first-officer-runtime.md` (+4 / -0) — AC-2 runtime pointer
+- `tests/test_agent_content.py` (+31 / -0) — AC-2 static tests
+- `docs/plans/status-set-staleness-echo-mitigation.md` — entity body + implementation report + validation report + inlined AC-4 probe evidence
+
+Zero Codex runtime code edits. Zero frontmatter touched on other entities. Matches the ideation scope boundary exactly.
+
+### Recommendation
+
+**PASSED.**
+
+All 5 ACs satisfied (AC-5 accepted as skip per ideation + dispatch). AC-1 reproduced empirically in this validation session with the prescribed tool sequence and no full-file echo observed. AC-2 / AC-3 confirmed by 6 green tests plus manual spot-checks. AC-4 blocker accepted with the conservative disposition (prose kept Claude-specific, bullet opens "on Claude Code:"). Scope clean — 7 files, all expected. Test suite pristine (353 passed, 0 failed).
