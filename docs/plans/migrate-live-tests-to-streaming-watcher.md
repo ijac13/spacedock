@@ -83,3 +83,41 @@ Live smoke: one test, one run. The goal is confirming the watcher integration st
 - Changes to `FOStreamWatcher`, `run_first_officer_streaming`, or predicate helpers.
 - Changes to CI workflow or Makefile.
 - Codex-runtime streaming watcher equivalent (Codex tests have their own `CodexLogParser`; a matching watcher is follow-up after this cohort).
+
+## Stage Report (implementation)
+
+| # | Commit | Test | Milestones | Post-hoc LogParser retained? |
+|---|---|---|---|---|
+| 1 | `0e855813` | `test_gate_guardrail.py` | 2 (gate review presented; at-gate report) + `expect_exit` — claude path only | Yes — scrubbed self-approval aggregate scan |
+| 2 | `6790dde0` | `test_merge_hook_guardrail.py` | With-hook: 2 (ensign dispatch; `_merge-hook-fired.txt` Bash write) + `expect_exit`. No-mods: 1 (ensign dispatch) + `expect_exit`. Claude paths only via new `_run_claude_merge_case`; codex routed through `_run_merge_case` unchanged. | Yes — `check_merge_outcome` filesystem checks (hook file, archive, worktree cleanup) |
+| 3 | `6350c3dd` | `test_feedback_keepalive.py` | 2 (implementation ensign dispatch; validation ensign dispatch = keepalive crossed transition) + `expect_exit` | Yes — `_scan_keepalive_events` cross-entry shutdown scan and Tier 2 feedback-routing classification |
+| 4 | `86d61dd3` | `test_team_dispatch_sequencing.py` | 2 (first Agent(); second Agent()) + `expect_exit` | Yes — whole-log sequencing invariant (no assistant message mixes TeamCreate/TeamDelete with Agent) |
+| 5 | `d39c4eba` | `test_dispatch_names.py` | 2 (first Agent(); second Agent() — fails fast under #160 xfail condition) + `expect_exit` | Yes — entity state + `dispatch_count >= 2` + completed-timestamp checks, relevant on the xpass branch |
+| 6 | `47c4c4e9` | `test_rebase_branch_before_push.py` | 3 (Bash `push origin main`; Bash `push origin <branch>`; Bash `gh pr create`) + `expect_exit` | Yes — git-wrapper push-log ordering, bare-remote rebase verification, gh-stub PR check, entity frontmatter |
+
+### Per-migration notes on assertion shape
+
+- `test_gate_guardrail`: the self-approval check strips guardrail-citation phrasings like "cannot self-approve" before searching — a regex scrub-and-search that operates on the *concatenated* FO text. Does not reduce to a single milestone predicate, so it stayed as a post-hoc `LogParser.fo_texts()` pass.
+- `test_merge_hook_guardrail`: `check_merge_outcome` verifies filesystem state (hook file contents, archive presence, worktree cleanup) — inherently post-execution filesystem inspection.
+- `test_feedback_keepalive`: `_scan_keepalive_events` correlates impl-dispatch → impl-completion → validation-dispatch ordering to detect premature shutdown messages *in that specific window*. The Tier 2 classifier also distinguishes `SendMessage`-to-impl-agent (keepalive worked) from fresh `Agent()` impl dispatch (keepalive failed) — requires cross-entry state, not a single predicate.
+- `test_team_dispatch_sequencing`: the AC5 invariant is a *whole-log* property — "no assistant message anywhere mixes TeamCreate/TeamDelete with Agent in its tool_use set." Post-hoc aggregation is the natural fit.
+- `test_dispatch_names`: xfail hits at the second milestone's `StepTimeout` under #160's 1-Agent()-instead-of-2 symptom. Post-hoc entity state checks remain for the xpass branch when #160 is fixed.
+- `test_rebase_branch_before_push`: the *ordering* of pushes (main before branch) plus remote-branch rebase verification against the bare repo require git commands against the post-run repo state, not stream-json entries.
+
+### `make test-static` results
+
+```
+426 passed, 22 deselected, 10 subtests passed in 19.92s
+```
+
+Baseline AC: `425+ pass count`. Achieved 426 (up one from the 425 baseline cited in the entity body, likely reflecting an unrelated test that landed between the #173 snapshot and this dispatch). No regressions.
+
+### Spot-check collection
+
+`uv run pytest --collect-only` across all six migrated tests returns `6 tests collected` with no import errors.
+
+### Recommendation for validation
+
+Per dispatch note #12: **offline + single live smoke**. Offline (`make test-static`) is green. For the live smoke, `test_gate_guardrail.py` at `opus` is the most direct confirmation — the gate-presentation milestone is quick (~120s target) and the `expect_exit` at 180s lets us confirm the watcher correctly closes down a budget-capped run. Alternatively `test_merge_hook_guardrail.py` at `opus` / `medium` effort exercises a more complex two-phase flow but costs more wallclock.
+
+All six migrations follow the pilot template from #173 verbatim; structural risk is low. The real test is that the per-step timeouts are tuned correctly — the smoke will surface any that are too tight.
