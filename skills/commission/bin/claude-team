@@ -284,12 +284,21 @@ def cmd_build(args):
             'un-polished/un-reviewed content if no reply.',
             '',
         ]
-        for name, description in standing_teammates:
+        for name, description, mod_path in standing_teammates:
             desc = description or 'standing teammate'
-            lines.append(
-                f'- **{name}** ({desc}): SendMessage with the relevant input '
-                f'shape; reply format per the mod.'
-            )
+            usage_body = _parse_routing_usage_body(mod_path) if mod_path else None
+            if usage_body:
+                lines.append(f'- **{name}** ({desc})')
+                for body_line in usage_body.split('\n'):
+                    if body_line:
+                        lines.append(f'  {body_line}')
+                    else:
+                        lines.append('')
+            else:
+                lines.append(
+                    f'- **{name}** ({desc}): SendMessage with the relevant input '
+                    f'shape; reply format per the mod.'
+                )
         lines.append('')
         lines.append(
             'Full routing contract: see '
@@ -440,8 +449,8 @@ def extract_runtime_models(jsonl_path: str) -> set[str]:
     return models
 
 
-def enumerate_alive_standing_teammates(workflow_dir: str, team_name) -> list[tuple[str, str]]:
-    """Return [(name, description)] for alive standing teammates in the given team.
+def enumerate_alive_standing_teammates(workflow_dir: str, team_name) -> list[tuple[str, str, str]]:
+    """Return [(name, description, mod_path)] for alive standing teammates in the given team.
 
     Scans `{workflow_dir}/_mods/*.md` for mod files with `standing: true`
     in frontmatter (parsed via parse_mod_metadata). For each such mod,
@@ -459,6 +468,8 @@ def enumerate_alive_standing_teammates(workflow_dir: str, team_name) -> list[tup
     `## Hook: startup` section (authoritative — this is the same name
     `claude-team spawn-standing` hands to Agent() at spawn time). The
     description comes from the mod frontmatter's `description` field.
+    The mod_path lets callers re-read the same mod for per-teammate
+    payload extras (e.g., `## Routing Usage`) without re-globbing.
     """
     if not team_name:
         return []
@@ -482,7 +493,7 @@ def enumerate_alive_standing_teammates(workflow_dir: str, team_name) -> list[tup
         if not member_exists(team_name, declared_name):
             continue
         description = meta["frontmatter"].get("description", "")
-        alive.append((declared_name, description))
+        alive.append((declared_name, description, mod_path))
     return alive
 
 
@@ -508,6 +519,45 @@ def member_exists(team: str, name: str) -> bool:
         if member.get("name") == name:
             return True
     return False
+
+
+def _parse_routing_usage_body(mod_path: str) -> str | None:
+    """Extract the body of a mod's `## Routing Usage` section, or None.
+
+    Returns the text between the `## Routing Usage` heading and the next
+    `## ` heading (or EOF), with surrounding blank lines stripped. Returns
+    None when the section is missing, empty, or contains only whitespace —
+    callers render the fallback one-liner in those cases.
+    """
+    try:
+        with open(mod_path, "r") as f:
+            content = f.read()
+    except OSError:
+        return None
+    lines = content.split("\n")
+
+    start = None
+    for i, line in enumerate(lines):
+        if line.strip() == "## Routing Usage":
+            start = i
+            break
+    if start is None:
+        return None
+
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].startswith("## "):
+            end = i
+            break
+
+    body_lines = lines[start + 1:end]
+    while body_lines and not body_lines[0].strip():
+        body_lines.pop(0)
+    while body_lines and not body_lines[-1].strip():
+        body_lines.pop()
+    if not body_lines:
+        return None
+    return "\n".join(body_lines)
 
 
 def _parse_hook_startup_spawn_config(mod_path: str) -> dict:
