@@ -1,16 +1,17 @@
 ---
 id: 166
 title: "Standing-teammate auto-enumeration payload: inline per-teammate usage spec into dispatch prompts"
-status: validation
+status: done
 source: "CL observation during 2026-04-16 session after comm-officer mod gained two new modes (polish-and-write, polish-and-edit) — dispatched ensigns can't discover mode trigger phrases from the current AC-13 section wording"
 started: 2026-04-16T16:00:50Z
-completed:
-verdict:
+completed: 2026-04-16T20:26:27Z
+verdict: PASSED
 score: 0.55
-worktree: .worktrees/spacedock-ensign-standing-teammate-enumeration-usage-payload
+worktree: 
 issue:
 pr: #103
 mod-block: 
+archived: 2026-04-16T20:26:32Z
 ---
 
 ## Problem Statement
