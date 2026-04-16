@@ -708,6 +708,49 @@ def cmd_spawn_standing(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_list_standing(args: argparse.Namespace) -> int:
+    """Emit absolute paths of `standing: true` mods under {workflow_dir}/_mods/*.md.
+
+    Used at FO boot (before team members exist) to enumerate which standing
+    mods to hand to `spawn-standing`. This is NOT the same predicate as
+    `enumerate_alive_standing_teammates`, which also filters by team
+    membership (member_exists). Keep the two call paths distinct.
+
+    Output format: one absolute mod path per line, sorted alphabetically
+    by filename. Paths are whitespace-free by `_mods/*.md` naming
+    convention (kebab-case) — if that ever changes, switch to `-0` NUL
+    delimiting or `--json`.
+
+    Exit 0 on success, including zero matches (empty stdout). Exit
+    non-zero only when the workflow directory cannot be resolved.
+    """
+    workflow_dir = args.workflow_dir
+    if not os.path.isdir(workflow_dir):
+        print(
+            f"error: workflow directory not found: {workflow_dir}",
+            file=sys.stderr,
+        )
+        return 1
+
+    mods_dir = os.path.join(workflow_dir, "_mods")
+    if not os.path.isdir(mods_dir):
+        return 0
+
+    standing_paths = []
+    for mod_path in sorted(glob.glob(os.path.join(mods_dir, "*.md"))):
+        try:
+            meta = parse_mod_metadata(mod_path)
+        except (ValueError, OSError) as e:
+            print(f"error: unreadable mod {mod_path}: {e}", file=sys.stderr)
+            return 1
+        if meta["standing"]:
+            standing_paths.append(os.path.abspath(mod_path))
+
+    for path in standing_paths:
+        print(path)
+    return 0
+
+
 def lookup_model(name: str) -> str | None:
     """Find the model for a team member by name.
 
@@ -822,6 +865,14 @@ def main():
     spawn_parser.add_argument("--mod", required=True, help="Path to the standing-teammate mod file")
     spawn_parser.add_argument("--team", required=True, help="Target team name")
 
+    list_standing_parser = subparsers.add_parser(
+        "list-standing",
+        help="List absolute paths of standing-teammate mod files (one per line)",
+    )
+    list_standing_parser.add_argument(
+        "--workflow-dir", required=True, help="Absolute path to workflow directory"
+    )
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -834,6 +885,8 @@ def main():
         sys.exit(cmd_build(args))
     elif args.command == "spawn-standing":
         sys.exit(cmd_spawn_standing(args))
+    elif args.command == "list-standing":
+        sys.exit(cmd_list_standing(args))
 
 
 if __name__ == "__main__":
