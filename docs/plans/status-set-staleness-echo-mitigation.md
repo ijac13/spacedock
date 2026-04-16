@@ -9,7 +9,7 @@ verdict:
 score: 0.80
 worktree: .worktrees/spacedock-ensign-status-set-staleness-echo-mitigation
 issue: "#96"
-pr:
+pr: #101
 mod-block: merge:pr-merge
 ---
 
