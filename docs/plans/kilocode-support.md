@@ -187,6 +187,20 @@ Conclusion: Subagents are NOT addressable after completion.
 - No team abstraction means concurrent dispatch limited to parallel `task` calls
 - Context budget API unknown — may need workarounds
 
+### Impact Analysis: Spacedock Usability
+
+| Spacedock Feature | Impact | Severity |
+|-----------------|-------|----------|
+| **Worker reuse** (per #96) | Broken - cannot message completed subagent | High |
+| **Feedback bounce** | Broken - needs fresh dispatch each cycle | High |
+| **Standing teammates** | Broken - cannot keep alive across session | High |
+| **Concurrent dispatch** | Partial - task blocks, but parallel `task` calls possible | Medium |
+| **Single-entity mode** | ✅ Works - aligns with blocking behavior | None |
+
+**Mitigation:** Kilo runtime must FRESH-DISPATCH for every stage. No reuse. This is acceptable for single-entity bounded runs but increases per-entity cost in multi-stage workflows.
+
+**Workaround:** Use deterministic stage ordering (backlog → ideation → done) without feedback cycles to minimize dispatches.
+
 ## Completion Checklist
 
 - [x] Research Kilo (kilo.ai) capabilities — understand the runtime
