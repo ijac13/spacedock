@@ -1543,7 +1543,7 @@ def _run_build_with_home(wf_dir: Path, stdin_data: dict, home: Path, cwd: Path |
 
 
 class TestBuildStandingTeammateEnumeration:
-    """AC-13: `claude-team build` auto-enumerates alive standing teammates into prompts."""
+    """AC-13: `claude-team build` auto-enumerates declared standing teammates into prompts."""
 
     _SECTION_HEADING = "### Standing teammates available in your team"
 
@@ -1576,8 +1576,13 @@ class TestBuildStandingTeammateEnumeration:
         # SendMessage(to="team-lead", ...) line stays at end-of-prompt.
         assert out["prompt"].index(self._SECTION_HEADING) < out["prompt"].index("### Completion Signal")
 
-    def test_build_omits_standing_section_when_absent(self, tmp_path):
-        """Standing mod declared but matching member NOT alive in team config."""
+    def test_build_emits_standing_section_for_declared_but_not_alive(self, tmp_path):
+        """Standing mod declared but member NOT alive in team config — section still appears.
+
+        Under lazy-spawn, teammates are declared at build time but may not be
+        alive yet. The section enumerates declared teammates regardless of
+        team-config membership.
+        """
         wf_dir, entity = _make_workflow_fixture(tmp_path)
         mods_dir = wf_dir / "_mods"
         mods_dir.mkdir()
@@ -1599,7 +1604,8 @@ class TestBuildStandingTeammateEnumeration:
         result = _run_build_with_home(wf_dir, inp, home=tmp_path)
         assert result.returncode == 0, f"stderr: {result.stderr}"
         out = json.loads(result.stdout)
-        assert self._SECTION_HEADING not in out["prompt"]
+        assert self._SECTION_HEADING in out["prompt"]
+        assert "comm-officer" in out["prompt"]
 
     def test_build_omits_standing_section_in_bare_mode(self, tmp_path):
         """Bare mode has no team_name → no section even if mods exist."""
