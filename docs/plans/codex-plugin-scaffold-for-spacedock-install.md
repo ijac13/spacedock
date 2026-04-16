@@ -1,7 +1,7 @@
 ---
 id: 142
 title: Codex plugin scaffold for Spacedock install experience
-status: implementation
+status: validation
 source: Research on OpenAI Codex plugin packaging docs on 2026-04-12
 score: 0.67
 started: 2026-04-15T05:18:01Z
