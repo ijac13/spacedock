@@ -20,19 +20,19 @@ The repo still tells Codex users to symlink `skills/` into `~/.agents/skills/spa
 
 ## Proposed Approach
 
-Use the repository root as the source of truth for the plugin package, but make the repo-plugin marketplace path explicit: the local catalog should point at `./plugins/spacedock` and the implementation must make that path resolvable for Codex. That resolvability must exist either as a real compatibility copy/symlink/layout under `./plugins/spacedock` or as a documented fallback resolver that maps that path to the repo-root plugin package. That keeps the current `skills/`, `agents/`, `references/`, `mods/`, and scripts layout intact while still matching the marketplace schema. The plugin package would live at the repo root via `.codex-plugin/plugin.json`, and the repo-local marketplace would live at `.agents/plugins/marketplace.json`.
+Use the repository root as the source of truth for the plugin package, but make the repo-plugin marketplace path explicit: the local catalog should point at `./plugins/spacedock` and the implementation must make that exact on-disk path exist. The concrete mechanism should be a checked-in symlink at `plugins/spacedock` that resolves to the repo root, so Codex can load the plugin without any resolver indirection. That keeps the current `skills/`, `agents/`, `references/`, `mods/`, and scripts layout intact while still matching the marketplace schema. The plugin package would live at the repo root via `.codex-plugin/plugin.json`, and the repo-local marketplace would live at `.agents/plugins/marketplace.json`.
 
 The implementation should:
 
 - Add `.codex-plugin/plugin.json` with the current Codex packaging fields
 - Include `interface.displayName`, `category`, `policy.installation`, and `policy.authentication` in the marketplace entry, using the schema's allowed values (`policy.installation`: `NOT_AVAILABLE`, `AVAILABLE`, or `INSTALLED_BY_DEFAULT`; `policy.authentication`: `ON_INSTALL` or `ON_USE`)
-- Add `.agents/plugins/marketplace.json` so Codex can discover the local repo install without a manual file copy, with `source.path: "./plugins/spacedock"` and a concrete on-disk or documented resolver path that makes that directory resolve correctly for Codex
+- Add `.agents/plugins/marketplace.json` so Codex can discover the local repo install without a manual file copy, with `source.path: "./plugins/spacedock"` and a checked-in symlink at `plugins/spacedock` that resolves to the repo root
 - Update README install docs to explain the Codex install path first, while explicitly labeling the symlink path and `.claude-plugin` surfaces as legacy migration support
 - Update `skills/commission/SKILL.md`, `skills/refit/SKILL.md`, `skills/debrief/SKILL.md`, and `scripts/release.sh` to reference the Codex packaging contract where they currently read `.claude-plugin`
-- Require either a synchronized compatibility copy or a fallback resolution path so legacy `.claude-plugin/plugin.json` consumers continue to resolve the version source during migration
+- Require a synchronized compatibility copy at `.claude-plugin/plugin.json` that mirrors `.codex-plugin/plugin.json` so legacy consumers continue to resolve the version source during migration
 - Treat `.claude-plugin/marketplace.json` as a compatibility surface during migration, not the primary install story
 
-If the root-vs-subdirectory decision changes, the task must also update `source.path` and the install docs accordingly. For the repo-plugin layout, the marketplace `source.path` must follow the current contract from the plugin spec: `./plugins/spacedock`. The implementation must make that path work on disk either by creating a real compatibility copy/symlink/layout at `./plugins/spacedock` or by shipping a documented fallback resolver that makes Codex resolve `./plugins/spacedock` to the repo-root plugin package.
+If the root-vs-subdirectory decision changes, the task must also update `source.path` and the install docs accordingly. For the repo-plugin layout, the marketplace `source.path` must follow the current contract from the plugin spec: `./plugins/spacedock`. The implementation must make that path work on disk by checking in `plugins/spacedock` as a symlink to the repo root.
 
 ## Acceptance Criteria
 
@@ -42,19 +42,20 @@ If the root-vs-subdirectory decision changes, the task must also update `source.
 2. The repo contains a valid local marketplace file at `.agents/plugins/marketplace.json`.
    - Test: load the JSON and verify the marketplace-level `interface.displayName: "Spacedock"`, and the Spacedock entry has `name: "spacedock"`, `category: "workflow"`, `source.source: "local"`, `source.path: "./plugins/spacedock"`, `policy.installation: "AVAILABLE"`, and `policy.authentication: "ON_INSTALL"`. Do not require a top-level `description` field on the marketplace entry unless the schema explicitly adds one later.
 
-3. The install docs and workflow helper docs describe the new Codex install path and the migration posture clearly.
-   - Test: inspect `README.md`, `skills/commission/SKILL.md`, `skills/refit/SKILL.md`, `skills/debrief/SKILL.md`, `scripts/release.sh`, and `.claude-plugin/marketplace.json` for the updated wording and compatibility notes.
+3. The repo contains the real plugin path that the marketplace targets.
+   - Test: verify `plugins/spacedock` exists as a symlink, resolves to the repository root, and exposes the same plugin root contents Codex would load from `./plugins/spacedock`.
 
-4. Legacy install guidance is not silently removed.
-   - Test: confirm the docs either retain the symlink-era path as fallback or explicitly mark it deprecated with a migration note, and confirm legacy `.claude-plugin/plugin.json` consumers in `skills/refit/SKILL.md`, `skills/debrief/SKILL.md`, and `scripts/release.sh` have either a synchronized compatibility copy or a fallback resolution path.
+4. Legacy install guidance and legacy manifest consumers remain synchronized.
+   - Test: confirm the docs either retain the symlink-era path as fallback or explicitly mark it deprecated with a migration note, and confirm `.claude-plugin/plugin.json` is a synchronized compatibility copy of `.codex-plugin/plugin.json` that legacy consumers in `skills/refit/SKILL.md`, `skills/debrief/SKILL.md`, and `scripts/release.sh` can continue to read.
 
 5. The package can be discovered and installed by Codex through the local marketplace.
-   - Test: run a scripted, noninteractive contract check that parses `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json`, verifies the manifest keys and marketplace enum values, and confirms the implementation has a real or resolver-backed `./plugins/spacedock` path. Separately, perform the manual Codex smoke path with explicit prerequisites: Codex is restarted, `/plugins` is opened, the local marketplace entry appears, Spacedock is installed, and the plugin loads.
+   - Test: run a scripted, noninteractive contract check that parses `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, and `.agents/plugins/marketplace.json`, verifies the manifests are synchronized where intended, verifies the marketplace enum values, and confirms `plugins/spacedock` resolves to the repo root. Separately, perform the manual Codex smoke path with explicit prerequisites: Codex is restarted, `/plugins` is opened, the local marketplace entry appears, Spacedock is installed, and the plugin loads.
 
 ## Test Plan
 
 - Static validation of JSON shape and required fields is low cost and should be automated.
 - Add a scripted noninteractive check for manifest and marketplace shape so the contract is reproducible without opening Codex.
+- Add a scripted noninteractive check that `plugins/spacedock` is a symlink to the repo root and that `.claude-plugin/plugin.json` matches `.codex-plugin/plugin.json` byte-for-byte or by normalized JSON comparison.
 - Doc/README checks are low cost and can be covered with targeted text assertions.
 - The Codex smoke path is higher cost because it requires an interactive restart and plugin UI flow, but it is necessary because the user-visible install experience is the point of the change.
 - No E2E workflow-runtime tests are needed; the scope stops at packaging and install experience, not runtime behavior or stage execution.
@@ -62,9 +63,9 @@ If the root-vs-subdirectory decision changes, the task must also update `source.
 ## Stage Report: ideation
 
 - [DONE] Problem statement reflects the current mismatch between Codex packaging, legacy `.claude-plugin` surfaces, and symlink-era instructions.
-- [DONE] Repo-layout decision is explicit: Spacedock stays at the repo root as the source of truth, and the marketplace path is concretely resolvable at `./plugins/spacedock`.
-- [DONE] Coexistence and migration are addressed for README install docs, `skills/commission/SKILL.md`, `skills/refit/SKILL.md`, `skills/debrief/SKILL.md`, `scripts/release.sh`, and `.claude-plugin/marketplace.json`.
-- [DONE] Acceptance criteria enumerate the intended keys and values for `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json`, including the top-level marketplace `interface` and policy enum constraints.
-- [DONE] Test plan separates a scripted contract check from the manual Codex smoke path, with explicit prerequisites for restart, `/plugins`, install, and load verification.
+- [DONE] Repo-layout decision is explicit: Spacedock stays at the repo root as the source of truth, `plugins/spacedock` is a checked-in symlink to the root, and the marketplace path is `./plugins/spacedock`.
+- [DONE] Coexistence and migration are addressed with a synchronized `.claude-plugin/plugin.json` copy plus the existing README/install-doc migration notes and legacy helper consumers.
+- [DONE] Acceptance criteria enumerate the intended keys and values for `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json`, and directly verify the symlinked plugin path.
+- [DONE] Test plan separates the scripted contract checks from the manual Codex smoke path, with explicit prerequisites for restart, `/plugins`, install, and load verification.
 - [DONE] Scope is constrained to packaging and install experience; runtime behavior changes are out of scope.
 - [SKIPPED] Frontmatter changes are out of scope for this stage refresh.
