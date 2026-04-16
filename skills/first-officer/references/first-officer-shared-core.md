@@ -79,6 +79,8 @@ For each entity reported by `status --next`:
 
 Feedback-stage worker instructions must preserve this rule: a review stage checks and reports on what was produced; it does not silently take over the prior stage's work.
 
+**Routing through a standing prose-polisher.** When composing drafts destined for captain review (PR bodies, gate review summaries, long narrative sections of entity bodies, debrief content), the FO MAY route through a live standing prose-polisher (convention: `comm-officer`) when present in team config. Check team-config members via `member_exists` before routing. Best-effort, non-blocking, 2-minute timeout. If the teammate is absent, proceed with un-polished text. **Out of scope for polish routing:** live captain-chat replies, short operational statuses (`pushed`, `tests green`, `PR opened`), tool-call outputs, commit messages, transient logs. Polish is a deliberate-draft discipline, not a live-turn reflex.
+
 ## Completion and Gates
 
 When a worker completes:
@@ -211,6 +213,15 @@ Merge hooks can create blocking conditions (e.g., requiring captain approval bef
 - **Guarded** by `status --set`, which refuses terminal transitions (status to a terminal stage, completed, verdict, worktree clear) while `mod-block` is non-empty unless `--force` is passed.
 - **Enforced at the mechanism level** — independent of whether the FO set `mod-block` first, `status --set` and `status --archive` refuse terminal transitions and archival when the workflow has registered merge hooks (`_mods/*.md` with `## Hook: merge`) AND `pr` is empty AND `mod-block` is empty. In that state the hook has provably not run, so terminal advancement is rejected with an error naming the hook. `--force` bypasses this check. This prevents the FO from skipping the hook even if it forgot to set `mod-block` first.
 - **Survives session resume** — the FO reads `mod-block` from entity frontmatter on boot and resumes the pending action.
+
+## Standing Teammates
+
+A **standing teammate** is a long-lived specialist agent (prose polisher, science officer, code reviewer, language translator) declared by a workflow mod with `standing: true` in frontmatter. The FO spawns each declared standing teammate once per captain session, routes to it by name via SendMessage, and lets it die with the team at session teardown. The four concept areas below are load-bearing for every runtime:
+
+- **first-boot-wins** — lifecycle is captain-session-scoped via team-scope, not workflow-scope. When multiple workflows share one team in a captain session, the first FO to boot that finds the member absent spawns it; subsequent workflows detect the live member and skip. Because Claude teams are a per-captain-session construct, "team-scope" is effectively "captain-session scope" for the Claude runtime; other runtimes with different team semantics will re-derive the scope from their own team model.
+- **team-scope lifecycle** — the teammate lives as a member of exactly one team. When Claude Code tears down the team (session end, `TeamDelete`, or captain-initiated shutdown), the teammate dies with it. There is no cross-team handoff and no persistence across sessions. Mid-session unexpected death is detected on the next routing attempt and handled by the caller (respawn via the helper, or proceed without); auto-recovery is deferred follow-up work.
+- **routing contract** — ensigns and the FO address a standing teammate by the `name` declared in its mod's `## Hook: startup` section, using SendMessage. Routing is best-effort and non-blocking: the sender proceeds with un-polished / un-reviewed / un-translated content if no reply arrives within the 2-minute interactive timeout convention. Observed round-trip latencies of several minutes are normal when the teammate is handling a long draft — the non-blocking discipline applies regardless of how long a given round trip takes. The sender is never expected to wait synchronously for the teammate.
+- **declaration format** — one mod file per standing teammate under `{workflow_dir}/_mods/{name}.md`. Frontmatter carries `standing: true`. The `## Hook: startup` section declares spawn config (`subagent_type`, `name`, `model` from the `sonnet|opus|haiku` enum, optional `team_name: {current team}` placeholder). The `## Agent Prompt` section is the LAST top-level section in the file; its body from the line after the heading to EOF is the verbatim prompt passed to Agent(). Any `## ` heading after `## Agent Prompt` is a convention violation and is rejected loudly by the helper.
 
 ## Clarification and Communication
 
