@@ -223,3 +223,21 @@ No E2E tests needed. All changes are prose (runtime adapter, shared-core) and a 
 9. Stage Report — DONE (this section).
 
 **Recommendation:** Ready for ideation gate review. The design is minimal (prose changes + one function rename), addresses all open questions, and avoids the ensign-cannot-spawn pitfall that a naive "spawn on first SendMessage" approach would hit.
+
+## Stage Report (implementation)
+
+1. Read the entity ideation output (Decision, Protocol, Changes Required, AC-1 through AC-7, Test Plan) — DONE. All sections read and understood as the implementation spec.
+2. Rename `enumerate_alive_standing_teammates` to `enumerate_declared_standing_teammates` — DONE. Removed `member_exists` call inside the loop. Updated docstring to reflect declared-not-alive semantics. Updated `cmd_build` call site. Updated `cmd_list_standing` docstring cross-reference. Return shape `[(name, description, mod_path)]` preserved.
+3. Update preamble in `cmd_build` — DONE. Changed from "The FO has spawned these standing teammates" to "These standing teammates are available in your team".
+4. Update `claude-first-officer-runtime.md` — DONE. (a) Renamed heading to `### Standing teammate discovery pass`, replaced 6-step eager protocol with 2-step discovery (list-standing + record mod paths, no spawn at boot). (b) Added `### Standing teammate lazy-spawn` subsection describing first-dispatch trigger with `spawn-standing`, `already-alive` handling, fire-and-forget discipline. (c) Updated bare-mode/single-entity/Degraded Mode skip notes: discovery still runs, lazy-spawn skipped.
+5. Update `first-officer-shared-core.md` — DONE. (a) Updated Standing Teammates intro and first-boot-wins bullet to note spawn is deferred to first dispatch. (b) Confirmed FO routing paragraph at line 82 still references `member_exists`.
+6. Update `test_standing_teammate_prose.py` — DONE. Changed heading grep from `Standing teammate spawn pass` to `Standing teammate discovery pass`. Added assertion that old heading is absent. Added `test_lazy_spawn_heading_present`. Added `test_discovery_does_not_call_spawn_standing` (AC-1). Added `test_lazy_spawn_mentions_spawn_standing` (AC-2). Added `TestSharedCoreLazySpawn` class with AC-5 grep for 'deferred'/'lazy'. Added `TestLazySpawnSkipConditions` class with AC-6 grep for skip conditions.
+7. Update `test_claude_team_spawn_standing.py` — DONE. Added `_load_claude_team_module` helper for direct import. Added `TestEnumerateDeclaredStandingTeammates` class with unit test: standing mod with no team config on disk, `enumerate_declared_standing_teammates` returns the mod (would have been empty under old function). Added bare-mode test returning empty list.
+8. Update `test_claude_team_spawn_standing.py` with AC-4 test — DONE. Added `TestBuildDeclaredTeammatesSection` class: run `cmd_build` with standing mod but no team config member, assert `### Standing teammates available in your team` section appears and preamble reads "These standing teammates are available". Also updated `test_claude_team.py`: renamed `test_build_omits_standing_section_when_absent` to `test_build_emits_standing_section_for_declared_but_not_alive` (expectation flipped — section now appears for declared-but-not-alive teammates).
+9. Run `make test-static` — DONE. 422 passed, 22 deselected, 10 subtests passed. Zero failures.
+10. Commits — DONE. Four focused commits: (i) helper code rename + filter removal + preamble, (ii) runtime adapter prose, (iii) shared-core prose, (iv) tests. Entity stage report commit follows.
+11. Stage Report — DONE (this section).
+
+**Summary:** Implemented lazy-spawn for standing teammates. Boot no longer calls `spawn-standing`; it only runs `list-standing` (discovery). Spawn is deferred to the first team-mode `Agent()` dispatch. The dispatch prompt now enumerates declared (not alive) teammates, so ensigns see standing teammates before they are spawned. All 7 ACs are covered by the test suite.
+
+**Recommendation:** Ready for validation.
