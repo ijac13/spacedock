@@ -10,6 +10,7 @@ score: 0.6
 worktree: .worktrees/spacedock-ensign-migrate-live-tests-to-streaming-watcher
 issue:
 pr:
+mod-block: merge:pr-merge
 ---
 
 ## Problem Statement
