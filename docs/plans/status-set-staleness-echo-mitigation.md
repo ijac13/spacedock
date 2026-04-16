@@ -10,7 +10,7 @@ score: 0.80
 worktree: .worktrees/spacedock-ensign-status-set-staleness-echo-mitigation
 issue: "#96"
 pr: #101
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 When the FO Reads an entity file and then calls `status --set` via Bash to update frontmatter, Claude Code's file-staleness safety net can emit the **entire current file** as a `<system-reminder>` on the next turn. Cost scales linearly with entity body size. Long-running workflows (triage batches, plans with many cycle reports) silently pay tens of thousands of cache-write tokens per frontmatter transition when the echo fires.
