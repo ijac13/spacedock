@@ -304,3 +304,7 @@ E2E need: yes. A real interactive Codex run is required for acceptance because t
 ### Summary
 
 The task is now scoped as a Codex-interactive follow-up to task 140: harden the real async completion-notification path so task-153 completion surfaces preempt side discussion until they are consumed into the entity's real next action. The doc now defines a pending-obligation PTY barrier with ordering proof, concrete consumption oracles, aligned required E2Es, and a fallback plan if Codex interactive observability is not yet stable enough for the full proof.
+
+### Feedback Cycles
+
+- Cycle 1 (2026-04-15): Validation REJECTED. Static Codex/runtime guardrails passed, but the required live interactive Codex completion-preemption proof did not complete in this environment: the PTY probe timed out before a prompt-ready boundary was observed, so AC1-AC3 remain unverified. Route back to implementation to either obtain true terminal-backed Codex evidence for the live probe or tighten the readiness/observability path so the task no longer stalls at the prompt-ready boundary.
