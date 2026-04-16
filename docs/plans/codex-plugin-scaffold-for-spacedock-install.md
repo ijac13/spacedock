@@ -70,3 +70,7 @@ If the root-vs-subdirectory decision changes, the task must also update `source.
 - [DONE] Test plan separates the scripted contract checks from the manual Codex smoke path, with explicit prerequisites for restart, `/plugins`, install, load verification, and release-tooling regeneration behavior.
 - [DONE] Scope is constrained to packaging and install experience; runtime behavior changes are out of scope.
 - [SKIPPED] Frontmatter changes are out of scope for this stage refresh.
+
+### Feedback Cycles
+
+1. `validation -> implementation` (2026-04-16): `REJECTED` on AC5 only. Scripted contract checks passed, but the required manual Codex smoke path still lacks evidence: restart Codex, open `/plugins`, confirm the local Spacedock entry appears, install it, and verify the plugin loads.
