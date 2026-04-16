@@ -14,23 +14,24 @@ pr:
 
 ## Problem Statement
 
-The status viewer (`skills/commission/bin/status`) and dispatch-prompt builder (`skills/commission/bin/claude-team`) both live under the `commission` skill's `bin/` directory. Neither is used by the commission flow itself — commission is a one-shot workflow-scaffolding skill. Both scripts are runtime tooling consumed by the first officer on every loop iteration:
+The status viewer (`skills/commission/bin/status`) and dispatch-prompt builder (`skills/commission/bin/claude-team`) both live under the `commission` skill's `bin/` directory. Neither is used by the commission flow itself — commission is a one-shot workflow-scaffolding skill. Both scripts are runtime tooling the first officer calls on every loop iteration:
 
 - `status --boot` / `--next` / `--where` / `--set` / `--next-id` / `--archive` — called from the FO event loop and the dispatch/merge lifecycle
 - `claude-team build` / `spawn-standing` / `context-budget` — called from the FO dispatch adapter and standing-teammate spawn pass
 
-The current layout forces every runtime reference in `skills/first-officer/references/*.md` to path-reach into a sibling skill (`{spacedock_plugin_dir}/skills/commission/bin/status`). The cross-skill dependency is load-bearing but invisible: a captain who reads `first-officer/` alone can't tell which scripts the FO actually executes without grepping the references.
+This layout forces every runtime reference in `skills/first-officer/references/*.md` to path-reach into a sibling skill (`{spacedock_plugin_dir}/skills/commission/bin/status`). The cross-skill dependency is load-bearing but invisible: a captain reading `skills/first-officer/` alone cannot tell which scripts the FO executes without grepping the references.
 
 ## Context
 
-This gap surfaced during the 2026-04-16 boot when CL asked why session-diagnostic commands were hitting `commission/bin/` — the directory name suggests one-shot setup tooling, but the FO runs them as its primary interface to workflow state. The mental model and the filesystem are out of sync.
+This gap surfaced during the 2026-04-16 boot when CL asked why session-diagnostic commands were hitting `commission/bin/` — the directory name suggests one-shot setup tooling, but the FO runs those scripts as its primary interface to workflow state. The mental model and the filesystem are out of sync.
 
 ## Observable asymmetries
 
 - Every first-officer runtime adapter (Claude, Codex) references `commission/bin/` paths verbatim.
-- The commission skill itself never invokes `status` or `claude-team` as part of its scaffolding flow — those scripts only run at FO runtime.
+- The `commission` skill never invokes `status` or `claude-team` as part of its scaffolding flow — those scripts run only at FO runtime.
 - Tests in `tests/` that exercise FO runtime behavior must shell out to `commission/bin/` paths.
-- The `claude-team build` helper's prompt-assembly logic encodes FO-specific dispatch knowledge (checklist shape, feedback-reflow routing, bare-mode switching). That lives far from the first-officer skill that depends on it.
+- The `claude-team build` helper's prompt-assembly logic encodes FO-specific dispatch knowledge (checklist shape, feedback-reflow routing, bare-mode switching) — far from the first-officer skill that depends on it.
+- The `claude-team` subcommands emit inconsistent top-level output shapes. `build` emits a `description` field suitable for forwarding verbatim to `Agent()`; `spawn-standing` omits it, forcing the first officer to synthesize one by hand before calling `Agent()`. The runtime adapter documents a forward-verbatim discipline; `spawn-standing`'s shape breaks it. Observed during the 2026-04-16 boot when the comm-officer spawn `Agent()` call was rejected with `required parameter description is missing`.
 
 ## Approach (for ideation)
 
@@ -38,14 +39,15 @@ Surface-level: move both scripts to `skills/first-officer/bin/` and update every
 
 Open questions ideation should resolve:
 
-- Where does the `status --discover` boot probe belong? It scans for workflow directories regardless of first-officer context — is it truly FO-owned, or does some shared utility location fit better?
-- Are there any external callers (tests, other skills, documentation) that assume the commission path? What breaks and how is it migrated?
+- Where does the `status --discover` boot probe belong? It scans for workflow directories regardless of first-officer context — is it truly FO-owned, or does a shared utility location fit better?
+- Which external callers (tests, other skills, documentation) assume the commission path, and how are they migrated?
 - Do we keep compatibility shims under `commission/bin/` during migration, or cut over in one PR?
-- Does the `commission` skill retain *any* runtime bin tooling, or does `bin/` empty out entirely?
-- Is there an even better home — e.g., a plugin-level `skills/shared/bin/` — for tooling that both the first-officer runtime and a future debrief skill might share?
+- Does the `commission` skill retain any runtime bin tooling, or does `bin/` empty out entirely?
+- Is there a better home — e.g., a plugin-level `skills/shared/bin/` — for tooling that both the first-officer runtime and a future debrief skill might share?
+- Does this relocation pair with normalizing the `claude-team` subcommand output shapes (so `spawn-standing` emits `description` like `build` does), or is that a separate paper-cut task?
 
 ## Out of Scope
 
 - Renaming or restructuring the scripts themselves (they keep their current CLI shape).
 - Changing commission-skill behavior beyond the file relocation.
-- Codex runtime equivalents if any — Codex has its own dispatch path; same migration pattern applies but is a separate rollout decision.
+- Codex runtime equivalents, if any — Codex has its own dispatch path; the same migration pattern applies but is a separate rollout decision.
