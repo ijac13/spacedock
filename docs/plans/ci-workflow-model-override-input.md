@@ -9,7 +9,7 @@ verdict:
 score: 0.55
 worktree: .worktrees/spacedock-ensign-ci-workflow-model-override-input
 issue:
-pr:
+pr: #110
 mod-block: merge:pr-merge
 ---
 
