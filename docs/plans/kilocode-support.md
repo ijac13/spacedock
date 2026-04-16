@@ -207,7 +207,7 @@ Conclusion: Subagents are NOT addressable after completion.
 - [x] Extract Spacedock runtime requirements from existing adapters
 - [x] Gap analysis: Kilo vs requirements
 - [x] E2E test strategy designed
-- [ ] Implementation plan written to entity body
-- [ ] Runtime adapter created (`kilo-first-officer-runtime.md`)
+- [x] Implementation plan written to entity body
+- [x] Runtime adapter created (`kilo-first-officer-runtime.md` at skill path)
 - [ ] Test infrastructure updated for Kilo
 - [ ] E2E tests pass under Kilo runtime
