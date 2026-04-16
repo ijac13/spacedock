@@ -34,45 +34,15 @@ Four architectural alternatives, not mutually exclusive:
 
 All four options address the core asymmetry — during worktree-backed stages, work lives in one place but state lives in another — by either consolidating state into a single file (a), moving state to where work is (b), reducing state commit frequency (c), or segregating state onto a dedicated branch (d). Option (a) is the recommended v1 because it changes least about how the FO thinks about state while eliminating most of the commit noise.
 
-## Proposed v1 direction (Option a)
+## Open questions for ideation
 
-Ship a sidecar state file. Scope, with ideation to sharpen:
+Ideation will choose an option and pin answers to these questions for the chosen direction:
 
-1. **New file:** `docs/plans/.state.yaml` (YAML for readability; SQLite can come later if performance demands). Schema: top-level keys are entity slugs; values are state records with fields `status`, `worktree`, `pr`, `mod-block`, `verdict`, `started`, `completed`.
-2. **`status --set` changes:** writes the sidecar, not frontmatter. One atomic write (rename) per invocation. Stdout still emits `field: old -> new` lines per #159.
-3. **`status --boot` / `status --next` / `status --where`:** read the sidecar. No entity-file scan for state.
-4. **Entity frontmatter:** keeps static metadata only (id, title, source, score, issue). No status / worktree / pr / mod-block / verdict / completed / started.
-5. **Refit migration:** one-time scan that reads each entity's current frontmatter, writes to sidecar, strips the transient fields from frontmatter, commits.
-6. **Consistency repair:** new `status repair` subcommand that reconciles sidecar vs frontmatter if they drift (should not happen in normal flow, but defends against external edits).
-
-Ideation will pin open questions:
-- YAML vs SQLite vs JSON (lean YAML for readability).
-- Whether `_archive/` entities also live in sidecar or get a separate archive state store.
-- How the FO's existing "read entity file, see status" pattern degrades (pointer prose in shared-core: "current status is in `.state.yaml`, not frontmatter").
-- Refit UX: one-shot migration or gradual per-entity promotion?
-- Impact on plugin-per-workflow direction from CL's earlier design discussion (sidecar file lives in the workflow instance's project tree, not in the template plugin).
-
-## Acceptance Criteria (provisional — sharpen in ideation)
-
-1. **AC-sidecar-exists:** `docs/plans/.state.yaml` is created by refit (or at commission time for new workflows). Schema documented in workflow README.
-2. **AC-status-set-targets-sidecar:** `status --set {slug} field=value` writes to sidecar, not to the entity's frontmatter. Entity file on disk is unchanged after the call. *Verified by* static test: pre-hash entity file, run `--set`, post-hash — must match.
-3. **AC-status-boot-reads-sidecar:** `status --boot` produces identical output with and without entity-file frontmatter containing state fields (tolerates-either-location during migration window, or strictly-sidecar post-migration). *Verified by* a parametrized test.
-4. **AC-status-repair:** `status repair` detects sidecar-vs-frontmatter drift on a synthetic fixture and reports / fixes it. *Verified by* a static test with known drift.
-5. **AC-refit-migration:** a commissioned workflow with state-in-frontmatter entities can run `refit` and end up with state-in-sidecar + clean frontmatter. *Verified by* an integration test using a pre-migration fixture.
-6. **AC-main-log-clean:** a representative feedback-cycle sequence (advance → reject → advance) produces 3 commits editing `.state.yaml` only (no entity-file diffs). *Verified by* a static test that runs the sequence against a fixture and checks `git diff` file list.
-
-Test plan will be sharpened in ideation; provisional shape is primarily static (parser + helper behavior) with one integration test for refit migration.
-
-## Out of Scope
-
-- **Codex runtime equivalents.** Codex has its own state-discovery path; if this lands for Claude first, file a sibling task for Codex once the sidecar format is stable.
-- **SQLite backend.** Start with YAML. SQLite is a follow-up if we need query patterns YAML can't serve (unlikely for the entity counts Spacedock workflows see).
-- **Multi-workflow sidecar aggregation.** One sidecar per workflow. Cross-workflow views come later.
-- **Historical state rewrite.** This task ships going forward; existing commit history on main with state in frontmatter stays as-is. Future commits use the sidecar.
-
-## Deferred follow-ups (file after this ships)
-
-- Codex sidecar parity.
-- Sidecar performance at scale (100+ entities).
-- Cross-workflow aggregation for plugin-per-workflow distribution.
-- Archive-state storage (do `_archive/` entities stay in sidecar or get a separate `.archive-state.yaml`?).
+- **Which of the four options (or a hybrid)?** Tradeoffs are above; ideation weighs them against this workflow's specific pain and operational constraints.
+- **What state fields move?** Candidates: `status`, `worktree`, `pr`, `mod-block`, `verdict`, `started`, `completed`. Some may stay in frontmatter (e.g. `completed` as permanent audit), others move to the new store.
+- **What stays in entity frontmatter?** Static metadata is the obvious keep (`id`, `title`, `source`, `score`, `issue`). Anything else?
+- **Migration strategy.** One-shot refit, gradual per-entity promotion, or new-workflows-only? How does existing workflow history stay intact?
+- **Consistency enforcement.** How does the helper detect drift if state lives in two places during a migration window? What does a `repair` subcommand do?
+- **Discovery performance.** If state scanning moves to one file, does `status --boot` become cheap enough that we can afford richer queries? Does this change the status script's architecture?
+- **Interaction with plugin-per-workflow direction.** Per earlier captain design discussion, workflows may become distributable plugins. Where does state live — in the workflow plugin itself, in a user-project sidecar, or elsewhere?
+- **Codex runtime parity.** Does any chosen option generalize cleanly to the Codex runtime adapter's state-discovery path, or does each runtime need its own mechanism?
