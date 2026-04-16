@@ -1,7 +1,7 @@
 ---
 id: 162
 title: "Standing-teammate mod pattern — `standing: true` hook + `claude-team spawn-standing` helper + FO routing"
-status: validation
+status: implementation
 source: "CL design discussion 2026-04-16 after recce-session proposal + in-session pilot of docs/plans/_mods/comm-officer.md"
 started: 2026-04-16T05:19:30Z
 completed:
@@ -136,6 +136,69 @@ This task's implementation branch will be based on `main` (post-#157 + post-#159
 - **Plugin-shipped standing teammates** — depends on plugin-per-workflow direction. Phase 3.
 - **Captain-initiated orderly shutdown** — `/spacedock shutdown-standing` or similar. Phase 2.
 - **Standing teammate crash recovery** — auto-respawn on detected absence. Phase 2.
+
+### Feedback Cycles
+
+**Cycle 1 — captain rejected at validation gate on 2026-04-16.** Validator recommended PASSED on all 12 ACs; live E2E and anti-gaming spot-check both green. However, captain identified a **half-implemented routing mechanism** (Finding E, sharpened): AC-10 ships FO-side routing prose but leaves ensign-side routing as discipline burden on the FO. Ensigns never read shared-core at dispatch time — they only know what their dispatch prompt (assembled by `claude-team build`) tells them. The current implementation surfaces standing teammates to the FO via the shared-core concept section (AC-9) and FO routing paragraph (AC-10), but **does not automatically propagate active standing-teammate availability into dispatched worker prompts**. Empirical evidence from this very session: the ideation dispatch brief included an explicit polish-routing opt-in and the ensign used it; the implementation dispatch brief did not (FO forgot) and the ensign did not discover `comm-officer` existed. The validation dispatch brief included it again and that ensign had the option (though didn't use it). Captain's judgment: "the FO forgetting to surface available standing teammates to ensigns" is a brittle discipline gap, not a deliberate design choice. Fix the mechanism, not the discipline.
+
+**Cycle 2 scope — Fix 2 (mechanism-level auto-enumeration):**
+
+Extend `claude-team build` so that on every dispatch-prompt assembly, the helper automatically enumerates active standing teammates from the current team's config and injects a `### Standing teammates available in your team` section into the built prompt. Ensigns see the list in their prompt without the FO needing to remember to add a polish-routing opt-in per dispatch.
+
+Specific implementation:
+
+1. **`claude-team build` enhancement**: after assembling the base prompt and before emitting the final JSON, the helper:
+   - Scans `{workflow_dir}/_mods/*.md` for files with `standing: true` in frontmatter (reuse `parse_mod_metadata` from cycle 1).
+   - For each standing mod, extracts its declared `name` from the `## Hook: startup` section.
+   - Calls `member_exists(team_name, name)` (reuse existing helper) to check if the teammate is alive.
+   - If the current build input's `team_name` is null (bare mode) or there are no alive standing teammates, no section is emitted (degenerate-empty is NOT emitted).
+   - If one or more are alive, appends to the prompt a section of the shape:
+     ```
+     ### Standing teammates available in your team
+
+     The FO has spawned these standing teammates; you MAY route to them via SendMessage. Best-effort, non-blocking, 2-minute timeout; proceed with un-polished/un-reviewed content if no reply.
+
+     - **comm-officer** (prose polish): SendMessage with draft text for captain-facing prose; reply format per the mod. Out of scope: live conversation, short operational statuses, tool-call outputs, commit messages.
+
+     Full routing contract: see `skills/first-officer/references/first-officer-shared-core.md` `## Standing Teammates`.
+     ```
+   - Each teammate's line combines: declared `name`, a short purpose hint (extracted from the mod's frontmatter `description` field), and a one-line usage cue. Specifics for `comm-officer` above are canonical; generic form for other future standing teammates: `**{name}** ({description}): SendMessage with {relevant input shape}; reply format per the mod.`
+
+2. **New AC-13 (standing-teammate auto-enumeration in dispatch prompts):**
+   - `claude-team build` output (the `prompt` field) contains a `### Standing teammates available in your team` section when the current team has one or more alive members whose names match `standing: true` mod declarations in `{workflow_dir}/_mods/`.
+   - No such section is emitted when: (a) no standing mods exist, (b) standing mods exist but no declared teammate is alive, (c) `team_name` is null (bare mode).
+   - The section is only injected into prompts built for stage workers (not into `spawn-standing` output or other helper modes that aren't building worker prompts).
+   - *Verified by* four static tests in `tests/test_claude_team.py::TestBuildStandingTeammateEnumeration`:
+     - `test_build_emits_standing_section_when_alive` — fixture with one standing mod + matching team member → section present with teammate listed.
+     - `test_build_omits_standing_section_when_absent` — fixture with standing mod declared but no matching team member → no section.
+     - `test_build_omits_standing_section_in_bare_mode` — build with `team_name: null` → no section.
+     - `test_build_omits_standing_section_when_no_standing_mods` — fixture with no `standing: true` mods → no section.
+
+3. **Updated AC-10 (FO routing)** — the existing FO-side polish routing prose in shared-core `## Dispatch` stays. But its downstream audience widens: the prose should now say "the FO MAY polish its own captain-facing drafts AND dispatched workers will discover the same teammates automatically via their build-time prompt section." The out-of-scope list for polish routing stays the same (captain-chat, operational statuses, tool-call outputs, commit messages, transient logs).
+
+4. **Live E2E extension (AC-12 or new AC-14)**:
+   - Extend the existing `tests/test_standing_teammate_spawn.py` OR write a sibling test that:
+     - Sets up a fixture with one standing mod (`echo-agent`) + a normal workflow that dispatches one ensign for a `work` stage.
+     - Runs the FO via the live harness.
+     - Asserts via session-trace inspection that the ensign's dispatch prompt contained the `### Standing teammates available in your team` section AND listed `echo-agent`.
+     - Asserts the ensign routed to `echo-agent` at least once during its work (evidence: SendMessage observed in trace).
+   - Budget: additional ~$0.02 / ~30s (the fixture can share infrastructure with AC-12's echo-agent setup).
+
+**Cycle 2 test plan summary:**
+
+- **Static (4 new)**: the four enumeration-behavior tests above in `TestBuildStandingTeammateEnumeration`.
+- **Static (1 updated)**: AC-10 grep test updated to check the new shared-core wording ("workers will discover the same teammates automatically via their build-time prompt section").
+- **Live (1 new or extended)**: either extend `test_standing_teammate_spawn.py` to verify the prompt-injection + routing, or add a sibling test. Prefer extending — keeps the test infrastructure overhead flat.
+
+**What the cycle-2 ensign must NOT change:**
+- The existing 12 ACs' core mechanism (parser, helper for spawn-standing, adapter prose, shared-core concept, FO routing prose).
+- The existing 30+ static tests (they should stay green; new tests are additive).
+- The `comm-officer` pilot mod.
+- The E2E fixture's base setup.
+
+**Scope guard:** Cycle 2 is additive, not a rewrite. ~50-80 LoC in `claude-team build` + 4 new tests + 1 shared-core prose tweak + 1 live test extension. Target total diff vs current branch: <150 LoC.
+
+**Routing:** captain has set status back to `implementation`. The previous implementation ensign hit context-budget ceiling (75.4%, reuse_ok=false) — fresh dispatch with `-cycle2` suffix. Validation ensign stays alive for the re-validation pass. `comm-officer` stays alive.
 
 ## Stage Report — Ideation
 
