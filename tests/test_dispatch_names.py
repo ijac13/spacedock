@@ -17,8 +17,9 @@ from test_lib import (  # noqa: E402
     git_add_commit,
     install_agents,
     read_entity_frontmatter,
-    run_first_officer,
+    run_first_officer_streaming,
     setup_fixture,
+    tool_use_matches,
 )
 
 
@@ -51,11 +52,26 @@ def test_dispatch_names(test_project):
     print()
 
     print("--- Phase 2: Run first officer (this takes ~60-180s) ---")
-    run_first_officer(
+    with run_first_officer_streaming(
         t,
         "Process all tasks through the pipeline to completion.",
         extra_args=["--max-budget-usd", "2.00"],
-    )
+    ) as w:
+        w.expect(
+            lambda e: tool_use_matches(e, "Agent"),
+            timeout_s=180,
+            label="first Agent() dispatched",
+        )
+        print("[OK] first Agent() dispatched")
+
+        w.expect(
+            lambda e: tool_use_matches(e, "Agent"),
+            timeout_s=240,
+            label="second Agent() dispatched (work + review expected)",
+        )
+        print("[OK] second Agent() dispatched")
+
+        w.expect_exit(timeout_s=240)
 
     print("--- Phase 3: Validation ---")
     print()
