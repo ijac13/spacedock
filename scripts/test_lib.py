@@ -784,15 +784,26 @@ def run_first_officer_streaming(
         raise
 
     watcher = FOStreamWatcher(log_path, proc)
+    exception_exit = False
     try:
         yield watcher
+    except BaseException:
+        exception_exit = True
+        raise
     finally:
         try:
             if proc.poll() is None:
-                elapsed = time.monotonic() - start
-                remaining = hard_cap_s - elapsed
+                if exception_exit:
+                    # Abnormal exit: assertions have already decided the test
+                    # result. Don't burn the remainder of hard_cap_s waiting
+                    # for a hung claude subprocess to exit on its own — use a
+                    # short fixed grace period before escalating to terminate.
+                    grace_s = 5
+                else:
+                    elapsed = time.monotonic() - start
+                    grace_s = max(hard_cap_s - elapsed, 1)
                 try:
-                    proc.wait(timeout=max(remaining, 1))
+                    proc.wait(timeout=grace_s)
                 except subprocess.TimeoutExpired:
                     proc.terminate()
                     try:
