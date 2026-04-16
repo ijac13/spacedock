@@ -29,18 +29,28 @@ In single-entity mode, skip team creation. Use bare-mode dispatch for all agent 
 
 When filing a new task, use `status --next-id` to fetch only the next sequential ID. Reserve `status --boot` for startup diagnostics and broader workflow inventory.
 
-### Standing teammate spawn pass
+### Standing teammate discovery pass
 
-After team creation succeeds (the ladder has resolved and the returned `team_name` is known) and BEFORE entering the normal dispatch event loop, run the standing-teammate spawn pass:
+After team creation succeeds (the ladder has resolved and the returned `team_name` is known) and BEFORE entering the normal dispatch event loop, run the standing-teammate discovery pass:
 
-1. Enumerate `_mods/*.md` whose frontmatter has `standing: true` by running `claude-team list-standing --workflow-dir {wd}` and consuming its newline-delimited output (one absolute mod path per line, sorted alphabetically, empty stdout on zero matches). Do NOT grep mod frontmatter yourself; authoritative parsing is deferred to the helper.
-2. For each mod, run `claude-team spawn-standing --mod {abs_path_to_mod} --team {team_name}`.
-3. If the helper emits JSON with top-level `status: "already-alive"`, log the reported `name` and skip to the next mod. Standing teammates are first-boot-wins across the captain session; subsequent workflows sharing the team pick up the live member.
-4. Otherwise the helper emits an Agent() call spec JSON with keys `subagent_type`, `name`, `team_name`, `model`, `prompt`. **Forward that spec verbatim** to the Agent tool — copy each field into the corresponding Agent() argument without paraphrasing the prompt, rewriting the name, or substituting the team. Same "forward verbatim" discipline as `claude-team build` output.
-5. The spawn is fire-and-forget. Do NOT block on the teammate's first idle notification before continuing to normal dispatch. Ensigns route on demand; if a SendMessage arrives before the teammate is ready, Claude Code queues it.
-6. If the helper exits non-zero on any mod (missing Agent Prompt section, invalid model enum, convention-violating trailing heading), surface the error to the captain and continue with the remaining mods. A broken mod does not block the workflow.
+1. Run `claude-team list-standing --workflow-dir {wd}` and consume its newline-delimited output (one absolute mod path per line, sorted alphabetically, empty stdout on zero matches). Do NOT grep mod frontmatter yourself; authoritative parsing is deferred to the helper.
+2. Record the returned mod paths in session memory. **No spawn calls at boot.** Spawn is deferred to the first team-mode dispatch (see lazy-spawn below).
 
-In single-entity (bare) mode and in Degraded Mode, skip the standing teammate spawn pass. Standing teammates are a team-scope concept; without a live team they have no lifecycle anchor. Prose-polish round-trips can reach several minutes on long drafts — ensigns and the FO MUST treat polish routing as non-blocking regardless of round-trip duration.
+In single-entity (bare) mode and in Degraded Mode, discovery still runs (it is cheap — just `list-standing`), but lazy-spawn is skipped in those modes (no team to spawn into). Standing teammates are a team-scope concept; without a live team they have no lifecycle anchor.
+
+### Standing teammate lazy-spawn
+
+Before the first `Agent()` call that uses a `team_name` (i.e., the first non-bare dispatch), spawn all declared standing teammates:
+
+1. For each declared standing-teammate mod path recorded during the discovery pass:
+   a. Run `claude-team spawn-standing --mod {abs_path_to_mod} --team {team_name}`.
+   b. If the helper emits JSON with top-level `status: "already-alive"`, log the reported `name` and skip to the next mod. Standing teammates are first-boot-wins across the captain session; subsequent workflows sharing the team pick up the live member.
+   c. Otherwise the helper emits an Agent() call spec JSON with keys `subagent_type`, `name`, `team_name`, `model`, `prompt`. **Forward that spec verbatim** to the Agent tool — copy each field into the corresponding Agent() argument without paraphrasing the prompt, rewriting the name, or substituting the team. Same "forward verbatim" discipline as `claude-team build` output.
+   d. The spawn is fire-and-forget. Do NOT block on the teammate's first idle notification before continuing to dispatch.
+   e. If the helper exits non-zero on any mod (missing Agent Prompt section, invalid model enum, convention-violating trailing heading), surface the error to the captain and continue with the remaining mods. A broken mod does not block the workflow.
+2. After all standing teammates are spawned (or skipped), proceed with the ensign `Agent()` dispatch.
+
+This is a one-time cost at first dispatch. Subsequent dispatches skip the spawn pass entirely — the FO tracks "standing teammates spawned for this team" in session memory. In single-entity (bare) mode and in Degraded Mode, skip lazy-spawn (same as the discovery-pass skip note above). Prose-polish round-trips can reach several minutes on long drafts — ensigns and the FO MUST treat polish routing as non-blocking regardless of round-trip duration.
 
 ## Worker Resolution
 
