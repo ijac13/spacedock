@@ -9,7 +9,7 @@ verdict:
 score: 0.7
 worktree: .worktrees/spacedock-ensign-ci-workflow-dispatch-bisection-inputs
 issue:
-pr:
+pr: #108
 mod-block: merge:pr-merge
 ---
 
