@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -11,35 +10,21 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (  # noqa: E402
-    LogParser,
+    assistant_model_equals,
     git_add_commit,
     install_agents,
-    run_first_officer,
+    run_first_officer_streaming,
     setup_fixture,
+    tool_use_matches,
 )
 
 
-def _assistant_models(jsonl_path: Path) -> dict[str, int]:
-    """Count distinct assistant message.model values in a stream-json log."""
-    counts: dict[str, int] = {}
-    with jsonl_path.open("r") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if entry.get("type") != "assistant":
-                continue
-            msg = entry.get("message", {})
-            if not isinstance(msg, dict):
-                continue
-            model = msg.get("model")
-            if model:
-                counts[model] = counts.get(model, 0) + 1
-    return counts
+def _agent_name(entry: dict) -> str:
+    message = entry.get("message", {})
+    for block in message.get("content", []) or []:
+        if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "Agent":
+            return (block.get("input", {}) or {}).get("name", "")
+    return ""
 
 
 @pytest.mark.live_claude
@@ -50,60 +35,48 @@ def _assistant_models(jsonl_path: Path) -> dict[str, int]:
     strict=False,
 )
 def test_per_stage_model_haiku_propagates(test_project, effort):
-    """stages.defaults.model: haiku must stamp the dispatched ensign with claude-haiku-*."""
+    """stages.defaults.model: haiku must stamp the dispatched ensign with claude-haiku-*.
+
+    Streaming-watcher variant: fail-fast within 240s after the ensign dispatches
+    if no haiku message arrives. xfail stays until #171 is fixed.
+    """
     t = test_project
 
     print("--- Phase 1: Set up test project (workflow nested in subdir) ---")
-    # Workflow lives at a subdirectory of project_root for cleanest isolation.
     setup_fixture(t, "per-stage-model", "per-stage-model")
     install_agents(t, include_ensign=True)
     git_add_commit(t.test_project_dir, "setup: per-stage-model fixture")
     print()
 
-    print("--- Phase 2: Run first officer ---")
+    print("--- Phase 2: Run first officer with streaming watcher ---")
     abs_workflow = t.test_project_dir / "per-stage-model"
-    # Pin captain to opus so any opus-inheritance bug would be observable.
-    fo_exit = run_first_officer(
+    prompt = (
+        f"Process all tasks through the workflow at {abs_workflow}/ to terminal "
+        "completion. Drive every dispatchable task through its stages until the "
+        "entity reaches the done stage. Stop once the entity is archived."
+    )
+
+    with run_first_officer_streaming(
         t,
-        (
-            f"Process all tasks through the workflow at {abs_workflow}/ to terminal "
-            "completion. Drive every dispatchable task through its stages until the "
-            "entity reaches the done stage. Stop once the entity is archived."
-        ),
+        prompt,
         agent_id="spacedock:first-officer",
         extra_args=["--model", "opus", "--effort", effort, "--max-budget-usd", "2.00"],
-    )
-    if fo_exit != 0:
-        print(f"  (first officer exit code {fo_exit})")
+    ) as w:
+        w.expect(
+            lambda e: tool_use_matches(e, "Agent") and "ensign" in _agent_name(e).lower(),
+            timeout_s=180,
+            label="ensign Agent() dispatched",
+        )
+        print("[OK] ensign Agent() dispatched")
 
-    print()
-    print("--- Phase 3: Validation ---")
+        # The hypothesis under test: the dispatched ensign stamps haiku on its
+        # assistant messages. If no haiku message arrives within 240s after
+        # dispatch the xfail surfaces fast instead of at the 600s cap.
+        haiku_entry = w.expect(
+            lambda e: assistant_model_equals(e, "claude-haiku-"),
+            timeout_s=240,
+            label="haiku assistant message observed",
+        )
+        print(f"[OK] haiku assistant message: {haiku_entry['message'].get('model')}")
 
-    # Confirm the FO dispatched at least one ensign.
-    log = LogParser(t.log_dir / "fo-log.jsonl")
-    log.write_agent_calls(t.log_dir / "agent-calls.txt")
-    agent_calls = log.agent_calls()
-    ensign_calls = [
-        c for c in agent_calls
-        if "ensign" in c.get("subagent_type", "")
-        or "ensign" in c.get("name", "")
-    ]
-    assert len(ensign_calls) > 0, (
-        "FO dispatched no ensigns; cannot verify per-stage model propagation."
-    )
-
-    # AC-live-propagation: the FO stream-json log folds in every subagent's
-    # assistant messages with their stamped runtime model. Under the target
-    # precedence (stages.defaults.model: haiku) the dispatched ensign MUST
-    # run on a claude-haiku-* model even though the captain is pinned to opus.
-    fo_log = t.log_dir / "fo-log.jsonl"
-    assert fo_log.is_file(), f"FO log not found at {fo_log}"
-    models = _assistant_models(fo_log)
-    haiku_models = [m for m in models if m.startswith("claude-haiku-")]
-    assert haiku_models, (
-        f"No claude-haiku-* assistant messages found in {fo_log}. "
-        f"Models seen: {sorted(models.keys())}. "
-        "This means the per-stage model did not propagate to the ensign; "
-        "the ensign inherited the captain's opus model instead."
-    )
-    print(f"[OK] haiku assistant messages in FO log: {haiku_models}")
+        w.expect_exit(timeout_s=300)
