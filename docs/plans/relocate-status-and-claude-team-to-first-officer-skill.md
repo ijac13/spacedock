@@ -32,10 +32,11 @@ This gap surfaced during the 2026-04-16 boot when CL asked why session-diagnosti
 - Tests in `tests/` that exercise FO runtime behavior must shell out to `commission/bin/` paths.
 - The `claude-team build` helper's prompt-assembly logic encodes FO-specific dispatch knowledge (checklist shape, feedback-reflow routing, bare-mode switching) — far from the first-officer skill that depends on it.
 - The `claude-team` subcommands emit inconsistent top-level output shapes. `build` emits a `description` field suitable for forwarding verbatim to `Agent()`; `spawn-standing` omits it, forcing the first officer to synthesize one by hand before calling `Agent()`. The runtime adapter documents a forward-verbatim discipline; `spawn-standing`'s shape breaks it. Observed during the 2026-04-16 boot when the comm-officer spawn `Agent()` call was rejected with `required parameter description is missing`.
+- The `claude-team build` prompt-assembly template for worktree stages emits a dangling `It contains:\n` sentence-opener with no enumeration after it. See `skills/commission/bin/claude-team:242-243`: the template was set up for a section-heading expansion that was never written. Cosmetic in effect — ensigns ignore the dangler — but visible in every worktree-stage dispatch prompt. The non-worktree branch of the same block has no such cruft; the two branches fell out of sync.
 
 ## Approach (for ideation)
 
-Surface-level: move both scripts to `skills/first-officer/bin/` and update every reference.
+Surface-level: move both scripts to `skills/first-officer/bin/` and update every reference. While moving the helper, also drop the `It contains:\n` dangler — change the worktree branch at `claude-team:241-244` to match the non-worktree branch's clean one-liner shape (`f'Read the entity file at {worktree_entity_path} for the full spec.\n'`). Do not implement section enumeration; the ensign reads the file anyway, so enumeration bloats the prompt without adding value.
 
 Open questions ideation should resolve:
 
