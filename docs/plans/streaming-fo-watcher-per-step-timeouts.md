@@ -9,7 +9,7 @@ verdict:
 score: 0.75
 worktree: .worktrees/spacedock-ensign-streaming-fo-watcher-per-step-timeouts
 issue:
-pr:
+pr: #109
 mod-block: merge:pr-merge
 ---
 
