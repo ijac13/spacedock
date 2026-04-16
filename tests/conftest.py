@@ -15,24 +15,52 @@ _SCRIPTS_DIR = _REPO_ROOT / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from test_lib import TestRunner, create_test_project, install_agents, run_first_officer, run_codex_first_officer  # noqa: E402
+from test_lib import (
+    TestRunner,
+    create_test_project,
+    install_agents,
+    run_first_officer,
+    run_codex_first_officer,
+    run_kilo_first_officer,
+)  # noqa: E402
 
 
 def pytest_addoption(parser):
-    parser.addoption("--runtime", action="store", default="claude",
-                     choices=["claude", "codex"],
-                     help="Runtime under test for live E2E (claude or codex).")
-    parser.addoption("--model", action="store", default="haiku",
-                     help="Model identifier for live runs (default: haiku).")
-    parser.addoption("--effort", action="store", default="low",
-                     help="Effort level for live runs (default: low).")
-    parser.addoption("--budget", action="store", type=float, default=None,
-                     help="Max budget in USD for a live run (optional).")
-    parser.addoption("--team-mode", action="store", default="auto",
-                     choices=["auto", "teams", "bare"],
-                     help="Filter live tests by teams_mode / bare_mode markers. "
-                          "'auto' resolves from CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS env "
-                          "('1' or 'true' → teams, else bare).")
+    parser.addoption(
+        "--runtime",
+        action="store",
+        default="claude",
+        choices=["claude", "codex", "kilo"],
+        help="Runtime under test for live E2E (claude, codex, or kilo).",
+    )
+    parser.addoption(
+        "--model",
+        action="store",
+        default="haiku",
+        help="Model identifier for live runs (default: haiku).",
+    )
+    parser.addoption(
+        "--effort",
+        action="store",
+        default="low",
+        help="Effort level for live runs (default: low).",
+    )
+    parser.addoption(
+        "--budget",
+        action="store",
+        type=float,
+        default=None,
+        help="Max budget in USD for a live run (optional).",
+    )
+    parser.addoption(
+        "--team-mode",
+        action="store",
+        default="auto",
+        choices=["auto", "teams", "bare"],
+        help="Filter live tests by teams_mode / bare_mode markers. "
+        "'auto' resolves from CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS env "
+        "('1' or 'true' → teams, else bare).",
+    )
 
 
 _LIVE_IMPORT_MARKERS = {"run_first_officer", "run_codex_first_officer"}
@@ -67,13 +95,17 @@ def pytest_collection_modifyitems(config, items):
                 "or left mode-agnostic (no marker)."
             )
         if has_teams and resolved_mode != "teams":
-            item.add_marker(pytest.mark.skip(
-                reason=f"requires teams mode; --team-mode={resolved_mode}"
-            ))
+            item.add_marker(
+                pytest.mark.skip(
+                    reason=f"requires teams mode; --team-mode={resolved_mode}"
+                )
+            )
         elif has_bare and resolved_mode != "bare":
-            item.add_marker(pytest.mark.skip(
-                reason=f"requires bare mode; --team-mode={resolved_mode}"
-            ))
+            item.add_marker(
+                pytest.mark.skip(
+                    reason=f"requires bare mode; --team-mode={resolved_mode}"
+                )
+            )
 
     by_module: dict[str, list] = {}
     for item in items:
@@ -86,7 +118,8 @@ def pytest_collection_modifyitems(config, items):
         if not imports_live:
             continue
         has_live_marker = any(
-            item.get_closest_marker("live_claude") or item.get_closest_marker("live_codex")
+            item.get_closest_marker("live_claude")
+            or item.get_closest_marker("live_codex")
             for item in module_items
         )
         if not has_live_marker:
@@ -132,10 +165,26 @@ def fo_run(test_project, runtime, model, effort):
 
     Tests may still call run_first_officer / run_codex_first_officer directly; this is opt-in.
     """
-    def _run(prompt, *, agent_id="spacedock:first-officer", extra_args=None, workflow_dir=None, run_goal=None):
+
+    def _run(
+        prompt,
+        *,
+        agent_id="spacedock:first-officer",
+        extra_args=None,
+        workflow_dir=None,
+        run_goal=None,
+    ):
         if runtime == "claude":
             return run_first_officer(
-                test_project, prompt,
+                test_project,
+                prompt,
+                agent_id=agent_id,
+                extra_args=list(extra_args or []),
+            )
+        if runtime == "kilo":
+            return run_kilo_first_officer(
+                test_project,
+                prompt,
                 agent_id=agent_id,
                 extra_args=list(extra_args or []),
             )
@@ -146,4 +195,5 @@ def fo_run(test_project, runtime, model, effort):
             run_goal=run_goal or prompt,
             extra_args=list(extra_args or []),
         )
+
     return _run

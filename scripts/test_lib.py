@@ -39,7 +39,9 @@ def _agent_targets_stage(agent_input: dict, stage: str) -> bool:
     if stage in name_lower:
         return True
     prompt = agent_input.get("prompt", "")
-    pattern = rf"(?m)^\*{{0,2}}Stage:?\*{{0,2}}\s+\*{{0,2}}{re.escape(stage)}\*{{0,2}}\s*$"
+    pattern = (
+        rf"(?m)^\*{{0,2}}Stage:?\*{{0,2}}\s+\*{{0,2}}{re.escape(stage)}\*{{0,2}}\s*$"
+    )
     if re.search(pattern, prompt):
         return True
     return False
@@ -86,7 +88,9 @@ def prepare_codex_skill_home(test_root: Path, repo_root: Path) -> Path:
     return home_dir
 
 
-def resolve_codex_worker(agent_id: str, repo_root: Path | None = None) -> dict[str, object]:
+def resolve_codex_worker(
+    agent_id: str, repo_root: Path | None = None
+) -> dict[str, object]:
     """Resolve a logical Codex worker id to a packaged asset and safe worker key."""
     if repo_root is None:
         repo_root = Path(__file__).resolve().parent.parent
@@ -168,9 +172,13 @@ def _assemble_skill_contract(
     parts = [text]
     trace: list[str] = []
     for include in _extract_skill_includes(text):
-        resolved_path, resolution_kind = resolve_skill_include(skill_path, include, repo_root)
+        resolved_path, resolution_kind = resolve_skill_include(
+            skill_path, include, repo_root
+        )
         trace.append(f"{include} -> {resolved_path} ({resolution_kind})")
-        child_parts, child_trace = _assemble_skill_contract(resolved_path, repo_root, seen)
+        child_parts, child_trace = _assemble_skill_contract(
+            resolved_path, repo_root, seen
+        )
         parts.extend(child_parts)
         trace.extend(child_trace)
     return parts, trace
@@ -182,7 +190,9 @@ def build_codex_first_officer_invocation_prompt(
     run_goal: str | None = None,
 ) -> str:
     workflow_dir = Path(workflow_dir)
-    prompt = f"Use the `{agent_id}` skill to manage the Codex workflow at `{workflow_dir}`."
+    prompt = (
+        f"Use the `{agent_id}` skill to manage the Codex workflow at `{workflow_dir}`."
+    )
     if run_goal:
         prompt = f"{prompt}\n\n{run_goal.strip()}"
     return prompt
@@ -341,29 +351,40 @@ def probe_claude_runtime(model: str, timeout_s: int = 30) -> tuple[bool, str]:
     except FileNotFoundError:
         return False, "claude CLI not found in PATH"
     except subprocess.TimeoutExpired:
-        return False, f"claude preflight for model {model!r} produced no result within {timeout_s}s"
+        return (
+            False,
+            f"claude preflight for model {model!r} produced no result within {timeout_s}s",
+        )
 
     if result.returncode != 0:
         return False, f"claude preflight for model {model!r} exited {result.returncode}"
 
-    if '"type":"result"' not in result.stdout and '"type": "result"' not in result.stdout:
-        return False, f"claude preflight for model {model!r} returned no stream-json result record"
+    if (
+        '"type":"result"' not in result.stdout
+        and '"type": "result"' not in result.stdout
+    ):
+        return (
+            False,
+            f"claude preflight for model {model!r} returned no stream-json result record",
+        )
 
     return True, ""
 
 
-_READ_ONLY_SHELL_COMMANDS = frozenset({
-    "cat",
-    "file",
-    "find",
-    "grep",
-    "head",
-    "ls",
-    "rg",
-    "stat",
-    "tail",
-    "wc",
-})
+_READ_ONLY_SHELL_COMMANDS = frozenset(
+    {
+        "cat",
+        "file",
+        "find",
+        "grep",
+        "head",
+        "ls",
+        "rg",
+        "stat",
+        "tail",
+        "wc",
+    }
+)
 _ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
 _OPTION_TOKEN_RE = re.compile(r"^-")
 
@@ -379,7 +400,9 @@ def _shell_words(command: str) -> list[str]:
         return command.split()
 
 
-def _matches_any_target(path: str, target_patterns: tuple[str, ...] | list[str]) -> bool:
+def _matches_any_target(
+    path: str, target_patterns: tuple[str, ...] | list[str]
+) -> bool:
     cleaned = path.strip().strip("\"'")
     return any(pattern in cleaned for pattern in target_patterns)
 
@@ -393,7 +416,9 @@ def _segment_is_read_only_probe(segment: str) -> bool:
     return words[0] in _READ_ONLY_SHELL_COMMANDS
 
 
-def bash_command_targets_write(command: str, target_patterns: tuple[str, ...] | list[str]) -> bool:
+def bash_command_targets_write(
+    command: str, target_patterns: tuple[str, ...] | list[str]
+) -> bool:
     """Heuristic for whether a Bash command writes to one of the guarded target paths."""
     stripped = _strip_harmless_redirections(command)
 
@@ -420,7 +445,11 @@ def bash_command_targets_write(command: str, target_patterns: tuple[str, ...] | 
         args = words[1:]
 
         if cmd == "tee":
-            if any(not _OPTION_TOKEN_RE.match(arg) and _matches_any_target(arg, target_patterns) for arg in args):
+            if any(
+                not _OPTION_TOKEN_RE.match(arg)
+                and _matches_any_target(arg, target_patterns)
+                for arg in args
+            ):
                 return True
             continue
 
@@ -441,7 +470,11 @@ def bash_command_targets_write(command: str, target_patterns: tuple[str, ...] | 
             continue
 
         if cmd in {"touch", "mkdir", "chmod", "chown", "rm"}:
-            if any(not _OPTION_TOKEN_RE.match(arg) and _matches_any_target(arg, target_patterns) for arg in args):
+            if any(
+                not _OPTION_TOKEN_RE.match(arg)
+                and _matches_any_target(arg, target_patterns)
+                for arg in args
+            ):
                 return True
 
     return False
@@ -449,6 +482,7 @@ def bash_command_targets_write(command: str, target_patterns: tuple[str, ...] | 
 
 class TestRunner:
     """Test framework with pass/fail counters, check helpers, and results summary."""
+
     __test__ = False
 
     __test__ = False
@@ -533,7 +567,9 @@ class TestRunner:
             print()
             print("Debug info:")
             print(f"  Test dir:   {self.test_dir}")
-            for f in sorted(self.log_dir.glob("*.jsonl")) + sorted(self.log_dir.glob("*.txt")):
+            for f in sorted(self.log_dir.glob("*.jsonl")) + sorted(
+                self.log_dir.glob("*.txt")
+            ):
                 print(f"  Log:        {f}")
             # Preserve test dir on failure
             self.keep_test_dir = True
@@ -547,7 +583,9 @@ def create_test_project(runner: TestRunner, name: str = "test-project") -> Path:
     subprocess.run(["git", "init", str(project_dir)], capture_output=True, check=True)
     subprocess.run(
         ["git", "commit", "--allow-empty", "-m", "init"],
-        capture_output=True, check=True, cwd=project_dir,
+        capture_output=True,
+        check=True,
+        cwd=project_dir,
     )
     runner.test_project_dir = project_dir
     return project_dir
@@ -619,12 +657,16 @@ def install_agents(runner: TestRunner, include_ensign: bool = False) -> Path:
     shutil.copy2(runner.repo_root / "agents" / "first-officer.md", fo_path)
 
     if include_ensign:
-        shutil.copy2(runner.repo_root / "agents" / "ensign.md", agents_dir / "ensign.md")
+        shutil.copy2(
+            runner.repo_root / "agents" / "ensign.md", agents_dir / "ensign.md"
+        )
 
     return fo_path
 
 
-def assembled_agent_content(runner: TestRunner, agent_name: str, runtime: str = "claude") -> str:
+def assembled_agent_content(
+    runner: TestRunner, agent_name: str, runtime: str = "claude"
+) -> str:
     """Read a thin agent wrapper and all its referenced files, returning combined content.
 
     This concatenates the agent entry point with the reference files it
@@ -636,17 +678,26 @@ def assembled_agent_content(runner: TestRunner, agent_name: str, runtime: str = 
     skill_root = runner.repo_root / "skills"
     if agent_name == "first-officer":
         skill_path = skill_root / "first-officer" / "SKILL.md"
-        runtime_path = skill_root / "first-officer" / "references" / f"{runtime}-first-officer-runtime.md"
+        runtime_path = (
+            skill_root
+            / "first-officer"
+            / "references"
+            / f"{runtime}-first-officer-runtime.md"
+        )
     elif agent_name == "ensign":
         skill_path = skill_root / "ensign" / "SKILL.md"
-        runtime_path = skill_root / "ensign" / "references" / f"{runtime}-ensign-runtime.md"
+        runtime_path = (
+            skill_root / "ensign" / "references" / f"{runtime}-ensign-runtime.md"
+        )
     else:
         skill_path = None
         runtime_path = None
 
     parts = [(runner.repo_root / "agents" / f"{agent_name}.md").read_text()]
     if skill_path is not None and skill_path.exists():
-        skill_parts, resolution_trace = _assemble_skill_contract(skill_path, runner.repo_root)
+        skill_parts, resolution_trace = _assemble_skill_contract(
+            skill_path, runner.repo_root
+        )
         parts.extend(skill_parts)
         if runtime_path is not None and runtime_path.exists():
             parts.append(runtime_path.read_text())
@@ -666,11 +717,16 @@ def run_commission(
     """Run claude -p with commission flags. Returns exit code."""
     log_path = runner.log_dir / log_name
     cmd = [
-        "claude", "-p", prompt,
-        "--plugin-dir", str(runner.repo_root),
-        "--permission-mode", "bypassPermissions",
+        "claude",
+        "-p",
+        prompt,
+        "--plugin-dir",
+        str(runner.repo_root),
+        "--permission-mode",
+        "bypassPermissions",
         "--verbose",
-        "--output-format", "stream-json",
+        "--output-format",
+        "stream-json",
     ]
     if extra_args:
         cmd.extend(extra_args)
@@ -678,8 +734,12 @@ def run_commission(
     with open(log_path, "w") as log_file:
         try:
             result = subprocess.run(
-                cmd, stdout=log_file, stderr=subprocess.STDOUT,
-                cwd=runner.test_project_dir, env=_clean_env(), timeout=600,
+                cmd,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                cwd=runner.test_project_dir,
+                env=_clean_env(),
+                timeout=600,
             )
         except subprocess.TimeoutExpired:
             print("\n  TIMEOUT: commission exceeded 600s limit")
@@ -705,12 +765,18 @@ def run_first_officer(
     """Run claude -p --plugin-dir ... --agent <agent_id>. Returns exit code."""
     log_path = runner.log_dir / log_name
     cmd = [
-        "claude", "-p", prompt,
-        "--plugin-dir", str(runner.repo_root),
-        "--agent", agent_id,
-        "--permission-mode", "bypassPermissions",
+        "claude",
+        "-p",
+        prompt,
+        "--plugin-dir",
+        str(runner.repo_root),
+        "--agent",
+        agent_id,
+        "--permission-mode",
+        "bypassPermissions",
         "--verbose",
-        "--output-format", "stream-json",
+        "--output-format",
+        "stream-json",
     ]
     if extra_args:
         cmd.extend(extra_args)
@@ -719,8 +785,12 @@ def run_first_officer(
     with open(log_path, "w") as log_file:
         try:
             result = subprocess.run(
-                cmd, stdout=log_file, stderr=subprocess.STDOUT,
-                cwd=runner.test_project_dir, env=env, timeout=600,
+                cmd,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                cwd=runner.test_project_dir,
+                env=env,
+                timeout=600,
             )
         except subprocess.TimeoutExpired:
             print("\n  TIMEOUT: first officer exceeded 600s limit")
@@ -749,7 +819,9 @@ def run_codex_first_officer(
     """Run the Codex first-officer skill via codex exec. Returns exit code."""
     log_path = runner.log_dir / log_name
     workflow_path = (runner.test_project_dir / workflow_dir).resolve()
-    prompt = build_codex_first_officer_invocation_prompt(workflow_path, agent_id=agent_id, run_goal=run_goal)
+    prompt = build_codex_first_officer_invocation_prompt(
+        workflow_path, agent_id=agent_id, run_goal=run_goal
+    )
     (runner.log_dir / "codex-fo-invocation.txt").write_text(prompt + "\n")
 
     skill_home = prepare_codex_skill_home(runner.test_dir, runner.repo_root)
@@ -820,7 +892,9 @@ def run_codex_first_officer(
                     except subprocess.TimeoutExpired:
                         proc.kill()
                         proc.wait()
-                    print(f"\n  TIMEOUT: codex first officer exceeded {timeout_s}s limit")
+                    print(
+                        f"\n  TIMEOUT: codex first officer exceeded {timeout_s}s limit"
+                    )
                     return 124
 
                 ready, _, _ = select.select([proc.stdout], [], [], 0.5)
@@ -844,7 +918,11 @@ def run_codex_first_officer(
                                     "command_execution",
                                     "file_change",
                                 }
-                                if entry_type == "item.started" and item_id and trackable_item:
+                                if (
+                                    entry_type == "item.started"
+                                    and item_id
+                                    and trackable_item
+                                ):
                                     active_item_ids.add(str(item_id))
                                 elif entry_type == "item.completed":
                                     if item_id:
@@ -852,13 +930,17 @@ def run_codex_first_officer(
                                     if item.get("type") == "collab_tool_call":
                                         saw_workflow_activity = True
                                     if item.get("type") == "agent_message":
-                                        last_completed_agent_message_at = time.monotonic()
+                                        last_completed_agent_message_at = (
+                                            time.monotonic()
+                                        )
                     elif proc.poll() is not None:
                         break
                 elif proc.poll() is not None:
                     break
 
-                idle_long_enough = time.monotonic() - last_output_at >= idle_after_agent_message_s
+                idle_long_enough = (
+                    time.monotonic() - last_output_at >= idle_after_agent_message_s
+                )
                 if (
                     last_completed_agent_message_at is not None
                     and idle_long_enough
@@ -882,6 +964,30 @@ def run_codex_first_officer(
         print(f"WARNING: codex first officer exited with code {result.returncode}")
 
     return result.returncode
+
+
+def run_kilo_first_officer(
+    runner: TestRunner,
+    prompt: str,
+    agent_id: str = "spacedock:first-officer",
+    extra_args: list[str] | None = None,
+    log_name: str = "kilo-fo-log.txt",
+) -> int:
+    """Stub function for Kilo runtime test infrastructure.
+
+    Kilo runtime test infrastructure requires external test harness with actual
+    `--runtime kilo` invocation. This stub returns a message indicating
+    the test infrastructure needs real --runtime invocation.
+    """
+    log_path = runner.log_dir / log_name
+    msg = (
+        f"Kilo runtime test infrastructure requires external test harness "
+        f"with actual `--runtime kilo` invocation. "
+        f"This stub function indicates the test mode is not yet implemented."
+    )
+    log_path.write_text(msg + "\n")
+    print(f"  STUB: {msg}")
+    return 1
 
 
 class LogParser:
@@ -909,8 +1015,7 @@ class LogParser:
     def assistant_messages(self) -> list[dict]:
         """Return all assistant message objects."""
         return [
-            e for e in self.entries
-            if e.get("type") == "assistant" and "message" in e
+            e for e in self.entries if e.get("type") == "assistant" and "message" in e
         ]
 
     def agent_calls(self) -> list[dict]:
@@ -920,12 +1025,14 @@ class LogParser:
             for block in msg["message"].get("content", []):
                 if block.get("type") == "tool_use" and block.get("name") == "Agent":
                     inp = block.get("input", {})
-                    calls.append({
-                        "subagent_type": inp.get("subagent_type", ""),
-                        "name": inp.get("name", ""),
-                        "team_name": inp.get("team_name", ""),
-                        "prompt": inp.get("prompt", ""),
-                    })
+                    calls.append(
+                        {
+                            "subagent_type": inp.get("subagent_type", ""),
+                            "name": inp.get("name", ""),
+                            "team_name": inp.get("team_name", ""),
+                            "prompt": inp.get("prompt", ""),
+                        }
+                    )
         return calls
 
     def fo_texts(self) -> list[str]:
@@ -943,10 +1050,12 @@ class LogParser:
         for msg in self.assistant_messages():
             for block in msg["message"].get("content", []):
                 if block.get("type") == "tool_use":
-                    calls.append({
-                        "name": block.get("name", ""),
-                        "input": block.get("input", {}),
-                    })
+                    calls.append(
+                        {
+                            "name": block.get("name", ""),
+                            "input": block.get("input", {}),
+                        }
+                    )
         return calls
 
     def agent_prompt(self) -> str:
@@ -991,7 +1100,9 @@ class CodexLogParser:
     @property
     def raw_lines(self) -> list[str]:
         if self._raw_lines is None:
-            self._raw_lines = self.log_path.read_text().splitlines() if self.log_path.exists() else []
+            self._raw_lines = (
+                self.log_path.read_text().splitlines() if self.log_path.exists() else []
+            )
         return self._raw_lines
 
     @property
@@ -1067,7 +1178,9 @@ class CodexLogParser:
             f.write(self.full_text())
 
 
-def extract_stats(log_path: Path | str, phase_name: str, output_dir: Path | str) -> dict:
+def extract_stats(
+    log_path: Path | str, phase_name: str, output_dir: Path | str
+) -> dict:
     """Extract stats from a stream-json log. Prints and writes to file. Returns stats dict."""
     log_path = Path(log_path)
     output_dir = Path(output_dir)
@@ -1159,10 +1272,14 @@ def extract_stats(log_path: Path | str, phase_name: str, output_dir: Path | str)
 
 def git_add_commit(project_dir: Path, message: str):
     """Stage all and commit in the given project directory."""
-    subprocess.run(["git", "add", "-A"], capture_output=True, check=True, cwd=project_dir)
+    subprocess.run(
+        ["git", "add", "-A"], capture_output=True, check=True, cwd=project_dir
+    )
     subprocess.run(
         ["git", "commit", "-m", message],
-        capture_output=True, check=True, cwd=project_dir,
+        capture_output=True,
+        check=True,
+        cwd=project_dir,
     )
 
 
@@ -1183,7 +1300,9 @@ def read_entity_frontmatter(entity_path: Path) -> dict[str, str]:
     return fields
 
 
-def iter_worktree_entity_paths(worktrees_dir: Path, workflow_dir: str, entity_slug: str) -> list[Path]:
+def iter_worktree_entity_paths(
+    worktrees_dir: Path, workflow_dir: str, entity_slug: str
+) -> list[Path]:
     """Return matching entity paths under per-worker worktrees for one workflow entity."""
     if not worktrees_dir.is_dir():
         return []
@@ -1194,10 +1313,14 @@ def iter_worktree_entity_paths(worktrees_dir: Path, workflow_dir: str, entity_sl
     ]
 
 
-def check_gate_hold_behavior(runner: TestRunner, workflow_dir: str, entity_slug: str, fo_text_output: str) -> None:
+def check_gate_hold_behavior(
+    runner: TestRunner, workflow_dir: str, entity_slug: str, fo_text_output: str
+) -> None:
     """Assert that a gated entity remains active and unarchived."""
     entity_file = runner.test_project_dir / workflow_dir / f"{entity_slug}.md"
-    archive_file = runner.test_project_dir / workflow_dir / "_archive" / f"{entity_slug}.md"
+    archive_file = (
+        runner.test_project_dir / workflow_dir / "_archive" / f"{entity_slug}.md"
+    )
 
     if entity_file.is_file():
         fm = read_entity_frontmatter(entity_file)
@@ -1216,7 +1339,11 @@ def check_gate_hold_behavior(runner: TestRunner, workflow_dir: str, entity_slug:
 
     runner.check(
         "first officer output mentions gate or approval handling",
-        bool(re.search(r"gate|approval|approve|reject|waiting", fo_text_output, re.IGNORECASE)),
+        bool(
+            re.search(
+                r"gate|approval|approve|reject|waiting", fo_text_output, re.IGNORECASE
+            )
+        ),
     )
 
 
@@ -1231,7 +1358,9 @@ def rejection_signal_present(
     patterns = r"REJECTED|recommend reject|failing test|Expected 5, got -1"
     if any(re.search(patterns, text, re.IGNORECASE) for text in texts if text):
         return True
-    if main_entity_path.is_file() and re.search(r"REJECTED", main_entity_path.read_text(), re.IGNORECASE):
+    if main_entity_path.is_file() and re.search(
+        r"REJECTED", main_entity_path.read_text(), re.IGNORECASE
+    ):
         return True
     return any(
         re.search(r"REJECTED", path.read_text(), re.IGNORECASE)
@@ -1251,7 +1380,11 @@ def rejection_follow_up_observed(
         return True
     for path in iter_worktree_entity_paths(worktrees_dir, workflow_dir, entity_slug):
         text = path.read_text()
-        if re.search(r"Feedback Cycles|Stage Report: validation|Stage Report: implementation", text, re.IGNORECASE):
+        if re.search(
+            r"Feedback Cycles|Stage Report: validation|Stage Report: implementation",
+            text,
+            re.IGNORECASE,
+        ):
             return True
     return False
 
@@ -1275,9 +1408,14 @@ def check_merge_outcome(
     if hook_expected:
         runner.check("merge hook fired marker exists", hook_file.is_file())
         if hook_file.is_file():
-            runner.check("merge hook fired marker contains entity slug", entity_slug in hook_file.read_text())
+            runner.check(
+                "merge hook fired marker contains entity slug",
+                entity_slug in hook_file.read_text(),
+            )
     else:
-        runner.check("no merge hook marker exists in no-mods run", not hook_file.exists())
+        runner.check(
+            "no merge hook marker exists in no-mods run", not hook_file.exists()
+        )
 
     if archive_required:
         if hook_expected:
@@ -1293,19 +1431,29 @@ def check_merge_outcome(
         fm = read_entity_frontmatter(entity_file)
         status_val = fm.get("status", "?")
         if hook_expected:
-            print(f"  SKIP: entity not archived (status: {status_val}) — FO may not have completed the full cycle within budget")
+            print(
+                f"  SKIP: entity not archived (status: {status_val}) — FO may not have completed the full cycle within budget"
+            )
         else:
-            print(f"  SKIP: entity not archived (status: {status_val}) — FO may not have completed the full cycle within budget")
+            print(
+                f"  SKIP: entity not archived (status: {status_val}) — FO may not have completed the full cycle within budget"
+            )
     else:
         if hook_expected:
-            runner.fail("entity was archived (entity file not found in either location)")
+            runner.fail(
+                "entity was archived (entity file not found in either location)"
+            )
         else:
             runner.fail("entity was archived via local merge (entity file not found)")
 
     if hook_expected:
-        runner.check("worktree cleaned up after merge hook run", not worktree_dir.exists())
+        runner.check(
+            "worktree cleaned up after merge hook run", not worktree_dir.exists()
+        )
     else:
-        runner.check("worktree cleaned up after no-mods fallback", not worktree_dir.exists())
+        runner.check(
+            "worktree cleaned up after no-mods fallback", not worktree_dir.exists()
+        )
 
     branches = subprocess.run(
         ["git", "branch", "--list", branch_name],
@@ -1317,17 +1465,23 @@ def check_merge_outcome(
     if hook_expected:
         runner.check("temporary branch cleaned up after merge hook run", branches == "")
     else:
-        runner.check("temporary branch cleaned up after no-mods fallback", branches == "")
+        runner.check(
+            "temporary branch cleaned up after no-mods fallback", branches == ""
+        )
 
 
-def file_contains(path: Path | str, pattern: str, case_insensitive: bool = False) -> bool:
+def file_contains(
+    path: Path | str, pattern: str, case_insensitive: bool = False
+) -> bool:
     """Check if a file contains a regex pattern."""
     text = Path(path).read_text()
     flags = re.IGNORECASE if case_insensitive else 0
     return bool(re.search(pattern, text, flags))
 
 
-def file_grep(path: Path | str, pattern: str, case_insensitive: bool = False) -> list[str]:
+def file_grep(
+    path: Path | str, pattern: str, case_insensitive: bool = False
+) -> list[str]:
     """Return all lines matching a regex pattern in a file."""
     text = Path(path).read_text()
     flags = re.IGNORECASE if case_insensitive else 0
