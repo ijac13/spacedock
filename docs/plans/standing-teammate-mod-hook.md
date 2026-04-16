@@ -1,9 +1,9 @@
 ---
 id: 162
 title: "Standing-teammate mod pattern — `standing: true` hook + `claude-team spawn-standing` helper + FO routing"
-status: backlog
+status: ideation
 source: "CL design discussion 2026-04-16 after recce-session proposal + in-session pilot of docs/plans/_mods/comm-officer.md"
-started:
+started: 2026-04-16T05:19:30Z
 completed:
 verdict:
 score: 0.65
