@@ -1,7 +1,7 @@
 ---
 id: 173
 title: "Streaming FO watcher with per-step timeouts and progressive assertions"
-status: validation
+status: implementation
 source: "CL observation during 2026-04-16 session — PR #107 CI (claude-live-opus) took 24m38s to surface a test failure that could have failed in ~120s with per-step timeouts. Post-hoc log parsing hides where in the sequence things stalled."
 started: 2026-04-16T21:55:52Z
 completed:
@@ -11,6 +11,34 @@ worktree: .worktrees/spacedock-ensign-streaming-fo-watcher-per-step-timeouts
 issue:
 pr:
 ---
+
+### Feedback Cycles
+
+**Cycle 1 (2026-04-16, captain rejection post-smoke)**
+
+Validation reported ACCEPTED. Captain overrode based on live-smoke evidence from `test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips` at opus-low (local, worktree-HEAD):
+
+- `StepTimeout` fired correctly at milestone 4 (`SendMessage to echo-agent observed`) with the right label.
+- Test result: FAILED (correct assertion).
+- FO subprocess exited with SIGTERM (exit 143) — context manager did kill it.
+- **But wallclock was 600.16s**, not the ~180s promised by the feature. FO log `Wallclock: 160s` ended at ~T+160 when the FO went idle; pytest total hit the 600s hard cap.
+
+**Root cause:** `run_first_officer_streaming.__exit__` uses `proc.wait(timeout=max(remaining, 1))` where `remaining = hard_cap_s - elapsed` regardless of whether exit is normal or exception-driven. On exception exit (StepTimeout / StepFailure / any test-body exception), the proc is typically hung (e.g., claude-p idle after FO work completes). Waiting `hard_cap - elapsed` for it to exit naturally wastes the rest of the budget. The terminate+kill escalation only fires after that wait expires.
+
+**Fix requested:** on exception-driven exit, use a short fixed grace period (5-10s) before escalating to terminate → kill. Distinguish the two paths in `__exit__`:
+
+```python
+def __exit__(self, exc_type, exc, tb):
+    if exc is not None:
+        grace_s = 5  # abnormal exit — decisions already made, kill fast
+    else:
+        grace_s = max(hard_cap_s - elapsed, 1)  # normal exit path
+    # existing wait/terminate/kill escalation using grace_s
+```
+
+**Test coverage required:** extend AC-6/7 (currently cover cleanup of lingering proc on normal with-exit and hard-cap) with a new AC: "context manager terminates within ~10s when an exception propagates through the `with` block." Offline unit test — use `sh -c 'sleep 60'` with `hard_cap_s=600`, raise an exception inside the with, assert total wallclock `< 15s`.
+
+**Reject-to target:** implementation. Routing fix instructions to the live implementation ensign.
 
 ## Problem Statement
 
