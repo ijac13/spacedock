@@ -82,24 +82,25 @@ From `codex-first-officer-runtime.md`:
 - `send_input` for reuse, `wait_agent` for completion
 - Explicit shutdown required
 
-### 3. Gap Analysis: Kilo vs Requirements
+### 3. Gap Analysis: Kilo vs Requirements (CORRECTED)
 
 | Requirement | Kilo Capability | Gap/Missing |
 |-------------|------------------|--------------|
 | Workflow discovery | Same git/FS access | None |
-| Status script | Same `status` tool | None (requires Kilo-specific wrapper) |
-| Worker spawning | `task` tool for subagents | **Major**: `task` is designed for parent→subagent, not orchestrator→worker. No direct `spawn_agent` equivalent. |
-| Completion detection | Subagent returns summary | **Medium**: No `wait_agent` equivalent — polling required |
-| Reuse logic | Subagent handles are not addressable post-completion | **Major**: Subagents don't persist as addressable handles |
-| Team creation | None (no `TeamCreate` equivalent) | **Major**: Kilo has no team abstraction |
-| Context budget | Unknown | **Unknown**: No `context-budget` equivalent found |
-| Gate handling | Parent agent can present to human | Partial — needs custom flow |
+| Status script | Same `status` tool | None |
+| Worker spawning | `task` tool + Agent Manager | **Pattern diff**: parent→subagent, not FO→worker |
+| Completion detection | Subagent returns summary | **Pattern diff**: no wait_agent equivalent |
+| Reuse logic | Agent Manager tabs (manual) | **Pattern diff**: tab-switching vs message-passing |
+| Team creation | Agent Manager | **Pattern diff**: tabs vs team model |
+| Concurrent dispatch | Parallel subagents supported | None! |
+| Gate handling | Parent presents to human | Partial — needs custom flow |
 
-**Key gaps:**
-1. No persistent worker handles for reuse — subagents terminate and don't stay addressable
-2. No team abstraction — Kilo doesn't have Claude Code's team model
-3. `task` tool is parent→subagent, not FO→worker — the dispatch pattern differs
-4. No known context budget API
+**Correction (2026-04-16):**
+- "No background agents" was INCORRECT — Kilo has Agent Manager and parallel subagents
+- The gap is **model difference**, not capability gap:
+  - Claude Code: Team + SendMessage (persistent message-passing)
+  - Kilo: Agent Manager tabs + task tool (tab-switching, session-based)
+- Reuse is possible via Agent Manager but requires manual coordination, not programmatic message-passing
 
 ### 4. E2E Test Strategy
 
