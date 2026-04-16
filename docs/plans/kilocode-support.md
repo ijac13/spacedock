@@ -95,12 +95,22 @@ From `codex-first-officer-runtime.md`:
 | Concurrent dispatch | Parallel subagents supported | None! |
 | Gate handling | Parent presents to human | Partial — needs custom flow |
 
-**Correction (2026-04-16):**
-- "No background agents" was INCORRECT — Kilo has Agent Manager and parallel subagents
-- The gap is **model difference**, not capability gap:
-  - Claude Code: Team + SendMessage (persistent message-passing)
-  - Kilo: Agent Manager tabs + task tool (tab-switching, session-based)
-- Reuse is possible via Agent Manager but requires manual coordination, not programmatic message-passing
+**Correction (2026-04-16) — FIRST-HAND TEST:**
+
+```
+Test: Spawn subagent, then try to send_message to it after completion
+Result: "none available" — subagent handle expires immediately
+
+Conclusion: Subagents are NOT addressable after completion.
+- task_id provided at spawn
+- After subagent returns, handle is gone
+- No SendMessage equivalent
+- No wait_agent equivalent
+```
+
+**Runtime detection in this session:**
+- `KILO=1` — primary detection env var
+- `KILOCODE_VERSION`, `KILO_PID`, `KILOCODE_FEATURE=cli` also set
 
 ### 4. E2E Test Strategy
 
