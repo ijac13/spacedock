@@ -1,7 +1,7 @@
 ---
 id: 174
 title: "CI workflow bisection inputs — pin Claude Code version, run specific tests"
-status: implementation
+status: validation
 source: "CL directive during 2026-04-16 session — PR #105 introduced a test failure that correlates with the claude-opus-4-6 → claude-opus-4-7 cutover. Bisecting the Claude Code version against a specific test is currently impossible without code commits."
 started: 2026-04-16T21:58:13Z
 completed:
@@ -10,6 +10,7 @@ score: 0.7
 worktree: .worktrees/spacedock-ensign-ci-workflow-dispatch-bisection-inputs
 issue:
 pr:
+mod-block: merge:pr-merge
 ---
 
 ## Problem Statement
