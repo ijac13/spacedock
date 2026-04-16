@@ -10,7 +10,7 @@ score: 0.65
 worktree: .worktrees/spacedock-ensign-standing-teammate-mod-hook
 issue:
 pr: #102
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 Ship the **"standing teammate" pattern** so Spacedock workflows can declare long-lived specialist agents (prose polishers, science officers, code reviewers, language translators) via a mod file. The FO spawns each declared standing teammate once per captain session (first-boot-wins across multiple workflows sharing a team), keeps it alive until session teardown, and routes drafts destined for the captain through it.
