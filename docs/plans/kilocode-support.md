@@ -208,6 +208,33 @@ This is closer to "background agents with one message" than "no background agent
 
 **Workaround:** Use deterministic stage ordering (backlog → ideation → done) without feedback cycles to minimize dispatches.
 
+## Implementation Report
+
+### Runtime Adapter Location
+- **Location verified**: `skills/first-officer/references/kilo-first-officer-runtime.md` ✅
+- File exists with full implementation covering: entry surface, runtime detection, workflow target, dispatch adapter, single-entity mode, bounded stop rules, merge/cleanup, completion shape
+
+### Test Infrastructure Changes Required
+1. **tests/conftest.py** (line 22-24): Add `"kilo"` to `--runtime` choices
+2. **tests/conftest.py** (line 136-148): Extend `fo_run` fixture to handle `runtime == "kilo"`
+3. **scripts/test_lib.py**: Create `run_kilo_first_officer()` function (similar to Codex pattern - invoke via skill)
+4. **pytest markers**: Add `@pytest.mark.live_kilo` support (parallel to live_claude/live_codex)
+
+### Changes Summary
+```diff
+# tests/conftest.py line 22-24
+-                     choices=["claude", "codex"],
++                     choices=["claude", "codex", "kilo"],
+
+# tests/conftest.py fo_run fixture needs:
++     elif runtime == "kilo":
++         return run_kilo_first_officer(...)
+```
+
+### Recommendation
+**Proceed to validation** - Runtime adapter is complete. Test infrastructure changes are straightforward additions following existing patterns. No blockers identified.
+
+---
 ## Completion Checklist
 
 - [x] Research Kilo (kilo.ai) capabilities — understand the runtime
