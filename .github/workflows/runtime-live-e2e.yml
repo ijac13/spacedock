@@ -139,9 +139,23 @@ jobs:
           git config --global init.defaultBranch main
 
       - name: Show tool versions
+        env:
+          CLAUDE_VERSION: ${{ inputs.claude_version }}
         run: |
-          claude --version
-          uv --version
+          CLAUDE_VERSION_OUT=$(claude --version)
+          UV_VERSION_OUT=$(uv --version)
+          echo "$CLAUDE_VERSION_OUT"
+          echo "$UV_VERSION_OUT"
+          {
+            echo "### Tool versions"
+            if [ -n "$CLAUDE_VERSION" ]; then
+              echo "- Claude Code pin requested: \`$CLAUDE_VERSION\`"
+            else
+              echo "- Claude Code pin requested: _none (installer default)_"
+            fi
+            echo "- Installed \`claude --version\`: \`$CLAUDE_VERSION_OUT\`"
+            echo "- Installed \`uv --version\`: \`$UV_VERSION_OUT\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Claude live suite
         env:
@@ -278,9 +292,23 @@ jobs:
           git config --global init.defaultBranch main
 
       - name: Show tool versions
+        env:
+          CLAUDE_VERSION: ${{ inputs.claude_version }}
         run: |
-          claude --version
-          uv --version
+          CLAUDE_VERSION_OUT=$(claude --version)
+          UV_VERSION_OUT=$(uv --version)
+          echo "$CLAUDE_VERSION_OUT"
+          echo "$UV_VERSION_OUT"
+          {
+            echo "### Tool versions"
+            if [ -n "$CLAUDE_VERSION" ]; then
+              echo "- Claude Code pin requested: \`$CLAUDE_VERSION\`"
+            else
+              echo "- Claude Code pin requested: _none (installer default)_"
+            fi
+            echo "- Installed \`claude --version\`: \`$CLAUDE_VERSION_OUT\`"
+            echo "- Installed \`uv --version\`: \`$UV_VERSION_OUT\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Claude live suite (bare mode)
         env:
@@ -417,9 +445,23 @@ jobs:
           git config --global init.defaultBranch main
 
       - name: Show tool versions
+        env:
+          CLAUDE_VERSION: ${{ inputs.claude_version }}
         run: |
-          claude --version
-          uv --version
+          CLAUDE_VERSION_OUT=$(claude --version)
+          UV_VERSION_OUT=$(uv --version)
+          echo "$CLAUDE_VERSION_OUT"
+          echo "$UV_VERSION_OUT"
+          {
+            echo "### Tool versions"
+            if [ -n "$CLAUDE_VERSION" ]; then
+              echo "- Claude Code pin requested: \`$CLAUDE_VERSION\`"
+            else
+              echo "- Claude Code pin requested: _none (installer default)_"
+            fi
+            echo "- Installed \`claude --version\`: \`$CLAUDE_VERSION_OUT\`"
+            echo "- Installed \`uv --version\`: \`$UV_VERSION_OUT\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Claude live suite (opus)
         env:
