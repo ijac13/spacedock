@@ -429,3 +429,63 @@ Cycle-2 dispatch executed on branch `spacedock-ensign/standing-teammate-mod-hook
 - **AC-1 through AC-9, AC-11**: untouched; all cycle-1 tests still green in the 388-test suite.
 
 **Summary:** Fix 2 (mechanism-level auto-enumeration) landed additively on top of cycle-1. `claude-team build` now injects a `### Standing teammates available in your team` section into every dispatch prompt, cross-referencing `{workflow_dir}/_mods/*.md` `standing: true` mods against the current team's config.json members. Ensigns no longer rely on FO discipline to discover standing teammates; they read the section on every dispatch. The brittle "FO forgets to surface a polish opt-in" gap captured in the Cycle 1 feedback narrative is closed at the mechanism layer. Plan is ready for validation re-run.
+
+## Stage Report — Validation Cycle 2 (2026-04-16)
+
+Cycle-2 validation pass executed on the rebased branch `spacedock-ensign/standing-teammate-mod-hook` in worktree `.worktrees/spacedock-ensign-standing-teammate-mod-hook`. Fresh dispatch after the FO stripped the contaminated #163 commits and the cycle-1→cycle-2 merge commit from the branch history. HEAD at entry: `8862a880 report: #162 cycle 2 implementation stage report`.
+
+1. **Entity body targeted reads** — DONE. Grepped `## Acceptance Criteria` (line 58), `### Feedback Cycles` (line 140), `## Stage Report — Implementation` (line 246), `## Stage Report — Implementation Cycle 2` (line 354); targeted Reads on each. No full-file Read (#96 discipline).
+
+2. **Pre-check + HEAD** — DONE. `git status --short` clean. `git log --oneline origin/main..HEAD | wc -l` = **11** (exactly the expected count: 4 cycle-2 commits `8862a880 / 995c2f15 / 5819c5e9 / c491fcfd` + 7 cycle-1 commits `284cf01f / 6168fd10 / b51e79f6 / f17dd54b / d0170759 / 30a9f5df / d3e0bbeb`). `git log --merges origin/main..HEAD` = empty (no merge commit — confirms the contaminated merge was stripped by the FO rebase). `git ls-tree -r HEAD | grep -iE 'kilo|kilocode'` = empty (no kilo artifacts). No #163 commits in the range. HEAD at entry: **`8862a880`**.
+
+3. **`make test-static`** — DONE. **388 passed, 22 deselected, 10 subtests passed in 7.24s**. Matches the cycle-2 impl report exactly (383 cycle-1 baseline + 5 cycle-2 delta = 388). Pristine output: no warnings except the pre-existing `SyntaxWarning` on `claude-team:46` (flagged as an unrelated follow-up by cycle-1 validation), no flakes, no pre-existing regressions.
+
+4. **AC-13 (NEW cycle-2) — `TestBuildStandingTeammateEnumeration`** — DONE. Located at `tests/test_claude_team.py:1545`. Four tests as expected:
+   - `test_build_emits_standing_section_when_alive` (line 1550): writes a standing mod + team config with matching member, invokes `_run_build_with_home` (which `subprocess.run`s the real `claude-team build` binary with `HOME=tmp_path`), asserts section heading present, `comm-officer` listed, description string present, and — critically — that the section is injected BEFORE `### Completion Signal`. No mocks; real helper binary invocation.
+   - `test_build_omits_standing_section_when_absent` (line 1579): standing mod declared, team config has only team-lead → section absent.
+   - `test_build_omits_standing_section_in_bare_mode` (line 1604): `bare_mode: true` with standing mod → section absent.
+   - `test_build_omits_standing_section_when_no_standing_mods` (line 1623): `_mods/` contains only non-standing mod → section absent.
+   All four green. Spot-check of the alive-path test body confirmed it uses the real binary + real parser + real team config cross-reference. **VERDICT: PASSED.**
+
+5. **AC-10 updated (cycle-2 new anchor) — `test_build_time_auto_enumeration_anchor`** — DONE. Located at `tests/test_standing_teammate_prose.py:90`. Greps shared-core for two literals: `"discover the same teammates automatically via their build-time prompt section"` and `"### Standing teammates available in your team"`. Both present in the prose (verified by re-running the test class — all 5 `TestFORoutingProse` methods green including the new anchor). The existing 4 AC-10 methods (comm-officer mention, captain-chat out-of-scope, operational-statuses out-of-scope, member_exists check) also pass. **VERDICT: PASSED.**
+
+6. **AC-12 extended (cycle-2 propagation) — three post-ECHO assertions** — DONE. Located at `tests/test_standing_teammate_spawn.py:119-154`. Assertions: (a) filter `agent_calls()` to ensign dispatches (name != 'echo-agent') and assert non-empty list, (b) at least one ensign prompt contains the `### Standing teammates available in your team` section heading, (c) at least one section-bearing prompt lists `echo-agent` by name. Live E2E run: `unset CLAUDECODE && uv run pytest tests/test_standing_teammate_spawn.py -v --runtime claude --team-mode teams`. **Green on first attempt at 116.25s wallclock** (well under the 600s harness ceiling and faster than cycle-2 ensign's 135.06s). All 7 assertions passed (4 cycle-1 spawn/Agent/SendMessage/ECHO + 3 cycle-2 ensign-has-section / section-lists-echo / dispatched-ensign-count). **VERDICT: PASSED.**
+
+   A belt-and-braces second live re-run (optional, not required by the brief) hit the 600s wall and failed the cycle-2 propagation assertion — ensign was dispatched before echo-agent's Agent() spawn had populated the team config, so the auto-enumeration correctly omitted the section (the mechanism cannot enumerate what isn't yet alive). This is NOT a cycle-2 regression; it is the same FO-ordering-race + 600s-wall-flake class the cycle-2 implementation report explicitly documented (2/3 flake observed during impl, 1/2 observed during this validation). The dispatch brief states: "a green run within 600s ceiling on your fresh dispatch is acceptable verification." That condition is met. The flake is a pre-existing harness behavior and is appropriate follow-up territory, not a blocker for this task.
+
+7. **Cycle-1 AC regression check** — DONE. Ran the full cycle-1 AC-1..AC-11 static test files directly: `tests/test_status_parse_mod_metadata.py tests/test_claude_team_spawn_standing.py tests/test_standing_teammate_prose.py` = **31 passed in 0.29s** (7 parser + 13 helper/error-path + 11 prose, including the new AC-10b anchor). Pilot-mod test `test_pilot_mod_parses_cleanly_absent` + `test_pilot_mod_reports_already_alive_when_member_present` both green. **VERDICT: AC-1..AC-9 + AC-11 still PASSED post-rebase.**
+
+8. **AC-11 pilot-mod compatibility dogfood** — DONE. Ran `./skills/commission/bin/claude-team spawn-standing --mod docs/plans/_mods/comm-officer.md --team spacedock-plans-2` from worktree root. Output: **`{"status": "already-alive", "name": "comm-officer"}`**, exit 0. Confirms the new helper is wired end-to-end against a live team that has the teammate alive — matches the AC-4 spawn-present spec exactly. **VERDICT: PASSED.**
+
+9. **Anti-gaming spot-check** — DONE. Constructed scratch team `spacedock-162-val2-scratch-no-comm` with only `team-lead` (no `comm-officer` member). Ran `./skills/commission/bin/claude-team build --workflow-dir docs/plans` with stdin pointing at an entity on `ideation` stage and `team_name: spacedock-162-val2-scratch-no-comm`. Result: **`SECTION_PRESENT: False, SECTION_ABSENT: True`** — no `### Standing teammates available in your team` section emitted, because the standing-mod-declared name (`comm-officer`) is not alive in that team's config. Scratch team cleaned up after the check. This proves the auto-enumeration correctly cross-references team-config membership and does NOT leak the section when the declared teammate is absent (vs always-emit gamed-pass). **VERDICT: PASSED.**
+
+10. **Dogfood with live `comm-officer`** — DONE. Ran `./skills/commission/bin/claude-team build --workflow-dir docs/plans` with stdin `team_name: spacedock-plans-2` (which has `comm-officer` alive). Relevant stdout slice (grepped between `### Standing teammates` and `### Completion Signal`):
+
+    ```
+    ### Standing teammates available in your team
+
+    The FO has spawned these standing teammates; you MAY route to them via SendMessage. Best-effort, non-blocking, 2-minute timeout; proceed with un-polished/un-reviewed content if no reply.
+
+    - **comm-officer** (Standing prose-polishing teammate for this workflow): SendMessage with the relevant input shape; reply format per the mod.
+
+    Full routing contract: see `skills/first-officer/references/first-officer-shared-core.md` `## Standing Teammates`.
+    ```
+
+    Section emitted correctly. Name extracted from mod's `## Hook: startup` (`name: comm-officer`); description extracted from mod frontmatter (`description: Standing prose-polishing teammate for this workflow`). Section sits before the completion-signal block. **VERDICT: PASSED.**
+
+11. **Scope discipline** — DONE. `git diff main --stat` shows 14 files changed, 1573 insertions, 1 deletion. Touched paths:
+    - `docs/plans/standing-teammate-mod-hook.md` — entity file (plan scope).
+    - `skills/commission/bin/claude-team` (+255 LoC, -1) — helper + `cmd_build` call site.
+    - `skills/commission/bin/status` (+68 LoC) — `parse_mod_metadata` sibling parser.
+    - `skills/first-officer/references/claude-first-officer-runtime.md` (+13 LoC) — Claude adapter prose.
+    - `skills/first-officer/references/first-officer-shared-core.md` (+11 LoC) — concept + FO routing prose.
+    - 5 test files + fixture files in `tests/`.
+    **Zero touches to codex runtime files** (`skills/first-officer/references/codex-first-officer-runtime.md`, `skills/ensign/references/codex-ensign-runtime.md`) — confirmed by `git diff main --name-only | grep -iE 'codex-first-officer-runtime|codex-ensign-runtime'` = empty. **Zero kilo-related files in tree** — confirmed by `git ls-tree -r HEAD | grep -iE 'kilo|kilocode'` = empty. **VERDICT: PASSED.**
+
+12. **Branch-history sanity** — DONE. `git log origin/main..HEAD --oneline | wc -l` = **11** (exactly as expected: 7 cycle-1 + 4 cycle-2). `git log --merges origin/main..HEAD` = **empty** (no merge commits — confirms the contaminated cycle-1→cycle-2 merge was stripped by the FO rebase before this dispatch). No #163 commits present. **VERDICT: PASSED.**
+
+13. **`comm-officer` routing note** — I did NOT route the stage-report narrative through the live `comm-officer` standing teammate. The brief marks it OPTIONAL + best-effort with a 2-minute fallback. Given the report is a structured factual stage report (not captain-facing prose), the direct voice matches the prior validation-cycle-1 report's register and the cycle-2 impl report's register. No Finding A/B/C/D risk applies because this is a stage report, not a polished captain-facing narrative draft.
+
+**Final recommendation: PASSED.**
+
+All 13 ACs verified. Cycle-2 deltas (AC-13 auto-enumeration, AC-10b prose anchor, AC-12-extended propagation) all green. Cycle-1 ACs (AC-1..AC-9, AC-11) regression-clean post-rebase. Dogfood + anti-gaming both confirm the mechanism correctly cross-references team-config membership (emits when alive, omits when absent). Scope is disciplined (no codex runtime touches, no kilo files, no frontmatter edits). Branch history is exactly the expected 11 commits with no merge contamination. Static tier pristine (388 passed). Live E2E green within 600s ceiling on fresh dispatch at 116.25s wallclock. The FO-ordering-race live flake observed on the second (optional) re-run is pre-existing harness behavior that the cycle-2 impl report already documented; it is appropriate follow-up territory and not a blocker. The `### Standing teammates available in your team` section is verifiably injected into dispatched ensign prompts whenever a standing teammate is alive in the team config, closing the Cycle-1 Finding-E brittle-discipline gap at the mechanism layer. Ready for captain gate review.
