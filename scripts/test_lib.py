@@ -737,6 +737,81 @@ def run_first_officer(
     return result.returncode
 
 
+@contextlib.contextmanager
+def run_first_officer_streaming(
+    runner: TestRunner,
+    prompt: str,
+    agent_id: str = "spacedock:first-officer",
+    extra_args: list[str] | None = None,
+    log_name: str = "fo-log.jsonl",
+    hard_cap_s: int = 600,
+) -> Iterator[FOStreamWatcher]:
+    """Launch the FO as a live subprocess and yield a watcher.
+
+    The context manager guarantees:
+    - log_path exists and is opened for writing before yield
+    - proc is Popen'd with stdout -> log_path, stderr -> STDOUT
+    - on normal exit: wait for proc (up to hard_cap_s), extract_stats
+    - on exception inside ``with``: terminate proc, drain log, reraise
+    - on caller forgetting to call expect_exit: enforce hard_cap_s wait
+      at context exit, terminate+kill if exceeded
+    """
+    log_path = runner.log_dir / log_name
+    cmd = [
+        "claude", "-p", prompt,
+        "--plugin-dir", str(runner.repo_root),
+        "--agent", agent_id,
+        "--permission-mode", "bypassPermissions",
+        "--verbose",
+        "--output-format", "stream-json",
+    ]
+    if extra_args:
+        cmd.extend(extra_args)
+
+    env = _isolated_claude_env() or _clean_env()
+    start = time.monotonic()
+    log_file = open(log_path, "w")
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            cwd=runner.test_project_dir,
+            env=env,
+        )
+    except Exception:
+        log_file.close()
+        raise
+
+    watcher = FOStreamWatcher(log_path, proc)
+    try:
+        yield watcher
+    finally:
+        try:
+            if proc.poll() is None:
+                elapsed = time.monotonic() - start
+                remaining = hard_cap_s - elapsed
+                try:
+                    proc.wait(timeout=max(remaining, 1))
+                except subprocess.TimeoutExpired:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait()
+            watcher.close()
+            log_file.close()
+            if proc.returncode is not None and proc.returncode != 0:
+                print(f"WARNING: first officer exited with code {proc.returncode}")
+            extract_stats(log_path, "fo", runner.log_dir)
+        except Exception:
+            watcher.close()
+            if not log_file.closed:
+                log_file.close()
+            raise
+
+
 def run_codex_first_officer(
     runner: TestRunner,
     workflow_dir: str,
