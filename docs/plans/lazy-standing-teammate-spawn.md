@@ -241,3 +241,60 @@ No E2E tests needed. All changes are prose (runtime adapter, shared-core) and a 
 **Summary:** Implemented lazy-spawn for standing teammates. Boot no longer calls `spawn-standing`; it only runs `list-standing` (discovery). Spawn is deferred to the first team-mode `Agent()` dispatch. The dispatch prompt now enumerates declared (not alive) teammates, so ensigns see standing teammates before they are spawned. All 7 ACs are covered by the test suite.
 
 **Recommendation:** Ready for validation.
+
+## Stage Report (validation)
+
+1. Read the entity's full body (ideation Decision, Protocol, Changes Required, ACs 1-7, Test Plan) and implementation Stage Report — DONE. All sections read and cross-referenced with the implementation output.
+
+2. Inspect the implementation branch commits — DONE. Five commits on the branch (excluding the stage-report commit):
+   - `e3e2338d` — `skills/commission/bin/claude-team` only (rename + filter removal + preamble). Scope: correct.
+   - `c51f4603` — `skills/first-officer/references/claude-first-officer-runtime.md` only (adapter prose). Scope: correct.
+   - `1fea3a32` — `skills/first-officer/references/first-officer-shared-core.md` only (shared-core prose). Scope: correct.
+   - `f358adb5` — `tests/test_claude_team.py`, `tests/test_claude_team_spawn_standing.py`, `tests/test_standing_teammate_prose.py` only (tests). Scope: correct.
+   - `58d51ae6` — `docs/plans/lazy-standing-teammate-spawn.md` only (stage report). Scope: correct.
+   No out-of-scope edits detected.
+
+3. Run `make test-static` — DONE. **422 passed, 22 deselected, 10 subtests passed** in 7.64s. Zero failures.
+
+4. **AC-1: Boot no longer calls spawn-standing** — PASSED.
+   - The heading `### Standing teammate discovery pass` exists at line 32 of `claude-first-officer-runtime.md`.
+   - The old heading `### Standing teammate spawn pass` does not exist (grep confirms absent).
+   - The discovery-pass section body (lines 34-39) does not contain `spawn-standing`. It only references `list-standing` and "Record the returned mod paths in session memory. **No spawn calls at boot.**"
+   - Test `test_discovery_does_not_call_spawn_standing` extracts the section and asserts `spawn-standing` not in body.
+
+5. **AC-2: Lazy-spawn triggers at first team-mode dispatch** — PASSED.
+   - `### Standing teammate lazy-spawn` subsection exists at line 41 of `claude-first-officer-runtime.md`.
+   - The subsection body describes: "Before the first `Agent()` call that uses a `team_name`" trigger, `spawn-standing` invocation (line 46), `member_exists` aliveness check via `already-alive` status handling (line 47), fire-and-forget discipline (line 49).
+   - Tests `test_lazy_spawn_heading_present` and `test_lazy_spawn_mentions_spawn_standing` confirm heading and content.
+
+6. **AC-3: Function rename** — PASSED.
+   - `enumerate_declared_standing_teammates` exists at line 452 of `claude-team`.
+   - `enumerate_alive_standing_teammates` does not appear anywhere in `claude-team` (grep returns zero matches in the script; only appears in archived plan docs).
+   - `member_exists` is NOT called inside `enumerate_declared_standing_teammates` (lines 452-494). The function scans `_mods/*.md` for `standing: true` and returns entries directly. `member_exists` is only used in `cmd_spawn_standing` (line 693).
+   - Return shape `[(name, description, mod_path)]` preserved (line 452 type hint, line 493 `.append((declared_name, description, mod_path))`).
+   - Test `TestEnumerateDeclaredStandingTeammates::test_returns_declared_mod_without_team_config` confirms a standing mod is returned even with no team config on disk.
+
+7. **AC-4: Dispatch prompt enumerates declared teammates** — PASSED.
+   - `cmd_build` calls `enumerate_declared_standing_teammates(workflow_dir, team_name)` at line 277.
+   - Preamble reads "These standing teammates are available in your team" (line 282), not "The FO has spawned these".
+   - Test `TestBuildDeclaredTeammatesSection::test_section_appears_without_team_config_member` runs `cmd_build` with a standing mod but no team config member and asserts the section appears with correct preamble.
+   - `test_claude_team.py::test_build_emits_standing_section_for_declared_but_not_alive` (renamed from `test_build_omits_standing_section_when_absent`) confirms the section now appears for declared-but-not-alive teammates.
+
+8. **AC-5: Shared-core prose updated** — PASSED.
+   - `## Standing Teammates` section (line 217 of `first-officer-shared-core.md`) contains: "defers spawn to the first team-mode dispatch" (line 219) and "Spawn is deferred to first dispatch, not boot" (line 221).
+   - `member_exists` still appears in the Dispatch section at line 82: "Check team-config membership via `member_exists` before routing."
+   - Test `TestSharedCoreLazySpawn::test_deferred_or_lazy_in_standing_teammates_section` greps the section for 'deferred' or 'lazy'.
+   - Test `TestFORoutingProse::test_member_exists_check_mentioned` asserts `member_exists` present.
+
+9. **AC-6: Skip conditions documented** — PASSED.
+   - The lazy-spawn subsection closing paragraph (line 53): "In single-entity (bare) mode and in Degraded Mode, skip lazy-spawn (same as the discovery-pass skip note above)."
+   - The discovery-pass section (line 39): "In single-entity (bare) mode and in Degraded Mode, discovery still runs (it is cheap — just `list-standing`), but lazy-spawn is skipped in those modes (no team to spawn into)."
+   - All three conditions (bare-mode, single-entity, Degraded Mode) are documented.
+   - Test `TestLazySpawnSkipConditions::test_skip_conditions_documented` greps the lazy-spawn section for 'bare', 'single-entity', or 'degraded'.
+
+10. **AC-7: Existing tests pass after rename** — PASSED.
+    - `make test-static` returned 422 passed, 22 deselected, 10 subtests passed, zero failures.
+    - All pre-existing test classes pass: `test_standing_teammate_prose.py` (updated heading greps), `test_claude_team_spawn_standing.py` (all original classes pass plus new ones), `test_claude_team_list_standing.py` (unchanged, still passes), `test_claude_team.py` (renamed test expectation flipped correctly).
+    - The 22 deselected are live/codex-marked tests, consistent with `test-static` exclusion. No regressions.
+
+**Overall recommendation: PASSED.** All 7 ACs verified with evidence. Test suite green at 422/422. No out-of-scope edits. Implementation is minimal and well-scoped.
