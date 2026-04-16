@@ -1,13 +1,13 @@
 ---
 id: 174
 title: "CI workflow bisection inputs — pin Claude Code version, run specific tests"
-status: backlog
+status: implementation
 source: "CL directive during 2026-04-16 session — PR #105 introduced a test failure that correlates with the claude-opus-4-6 → claude-opus-4-7 cutover. Bisecting the Claude Code version against a specific test is currently impossible without code commits."
-started:
+started: 2026-04-16T21:58:13Z
 completed:
 verdict:
 score: 0.7
-worktree:
+worktree: .worktrees/spacedock-ensign-ci-workflow-dispatch-bisection-inputs
 issue:
 pr:
 ---
@@ -63,7 +63,7 @@ This produces a one-job run that isolates a single variable (Claude Code version
 ## Open questions for ideation
 
 - Does the `claude.ai/install.sh` installer support version pinning? If not, what is the mechanism — download a specific release artifact from GitHub, pin an npm version, or raise upstream? The answer affects complexity.
-- Does `test_selector` apply to all four jobs (`CI-E2E`, `CI-E2E-OPUS`, `CI-E2E-CODEX`, bare) or only a subset? Which jobs accept the selector and which ignore it?
+- Does `test_selector` apply to all four jobs (`claude-live`, `claude-live-bare`, `claude-live-opus`, `codex-live`) or only a subset? Which jobs accept the selector and which ignore it?
 - Should `effort_override` propagate to tests that do not currently take `--effort` (e.g., bare-mode tests), or stay strictly additive for tests that already honor it?
 - Is a fourth input `model_override` (sonnet/opus/haiku) worth adding so one job can run with a model different from its Makefile default? Low cost, expands bisection reach.
 - Should each job report the installed `claude --version` explicitly in its output for audit trail, independent of whether it was pinned?
