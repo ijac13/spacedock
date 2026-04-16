@@ -1,13 +1,13 @@
 ---
 id: 142
 title: Codex plugin scaffold for Spacedock install experience
-status: ideation
+status: implementation
 source: Research on OpenAI Codex plugin packaging docs on 2026-04-12
 score: 0.67
 started: 2026-04-15T05:18:01Z
 completed:
 verdict:
-worktree:
+worktree: .worktrees/spacedock-ensign-codex-plugin-scaffold-for-spacedock-install
 issue:
 pr:
 ---
