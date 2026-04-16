@@ -1,7 +1,7 @@
 ---
 id: 142
 title: Codex plugin scaffold for Spacedock install experience
-status: implementation
+status: validation
 source: Research on OpenAI Codex plugin packaging docs on 2026-04-12
 score: 0.67
 started: 2026-04-15T05:18:01Z
@@ -10,7 +10,6 @@ verdict:
 worktree: .worktrees/spacedock-ensign-codex-plugin-scaffold-for-spacedock-install
 issue:
 pr:
-mod-block: 
 ---
 
 Spacedock's Codex install story is still split across manual skill symlinks and legacy `.claude-plugin` packaging. That leaves users with two mismatched install paths and no clear Codex marketplace entry to discover locally. The current goal is packaging and install ergonomics only: make Spacedock installable as a Codex plugin without changing runtime behavior, workflow semantics, or stage execution logic.
@@ -74,4 +73,94 @@ If the root-vs-subdirectory decision changes, the task must also update `source.
 
 ### Feedback Cycles
 
-1. `validation -> implementation` (2026-04-16): `REJECTED` on AC5 only. Scripted contract checks passed, but the required manual Codex smoke path still lacks evidence: restart Codex, open `/plugins`, confirm the local Spacedock entry appears, install it, and verify the plugin loads.
+1. `validation -> implementation` (2026-04-16): `REJECTED` on AC5 only. Scripted contract checks passed, but the required manual Codex smoke path initially lacked evidence: restart Codex, open `/plugins`, confirm the local Spacedock entry appears, install it, and verify the plugin loads. This was addressed in implementation cycle 2 and later validation passed.
+
+## Stage Report: implementation
+
+- DONE: Implement the Codex plugin scaffold at the repo root with a valid `.codex-plugin/plugin.json` matching the task’s approved manifest contract.
+  Evidence: `.codex-plugin/plugin.json` added and verified by `tests/test_codex_plugin_packaging.py::test_codex_plugin_manifest_matches_approved_contract`.
+- DONE: Create the real marketplace target path `plugins/spacedock` as the approved checked-in symlink to the repo root.
+  Evidence: `plugins/spacedock -> ..`; verified by `tests/test_codex_plugin_packaging.py::test_plugins_spacedock_symlink_resolves_to_repo_root`.
+- DONE: Add `.agents/plugins/marketplace.json` with the approved marketplace shape and make `.claude-plugin/marketplace.json` the generated legacy mirror of that Codex marketplace surface.
+  Evidence: `.agents/plugins/marketplace.json` added; `.claude-plugin/marketplace.json` synchronized; verified by the marketplace and mirror tests in `tests/test_codex_plugin_packaging.py`.
+- DONE: Make `.claude-plugin/plugin.json` the generated synchronized legacy mirror of `.codex-plugin/plugin.json`.
+  Evidence: `.claude-plugin/plugin.json` now mirrors `.codex-plugin/plugin.json`; verified by `tests/test_codex_plugin_packaging.py::test_legacy_plugin_manifest_is_a_synchronized_mirror`.
+- DONE: Update `README.md`, `skills/commission/SKILL.md`, `skills/refit/SKILL.md`, `skills/debrief/SKILL.md`, and `scripts/release.sh` so release tooling and helper surfaces treat `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json` as authoritative while preserving the documented legacy `.claude-plugin` compatibility surfaces.
+  Evidence: Codex-first install docs and legacy notes added in `README.md`; the three skills now read `.codex-plugin/plugin.json`; `scripts/release.sh` now uses authoritative path variables plus `sync_legacy_plugin_manifest` and `sync_legacy_marketplace`.
+- DONE: Add scripted noninteractive verification for the approved contract: manifest shape, marketplace shape, `plugins/spacedock` symlink, legacy mirror synchronization, and release-script source-of-truth behavior.
+  Evidence: new `tests/test_codex_plugin_packaging.py` covers the full contract and passed after implementation.
+- DONE: Run the relevant tests/checks added or touched, and record results.
+  Evidence: `unset CLAUDECODE && uv run pytest tests/test_codex_plugin_packaging.py -v` -> `7 passed`; `unset CLAUDECODE && uv run pytest tests/test_agent_content.py tests/test_codex_plugin_packaging.py -v` -> `52 passed`; `bash -n scripts/release.sh` -> exit 0.
+- DONE: Update the entity body in the worktree with an `## Stage Report: implementation` section that uses DONE/SKIPPED/FAILED markers and points to the produced deliverables and verification evidence.
+  Evidence: this appended stage report in `docs/plans/codex-plugin-scaffold-for-spacedock-install.md`.
+- DONE: Commit the implementation work on the worktree branch before reporting completion.
+  Evidence: implementation payload committed as `10f67572` on `spacedock-ensign/codex-plugin-scaffold-for-spacedock-install`.
+
+### Summary
+
+The repo now exposes a Codex-first plugin package at `.codex-plugin/plugin.json`, a repo-local marketplace at `.agents/plugins/marketplace.json`, and the real `plugins/spacedock` symlink target Codex resolves through the local catalog. Legacy `.claude-plugin` manifest and marketplace files were kept as synchronized compatibility mirrors, and release/docs surfaces were updated to treat the Codex packaging files as authoritative.
+
+The scripted verification added for this task is green. The remaining validation work is the manual Codex UI smoke path from the acceptance criteria: restart Codex, open `/plugins`, confirm the local Spacedock entry appears, install it, and verify the plugin loads from the repo-local marketplace.
+
+## Stage Report: validation
+
+- DONE: Verify AC1: `.codex-plugin/plugin.json` exists and matches the approved contract.
+  Evidence: direct inspection shows `name: "spacedock"`, `version: "0.9.6"`, the approved description/author/repository/license/keywords, and `skills: "./skills/"`; `unset CLAUDECODE && uv run pytest tests/test_codex_plugin_packaging.py -v` passed `test_codex_plugin_manifest_matches_approved_contract`.
+- DONE: Verify AC2: `.agents/plugins/marketplace.json` exists and matches the approved marketplace contract.
+  Evidence: direct inspection shows `interface.displayName: "Spacedock"` and plugin entry `name: "spacedock"`, `category: "workflow"`, `source.source: "local"`, `source.path: "./plugins/spacedock"`, `policy.installation: "AVAILABLE"`, and `policy.authentication: "ON_INSTALL"`; the task-specific pytest passed `test_codex_marketplace_matches_approved_contract`.
+- DONE: Verify AC3: `plugins/spacedock` exists as the required symlink and resolves to the repo root.
+  Evidence: `ls -l plugins` shows `spacedock -> ..`; a `Path.resolve()` check in the worktree resolved the symlink to `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-codex-plugin-scaffold-for-spacedock-install`, and `.codex-plugin/plugin.json` is reachable through that path; pytest passed `test_plugins_spacedock_symlink_resolves_to_repo_root`.
+- DONE: Verify AC4: legacy `.claude-plugin` mirrors, helper consumers, and release-tooling source-of-truth behavior match the approved migration contract.
+  Evidence: `.claude-plugin/plugin.json` matches `.codex-plugin/plugin.json`, `.claude-plugin/marketplace.json` matches `.agents/plugins/marketplace.json`, `README.md` retains `~/.agents/skills/spacedock` as legacy fallback, `skills/commission/SKILL.md`, `skills/refit/SKILL.md`, and `skills/debrief/SKILL.md` read `.codex-plugin/plugin.json`, and `scripts/release.sh` uses authoritative `.codex-plugin/plugin.json` / `.agents/plugins/marketplace.json` with `sync_legacy_plugin_manifest` and `sync_legacy_marketplace`; relevant tests passed.
+- FAILED: Verify AC5: package discovery/install evidence is sufficient, including the manual Codex `/plugins` smoke path.
+  Evidence: the scripted contract checks passed, but no evidence was found that Codex was restarted, `/plugins` was opened, the local Spacedock entry appeared, install completed, and the plugin loaded; the implementation report explicitly states that manual smoke path remained for validation.
+- DONE: Run the applicable scripted checks/tests and report exact commands and outcomes.
+  Evidence: `unset CLAUDECODE && uv run pytest tests/test_codex_plugin_packaging.py -v` -> `7 passed`; `unset CLAUDECODE && uv run pytest tests/test_agent_content.py tests/test_codex_plugin_packaging.py -v` -> `52 passed`; `bash -n scripts/release.sh` -> exit `0`.
+- DONE: Append `## Stage Report: validation` to the entity file with DONE/SKIPPED/FAILED markers, explicit evidence for each acceptance criterion, and a clear final verdict.
+  Evidence: this section is appended at the end of the worktree entity file and records the acceptance-criteria evidence and verdict.
+- DONE: Commit the validation report on the worktree branch before reporting completion.
+  Evidence: the report is prepared in the worktree copy for commit on `spacedock-ensign/codex-plugin-scaffold-for-spacedock-install`.
+
+### Summary
+
+Validation confirms that the Codex plugin manifest, local marketplace, repo-root symlink target, legacy compatibility mirrors, and release-tooling authority all match the approved contract. The deliverable still fails AC5 because the required manual Codex `/plugins` discovery/install smoke path was not executed or at least not evidenced in the worktree. Final verdict: REJECTED.
+
+## Stage Report: implementation (cycle 2)
+
+- DONE: Attempt the approved manual Codex smoke path in this environment from a fresh interactive Codex session.
+  Evidence: launched `codex --no-alt-screen -C /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-codex-plugin-scaffold-for-spacedock-install`; Codex CLI `0.120.0` opened an interactive TUI in the assigned worktree.
+- DONE: Open `/plugins` and confirm the local Spacedock entry appears in the marketplace UI.
+  Evidence: entering `/plugins` showed `Plugins` and `Loading available plugins...`; searching `spacedock` updated the list to `› Spacedock  Available`.
+- DONE: Install Spacedock from the `/plugins` UI and capture the install result.
+  Evidence: opening the plugin details showed `Spacedock · Can be installed · spacedock`; selecting `2. Install plugin` produced `Installed Spacedock plugin. No additional app authentication is required.` and returned to the plugin list with `› Spacedock                    Installed`.
+- DONE: Verify the plugin loads after install.
+  Evidence: the plugin detail view listed the shipped skills `spacedock:commission`, `spacedock:debrief`, `spacedock:ensign`, `spacedock:first-officer`, and `spacedock:refit`, and `~/.codex/config.toml` now contains `[plugins."spacedock@spacedock"]` with `enabled = true`.
+- DONE: Record the AC5 follow-up evidence in the worktree entity file and commit it on the implementation branch.
+  Evidence: this follow-up report is appended in the worktree copy for commit on `spacedock-ensign/codex-plugin-scaffold-for-spacedock-install`.
+
+### Summary
+
+The previously missing AC5 evidence has now been gathered directly in this environment. A fresh Codex interactive session reached `/plugins`, the local `Spacedock` marketplace entry appeared, the install completed successfully, and the installed plugin exposed the expected Spacedock skills with persisted enabled state in Codex config.
+
+## Stage Report: validation (cycle 2)
+
+- DONE: Verify AC1: `.codex-plugin/plugin.json` exists and matches the approved contract.
+  Evidence: direct inspection in the worktree shows `name: "spacedock"`, `version: "0.9.6"`, the approved description, `author.name: "CL Kao"`, `repository: "https://github.com/clkao/spacedock"`, `license: "Apache-2.0"`, the approved keywords, and `skills: "./skills/"`; fresh run `unset CLAUDECODE && uv run pytest tests/test_codex_plugin_packaging.py -v` passed `test_codex_plugin_manifest_matches_approved_contract`.
+- DONE: Verify AC2: `.agents/plugins/marketplace.json` exists and matches the approved marketplace contract.
+  Evidence: direct inspection shows `interface.displayName: "Spacedock"` and plugin entry `name: "spacedock"`, `category: "workflow"`, `source.source: "local"`, `source.path: "./plugins/spacedock"`, `policy.installation: "AVAILABLE"`, and `policy.authentication: "ON_INSTALL"`; the fresh pytest run passed `test_codex_marketplace_matches_approved_contract`.
+- DONE: Verify AC3: `plugins/spacedock` exists as the required symlink and resolves to the repo root.
+  Evidence: `plugins/spacedock` is a checked-in symlink with target `..`, and a fresh `Path.resolve()` check resolved it to `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-codex-plugin-scaffold-for-spacedock-install`; `.codex-plugin/plugin.json` is reachable through that path; the fresh pytest run passed `test_plugins_spacedock_symlink_resolves_to_repo_root`.
+- DONE: Verify AC4: legacy `.claude-plugin` mirrors, helper consumers, and release-tooling source-of-truth behavior match the approved migration contract.
+  Evidence: direct JSON inspection shows `.claude-plugin/plugin.json` mirrors `.codex-plugin/plugin.json` and `.claude-plugin/marketplace.json` mirrors `.agents/plugins/marketplace.json`; `README.md` retains the `~/.agents/skills/spacedock` legacy fallback while describing the Codex-first install path; `skills/commission/SKILL.md`, `skills/refit/SKILL.md`, and `skills/debrief/SKILL.md` read `.codex-plugin/plugin.json`; `scripts/release.sh` treats `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json` as authoritative and defines `sync_legacy_plugin_manifest` plus `sync_legacy_marketplace`; the fresh pytest run passed the mirror/doc/release assertions and `bash -n scripts/release.sh` exited `0`.
+- DONE: Verify AC5, including the added manual Codex smoke evidence, and judge whether it is sufficient.
+  Evidence: implementation cycle 2 committed the missing manual smoke path in `a62c3d51`, recording a fresh interactive Codex session, `/plugins`, the visible `Spacedock` entry, successful install, and loaded skills; that evidence is corroborated by current local state because `~/.codex/config.toml` contains `[plugins."spacedock@spacedock"]` with `enabled = true`; the scripted contract checks also passed on this validation pass. Judgment: the combined committed UI evidence plus persisted config state is sufficient for AC5.
+- DONE: Run the applicable scripted checks/tests and report exact commands and outcomes.
+  Evidence: `unset CLAUDECODE && uv run pytest tests/test_codex_plugin_packaging.py -v` -> `7 passed in 0.01s`; `bash -n scripts/release.sh` -> exit `0`.
+- DONE: Append `## Stage Report: validation` to the entity file with DONE/SKIPPED/FAILED markers, explicit evidence for each acceptance criterion, and a clear final verdict.
+  Evidence: this `validation (cycle 2)` section is appended at the end of the worktree entity file and supersedes the earlier rejected validation now that AC5 has evidence.
+- DONE: Commit the validation report on the worktree branch before reporting completion.
+  Evidence: this report is prepared in the assigned worktree for commit on `spacedock-ensign/codex-plugin-scaffold-for-spacedock-install`.
+
+### Summary
+
+The earlier rejection was caused solely by missing AC5 evidence. That gap is now closed by the committed manual Codex smoke-path report in implementation cycle 2, corroborated by current Codex config state and a fresh green run of the task-specific contract checks. Final verdict: PASSED.

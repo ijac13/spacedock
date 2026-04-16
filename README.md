@@ -50,23 +50,32 @@ The first officer coordinates the flow: it dispatches workers to advance each wo
 
 ### Codex CLI
 
-1. Clone Spacedock and expose its skills under the Codex skills namespace:
+1. Clone Spacedock and start Codex from the repo root:
 
    ```bash
    git clone https://github.com/clkao/spacedock.git /path/to/spacedock
+   cd /path/to/spacedock
+   codex --enable multi_agent
+   ```
+
+2. Restart Codex if it was already open, then open `/plugins` and install **Spacedock** from the repo-local marketplace entry.
+
+   The authoritative Codex plugin manifest is `.codex-plugin/plugin.json`, and the authoritative local catalog is `.agents/plugins/marketplace.json`. That catalog points to `./plugins/spacedock`, which is a checked-in symlink to the repository root so Codex loads the real plugin package directly.
+
+3. Prompt Codex to use the first-officer skill and commission your workflow:
+
+   ```bash
+   Use the spacedock:first-officer skill to run /commission <your mission prompt> in this directory.
+   ```
+
+   Legacy compatibility: older Codex setups can still expose `~/.agents/skills/spacedock` directly:
+
+   ```bash
    mkdir -p ~/.agents/skills
    ln -s /path/to/spacedock/skills ~/.agents/skills/spacedock
    ```
 
-   This makes `~/.agents/skills/spacedock/first-officer/SKILL.md` and `~/.agents/skills/spacedock/ensign/SKILL.md` resolve to the cloned repo: the layout the Codex runtime adapters expect.
-
-2. Start Codex interactively with multi-agent enabled, then prompt it to use the first-officer skill and commission your workflow:
-
-   ```bash
-   codex --enable multi_agent
-   ```
-
-   At the prompt: `Use the spacedock:first-officer skill to run /commission <your mission prompt> in this directory.`
+   The `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` files remain synchronized legacy mirrors of the Codex-first metadata for migration compatibility.
 
 > Codex multi-agent is experimental. The Claude Code path is the primary supported surface.
 

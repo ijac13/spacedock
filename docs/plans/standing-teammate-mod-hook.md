@@ -9,7 +9,7 @@ verdict:
 score: 0.65
 worktree: .worktrees/spacedock-ensign-standing-teammate-mod-hook
 issue:
-pr:
+pr: #102
 mod-block: merge:pr-merge
 ---
 

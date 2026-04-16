@@ -176,7 +176,7 @@ If a filed entity also shipped in the same session (appears in both 2b and 2f), 
 
 ### Step 1 — Present the draft
 
-Before drafting, construct PR URLs by reading the Spacedock plugin manifest (same logic as Step 3 below). Find the `skills/` directory containing this skill file, read `.claude-plugin/plugin.json`, and extract the `repository` field. The field may be a plain URL string (e.g. `https://github.com/clkao/spacedock`) or an object (e.g. `{"type": "git", "url": "..."}`) — handle both. Derive `{owner}` and `{repo}` for PR links of the form `https://github.com/{owner}/{repo}/pull/{N}`.
+Before drafting, construct PR URLs by reading the Spacedock plugin manifest (same logic as Step 3 below). Find the `skills/` directory containing this skill file, read `.codex-plugin/plugin.json`, and extract the `repository` field. Treat `.agents/plugins/marketplace.json` as the authoritative install surface and `.claude-plugin/*` as legacy mirrors. The `repository` field may be a plain URL string (e.g. `https://github.com/clkao/spacedock`) or an object (e.g. `{"type": "git", "url": "..."}`) — handle both. Derive `{owner}` and `{repo}` for PR links of the form `https://github.com/{owner}/{repo}/pull/{N}`.
 
 Assemble the extracted data into a draft debrief and present it to the captain:
 
@@ -225,7 +225,7 @@ Incorporate the captain's input into the final debrief.
 
 For each issue categorized as a spacedock issue, offer to file a GitHub issue:
 
-1. Read the spacedock repo URL from the plugin manifest. Find the Spacedock plugin directory by locating the `skills/` folder that contains this skill file. Read `.claude-plugin/plugin.json` from that directory and extract the `repository` field.
+1. Read the spacedock repo URL from the plugin manifest. Find the Spacedock plugin directory by locating the `skills/` folder that contains this skill file. Read `.codex-plugin/plugin.json` from that directory, treat `.agents/plugins/marketplace.json` as the authoritative local marketplace surface, and extract the `repository` field from `.codex-plugin/plugin.json`.
 
 2. For each spacedock issue, draft an **anonymized** GitHub issue. The issue body must NOT contain:
    - The user's actual mission or workflow purpose

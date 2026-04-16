@@ -34,7 +34,7 @@ If a file doesn't exist, note it as missing and skip it.
 
 ### Step 3 — Read current Spacedock version
 
-Read `.claude-plugin/plugin.json` from the Spacedock plugin directory (the directory containing the `skills/` folder — resolve from your own plugin context). Extract the `version` field. Store as `{current_version}`.
+Read `.codex-plugin/plugin.json` from the Spacedock plugin directory (the directory containing the `skills/` folder — resolve from your own plugin context). Treat `.agents/plugins/marketplace.json` as the authoritative local marketplace surface and `.claude-plugin/*` as synchronized legacy mirrors. Extract the `version` field from `.codex-plugin/plugin.json` and store it as `{current_version}`.
 
 ### Step 4 — Evaluate
 
