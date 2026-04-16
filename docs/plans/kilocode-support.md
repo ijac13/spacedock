@@ -98,15 +98,22 @@ From `codex-first-officer-runtime.md`:
 **Correction (2026-04-16) — FIRST-HAND TEST:**
 
 ```
-Test: Spawn subagent, then try to send_message to it after completion
-Result: "none available" — subagent handle expires immediately
+Test 1 (comm-officer):
+  1. task(spawn) → "Standing by..."
+  2. task(task_id=ses_..., message) → polished reply ✅
 
-Conclusion: Subagents are NOT addressable after completion.
-- task_id provided at spawn
-- After subagent returns, handle is gone
-- No SendMessage equivalent
-- No wait_agent equivalent
+Test 2 (ideation worker):
+  1. task(spawn) → work done, return result
+  2. task(task_id=same, message) → "none available"
+
+Conclusion: Nuanced background capability
+- task() BLOCKS until subagent RETURNS (not non-blocking)
+- CAN send follow-up messages while subagent is running
+- After return → handle expires ("none available")
+- Limited reuse: one spawn→work→return cycle, not persistent
 ```
+
+This is closer to "background agents with one message" than "no background agents".
 
 **Source code verification:**
 - Kilo (`packages/opencode/src/tool/task.ts:180`): `Effect.runPromise(run(params, ctx))` — blocking
