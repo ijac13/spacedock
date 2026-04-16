@@ -120,3 +120,20 @@ The scripted verification added for this task is green. The remaining validation
 ### Summary
 
 Validation confirms that the Codex plugin manifest, local marketplace, repo-root symlink target, legacy compatibility mirrors, and release-tooling authority all match the approved contract. The deliverable still fails AC5 because the required manual Codex `/plugins` discovery/install smoke path was not executed or at least not evidenced in the worktree. Final verdict: REJECTED.
+
+## Stage Report: implementation (cycle 2)
+
+- DONE: Attempt the approved manual Codex smoke path in this environment from a fresh interactive Codex session.
+  Evidence: launched `codex --no-alt-screen -C /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-codex-plugin-scaffold-for-spacedock-install`; Codex CLI `0.120.0` opened an interactive TUI in the assigned worktree.
+- DONE: Open `/plugins` and confirm the local Spacedock entry appears in the marketplace UI.
+  Evidence: entering `/plugins` showed `Plugins` and `Loading available plugins...`; searching `spacedock` updated the list to `› Spacedock  Available`.
+- DONE: Install Spacedock from the `/plugins` UI and capture the install result.
+  Evidence: opening the plugin details showed `Spacedock · Can be installed · spacedock`; selecting `2. Install plugin` produced `Installed Spacedock plugin. No additional app authentication is required.` and returned to the plugin list with `› Spacedock                    Installed`.
+- DONE: Verify the plugin loads after install.
+  Evidence: the plugin detail view listed the shipped skills `spacedock:commission`, `spacedock:debrief`, `spacedock:ensign`, `spacedock:first-officer`, and `spacedock:refit`, and `~/.codex/config.toml` now contains `[plugins."spacedock@spacedock"]` with `enabled = true`.
+- DONE: Record the AC5 follow-up evidence in the worktree entity file and commit it on the implementation branch.
+  Evidence: this follow-up report is appended in the worktree copy for commit on `spacedock-ensign/codex-plugin-scaffold-for-spacedock-install`.
+
+### Summary
+
+The previously missing AC5 evidence has now been gathered directly in this environment. A fresh Codex interactive session reached `/plugins`, the local `Spacedock` marketplace entry appeared, the install completed successfully, and the installed plugin exposed the expected Spacedock skills with persisted enabled state in Codex config.
