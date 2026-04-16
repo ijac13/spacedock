@@ -447,3 +447,48 @@ AC-9's fails-fast live verification is a **manual** step per the ideation agreem
 ### Summary
 
 Shipped `FOStreamWatcher` + `run_first_officer_streaming` + three predicate helpers + two `StepTimeout`/`StepFailure` exception classes in `scripts/test_lib.py` with 12 offline unit tests (all green in 7.31s). Migrated both pilot tests to progressive `expect()` sequences with per-step timeouts (60-240s each) replacing the 600s post-hoc wait. `make test-static` green (425/425). `run_first_officer` and `LogParser` untouched — all non-migrated live tests continue to work unchanged. Recommendation: advance to **validation**.
+
+## Stage Report (validation)
+
+### Inputs verified
+
+1. Read the full entity (problem statement, decision, API, subprocess lifecycle, pilot migrations, ACs 1-12, test plan, implementation stage report) — DONE.
+2. Inspected the six commits on `spacedock-ensign/streaming-fo-watcher-per-step-timeouts`: `8438068b` watcher+helpers+exceptions (`scripts/test_lib.py` only), `df2a7f67` streaming context manager (`scripts/test_lib.py` only), `8fa841e0` offline unit tests (`tests/test_fo_stream_watcher.py` only), `fc426716` standing-teammate migration (`tests/test_standing_teammate_spawn.py` only), `362ba4f4` per-stage-model migration (`tests/test_claude_per_stage_model.py` only), `f932f609` implementation Stage Report (entity file only). **No out-of-scope edits.** DONE.
+3. `git diff main...HEAD -- scripts/test_lib.py` shows +317/-1 where the single deletion is the `Callable` import line (replaced by `Callable, Iterator`). `run_first_officer` and `LogParser` public surface are untouched — confirmed by full-file read at `scripts/test_lib.py:1-240` and `scripts/test_lib.py:735-812`.
+
+### `make test-static`
+
+- Ran from the worktree root.
+- Result: **`425 passed, 22 deselected, 10 subtests passed in 17.74s`**. Matches the implementation-report count (425). PASS.
+- New offline suite `tests/test_fo_stream_watcher.py` ran verbosely in isolation: **12 passed in 7.30s**.
+
+### Per-AC verdicts
+
+1. **AC-1 (`expect()` returns matched entry dict)** — PASSED. `scripts/test_lib.py:1145` and `:1153` both `return entry`. Test `test_expect_returns_matched_entry` (`tests/test_fo_stream_watcher.py:77-93`) asserts `result["message"]["content"][0]["input"]["command"] == "spawn-standing now"` — PASS.
+2. **AC-2 (`StepTimeout` raised with `.label` attribute)** — PASSED. `StepTimeout.__init__` stores `self.label = label` (`scripts/test_lib.py:966-968`); `expect()` raises with `label=label` at `:1164-1168`. Test `test_expect_raises_step_timeout_with_label` asserts `excinfo.value.label == "echo-agent dispatched"` — PASS.
+3. **AC-3 (`StepFailure` on early proc exit, drain-before-poll)** — PASSED. Poll loop in `expect()` drains entries first (`:1142-1147`), then checks `self.proc.poll()` (`:1149`), and on non-None exit **drains again** (`:1150-1155`) to catch the final-flush entry before raising `StepFailure` with `exit_code=self.proc.returncode` (`:1156-1161`). Both `test_expect_raises_step_failure_when_proc_exits` (asserts `exit_code == 1`, `"code=1" in str(...)`, label carried) and `test_expect_matches_final_flush_before_exit` (entry written + `proc.set_exited(0)` before `expect()` — matches on final drain) PASS.
+4. **AC-4 (partial-line handling)** — PASSED. `_drain_entries()` appends the raw `read()` chunk to `self._buffer`, splits on `\n`, keeps any incomplete trailing fragment in `_buffer` for the next poll (`:1092-1117`). Test `test_partial_line_then_newline` writes half a line (expect times out), writes the rest + `\n`, and the next `expect()` matches exactly once — PASS.
+5. **AC-5 (context manager drains + runs `extract_stats` on exit)** — PASSED. `finally` block at `scripts/test_lib.py:789-812` calls `watcher.close()`, closes the log file, and invokes `extract_stats(log_path, "fo", runner.log_dir)` on the normal-exit path. Test `test_context_manager_extracts_stats_on_normal_exit` monkeypatches `extract_stats`, uses `sh -c printf`, and asserts `calls["args"][1] == "fo"` and `calls["args"][0].name == "fo-log.jsonl"` — PASS.
+6. **AC-6 (terminate on with-exit when caller skips `expect_exit`)** — PASSED. If `proc.poll() is None` at `finally`, the context manager waits up to `hard_cap_s`, then escalates `proc.terminate()` → `proc.wait(timeout=5)` → `proc.kill()` → `proc.wait()` (`:791-802`). Test `test_context_manager_terminates_lingering_proc` spawns `sh -c 'sleep 30'`, exits after 0.2s with `hard_cap_s=1`, asserts `proc.poll() is not None` and total elapsed `< 4.0s` — PASS.
+7. **AC-7 (600s hard cap enforcement)** — PASSED. Same `finally` escalation as AC-6, gated by `remaining = hard_cap_s - elapsed`. Test `test_context_manager_enforces_hard_cap` uses `hard_cap_s=1` against `sh -c 'sleep 10'`, sleeps 3s inside the `with`, and confirms the subprocess is dead within `< 6.0s` — PASS.
+8. **AC-8 (predicate helpers)** — PASSED. `tool_use_matches`, `entry_contains_text`, `assistant_model_equals` each accept a single entry (no list walks) and return bool (`scripts/test_lib.py:993-1065`). `tool_use_matches` checks all `key=substring` pairs via `needle in input[key]`. Tests `test_tool_use_matches_covers_all_tool_shapes` and `test_entry_contains_text_and_assistant_model_equals` PASS (covering Bash/Agent/SendMessage shapes, non-tool-use return-False, regex in assistant text and user tool_result, haiku/opus model prefix).
+9. **AC-9 pilot: standing-teammate migration** — PASSED (static verification; live fails-fast verification is explicitly a deferred manual captain step per ideation agreement). `tests/test_standing_teammate_spawn.py` imports `run_first_officer_streaming`, `tool_use_matches`, `entry_contains_text`; uses five `expect()` calls (spawn-standing 60s, echo-agent 120s, ensign dispatch 240s, SendMessage 240s, ECHO: ping 240s) + `expect_exit(240)`; preserves `@pytest.mark.live_claude` + `@pytest.mark.teams_mode` (lines 32-33); final aggregate still uses `LogParser` after exit (lines 126-133).
+10. **AC-10 pilot: per-stage-model migration** — PASSED (static). `tests/test_claude_per_stage_model.py` imports the same streaming surface; two `expect()` calls (ensign dispatch 180s, haiku model 240s) + `expect_exit(300)`; preserves `@pytest.mark.live_claude` + `@pytest.mark.xfail(strict=False)` (lines 30-36, reason cites #171).
+11. **AC-11 (non-migrated tests unchanged)** — PASSED. `uv run pytest --collect-only tests/test_gate_guardrail.py` collects 1 test. `git diff main...HEAD -- scripts/test_lib.py` shows only +1 deletion (the `Callable`→`Callable, Iterator` import refactor); no modifications to `run_first_officer`, `LogParser`, or any other existing callable. Test `test_non_migrated_public_surface_intact` imports `{FOStreamWatcher, LogParser, run_first_officer, run_first_officer_streaming}` cleanly — PASS.
+12. **AC-12 (failure messages include log tail + label)** — PASSED. Both `StepTimeout` and `StepFailure` messages embed `f"Log tail:\n{self._log_tail()}"` (`scripts/test_lib.py:1156-1161, 1164-1168, 1186-1190`). `_log_tail` reads up to `_LOG_TAIL_LINES=20` tail lines. Test `test_failure_messages_include_log_tail_and_label` writes 5 noise lines and asserts both `"echo-agent dispatched"`/`"after-exit step"` labels **and** `"Log tail:"` + `"noise line 4"` appear in each error message — PASS.
+
+### AC-14 (prompt-section on matched entry, from #162)
+
+AC-14 is explicitly called out in the dispatch. The ensign-dispatch `expect()` at `tests/test_standing_teammate_spawn.py:88-93` captures the matched entry into `ensign_dispatch`, then the prompt-section assertions at lines 94-102 operate on `_agent_input(ensign_dispatch).get("prompt", "")` — single-entry, no second scan of the log. PASSED.
+
+### AC-9 live fails-fast verification
+
+NOT RUN as part of validation — this is a deferred manual captain step per the ideation agreement (see entity `## Test Plan` line 380 and implementation Stage Report line 416). The manual procedure: temporarily patch the standing-teammate fixture to drop the ensign SendMessage instruction, run the live test, confirm `StepTimeout` fires at the `"SendMessage to echo-agent observed"` label in <4 min. Noted as SKIPPED (manual) here; no validation action required.
+
+### Overall recommendation
+
+**ACCEPTED — advance to merge.**
+
+Evidence: 12/12 ACs verified (ACs 9-10 on static-only grounds per the dispatch brief; AC-14 prompt-section matched-entry pattern verified); `make test-static` green (425/425 + 10 subtests, 17.74s); six focused commits with no out-of-scope edits; `run_first_officer` / `LogParser` public surface untouched. Two follow-up items for the captain (not blocking this validation):
+- Manual AC-9 fails-fast verification (temporarily patch fixture, run live, confirm <180s StepTimeout at milestone 4).
+- Live-run the migrated pilots on `claude-live-opus` to confirm the wall-clock improvement (~180s vs. 24m38s) in practice — this is the feature's real payoff and should be measured once post-merge.
