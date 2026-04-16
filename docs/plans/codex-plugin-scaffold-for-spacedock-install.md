@@ -70,3 +70,30 @@ If the root-vs-subdirectory decision changes, the task must also update `source.
 - [DONE] Test plan separates the scripted contract checks from the manual Codex smoke path, with explicit prerequisites for restart, `/plugins`, install, load verification, and release-tooling regeneration behavior.
 - [DONE] Scope is constrained to packaging and install experience; runtime behavior changes are out of scope.
 - [SKIPPED] Frontmatter changes are out of scope for this stage refresh.
+
+## Stage Report: implementation
+
+- DONE: Implement the Codex plugin scaffold at the repo root with a valid `.codex-plugin/plugin.json` matching the task’s approved manifest contract.
+  Evidence: `.codex-plugin/plugin.json` added and verified by `tests/test_codex_plugin_packaging.py::test_codex_plugin_manifest_matches_approved_contract`.
+- DONE: Create the real marketplace target path `plugins/spacedock` as the approved checked-in symlink to the repo root.
+  Evidence: `plugins/spacedock -> ..`; verified by `tests/test_codex_plugin_packaging.py::test_plugins_spacedock_symlink_resolves_to_repo_root`.
+- DONE: Add `.agents/plugins/marketplace.json` with the approved marketplace shape and make `.claude-plugin/marketplace.json` the generated legacy mirror of that Codex marketplace surface.
+  Evidence: `.agents/plugins/marketplace.json` added; `.claude-plugin/marketplace.json` synchronized; verified by the marketplace and mirror tests in `tests/test_codex_plugin_packaging.py`.
+- DONE: Make `.claude-plugin/plugin.json` the generated synchronized legacy mirror of `.codex-plugin/plugin.json`.
+  Evidence: `.claude-plugin/plugin.json` now mirrors `.codex-plugin/plugin.json`; verified by `tests/test_codex_plugin_packaging.py::test_legacy_plugin_manifest_is_a_synchronized_mirror`.
+- DONE: Update `README.md`, `skills/commission/SKILL.md`, `skills/refit/SKILL.md`, `skills/debrief/SKILL.md`, and `scripts/release.sh` so release tooling and helper surfaces treat `.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json` as authoritative while preserving the documented legacy `.claude-plugin` compatibility surfaces.
+  Evidence: Codex-first install docs and legacy notes added in `README.md`; the three skills now read `.codex-plugin/plugin.json`; `scripts/release.sh` now uses authoritative path variables plus `sync_legacy_plugin_manifest` and `sync_legacy_marketplace`.
+- DONE: Add scripted noninteractive verification for the approved contract: manifest shape, marketplace shape, `plugins/spacedock` symlink, legacy mirror synchronization, and release-script source-of-truth behavior.
+  Evidence: new `tests/test_codex_plugin_packaging.py` covers the full contract and passed after implementation.
+- DONE: Run the relevant tests/checks added or touched, and record results.
+  Evidence: `unset CLAUDECODE && uv run pytest tests/test_codex_plugin_packaging.py -v` -> `7 passed`; `unset CLAUDECODE && uv run pytest tests/test_agent_content.py tests/test_codex_plugin_packaging.py -v` -> `52 passed`; `bash -n scripts/release.sh` -> exit 0.
+- DONE: Update the entity body in the worktree with an `## Stage Report: implementation` section that uses DONE/SKIPPED/FAILED markers and points to the produced deliverables and verification evidence.
+  Evidence: this appended stage report in `docs/plans/codex-plugin-scaffold-for-spacedock-install.md`.
+- DONE: Commit the implementation work on the worktree branch before reporting completion.
+  Evidence: implementation payload committed as `10f67572` on `spacedock-ensign/codex-plugin-scaffold-for-spacedock-install`.
+
+### Summary
+
+The repo now exposes a Codex-first plugin package at `.codex-plugin/plugin.json`, a repo-local marketplace at `.agents/plugins/marketplace.json`, and the real `plugins/spacedock` symlink target Codex resolves through the local catalog. Legacy `.claude-plugin` manifest and marketplace files were kept as synchronized compatibility mirrors, and release/docs surfaces were updated to treat the Codex packaging files as authoritative.
+
+The scripted verification added for this task is green. The remaining validation work is the manual Codex UI smoke path from the acceptance criteria: restart Codex, open `/plugins`, confirm the local Spacedock entry appears, install it, and verify the plugin loads from the repo-local marketplace.
