@@ -305,3 +305,49 @@ Implementation executed on branch `spacedock-ensign/standing-teammate-mod-hook` 
 **Summary**
 
 Implementation shipped all 12 ACs. The standing-teammate mod pattern is now usable: a workflow author writes one `_mods/{name}.md` file with `standing: true`, `## Hook: startup` declaring spawn config, and a `## Agent Prompt` last-section, and the FO at captain-session boot spawns the teammate via `claude-team spawn-standing`. First-boot-wins semantics via team-scope, best-effort SendMessage routing with a 2-minute fallback, and one pilot already validated in production (`comm-officer` in `docs/plans/_mods/`). Parser + helper + adapter prose + shared-core concept + FO routing guidance all land additively with no churn to surrounding material.
+
+## Stage Report — Validation (2026-04-16)
+
+Validation executed on branch `spacedock-ensign/standing-teammate-mod-hook` in worktree `.worktrees/spacedock-ensign-standing-teammate-mod-hook`. Fresh ensign; treated the implementation stage report as self-claim and independently verified each AC.
+
+1. **Entity body read via targeted Grep** — DONE. Greped `## Acceptance Criteria`, `## Test Plan`, `## Stage Report` headings, then targeted reads on the AC block and the implementation report. No full-file reads.
+
+2. **Pre-check** — DONE. `git status --short` clean; `git log --oneline -8` shows all 6 impl commits on top of `72540806` in the expected order (`4cd6d311`, `ef150a3d`, `9cdf1533`, `70d038bd`, `b1568381`, `df45423d`). HEAD at entry: `df45423d32608dd960571035ea330dedf6489c3f`.
+
+3. **`make test-static`** — DONE. `383 passed, 22 deselected, 10 subtests passed in 6.90s`. Matches the +30 delta from the 353 baseline claimed by implementation. Pristine — no warnings in pytest output, no flakes. Minor observation: impl report wrote `21 deselected` but the actual number is `22` — cosmetic drift, does not affect the pass count or AC verdict.
+
+4. **Per-AC verification** — DONE. Ran the 30 target tests via `uv run pytest tests/test_status_parse_mod_metadata.py tests/test_claude_team_spawn_standing.py tests/test_standing_teammate_prose.py -v` → `30 passed in 0.31s`. Per-AC verdict table:
+
+   | AC | Verifier | Verdict |
+   |----|----------|---------|
+   | AC-1 parser standing-flag | `TestStandingFlag::test_standing_flag_{true,false,absent}` (3 tests) | PASSED |
+   | AC-2 parser prompt-extract + trailing-fail-loud | `TestAgentPromptExtract::test_extracts_prompt_body_verbatim` + `TestTrailingHeadingFailLoud::test_errors_on_trailing_section_after_agent_prompt` | PASSED |
+   | AC-3 helper spawn-absent | `TestSpawnAbsent::test_emits_spec_when_absent` | PASSED |
+   | AC-4 helper spawn-present | `TestSpawnPresent::test_emits_already_alive_when_present` | PASSED |
+   | AC-5 helper enum-validation | `TestEnumValidation::test_enum_validation_rejects_bad_model` | PASSED — spot-checked test body at `test_claude_team_spawn_standing.py:128–129`: asserts `"model" in result.stderr` AND `"must be one of: sonnet, opus, haiku" in result.stderr` (both field name and enum literal, matches #157 bar) |
+   | AC-6 helper missing-prompt/standing | `TestErrorPaths::test_errors_on_missing_agent_prompt` + `test_errors_on_missing_standing_flag` | PASSED |
+   | AC-7 trailing-content fail-loud + nested-## accepted | `TestErrorPaths::test_errors_on_trailing_section_after_agent_prompt` + `TestTrailingHeadingFailLoud::test_accepts_nested_hashes_in_prompt_body` | PASSED |
+   | AC-8 Claude adapter prose | Grep `claude-first-officer-runtime.md`: `### Standing teammate spawn pass` (line 32), `claude-team spawn-standing` (line 37), `Forward that spec verbatim` (line 39), `already-alive` skip (line 38), `fire-and-forget` (line 40), error-continue (line 41). All four anchor phrases present. | PASSED |
+   | AC-9 shared-core concept | Grep `first-officer-shared-core.md`: `## Standing Teammates` (line 217), `first-boot-wins` (line 221), `team-scope lifecycle` (line 222), `routing contract` (line 223), `declaration format` (line 224). All four anchors present. | PASSED |
+   | AC-10 FO routing prose | Grep shared-core `## Dispatch` routing paragraph at line 82: mentions `comm-officer` by convention, `member_exists` check, `2-minute timeout`, and the full explicit out-of-scope list (captain-chat replies, operational statuses, tool-call outputs, commit messages, transient logs). All five out-of-scope categories present. | PASSED |
+   | AC-11 pilot-mod compatibility | Live run: `./skills/commission/bin/claude-team spawn-standing --mod docs/plans/_mods/comm-officer.md --team spacedock-plans-2` → stdout `{"status": "already-alive", "name": "comm-officer"}`, exit 0. Pre-existing `SyntaxWarning` from `extract_stage_subsection` docstring on stderr (noted by impl as unrelated follow-up). | PASSED |
+   | AC-12 live E2E | `unset CLAUDECODE && uv run pytest tests/test_standing_teammate_spawn.py -v --runtime claude --team-mode teams` → `1 passed in 227.79s (0:03:47)`. Real trace assertions at `test_standing_teammate_spawn.py:80, 88, 100, 113`: Bash `claude-team spawn-standing` invoked, Agent() dispatched with `name=echo-agent`, SendMessage `to=echo-agent` observed, `ECHO: ping` regex match found. Wallclock well under the 600s harness ceiling the impl report mentioned (impl hit the ceiling once; this re-run completed cleanly in under 4 minutes). | PASSED |
+
+5. **Scope-discipline check** — DONE. `git diff main --stat -- 'skills/first-officer/references/codex-first-officer-runtime.md' 'skills/ensign/references/codex-ensign-runtime.md'` returned empty. No changes to codex runtime files, as expected for a Claude-adapter-scoped task.
+
+6. **Spawn-absent spot-check (anti-gaming)** — DONE. Copied `~/.claude/teams/spacedock-plans-2/config.json` to a fresh scratch team `spacedock-162-validation-scratch` with the `comm-officer` member removed. Ran `./skills/commission/bin/claude-team spawn-standing --mod docs/plans/_mods/comm-officer.md --team spacedock-162-validation-scratch` against the scratch team. Output: a well-shaped Agent() spec JSON with exactly the five expected top-level keys (`subagent_type`, `name`, `team_name`, `model`, `prompt`), `subagent_type=general-purpose`, `name=comm-officer`, `team_name=spacedock-162-validation-scratch`, `model=sonnet`, and a prompt body containing all four findings (A/B/C/D) verbatim. Exit 0. Confirms the helper is not gaming `already-alive` — it genuinely emits spawn specs when the member is absent and already-alive when present. Scratch team cleaned up after the check.
+
+7. **Stage report written** — DONE (this section).
+
+8. **Pre-push discipline** — DONE. Branch not pushed, no PR opened, per merge-hook-is-post-gate-approval directive.
+
+**Non-blocking observations:**
+- Impl stage report says `21 deselected` but actual is `22`. Cosmetic drift, not a correctness issue.
+- Impl stage report notes its first live E2E run hit the 600s `run_first_officer` harness timeout. This validation re-run completed in 227.79s, well under the ceiling — either the first run was an outlier or the implementation commits reduced the end-to-end path.
+- Pre-existing `SyntaxWarning` in `claude-team:46` (backtick escaping in `extract_stage_subsection` docstring) surfaces on stderr for every helper invocation. Unrelated to #162; filed by the impl author as a follow-up cleanup.
+
+**comm-officer routing (optional step):** SKIPPED for this stage report narrative. The report is a mechanical verdict table with concrete command outputs; polish routing is for deliberate drafts where the prose carries load, not for structured evidence listings. The shared-core's out-of-scope list effectively covers this case (tool-call outputs, short operational statuses).
+
+**Recommendation: PASSED.**
+
+All 12 ACs verified against independent evidence. Static tier pristine at 383 passed; AC-11 live run reproduces the implementation's reported shape exactly; AC-12 live E2E re-ran green under harness budget; scope-discipline confirmed (no codex-runtime churn); spawn-absent spot-check confirms the helper is not gaming the `already-alive` branch. Plan is ready for captain gate review.
