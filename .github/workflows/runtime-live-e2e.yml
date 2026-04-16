@@ -146,11 +146,17 @@ jobs:
       - name: Show tool versions
         env:
           CLAUDE_VERSION: ${{ inputs.claude_version }}
+          MODEL_OVERRIDE: ${{ inputs.model_override }}
         run: |
           CLAUDE_VERSION_OUT=$(claude --version)
           UV_VERSION_OUT=$(uv --version)
           echo "$CLAUDE_VERSION_OUT"
           echo "$UV_VERSION_OUT"
+          if [ -n "$MODEL_OVERRIDE" ]; then
+            EFFECTIVE_MODEL="$MODEL_OVERRIDE"
+          else
+            EFFECTIVE_MODEL="(pytest default — haiku)"
+          fi
           {
             echo "### Tool versions"
             if [ -n "$CLAUDE_VERSION" ]; then
@@ -160,6 +166,7 @@ jobs:
             fi
             echo "- Installed \`claude --version\`: \`$CLAUDE_VERSION_OUT\`"
             echo "- Installed \`uv --version\`: \`$UV_VERSION_OUT\`"
+            echo "- Effective model: \`$EFFECTIVE_MODEL\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Claude live suite
@@ -304,11 +311,17 @@ jobs:
       - name: Show tool versions
         env:
           CLAUDE_VERSION: ${{ inputs.claude_version }}
+          MODEL_OVERRIDE: ${{ inputs.model_override }}
         run: |
           CLAUDE_VERSION_OUT=$(claude --version)
           UV_VERSION_OUT=$(uv --version)
           echo "$CLAUDE_VERSION_OUT"
           echo "$UV_VERSION_OUT"
+          if [ -n "$MODEL_OVERRIDE" ]; then
+            EFFECTIVE_MODEL="$MODEL_OVERRIDE"
+          else
+            EFFECTIVE_MODEL="(pytest default — haiku)"
+          fi
           {
             echo "### Tool versions"
             if [ -n "$CLAUDE_VERSION" ]; then
@@ -318,6 +331,7 @@ jobs:
             fi
             echo "- Installed \`claude --version\`: \`$CLAUDE_VERSION_OUT\`"
             echo "- Installed \`uv --version\`: \`$UV_VERSION_OUT\`"
+            echo "- Effective model: \`$EFFECTIVE_MODEL\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Claude live suite (bare mode)
@@ -462,11 +476,17 @@ jobs:
       - name: Show tool versions
         env:
           CLAUDE_VERSION: ${{ inputs.claude_version }}
+          MODEL_OVERRIDE: ${{ inputs.model_override }}
         run: |
           CLAUDE_VERSION_OUT=$(claude --version)
           UV_VERSION_OUT=$(uv --version)
           echo "$CLAUDE_VERSION_OUT"
           echo "$UV_VERSION_OUT"
+          if [ -n "$MODEL_OVERRIDE" ]; then
+            EFFECTIVE_MODEL="$MODEL_OVERRIDE"
+          else
+            EFFECTIVE_MODEL="opus"
+          fi
           {
             echo "### Tool versions"
             if [ -n "$CLAUDE_VERSION" ]; then
@@ -476,6 +496,7 @@ jobs:
             fi
             echo "- Installed \`claude --version\`: \`$CLAUDE_VERSION_OUT\`"
             echo "- Installed \`uv --version\`: \`$UV_VERSION_OUT\`"
+            echo "- Effective model: \`$EFFECTIVE_MODEL\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Claude live suite (opus)
