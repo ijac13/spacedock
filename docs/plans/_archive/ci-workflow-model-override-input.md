@@ -1,16 +1,17 @@
 ---
 id: 176
 title: "CI workflow `model_override` input — parameterize Claude model for bisection and mitigation"
-status: validation
+status: done
 source: "CL directive during 2026-04-16 session — 2.1.111 bisection confirmed the regression is Claude Code's default-alias flip from claude-opus-4-6 to claude-opus-4-7. Mitigation via dated-model pin needs workflow parameterization; #174 shipped claude_version but not model_override."
 started: 2026-04-16T22:57:26Z
-completed:
-verdict:
+completed: 2026-04-16T23:04:17Z
+verdict: PASSED
 score: 0.55
-worktree: .worktrees/spacedock-ensign-ci-workflow-model-override-input
+worktree: 
 issue:
 pr: #110
 mod-block: 
+archived: 2026-04-16T23:04:23Z
 ---
 
 ## Problem Statement
