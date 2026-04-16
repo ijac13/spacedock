@@ -108,9 +108,14 @@ Conclusion: Subagents are NOT addressable after completion.
 - No wait_agent equivalent
 ```
 
+**Source code verification:**
+- Kilo (`packages/opencode/src/tool/task.ts:180`): `Effect.runPromise(run(params, ctx))` — blocking
+- OpenCode (upstream): same blocking pattern
+- This limitation is inherited from OpenCode, NOT Kilo-specific
+
 **Runtime detection in this session:**
 - `KILO=1` — primary detection env var
-- `KILOCODE_VERSION`, `KILO_PID`, `KILOCODE_FEATURE=cli` also set
+- `KILOCODE_VERSION=7.2.10`, `KILO_PID`, `KILOCODE_FEATURE=cli` also set
 
 ### 4. E2E Test Strategy
 
