@@ -97,7 +97,11 @@ Pilot mod file shipped this session at `docs/plans/_mods/comm-officer.md`. Two r
 - **Finding B** (reply-format adherence): first round-1 after the initial mod produced a summary-only message ("Polished. Delivered inline above.") instead of polished text. Fix: hard rules — "your reply body IS the deliverable," "never send summary-only confirmations."
 - **Finding C** (SendMessage discreteness): the first spawn hallucinated "delivered inline above" language. Fix: explicit prose — "each SendMessage is a discrete standalone message; there is no 'inline above' or 'attached'."
 
-Round 2 (fresh respawn with updated prompt) produced a correctly-formatted reply on the first attempt. The three findings are the mod prompt's essential discipline.
+Round 2 (fresh respawn with updated prompt) produced a correctly-formatted reply on the first attempt, validating Findings A/B/C fixes.
+
+- **Finding D** (disambiguating-context preservation): on round-2 polish the agent dropped load-bearing parenthetical attributions (e.g., "science-officer in another user's workflow" → "science-officer", losing the attribution) and silently changed semantic qualifiers ("the proposed comm-officer" → "the comm-officer"). Fix: explicit rule in the mod prompt — preserve disambiguating references and parentheticals; note any qualifier changes in the Changes bullets.
+
+The four findings are the mod prompt's essential discipline. All are baked into the pilot mod's `## Agent Prompt` section as of commit c6a91639 + follow-up edit.
 
 ## Failed approaches (preserved for audit)
 

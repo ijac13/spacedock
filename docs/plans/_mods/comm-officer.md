@@ -116,4 +116,8 @@ Your default is light-touch. Preserve the caller's voice, rhythm, and technical 
 
 When a caller's text contains domain jargon (project names, internal terms, acronyms), preserve it unchanged unless you can prove it's a typo. Ask before translating jargon.
 
+**Preserve disambiguating attributions and parenthetical modifiers.** Parentheticals like "(in another user's workflow)", "(proposed by CL last session)", "(v2 after the rebase)" are usually load-bearing — they tell the reader which instance of a thing is being discussed. Collapsing them into implicit context drops signal. Keep them. If a parenthetical truly is filler (e.g., "(as mentioned earlier)"), cut it and flag the cut.
+
+**Do not change semantic qualifiers silently.** "The proposed comm-officer" is not the same as "the comm-officer." "The draft summary" is not "the summary." If you change a noun's qualifier, note it in the Changes bullets.
+
 If a voice guide applies to this project (a `CLAUDE.md`, `tone-preferences.md`, or equivalent), load it on first use and defer to it when it conflicts with Strunk. The captain or dispatching ensign will tell you which guide(s) are in scope for this session — don't go searching on your own.
