@@ -274,6 +274,48 @@ gh workflow run runtime-live-e2e.yml --ref <pr-branch> -f pr_number=<N>
 
 `workflow_dispatch` inputs are supplied when the run is created, not when the environment approval is granted. That makes manual dispatch the right entrypoint for any future parameterized or matrix live runs.
 
+### Bisection inputs (`runtime-live-e2e.yml`)
+
+Four optional `workflow_dispatch` inputs narrow a run to a single variable. All default to empty; when unset, the job runs its normal `make test-live-*` target.
+
+| Input | Purpose | Example |
+|-------|---------|---------|
+| `claude_version` | Pin Claude Code to a specific version (`stable`, `latest`, or `X.Y.Z`). When set, the install step runs `curl -fsSL https://claude.ai/install.sh \| bash -s -- "$CLAUDE_VERSION"`. | `2.1.110` |
+| `test_selector` | Pytest nodeid or path to scope the run. When set, each job runs `uv run pytest "$TEST_SELECTOR"` instead of `make test-live-*`. Jobs whose markers don't match the selector collect zero tests and exit cleanly. | `tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips` |
+| `effort_override` | Override the `--effort` flag. Applied to `claude-live`, `claude-live-bare`, `claude-live-opus`. | `high` |
+| `model_override` | Override the `--model` flag for Claude jobs. Lets you bypass default-alias resolution (e.g., pin `claude-opus-4-6` even when the installed Claude Code resolves `opus` to `claude-opus-4-7`). No-op on `codex-live` — Codex uses its own model-selection path. | `claude-opus-4-6` |
+
+Each Claude job's `GITHUB_STEP_SUMMARY` records the installed `claude --version` and the effective model used, so bisection runs are self-documenting.
+
+### Bisection recipe
+
+To narrow a Claude Code regression to a single version, dispatch the same test against pinned versions one at a time and compare results:
+
+```bash
+gh workflow run runtime-live-e2e.yml --ref main \
+  -f pr_number=<N> \
+  -f claude_version=2.1.107 \
+  -f test_selector=tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips \
+  -f effort_override=low
+```
+
+Then rerun with `claude_version=2.1.110`, `2.1.111`, etc. The narrow window between a passing and failing version isolates the regression's introduction.
+
+### Mitigation recipe
+
+When a Claude Code version flips a model alias in a way that breaks a test (e.g., 2.1.111 flipped `--model opus` from `claude-opus-4-6` to `claude-opus-4-7`), pin the dated model explicitly to bypass the alias:
+
+```bash
+gh workflow run runtime-live-e2e.yml --ref main \
+  -f pr_number=<N> \
+  -f claude_version=2.1.111 \
+  -f test_selector=tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips \
+  -f effort_override=low \
+  -f model_override=claude-opus-4-6
+```
+
+The dated-model pin is future-proof against further default-alias flips. Prefer it over pinning `claude_version` when the Claude Code version itself is otherwise healthy.
+
 Required environment secrets:
 
 - `CI-E2E`: `ANTHROPIC_API_KEY` for `claude-live` and `claude-live-bare`
