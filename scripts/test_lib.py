@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import contextlib
 import json
 import os
 import re
@@ -16,7 +17,7 @@ import sys
 import tempfile
 import textwrap
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import datetime
 from pathlib import Path
 
@@ -882,6 +883,246 @@ def run_codex_first_officer(
         print(f"WARNING: codex first officer exited with code {result.returncode}")
 
     return result.returncode
+
+
+class StepTimeout(AssertionError):
+    """Expected log entry did not appear within the per-step budget."""
+
+    def __init__(self, message: str, label: str):
+        super().__init__(message)
+        self.label = label
+
+
+class StepFailure(AssertionError):
+    """FO subprocess exited before the expected log entry appeared."""
+
+    def __init__(self, message: str, label: str, exit_code: int | None):
+        super().__init__(message)
+        self.label = label
+        self.exit_code = exit_code
+
+
+def _tool_use_block(entry: dict) -> dict | None:
+    """Return the first tool_use block of an assistant entry, or None."""
+    if entry.get("type") != "assistant":
+        return None
+    message = entry.get("message")
+    if not isinstance(message, dict):
+        return None
+    for block in message.get("content", []) or []:
+        if isinstance(block, dict) and block.get("type") == "tool_use":
+            return block
+    return None
+
+
+def tool_use_matches(entry: dict, tool_name: str, **input_contains: str) -> bool:
+    """True when entry is an assistant tool_use for tool_name whose input contains
+    all `key=substring` pairs as substrings of input[key]."""
+    block = _tool_use_block(entry)
+    if block is None or block.get("name") != tool_name:
+        return False
+    inp = block.get("input", {}) or {}
+    for key, needle in input_contains.items():
+        value = inp.get(key, "")
+        if not isinstance(value, str):
+            return False
+        if needle not in value:
+            return False
+    return True
+
+
+def _user_tool_result_texts(entry: dict) -> list[str]:
+    """Extract plain text from user tool_result content blocks."""
+    if entry.get("type") != "user":
+        return []
+    message = entry.get("message")
+    if not isinstance(message, dict):
+        return []
+    texts: list[str] = []
+    content = message.get("content")
+    if isinstance(content, str):
+        texts.append(content)
+        return texts
+    if not isinstance(content, list):
+        return texts
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") != "tool_result":
+            continue
+        inner = block.get("content")
+        if isinstance(inner, str):
+            texts.append(inner)
+        elif isinstance(inner, list):
+            for sub in inner:
+                if isinstance(sub, dict) and sub.get("type") == "text":
+                    val = sub.get("text")
+                    if isinstance(val, str):
+                        texts.append(val)
+    return texts
+
+
+def entry_contains_text(entry: dict, pattern: str) -> bool:
+    """True when entry is an assistant text block or a user tool_result whose text
+    matches the regex pattern."""
+    if entry.get("type") == "assistant":
+        message = entry.get("message")
+        if isinstance(message, dict):
+            for block in message.get("content", []) or []:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text = block.get("text", "")
+                    if isinstance(text, str) and re.search(pattern, text):
+                        return True
+    for text in _user_tool_result_texts(entry):
+        if re.search(pattern, text):
+            return True
+    return False
+
+
+def assistant_model_equals(entry: dict, prefix: str) -> bool:
+    """True when entry is an assistant message whose message.model starts with prefix."""
+    if entry.get("type") != "assistant":
+        return False
+    message = entry.get("message")
+    if not isinstance(message, dict):
+        return False
+    model = message.get("model", "")
+    return isinstance(model, str) and model.startswith(prefix)
+
+
+class FOStreamWatcher:
+    """Tails an FO stream-json log and asserts per-step progress.
+
+    The watcher owns a read offset into ``log_path`` plus a handle to the live
+    ``proc``. ``expect()`` polls for new entries at 0.2s intervals, invokes the
+    caller-supplied predicate on each, and returns the first matching entry.
+    On per-step timeout it raises StepTimeout with the label; on early
+    subprocess exit it raises StepFailure with the exit code and a tail of the
+    log.
+    """
+
+    POLL_INTERVAL_S = 0.2
+    _LOG_TAIL_LINES = 20
+
+    def __init__(self, log_path: Path, proc: subprocess.Popen):
+        self.log_path = Path(log_path)
+        self.proc = proc
+        self._fh = None
+        self._buffer = ""
+
+    def _ensure_handle(self) -> None:
+        if self._fh is None:
+            self._fh = open(self.log_path, "r")
+
+    def _drain_entries(self) -> list[dict]:
+        """Read any new complete lines, parse them as JSON, return matched entries.
+
+        Partial trailing lines are held in ``self._buffer`` until the remainder
+        arrives on a later poll.
+        """
+        self._ensure_handle()
+        chunk = self._fh.read()
+        if not chunk:
+            return []
+        self._buffer += chunk
+        entries: list[dict] = []
+        while True:
+            newline_idx = self._buffer.find("\n")
+            if newline_idx < 0:
+                break
+            line = self._buffer[:newline_idx]
+            self._buffer = self._buffer[newline_idx + 1:]
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                entries.append(json.loads(stripped))
+            except json.JSONDecodeError:
+                continue
+        return entries
+
+    def _log_tail(self, max_lines: int = _LOG_TAIL_LINES) -> str:
+        if not self.log_path.is_file():
+            return ""
+        try:
+            text = self.log_path.read_text()
+        except OSError:
+            return ""
+        lines = text.splitlines()[-max_lines:]
+        return "\n".join(lines)
+
+    def expect(
+        self,
+        predicate: Callable[[dict], bool],
+        timeout_s: float,
+        label: str,
+    ) -> dict:
+        """Return the first log entry where predicate(entry) is True.
+
+        Raises StepTimeout after timeout_s wallclock.
+        Raises StepFailure if proc.poll() returns non-None before match.
+        """
+        deadline = time.monotonic() + timeout_s
+        while True:
+            for entry in self._drain_entries():
+                try:
+                    if predicate(entry):
+                        return entry
+                except Exception:
+                    continue
+
+            if self.proc.poll() is not None:
+                for entry in self._drain_entries():
+                    try:
+                        if predicate(entry):
+                            return entry
+                    except Exception:
+                        continue
+                raise StepFailure(
+                    f"FO subprocess exited (code={self.proc.returncode}) "
+                    f"before step {label!r} matched.\nLog tail:\n{self._log_tail()}",
+                    label=label,
+                    exit_code=self.proc.returncode,
+                )
+
+            if time.monotonic() >= deadline:
+                raise StepTimeout(
+                    f"Step {label!r} did not match within {timeout_s}s.\n"
+                    f"Log tail:\n{self._log_tail()}",
+                    label=label,
+                )
+            time.sleep(self.POLL_INTERVAL_S)
+
+    def expect_exit(self, timeout_s: float) -> int:
+        """Wait up to timeout_s for the FO subprocess to exit. Returns exit code.
+
+        Drains remaining stream-json output into the log file before returning.
+        Raises StepTimeout on timeout (after terminating the process).
+        """
+        try:
+            self.proc.wait(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                self.proc.wait()
+            raise StepTimeout(
+                f"FO subprocess did not exit within {timeout_s}s.\n"
+                f"Log tail:\n{self._log_tail()}",
+                label="expect_exit",
+            )
+        # Drain any final lines that hit disk after wait() returned.
+        self._drain_entries()
+        return self.proc.returncode
+
+    def close(self) -> None:
+        if self._fh is not None:
+            try:
+                self._fh.close()
+            finally:
+                self._fh = None
 
 
 class LogParser:
