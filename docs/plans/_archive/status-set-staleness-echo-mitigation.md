@@ -1,16 +1,17 @@
 ---
 id: 159
 title: "FO shared-core: avoid full-file staleness echoes from Read + `status --set` pattern"
-status: validation
+status: done
 source: "github.com/clkao/spacedock#96 — `status --set` triggers full-file staleness echoes when FO has Read the entity body; Claude Code dumps entire current file as a system-reminder on the turn after a Bash-driven mutation"
 started: 2026-04-15T20:37:50Z
-completed:
-verdict:
+completed: 2026-04-16T05:20:20Z
+verdict: PASSED
 score: 0.80
-worktree: .worktrees/spacedock-ensign-status-set-staleness-echo-mitigation
+worktree: 
 issue: "#96"
 pr: #101
 mod-block: 
+archived: 2026-04-16T05:20:20Z
 ---
 
 When the FO Reads an entity file and then calls `status --set` via Bash to update frontmatter, Claude Code's file-staleness safety net can emit the **entire current file** as a `<system-reminder>` on the next turn. Cost scales linearly with entity body size. Long-running workflows (triage batches, plans with many cycle reports) silently pay tens of thousands of cache-write tokens per frontmatter transition when the echo fires.
