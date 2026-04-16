@@ -9,7 +9,7 @@ verdict:
 score: 0.55
 worktree: .worktrees/spacedock-ensign-standing-teammate-enumeration-usage-payload
 issue:
-pr:
+pr: #103
 mod-block: merge:pr-merge
 ---
 
