@@ -10,6 +10,7 @@ score: 0.65
 worktree: .worktrees/spacedock-ensign-lazy-standing-teammate-spawn
 issue:
 pr:
+mod-block: merge:pr-merge
 ---
 
 ## Problem Statement
