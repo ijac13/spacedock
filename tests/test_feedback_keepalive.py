@@ -18,9 +18,21 @@ from test_lib import (  # noqa: E402
     git_add_commit,
     install_agents,
     probe_claude_runtime,
-    run_first_officer,
+    run_first_officer_streaming,
     setup_fixture,
+    tool_use_matches,
 )
+
+
+def _agent_input_dict(entry: dict) -> dict:
+    """Extract the input dict of the first Agent() tool_use block in an entry."""
+    if entry.get("type") != "assistant":
+        return {}
+    message = entry.get("message", {})
+    for block in message.get("content", []) or []:
+        if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "Agent":
+            return block.get("input", {}) or {}
+    return {}
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -142,21 +154,39 @@ def test_feedback_keepalive(test_project, model, effort):
         )
 
     abs_workflow = t.test_project_dir / "keepalive-pipeline"
-    fo_exit = run_first_officer(
+    prompt = (
+        f"Process the entity `keepalive-test-task` through the workflow at {abs_workflow}/. "
+        "Drive it from backlog through implementation and validation. "
+        "The implementation task is trivial (create a text file). "
+        "The validation stage has feedback-to: implementation, so you must keep the implementation "
+        "agent alive when dispatching validation. "
+        "When you encounter a gate review where the reviewer recommends REJECTED, "
+        "auto-bounce into the feedback rejection flow and route findings to the implementation agent "
+        "via SendMessage."
+    )
+    with run_first_officer_streaming(
         t,
-        (
-            f"Process the entity `keepalive-test-task` through the workflow at {abs_workflow}/. "
-            "Drive it from backlog through implementation and validation. "
-            "The implementation task is trivial (create a text file). "
-            "The validation stage has feedback-to: implementation, so you must keep the implementation "
-            "agent alive when dispatching validation. "
-            "When you encounter a gate review where the reviewer recommends REJECTED, "
-            "auto-bounce into the feedback rejection flow and route findings to the implementation agent "
-            "via SendMessage."
-        ),
+        prompt,
         agent_id="spacedock:first-officer",
         extra_args=["--model", model, "--effort", effort, "--max-budget-usd", "5.00"],
-    )
+    ) as w:
+        w.expect(
+            lambda e: tool_use_matches(e, "Agent", subagent_type="spacedock:ensign")
+            and _agent_targets_stage(_agent_input_dict(e), "implementation"),
+            timeout_s=180,
+            label="implementation ensign dispatched",
+        )
+        print("[OK] implementation ensign dispatched")
+
+        w.expect(
+            lambda e: tool_use_matches(e, "Agent", subagent_type="spacedock:ensign")
+            and _agent_targets_stage(_agent_input_dict(e), "validation"),
+            timeout_s=240,
+            label="validation ensign dispatched (keepalive crossed the transition)",
+        )
+        print("[OK] validation ensign dispatched — implementation agent survived the transition")
+
+        fo_exit = w.expect_exit(timeout_s=300)
     if fo_exit != 0:
         print("  (may be expected — budget cap or gate hold)")
 
