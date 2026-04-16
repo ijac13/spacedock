@@ -1,7 +1,7 @@
 ---
 id: "163"
 title: "Kilocode support — Kilo as a Spacedock runtime"
-status: implementation
+status: validation
 source:
 started: 2026-04-16T06:05:42Z
 completed:
