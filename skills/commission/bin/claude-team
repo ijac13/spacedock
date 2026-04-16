@@ -27,6 +27,7 @@ _spec.loader.exec_module(_status)
 parse_frontmatter = _status.parse_frontmatter
 parse_stages_block = _status.parse_stages_block
 parse_stages_with_defaults = _status.parse_stages_with_defaults
+parse_mod_metadata = _status.parse_mod_metadata
 load_active_entity_fields = _status.load_active_entity_fields
 find_git_root = _status.find_git_root
 
@@ -414,6 +415,178 @@ def extract_runtime_models(jsonl_path: str) -> set[str]:
     return models
 
 
+def member_exists(team: str, name: str) -> bool:
+    """Return True iff member {name} is in team {team}'s config.json members list.
+
+    Sibling of lookup_model, not an extension. lookup_model globs ALL team
+    configs to answer "what model does agent X run as anywhere" — appropriate
+    for reuse-model comparison. The standing-spawn check is team-scoped: two
+    parallel teams in the same captain session may each spawn their own
+    comm-officer, so this helper opens exactly one config file.
+    """
+    home = os.path.expanduser("~")
+    config_path = os.path.join(home, ".claude", "teams", team, "config.json")
+    if not os.path.isfile(config_path):
+        return False
+    try:
+        with open(config_path, "r") as f:
+            config = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return False
+    for member in config.get("members", []):
+        if member.get("name") == name:
+            return True
+    return False
+
+
+def _parse_hook_startup_spawn_config(mod_path: str) -> dict:
+    """Extract subagent_type / name / model from a mod's `## Hook: startup` section.
+
+    The `## Hook: startup` section in a standing-teammate mod declares
+    spawn config as markdown bullets of the form `- key: value`. The pilot
+    mod (docs/plans/_mods/comm-officer.md) uses backtick-wrapped inline
+    code for each field (e.g. `` - `subagent_type: general-purpose` ``) so
+    we strip backticks from values when detected.
+
+    Returns a dict with keys `subagent_type`, `name`, `model`. Missing keys
+    are absent from the dict (the caller validates required fields).
+    """
+    with open(mod_path, "r") as f:
+        content = f.read()
+    lines = content.split("\n")
+
+    hook_start = None
+    for i, line in enumerate(lines):
+        if line.strip() == "## Hook: startup":
+            hook_start = i
+            break
+    if hook_start is None:
+        return {}
+
+    hook_end = len(lines)
+    for i in range(hook_start + 1, len(lines)):
+        if lines[i].startswith("## "):
+            hook_end = i
+            break
+
+    config = {}
+    for line in lines[hook_start + 1:hook_end]:
+        stripped = line.strip()
+        if not stripped.startswith("- "):
+            continue
+        item = stripped[2:].strip()
+        # Strip surrounding backticks if the whole bullet is wrapped as inline code
+        if item.startswith("`") and item.endswith("`") and len(item) >= 2:
+            item = item[1:-1]
+        if ":" not in item:
+            continue
+        key, _, value = item.partition(":")
+        key = key.strip()
+        value = value.strip()
+        # Strip trailing inline comments introduced by a backtick pair
+        if value.startswith("`") and value.endswith("`") and len(value) >= 2:
+            value = value[1:-1]
+        if key in ("subagent_type", "name", "model"):
+            config[key] = value
+
+    return config
+
+
+def cmd_spawn_standing(args: argparse.Namespace) -> int:
+    """Emit an Agent() spec JSON for a standing-teammate mod, or report already-alive.
+
+    Reads a mod file at --mod, validates `standing: true` in frontmatter,
+    extracts spawn config from `## Hook: startup`, and checks the target
+    team's config.json for an existing member with the declared name.
+
+    - If the member already exists in the team config, emit
+      `{"status": "already-alive", "name": "..."}` on stdout (exit 0).
+    - Otherwise emit an Agent() call spec JSON shaped like `claude-team build`
+      output: subagent_type, name, team_name, model, prompt.
+
+    Fails loudly (non-zero exit, stderr) on: missing mod file, missing
+    `standing: true`, missing `## Agent Prompt` section, model value outside
+    the sonnet/opus/haiku enum, or a convention-violating trailing heading
+    after `## Agent Prompt` (caught by parse_mod_metadata).
+    """
+    mod_path = args.mod
+    team_name = args.team
+
+    if not os.path.isfile(mod_path):
+        print(f"error: mod file not found: {mod_path}", file=sys.stderr)
+        return 1
+
+    try:
+        meta = parse_mod_metadata(mod_path)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+
+    if not meta["standing"]:
+        print(
+            f"error: mod {mod_path} is missing 'standing: true' in frontmatter — "
+            f"not a standing-teammate mod",
+            file=sys.stderr,
+        )
+        return 1
+
+    if meta["agent_prompt"] is None:
+        print(
+            f"error: mod {mod_path} has no '## Agent Prompt' section — "
+            f"required for standing-teammate spawn",
+            file=sys.stderr,
+        )
+        return 1
+
+    hook_config = _parse_hook_startup_spawn_config(mod_path)
+
+    subagent_type = hook_config.get("subagent_type") or meta["frontmatter"].get("subagent_type", "")
+    declared_name = hook_config.get("name") or meta["name"]
+    model = hook_config.get("model", "")
+
+    if not subagent_type:
+        print(
+            f"error: mod {mod_path} has no 'subagent_type' in '## Hook: startup' "
+            f"or frontmatter",
+            file=sys.stderr,
+        )
+        return 1
+    if not declared_name:
+        print(
+            f"error: mod {mod_path} has no 'name' in '## Hook: startup' or frontmatter",
+            file=sys.stderr,
+        )
+        return 1
+    if not model:
+        print(
+            f"error: mod {mod_path} has no 'model' in '## Hook: startup' — "
+            f"{MODEL_ENUM_LIST}",
+            file=sys.stderr,
+        )
+        return 1
+    if model not in MODEL_ENUM:
+        print(
+            f"error: invalid model '{model}' in '## Hook: startup' of {mod_path} — "
+            f"{MODEL_ENUM_LIST}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if member_exists(team_name, declared_name):
+        print(json.dumps({"status": "already-alive", "name": declared_name}))
+        return 0
+
+    spec = {
+        "subagent_type": subagent_type,
+        "name": declared_name,
+        "team_name": team_name,
+        "model": model,
+        "prompt": meta["agent_prompt"],
+    }
+    print(json.dumps(spec, indent=2))
+    return 0
+
+
 def lookup_model(name: str) -> str | None:
     """Find the model for a team member by name.
 
@@ -521,6 +694,13 @@ def main():
     build_parser = subparsers.add_parser("build", help="Assemble structured dispatch JSON")
     build_parser.add_argument("--workflow-dir", required=True, help="Absolute path to workflow directory")
 
+    spawn_parser = subparsers.add_parser(
+        "spawn-standing",
+        help="Emit Agent() spec JSON for a standing-teammate mod, or report already-alive",
+    )
+    spawn_parser.add_argument("--mod", required=True, help="Path to the standing-teammate mod file")
+    spawn_parser.add_argument("--team", required=True, help="Target team name")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -531,6 +711,8 @@ def main():
         sys.exit(cmd_context_budget(args))
     elif args.command == "build":
         sys.exit(cmd_build(args))
+    elif args.command == "spawn-standing":
+        sys.exit(cmd_spawn_standing(args))
 
 
 if __name__ == "__main__":
