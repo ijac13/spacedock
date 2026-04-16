@@ -6,6 +6,39 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+AUTHORITATIVE_PLUGIN_JSON=".codex-plugin/plugin.json"
+AUTHORITATIVE_MARKETPLACE_JSON=".agents/plugins/marketplace.json"
+LEGACY_PLUGIN_JSON=".claude-plugin/plugin.json"
+LEGACY_MARKETPLACE_JSON=".claude-plugin/marketplace.json"
+
+sync_legacy_plugin_manifest() {
+    python3 - "$AUTHORITATIVE_PLUGIN_JSON" "$LEGACY_PLUGIN_JSON" <<'PY'
+import json
+import pathlib
+import sys
+
+source_path = pathlib.Path(sys.argv[1])
+target_path = pathlib.Path(sys.argv[2])
+payload = json.loads(source_path.read_text())
+target_path.parent.mkdir(parents=True, exist_ok=True)
+target_path.write_text(json.dumps(payload, indent=2) + "\n")
+PY
+}
+
+sync_legacy_marketplace() {
+    python3 - "$AUTHORITATIVE_MARKETPLACE_JSON" "$LEGACY_MARKETPLACE_JSON" <<'PY'
+import json
+import pathlib
+import sys
+
+source_path = pathlib.Path(sys.argv[1])
+target_path = pathlib.Path(sys.argv[2])
+payload = json.loads(source_path.read_text())
+target_path.parent.mkdir(parents=True, exist_ok=True)
+target_path.write_text(json.dumps(payload, indent=2) + "\n")
+PY
+}
+
 VERSION="${1:-}"
 EXTRA_INSTRUCTIONS="${2:-}"
 
@@ -44,32 +77,20 @@ echo "Creating release worktree: $WORKTREE_PATH (branch: $RELEASE_BRANCH)"
 git worktree add "$WORKTREE_PATH" -b "$RELEASE_BRANCH"
 cd "$WORKTREE_PATH"
 
-PLUGIN_JSON=".claude-plugin/plugin.json"
-MARKETPLACE_JSON=".claude-plugin/marketplace.json"
-
-OLD_VERSION=$(python3 -c "import json; print(json.load(open('$PLUGIN_JSON'))['version'])")
+OLD_VERSION=$(python3 -c "import json; print(json.load(open('$AUTHORITATIVE_PLUGIN_JSON'))['version'])")
 echo "Bumping version: $OLD_VERSION -> $VERSION"
 
 python3 -c "
 import json, sys
-with open('$PLUGIN_JSON', 'r') as f:
+with open('$AUTHORITATIVE_PLUGIN_JSON', 'r') as f:
     data = json.load(f)
 data['version'] = '$VERSION'
-with open('$PLUGIN_JSON', 'w') as f:
+with open('$AUTHORITATIVE_PLUGIN_JSON', 'w') as f:
     json.dump(data, f, indent=2)
     f.write('\n')
 "
-
-python3 -c "
-import json, sys
-with open('$MARKETPLACE_JSON', 'r') as f:
-    data = json.load(f)
-for plugin in data.get('plugins', []):
-    plugin['version'] = '$VERSION'
-with open('$MARKETPLACE_JSON', 'w') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-"
+sync_legacy_plugin_manifest
+sync_legacy_marketplace
 
 for f in mods/*.md; do
     if [ -f "$f" ] && grep -q '^version:' "$f"; then
@@ -91,7 +112,7 @@ if [ -d "$SELF_MODS_DIR" ]; then
     done
 fi
 
-git add "$PLUGIN_JSON" "$MARKETPLACE_JSON" mods/*.md
+git add "$AUTHORITATIVE_PLUGIN_JSON" "$AUTHORITATIVE_MARKETPLACE_JSON" "$LEGACY_PLUGIN_JSON" "$LEGACY_MARKETPLACE_JSON" mods/*.md
 if [ -d "$SELF_MODS_DIR" ]; then
     git add "$SELF_MODS_DIR"
 fi

@@ -168,7 +168,7 @@ Phase 2 is sufficient for tracking completion.
 
 Before generating any files, read the Spacedock plugin manifest to get the current version:
 
-1. Read `.claude-plugin/plugin.json` from the Spacedock plugin directory (the directory containing the `skills/` folder — resolve from your own plugin context).
+1. Read `.codex-plugin/plugin.json` from the Spacedock plugin directory (the directory containing the `skills/` folder — resolve from your own plugin context). `.claude-plugin/plugin.json` is the synchronized legacy mirror during migration.
 2. Extract the `version` field and store it as `{spacedock_version}`.
 
 This version will be embedded in each generated scaffolding file.
