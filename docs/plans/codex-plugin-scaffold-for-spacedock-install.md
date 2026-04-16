@@ -12,24 +12,57 @@ issue:
 pr:
 ---
 
-Spacedock's current Codex install path is still oriented around manual skill exposure and local symlink setup. The official Codex plugin docs now provide a clearer install surface: a plugin rooted by `.codex-plugin/plugin.json`, optionally bundled `skills/`, and a marketplace entry under either `$REPO_ROOT/.agents/plugins/marketplace.json` or `~/.agents/plugins/marketplace.json`. That gives users a much better install experience than manually wiring `~/.agents/skills/` and hoping the layout matches the runtime adapter assumptions.
+Spacedock's Codex install story is still split across manual skill symlinks and legacy `.claude-plugin` packaging. That leaves users with two mismatched install paths and no clear Codex marketplace entry to discover locally. The current goal is packaging and install ergonomics only: make Spacedock installable as a Codex plugin without changing runtime behavior, workflow semantics, or stage execution logic.
 
-This task should scaffold Spacedock as a first-class Codex plugin while preserving the existing skill layout. The goal is not to redesign Spacedock's runtime behavior, only to package the existing skills and related metadata in the Codex plugin structure that the official docs recommend.
+## Problem Statement
 
-## Desired Direction
+The repo still tells Codex users to symlink `skills/` into `~/.agents/skills/spacedock`, while the release and refit scripts still read `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`. That is brittle and does not match the current Codex plugin contract. The repo needs a single first-class Codex packaging surface with a local marketplace entry, while preserving a migration path for the older Claude Code and symlink-era docs.
 
-- Add a plugin manifest at `.codex-plugin/plugin.json`
-- Point the manifest at the existing packaged `skills/` directory
-- Add install-surface metadata suitable for Codex's plugin directory
-- Add a repo-local marketplace file at `.agents/plugins/marketplace.json` so this repo can self-host the local install path for testing
-- Keep the resulting install story aligned with the official Codex plugin packaging and marketplace docs
+## Proposed Approach
 
-## Validation Expectations
+Use the repository root as the plugin root, not `plugins/spacedock/`. That keeps the current `skills/`, `agents/`, `references/`, `mods/`, and scripts layout intact and minimizes install friction for local development. The plugin package would live at the repo root via `.codex-plugin/plugin.json`, and the repo-local marketplace would live at `.agents/plugins/marketplace.json` pointing `source.path` at `./`.
 
-Implementation should verify both structure and install ergonomics:
+The implementation should:
 
-1. static checks for manifest shape and required fields
-2. marketplace-path checks proving the repo-local catalog points at the plugin folder correctly
-3. a documented manual or scripted smoke path showing that after restart Codex can see/install the local Spacedock plugin from the marketplace
+- Add `.codex-plugin/plugin.json` with the current Codex packaging fields
+- Include `interface.displayName`, `category`, `policy.installation`, and `policy.authentication` in the marketplace entry
+- Add `.agents/plugins/marketplace.json` so Codex can discover the local repo install without a manual file copy
+- Update README install docs to explain the Codex install path first, while explicitly labeling the symlink path and `.claude-plugin` surfaces as legacy migration support
+- Update `skills/commission/SKILL.md`, `skills/refit/SKILL.md`, and `scripts/release.sh` to reference the Codex packaging contract where they currently read `.claude-plugin`
+- Treat `.claude-plugin/marketplace.json` as a compatibility surface during migration, not the primary install story
 
-The task should also make clear whether any legacy symlink-based setup instructions can be removed or should remain as fallback guidance during migration.
+If the root-vs-subdirectory decision changes, the task must also update `source.path` and the install docs accordingly. Otherwise, the root choice keeps install ergonomics simple: clone the repo, restart Codex, and install from the local marketplace entry.
+
+## Acceptance Criteria
+
+1. The repo contains a valid `.codex-plugin/plugin.json` for Spacedock at the repository root.
+   - Test: parse the manifest and verify required fields exist and point at the expected plugin root.
+
+2. The repo contains a valid local marketplace file at `.agents/plugins/marketplace.json`.
+   - Test: load the JSON and verify the Spacedock entry has the expected `interface.displayName`, `category`, `policy.installation`, `policy.authentication`, and `source.path`.
+
+3. The install docs and workflow helper docs describe the new Codex install path and the migration posture clearly.
+   - Test: inspect `README.md`, `skills/commission/SKILL.md`, `skills/refit/SKILL.md`, `scripts/release.sh`, and `.claude-plugin/marketplace.json` for the updated wording and compatibility notes.
+
+4. Legacy install guidance is not silently removed.
+   - Test: confirm the docs either retain the symlink-era path as fallback or explicitly mark it deprecated with a migration note.
+
+5. The package can be discovered and installed by Codex through the local marketplace.
+   - Test: restart Codex, open `/plugins`, confirm the local marketplace entry appears, install Spacedock, and verify the plugin loads.
+
+## Test Plan
+
+- Static validation of JSON shape and required fields is low cost and should be automated.
+- Doc/README checks are low cost and can be covered with targeted text assertions.
+- The Codex smoke path is higher cost because it requires an interactive restart and plugin UI flow, but it is necessary because the user-visible install experience is the point of the change.
+- No E2E workflow-runtime tests are needed; the scope stops at packaging and install experience, not runtime behavior or stage execution.
+
+## Stage Report: ideation
+
+- [DONE] Problem statement reflects the current mismatch between Codex packaging, legacy `.claude-plugin` surfaces, and symlink-era instructions.
+- [DONE] Repo-layout decision is explicit: Spacedock stays at the repo root as the plugin root, with `source.path: "./"`.
+- [DONE] Coexistence and migration are addressed for README install docs, `skills/commission/SKILL.md`, `skills/refit/SKILL.md`, `scripts/release.sh`, and `.claude-plugin/marketplace.json`.
+- [DONE] Acceptance criteria each include a concrete test method.
+- [DONE] Test plan includes the actual Codex smoke path: restart Codex, open `/plugins`, confirm the local marketplace entry, install, and verify the plugin loads.
+- [DONE] Scope is constrained to packaging and install experience; runtime behavior changes are out of scope.
+- [SKIPPED] Frontmatter changes are out of scope for this stage refresh.
