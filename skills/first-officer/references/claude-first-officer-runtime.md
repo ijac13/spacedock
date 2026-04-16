@@ -33,7 +33,7 @@ When filing a new task, use `status --next-id` to fetch only the next sequential
 
 After team creation succeeds (the ladder has resolved and the returned `team_name` is known) and BEFORE entering the normal dispatch event loop, run the standing-teammate spawn pass:
 
-1. Enumerate `_mods/*.md` whose frontmatter has `standing: true`. Grep each mod for `standing: true` between the frontmatter delimiters; authoritative parsing is deferred to the helper.
+1. Enumerate `_mods/*.md` whose frontmatter has `standing: true` by running `claude-team list-standing --workflow-dir {wd}` and consuming its newline-delimited output (one absolute mod path per line, sorted alphabetically, empty stdout on zero matches). Do NOT grep mod frontmatter yourself; authoritative parsing is deferred to the helper.
 2. For each mod, run `claude-team spawn-standing --mod {abs_path_to_mod} --team {team_name}`.
 3. If the helper emits JSON with top-level `status: "already-alive"`, log the reported `name` and skip to the next mod. Standing teammates are first-boot-wins across the captain session; subsequent workflows sharing the team pick up the live member.
 4. Otherwise the helper emits an Agent() call spec JSON with keys `subagent_type`, `name`, `team_name`, `model`, `prompt`. **Forward that spec verbatim** to the Agent tool — copy each field into the corresponding Agent() argument without paraphrasing the prompt, rewriting the name, or substituting the team. Same "forward verbatim" discipline as `claude-team build` output.
