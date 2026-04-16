@@ -87,6 +87,14 @@ class TestFORoutingProse:
         text = read(SHARED_CORE)
         assert "member_exists" in text
 
+    def test_build_time_auto_enumeration_anchor(self):
+        """AC-10 cycle-2 extension: prose acknowledges workers auto-discover
+        standing teammates via their build-time prompt section, so the FO
+        does not need to add per-dispatch routing opt-ins manually."""
+        text = read(SHARED_CORE)
+        assert "discover the same teammates automatically via their build-time prompt section" in text
+        assert "### Standing teammates available in your team" in text
+
 
 if __name__ == "__main__":
     import sys
