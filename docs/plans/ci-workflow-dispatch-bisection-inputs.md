@@ -80,3 +80,36 @@ This produces a one-job run that isolates a single variable (Claude Code version
 - Regression tracking, history, or dashboards for bisection runs.
 - Rewriting the existing Makefile targets. Current `make test-live-*` targets stay; this task adds manual-dispatch inputs that compose with them.
 - Codex-runtime version pinning, if the Codex CLI distribution model is materially different from Claude Code's. Scope to Claude Code for v1.
+
+## Stage Report (implementation)
+
+1. DONE — Read entity body. Ideation was fast-tracked; the Proposed design section was the spec. Three inputs (`claude_version`, `test_selector`, `effort_override`) implemented as specified.
+2. DONE — Read `.github/workflows/runtime-live-e2e.yml` in full. Identified (a) `workflow_dispatch.inputs` block at top, (b) identical `Install Claude Code` step in each of the three Claude jobs, (c) four per-job test-run steps (`Run Claude live suite`, `Run Claude live suite (bare mode)`, `Run Claude live suite (opus)`, `Run Codex live suite`).
+3. DONE — Investigated the Claude Code installer (`https://claude.ai/install.sh`). It accepts an optional positional argument matching `stable|latest|X.Y.Z[-suffix]` which it forwards to the downloaded binary's `install` subcommand. Pin invocation: `curl -fsSL https://claude.ai/install.sh | bash -s -- "$VERSION"`. Unpinned fallback preserves the original `curl | bash` path.
+4. DONE — Added `claude_version`, `test_selector`, `effort_override` to `workflow_dispatch.inputs`. All three are `required: false`, `type: string`, `default: ""`. The existing `pr_number` input and its semantics are preserved. Commit: `c459e2bd`.
+5. DONE — Modified the `Install Claude Code` step in all three Claude jobs (via `replace_all` on the shared text) to branch on `$CLAUDE_VERSION`: set → pinned install, unset → original path. Commit: `2271dd03`.
+6. DONE — Modified the test-run step in each of the four jobs to branch on `$TEST_SELECTOR`. When set, each job runs `uv run pytest "$TEST_SELECTOR"` with its runtime/mode flags (and, for opus, its `--model opus --effort {override|low}` pair; the opus job preserves `--effort low` as the default when `effort_override` is empty, matching `make test-live-claude-opus`). The codex variant is wrapped in `run_pytest_tier.py --allow-no-tests` to match the Makefile's allow-no-tests gate. When unset, the original `make test-live-{x}` invocation runs unchanged. `effort_override` is appended as `--effort {value}` for claude / claude-bare / codex only when set; it is a no-op when unset. Commit: `0b7ce6a0`.
+7. DONE — Sanity-checked the YAML with `uv run --with pyyaml python -c "yaml.safe_load(...)"`. All four jobs parse, all four `workflow_dispatch` inputs are present, no syntax errors.
+8. DONE — Added a structured `GITHUB_STEP_SUMMARY` block to each Claude job's `Show tool versions` step that records both the requested pin (or "none") and the installed `claude --version` + `uv --version`. The step still prints versions to the log as before. The Codex job's `Show tool versions` step is unchanged (it uses `codex --version`, not `claude --version`, per the task scope). Commit: `8335bd0c`.
+9. DONE — Static validation of the bash conditionals. Each new run block was syntax-checked with `bash -n` against both the unset and set branches (plus the opus `EFFORT_FLAG` fallback branch). All five variants parse cleanly. The default path (`test_selector=""`, `claude_version=""`) falls through to the existing `make` target, and the install step falls through to the existing `curl | bash` — default behavior preserved.
+10. DONE — Committed in four focused commits on `spacedock-ensign/ci-workflow-dispatch-bisection-inputs`:
+    - `c459e2bd` add workflow_dispatch inputs
+    - `2271dd03` claude_version pinning in install step
+    - `0b7ce6a0` test_selector + effort_override in test-run steps
+    - `8335bd0c` version-echo audit step
+    This stage report commit will be (v).
+11. DONE — This stage report.
+
+### Recommendation for validation
+
+CI workflow changes cannot be validated by running CI on themselves (chicken-and-egg: the very workflow we changed would need to execute the changed version). Validation should be:
+
+1. **YAML lint** — already passed in implementation (step 7). Validator can re-run `uv run --with pyyaml python -c "yaml.safe_load(...)"` or `actionlint` if available.
+2. **Manual captain spot-check post-merge** — once merged to `main`, the captain dispatches one baseline run (`gh workflow run runtime-live-e2e.yml --ref main -f pr_number=<N>` with no bisection inputs set) to confirm the default path still works, then a bisection run with `claude_version`, `test_selector`, and `effort_override` set to confirm the three new inputs thread through correctly.
+3. **Diff review** — the four commits are small and additive. A human reviewer can verify that every default path (unset inputs) matches the pre-change behavior line-for-line.
+
+Validator should mark the task as implementation-complete and defer end-to-end confirmation to the captain's post-merge spot-check. No CI-on-CI validation is possible from this worktree.
+
+### Summary
+
+Added three optional `workflow_dispatch` inputs to `.github/workflows/runtime-live-e2e.yml` — `claude_version`, `test_selector`, `effort_override` — wired into the Claude Code install step and each of the four per-job test-run steps, plus an audit-trail version echo that surfaces both the requested pin and the installed `claude --version` to `GITHUB_STEP_SUMMARY`. Default-unset path preserves current behavior across all four jobs. Delivered in four focused commits on `spacedock-ensign/ci-workflow-dispatch-bisection-inputs`.

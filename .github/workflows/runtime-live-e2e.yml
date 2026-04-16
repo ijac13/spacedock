@@ -8,6 +8,21 @@ on:
         description: "Approved PR number to validate with the live runtime suite"
         required: true
         type: string
+      claude_version:
+        description: "Pin Claude Code to a specific version (e.g. 2.1.107, stable, latest). Empty = installer default."
+        required: false
+        type: string
+        default: ""
+      test_selector:
+        description: "Pytest nodeid or path to run instead of the full make target (e.g. tests/test_foo.py::test_bar). Empty = full make target."
+        required: false
+        type: string
+        default: ""
+      effort_override:
+        description: "Override --effort passed to pytest (e.g. low, high, xhigh). Only applied when test_selector is set. Empty = no --effort flag."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -105,8 +120,16 @@ jobs:
           echo "SPACEDOCK_TEST_TMP_ROOT=$RUNNER_TEMP/spacedock-live/$GITHUB_JOB" >> "$GITHUB_ENV"
 
       - name: Install Claude Code
+        env:
+          CLAUDE_VERSION: ${{ inputs.claude_version }}
         run: |
-          curl -fsSL https://claude.ai/install.sh | bash
+          if [ -n "$CLAUDE_VERSION" ]; then
+            echo "Installing pinned Claude Code version: $CLAUDE_VERSION"
+            curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_VERSION"
+          else
+            echo "Installing latest Claude Code (no pin)"
+            curl -fsSL https://claude.ai/install.sh | bash
+          fi
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Configure git identity
@@ -116,12 +139,40 @@ jobs:
           git config --global init.defaultBranch main
 
       - name: Show tool versions
+        env:
+          CLAUDE_VERSION: ${{ inputs.claude_version }}
         run: |
-          claude --version
-          uv --version
+          CLAUDE_VERSION_OUT=$(claude --version)
+          UV_VERSION_OUT=$(uv --version)
+          echo "$CLAUDE_VERSION_OUT"
+          echo "$UV_VERSION_OUT"
+          {
+            echo "### Tool versions"
+            if [ -n "$CLAUDE_VERSION" ]; then
+              echo "- Claude Code pin requested: \`$CLAUDE_VERSION\`"
+            else
+              echo "- Claude Code pin requested: _none (installer default)_"
+            fi
+            echo "- Installed \`claude --version\`: \`$CLAUDE_VERSION_OUT\`"
+            echo "- Installed \`uv --version\`: \`$UV_VERSION_OUT\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Claude live suite
-        run: make test-live-claude
+        env:
+          TEST_SELECTOR: ${{ inputs.test_selector }}
+          EFFORT_OVERRIDE: ${{ inputs.effort_override }}
+        run: |
+          if [ -n "$TEST_SELECTOR" ]; then
+            echo "Running selector: $TEST_SELECTOR"
+            EFFORT_ARGS=()
+            if [ -n "$EFFORT_OVERRIDE" ]; then
+              EFFORT_ARGS=(--effort "$EFFORT_OVERRIDE")
+            fi
+            unset CLAUDECODE
+            uv run pytest "$TEST_SELECTOR" --runtime claude "${EFFORT_ARGS[@]}" -v
+          else
+            make test-live-claude
+          fi
 
       - name: Upload Claude live artifacts
         if: always()
@@ -222,8 +273,16 @@ jobs:
           echo "SPACEDOCK_TEST_TMP_ROOT=$RUNNER_TEMP/spacedock-live/$GITHUB_JOB" >> "$GITHUB_ENV"
 
       - name: Install Claude Code
+        env:
+          CLAUDE_VERSION: ${{ inputs.claude_version }}
         run: |
-          curl -fsSL https://claude.ai/install.sh | bash
+          if [ -n "$CLAUDE_VERSION" ]; then
+            echo "Installing pinned Claude Code version: $CLAUDE_VERSION"
+            curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_VERSION"
+          else
+            echo "Installing latest Claude Code (no pin)"
+            curl -fsSL https://claude.ai/install.sh | bash
+          fi
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Configure git identity
@@ -233,12 +292,40 @@ jobs:
           git config --global init.defaultBranch main
 
       - name: Show tool versions
+        env:
+          CLAUDE_VERSION: ${{ inputs.claude_version }}
         run: |
-          claude --version
-          uv --version
+          CLAUDE_VERSION_OUT=$(claude --version)
+          UV_VERSION_OUT=$(uv --version)
+          echo "$CLAUDE_VERSION_OUT"
+          echo "$UV_VERSION_OUT"
+          {
+            echo "### Tool versions"
+            if [ -n "$CLAUDE_VERSION" ]; then
+              echo "- Claude Code pin requested: \`$CLAUDE_VERSION\`"
+            else
+              echo "- Claude Code pin requested: _none (installer default)_"
+            fi
+            echo "- Installed \`claude --version\`: \`$CLAUDE_VERSION_OUT\`"
+            echo "- Installed \`uv --version\`: \`$UV_VERSION_OUT\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Claude live suite (bare mode)
-        run: make test-live-claude-bare
+        env:
+          TEST_SELECTOR: ${{ inputs.test_selector }}
+          EFFORT_OVERRIDE: ${{ inputs.effort_override }}
+        run: |
+          if [ -n "$TEST_SELECTOR" ]; then
+            echo "Running selector: $TEST_SELECTOR"
+            EFFORT_ARGS=()
+            if [ -n "$EFFORT_OVERRIDE" ]; then
+              EFFORT_ARGS=(--effort "$EFFORT_OVERRIDE")
+            fi
+            unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+            uv run pytest "$TEST_SELECTOR" --runtime claude --team-mode=bare "${EFFORT_ARGS[@]}" -v
+          else
+            make test-live-claude-bare
+          fi
 
       - name: Upload Claude live bare artifacts
         if: always()
@@ -339,8 +426,16 @@ jobs:
           echo "SPACEDOCK_TEST_TMP_ROOT=$RUNNER_TEMP/spacedock-live/$GITHUB_JOB" >> "$GITHUB_ENV"
 
       - name: Install Claude Code
+        env:
+          CLAUDE_VERSION: ${{ inputs.claude_version }}
         run: |
-          curl -fsSL https://claude.ai/install.sh | bash
+          if [ -n "$CLAUDE_VERSION" ]; then
+            echo "Installing pinned Claude Code version: $CLAUDE_VERSION"
+            curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_VERSION"
+          else
+            echo "Installing latest Claude Code (no pin)"
+            curl -fsSL https://claude.ai/install.sh | bash
+          fi
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Configure git identity
@@ -350,12 +445,42 @@ jobs:
           git config --global init.defaultBranch main
 
       - name: Show tool versions
+        env:
+          CLAUDE_VERSION: ${{ inputs.claude_version }}
         run: |
-          claude --version
-          uv --version
+          CLAUDE_VERSION_OUT=$(claude --version)
+          UV_VERSION_OUT=$(uv --version)
+          echo "$CLAUDE_VERSION_OUT"
+          echo "$UV_VERSION_OUT"
+          {
+            echo "### Tool versions"
+            if [ -n "$CLAUDE_VERSION" ]; then
+              echo "- Claude Code pin requested: \`$CLAUDE_VERSION\`"
+            else
+              echo "- Claude Code pin requested: _none (installer default)_"
+            fi
+            echo "- Installed \`claude --version\`: \`$CLAUDE_VERSION_OUT\`"
+            echo "- Installed \`uv --version\`: \`$UV_VERSION_OUT\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Claude live suite (opus)
-        run: make test-live-claude-opus
+        env:
+          TEST_SELECTOR: ${{ inputs.test_selector }}
+          EFFORT_OVERRIDE: ${{ inputs.effort_override }}
+        run: |
+          if [ -n "$TEST_SELECTOR" ]; then
+            echo "Running selector: $TEST_SELECTOR"
+            if [ -n "$EFFORT_OVERRIDE" ]; then
+              EFFORT_FLAG="$EFFORT_OVERRIDE"
+            else
+              EFFORT_FLAG="low"
+            fi
+            echo "Opus effort: $EFFORT_FLAG"
+            unset CLAUDECODE
+            uv run pytest "$TEST_SELECTOR" --runtime claude --model opus --effort "$EFFORT_FLAG" -v
+          else
+            make test-live-claude-opus
+          fi
 
       - name: Upload Claude live opus artifacts
         if: always()
@@ -472,7 +597,21 @@ jobs:
           uv --version
 
       - name: Run Codex live suite
-        run: make test-live-codex
+        env:
+          TEST_SELECTOR: ${{ inputs.test_selector }}
+          EFFORT_OVERRIDE: ${{ inputs.effort_override }}
+        run: |
+          if [ -n "$TEST_SELECTOR" ]; then
+            echo "Running selector: $TEST_SELECTOR"
+            EFFORT_ARGS=()
+            if [ -n "$EFFORT_OVERRIDE" ]; then
+              EFFORT_ARGS=(--effort "$EFFORT_OVERRIDE")
+            fi
+            uv run python scripts/run_pytest_tier.py --allow-no-tests -- \
+              uv run pytest "$TEST_SELECTOR" --runtime codex "${EFFORT_ARGS[@]}" -v
+          else
+            make test-live-codex
+          fi
 
       - name: Upload Codex live artifacts
         if: always()
