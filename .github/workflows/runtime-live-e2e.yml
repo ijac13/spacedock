@@ -8,6 +8,21 @@ on:
         description: "Approved PR number to validate with the live runtime suite"
         required: true
         type: string
+      claude_version:
+        description: "Pin Claude Code to a specific version (e.g. 2.1.107, stable, latest). Empty = installer default."
+        required: false
+        type: string
+        default: ""
+      test_selector:
+        description: "Pytest nodeid or path to run instead of the full make target (e.g. tests/test_foo.py::test_bar). Empty = full make target."
+        required: false
+        type: string
+        default: ""
+      effort_override:
+        description: "Override --effort passed to pytest (e.g. low, high, xhigh). Only applied when test_selector is set. Empty = no --effort flag."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
