@@ -10,6 +10,7 @@ verdict: PASSED
 worktree: 
 issue:
 pr:
+archived: 2026-04-16T14:27:00Z
 ---
 
 Spacedock's Codex install story is still split across manual skill symlinks and legacy `.claude-plugin` packaging. That leaves users with two mismatched install paths and no clear Codex marketplace entry to discover locally. The current goal is packaging and install ergonomics only: make Spacedock installable as a Codex plugin without changing runtime behavior, workflow semantics, or stage execution logic.
