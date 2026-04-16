@@ -121,3 +121,79 @@ Baseline AC: `425+ pass count`. Achieved 426 (up one from the 425 baseline cited
 Per dispatch note #12: **offline + single live smoke**. Offline (`make test-static`) is green. For the live smoke, `test_gate_guardrail.py` at `opus` is the most direct confirmation — the gate-presentation milestone is quick (~120s target) and the `expect_exit` at 180s lets us confirm the watcher correctly closes down a budget-capped run. Alternatively `test_merge_hook_guardrail.py` at `opus` / `medium` effort exercises a more complex two-phase flow but costs more wallclock.
 
 All six migrations follow the pilot template from #173 verbatim; structural risk is low. The real test is that the per-step timeouts are tuned correctly — the smoke will surface any that are too tight.
+
+## Stage Report (validation)
+
+Fresh validation pass. Live E2E deferred to captain post-merge per the ideation agreement; offline-only verification here.
+
+### Commit scope audit
+
+Each commit touches only its declared test file. No changes to `scripts/test_lib.py`, `scripts/` (no `fo_stream_watcher.py` on this branch — `FOStreamWatcher` / `run_first_officer_streaming` / predicate helpers / `LogParser` / `run_first_officer` all live in `scripts/test_lib.py`, which is byte-identical to `main` — `git diff main..HEAD -- scripts/test_lib.py` returns 0 lines), `agents/`, or `references/`.
+
+| Commit | File | LOC | Scope |
+|---|---|---|---|
+| `0e855813` | `tests/test_gate_guardrail.py` | +23/-3 | In-scope |
+| `6790dde0` | `tests/test_merge_hook_guardrail.py` | +53/-8 | In-scope |
+| `6350c3dd` | `tests/test_feedback_keepalive.py` | +43/-13 | In-scope |
+| `86d61dd3` | `tests/test_team_dispatch_sequencing.py` | +25/-8 | In-scope |
+| `d39c4eba` | `tests/test_dispatch_names.py` | +19/-3 | In-scope |
+| `47c4c4e9` | `tests/test_rebase_branch_before_push.py` | +35/-10 | In-scope |
+
+No out-of-scope edits. No framework file modifications.
+
+### `make test-static` result
+
+```
+426 passed, 22 deselected, 10 subtests passed in 19.87s
+```
+
+Matches the implementation-stage number (426). Meets AC-3 (`425+`).
+
+### Collection smoke
+
+`uv run pytest --collect-only` across all six migrated tests returns `6 tests collected in 0.02s` with no import errors.
+
+### Per-migration verification
+
+| # | Test | Markers preserved | Streaming CM | Labeled `w.expect` | `expect_exit` | Post-hoc `LogParser` justified | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | `test_gate_guardrail` | `live_claude`, `live_codex`, `serial` | Yes (claude path) | 2 (240s, 120s) | 180s | Yes — guardrail-citation scrub operates on concatenated FO text (whole-log scrub-and-search) | PASSED |
+| 2 | `test_merge_hook_guardrail` | `live_claude`, `live_codex` | Yes (claude path) | 2 hook / 1 no-mods (180s, 300s) | 300s | Yes — `check_merge_outcome` verifies filesystem state (hook file, archive, worktree cleanup) | PASSED |
+| 3 | `test_feedback_keepalive` | `live_claude` | Yes | 2 (180s, 240s) | 300s | Yes — `_scan_keepalive_events` correlates impl-dispatch → completion → validation-dispatch cross-entry, and Tier 2 classifier distinguishes `SendMessage`-to-impl vs fresh `Agent()` dispatch | PASSED |
+| 4 | `test_team_dispatch_sequencing` | `live_claude`, `teams_mode` | Yes | 2 (180s, 240s) | 240s | Yes — AC5 sequencing invariant is a whole-log property ("no assistant message anywhere mixes TeamCreate/TeamDelete with Agent") | PASSED |
+| 5 | `test_dispatch_names` | `live_claude`, `xfail(strict=False, reason="pending #160 …")` verbatim with full reason | Yes | 2 (180s, 240s) | 240s | Yes — entity state (`status=done`, `completed` timestamp) + `dispatch_count >= 2` for the xpass branch | PASSED |
+| 6 | `test_rebase_branch_before_push` | `live_claude`, `serial`, `teams_mode`, `xfail(strict=False, reason="pending #158 …")` verbatim with full reason | Yes | 3 (240s, 180s, 180s) | 180s | Yes — git-wrapper push ordering, bare-remote rebase verification via `merge-base`, gh-stub PR check, entity frontmatter — all post-run git/filesystem state | PASSED |
+
+All six tests invoke `run_first_officer_streaming(...)` as a context manager, use at least one `w.expect(...)` with `label` and `timeout_s`, and end with `w.expect_exit(timeout_s=...)`. All `pytest.mark` decorators (including `xfail` markers with `reason` and `strict=False`) are preserved verbatim against the originals on `main`.
+
+### Timeout spot-check
+
+Per-step timeouts against entity guidelines (short 60-120s; team-mode spawn + first Agent 120-180s; stage transitions 180-240s; `expect_exit` 120-240s):
+
+- `test_gate_guardrail`: 240s (gate review — stage transition) / 120s (at-gate — short milestone after the gate arrives) / `expect_exit` 180s — within guidelines.
+- `test_merge_hook_guardrail`: 180s (ensign dispatch — team-mode + first Agent) / 300s (Bash write to `_merge-hook-fired.txt`) / `expect_exit` 300s. Both 300s values exceed the 240s guideline ceiling but are defensible: the hook-file write follows a full ensign round-trip that does local merge work, and `expect_exit` covers post-hook archive cleanup. Not flagged as a defect, but noted as the most timeout-sensitive of the six.
+- `test_feedback_keepalive`: 180s (impl ensign) / 240s (validation ensign after impl completion — stage transition) / `expect_exit` 300s. The 300s on `expect_exit` is justified by the full rejection → feedback → re-review round-trip the test drives. Slightly above the 240s ceiling but appropriate.
+- `test_team_dispatch_sequencing`: 180s (first Agent — team-mode spawn) / 240s (second Agent — stage transition) / `expect_exit` 240s — all within guidelines.
+- `test_dispatch_names`: 180s / 240s / `expect_exit` 240s — within guidelines.
+- `test_rebase_branch_before_push`: 240s (push origin main — stage transition) / 180s (push branch) / 180s (gh pr create) / `expect_exit` 180s — within guidelines.
+
+The #173 entity body explicitly notes "Start conservative and tighten once green" — the two modest over-ceiling values in `test_merge_hook_guardrail` and `test_feedback_keepalive` are consistent with that guidance and should be retuned only after live-smoke data is available.
+
+### Post-hoc `LogParser` retention audit
+
+Each retained post-hoc `LogParser` pass is justified against the entity body's §"Migration pattern" item 6 ("Keep the final `LogParser` pass only for aggregate assertions that cannot be expressed as a single milestone"):
+
+- Gate guardrail: whole-log regex scrub-and-search.
+- Merge hook guardrail: filesystem state verification.
+- Feedback keepalive: cross-entry correlation (shutdown-between-windows + routing classifier).
+- Team dispatch sequencing: whole-log tool-name invariant.
+- Dispatch names: entity state + dispatch count (xpass branch).
+- Rebase branch: git-command-against-post-run-state + bare-remote inspection.
+
+All six retentions match the implementation report's per-migration rationale verbatim. No retention is reducible to a single `w.expect(...)` predicate without losing test coverage.
+
+### Recommendation
+
+**APPROVED for merge.** All six migrations PASSED structural, marker-preservation, timeout-guideline, and post-hoc-retention checks. `make test-static` green at 426 passed. No framework files modified. Commit scopes are surgical — each commit is a single-file migration with no incidental changes.
+
+Live smoke is deferred to captain post-merge per ideation agreement. The two timeouts above the 240s guideline ceiling (`test_merge_hook_guardrail` 300s, `test_feedback_keepalive` 300s `expect_exit`) are defensible as "conservative starting values" per the entity's own tuning guidance; flag them as candidates for retightening in a follow-up after the first live smoke accumulates wall-clock data.
