@@ -1482,5 +1482,169 @@ class TestSharedCoreProbeDiscipline:
         assert "usage presence is not existence evidence" in text
 
 
+_STANDING_MOD_BODY = """---
+name: comm-officer
+description: Standing prose-polishing teammate for this workflow
+version: 0.1.0
+standing: true
+---
+
+# Comm Officer
+
+## Hook: startup
+
+- `subagent_type: general-purpose`
+- `name: comm-officer`
+- `team_name: {current team}`
+- `model: sonnet`
+
+## Agent Prompt
+
+You are the comm officer. Reply with polished prose.
+"""
+
+
+_NON_STANDING_MOD_BODY = """---
+name: pr-merge
+description: PR merge helper (not a standing teammate)
+version: 0.1.0
+---
+
+# PR merge
+
+## Hook: merge
+
+- runs on validation PASSED
+
+## Agent Prompt
+
+Trivial.
+"""
+
+
+def _write_team_config(home: Path, team: str, members: list) -> Path:
+    teams_dir = home / ".claude" / "teams" / team
+    teams_dir.mkdir(parents=True, exist_ok=True)
+    config_path = teams_dir / "config.json"
+    config_path.write_text(json.dumps({"name": team, "members": members}))
+    return config_path
+
+
+def _run_build_with_home(wf_dir: Path, stdin_data: dict, home: Path, cwd: Path | None = None) -> subprocess.CompletedProcess:
+    env = {**os.environ, "HOME": str(home)}
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), "build", "--workflow-dir", str(wf_dir)],
+        input=json.dumps(stdin_data),
+        capture_output=True,
+        text=True,
+        cwd=cwd or wf_dir.parent,
+        env=env,
+    )
+
+
+class TestBuildStandingTeammateEnumeration:
+    """AC-13: `claude-team build` auto-enumerates alive standing teammates into prompts."""
+
+    _SECTION_HEADING = "### Standing teammates available in your team"
+
+    def test_build_emits_standing_section_when_alive(self, tmp_path):
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        mods_dir = wf_dir / "_mods"
+        mods_dir.mkdir()
+        (mods_dir / "comm-officer.md").write_text(_STANDING_MOD_BODY)
+        _write_team_config(
+            tmp_path,
+            "active-team",
+            [{"name": "team-lead"}, {"name": "comm-officer"}],
+        )
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "team_name": "active-team",
+            "bare_mode": False,
+        }
+        result = _run_build_with_home(wf_dir, inp, home=tmp_path)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert self._SECTION_HEADING in out["prompt"]
+        assert "comm-officer" in out["prompt"]
+        assert "Standing prose-polishing teammate" in out["prompt"]
+        # Must be injected BEFORE the Completion Signal block so the literal
+        # SendMessage(to="team-lead", ...) line stays at end-of-prompt.
+        assert out["prompt"].index(self._SECTION_HEADING) < out["prompt"].index("### Completion Signal")
+
+    def test_build_omits_standing_section_when_absent(self, tmp_path):
+        """Standing mod declared but matching member NOT alive in team config."""
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        mods_dir = wf_dir / "_mods"
+        mods_dir.mkdir()
+        (mods_dir / "comm-officer.md").write_text(_STANDING_MOD_BODY)
+        _write_team_config(
+            tmp_path,
+            "solo-team",
+            [{"name": "team-lead"}],
+        )
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "team_name": "solo-team",
+            "bare_mode": False,
+        }
+        result = _run_build_with_home(wf_dir, inp, home=tmp_path)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert self._SECTION_HEADING not in out["prompt"]
+
+    def test_build_omits_standing_section_in_bare_mode(self, tmp_path):
+        """Bare mode has no team_name → no section even if mods exist."""
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        mods_dir = wf_dir / "_mods"
+        mods_dir.mkdir()
+        (mods_dir / "comm-officer.md").write_text(_STANDING_MOD_BODY)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "bare_mode": True,
+        }
+        result = _run_build_with_home(wf_dir, inp, home=tmp_path)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert self._SECTION_HEADING not in out["prompt"]
+
+    def test_build_omits_standing_section_when_no_standing_mods(self, tmp_path):
+        """`_mods/` exists but contains only non-standing mods → no section."""
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        mods_dir = wf_dir / "_mods"
+        mods_dir.mkdir()
+        (mods_dir / "pr-merge.md").write_text(_NON_STANDING_MOD_BODY)
+        _write_team_config(
+            tmp_path,
+            "some-team",
+            [{"name": "team-lead"}, {"name": "pr-merge"}],
+        )
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "team_name": "some-team",
+            "bare_mode": False,
+        }
+        result = _run_build_with_home(wf_dir, inp, home=tmp_path)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        assert self._SECTION_HEADING not in out["prompt"]
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__]))

@@ -273,7 +273,32 @@ def cmd_build(args):
         'Every checklist item must appear in your report. Do not omit items.'
     )
 
-    # 9. Completion signal (conditional, team mode only)
+    # 9. Standing teammates available (conditional: team mode, alive members found)
+    standing_teammates = enumerate_alive_standing_teammates(workflow_dir, team_name)
+    if standing_teammates:
+        lines = [
+            '### Standing teammates available in your team',
+            '',
+            'The FO has spawned these standing teammates; you MAY route to them via '
+            'SendMessage. Best-effort, non-blocking, 2-minute timeout; proceed with '
+            'un-polished/un-reviewed content if no reply.',
+            '',
+        ]
+        for name, description in standing_teammates:
+            desc = description or 'standing teammate'
+            lines.append(
+                f'- **{name}** ({desc}): SendMessage with the relevant input '
+                f'shape; reply format per the mod.'
+            )
+        lines.append('')
+        lines.append(
+            'Full routing contract: see '
+            '`skills/first-officer/references/first-officer-shared-core.md` '
+            '`## Standing Teammates`.'
+        )
+        prompt_parts.append('\n'.join(lines))
+
+    # 10. Completion signal (conditional, team mode only)
     if not bare_mode and team_name:
         entity_file_ref = worktree_entity_path if worktree_path else entity_path
         prompt_parts.append(
@@ -413,6 +438,52 @@ def extract_runtime_models(jsonl_path: str) -> set[str]:
             if model:
                 models.add(model)
     return models
+
+
+def enumerate_alive_standing_teammates(workflow_dir: str, team_name) -> list[tuple[str, str]]:
+    """Return [(name, description)] for alive standing teammates in the given team.
+
+    Scans `{workflow_dir}/_mods/*.md` for mod files with `standing: true`
+    in frontmatter (parsed via parse_mod_metadata). For each such mod,
+    cross-references the declared name against the team's config.json
+    members list via member_exists. Returns only entries for teammates
+    that are currently alive in `team_name`.
+
+    Degenerate cases return an empty list:
+    - `team_name` is None or empty (bare mode)
+    - no `_mods/` directory exists under `workflow_dir`
+    - no `standing: true` mods found
+    - no declared teammate is alive in the team
+
+    The name used for the aliveness check comes from the mod's
+    `## Hook: startup` section (authoritative — this is the same name
+    `claude-team spawn-standing` hands to Agent() at spawn time). The
+    description comes from the mod frontmatter's `description` field.
+    """
+    if not team_name:
+        return []
+
+    mods_dir = os.path.join(workflow_dir, "_mods")
+    if not os.path.isdir(mods_dir):
+        return []
+
+    alive = []
+    for mod_path in sorted(glob.glob(os.path.join(mods_dir, "*.md"))):
+        try:
+            meta = parse_mod_metadata(mod_path)
+        except (ValueError, OSError):
+            continue
+        if not meta["standing"]:
+            continue
+        hook_config = _parse_hook_startup_spawn_config(mod_path)
+        declared_name = hook_config.get("name") or meta["name"]
+        if not declared_name:
+            continue
+        if not member_exists(team_name, declared_name):
+            continue
+        description = meta["frontmatter"].get("description", "")
+        alive.append((declared_name, description))
+    return alive
 
 
 def member_exists(team: str, name: str) -> bool:
