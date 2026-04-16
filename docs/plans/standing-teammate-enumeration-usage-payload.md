@@ -10,6 +10,7 @@ score: 0.55
 worktree: .worktrees/spacedock-ensign-standing-teammate-enumeration-usage-payload
 issue:
 pr:
+mod-block: merge:pr-merge
 ---
 
 ## Problem Statement
