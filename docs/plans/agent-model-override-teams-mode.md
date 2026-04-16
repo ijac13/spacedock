@@ -31,7 +31,11 @@ In bare mode (no `team_name`), `Agent(model="haiku")` works correctly — `claud
 
 ## Correlation with model cutover
 
-Failure severity increased when the default opus pointer rotated from `claude-opus-4-6` to `claude-opus-4-7` between 2026-04-15 and 2026-04-16. The bug existed under `4-6` (10% propagation) but was masked by the weak assertion. Under `4-7` propagation dropped to 0%.
+Failure severity increased when the default opus pointer rotated from `claude-opus-4-6` to `claude-opus-4-7` between 2026-04-15 and 2026-04-16 (Claude Code 2.1.110 → 2.1.111 default-alias flip, verified by the 2026-04-16 session bisection). The bug existed under `4-6` (10% propagation) but was masked by the weak assertion; under `4-7` propagation dropped to 0%. The cutover amplified the bug rather than introducing it.
+
+## Distinction from the standing-teammate opus-4-7 regression
+
+The 2.1.110 → 2.1.111 default-alias flip also affects `test_standing_teammate_spawns_and_roundtrips`, but through a different mechanism. That test fails because `claude-opus-4-7` at low effort hallucinates checklist completion (per the Opus 4.7 migration guide's stricter-effort calibration), not because `Agent(model=...)` propagation breaks. Its mitigation — pin `--model claude-opus-4-6` via the `model_override` workflow input (#176) or bump effort — is orthogonal to #171's Agent-propagation bug. Resolving one does not resolve the other.
 
 ## Current mitigation
 
