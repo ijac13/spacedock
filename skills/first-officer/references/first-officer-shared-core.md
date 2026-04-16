@@ -79,7 +79,7 @@ For each entity reported by `status --next`:
 
 Feedback-stage worker instructions must preserve this rule: a review stage checks and reports on what was produced; it does not silently take over the prior stage.
 
-**Routing through a standing prose-polisher.** When composing drafts for captain review (PR bodies, gate review summaries, long narrative entity-body sections, debrief content), the FO MAY route through a live standing prose-polisher (convention: `comm-officer`). Check team-config membership via `member_exists` before routing. Best-effort, non-blocking, 2-minute timeout; if the teammate is absent, proceed with un-polished text. **Out of scope for polish routing:** live captain-chat replies, short operational statuses (`pushed`, `tests green`, `PR opened`), tool-call outputs, commit messages, transient logs. Polish is a deliberate-draft discipline, not a live-turn reflex. Workers dispatched via `claude-team build` discover the same teammates automatically — a `### Standing teammates available in your team` section is injected when standing-teammate mods in `{workflow_dir}/_mods/` match alive members in the team config. The FO does not add per-dispatch routing opt-ins manually.
+**Routing through a standing prose-polisher.** When composing drafts for captain review (PR bodies, gate review summaries, long narrative entity-body sections, debrief content), the FO MAY route through a live standing prose-polisher (convention: `comm-officer`). Check team-config membership via `member_exists` before routing. Best-effort, non-blocking, 2-minute timeout; if the teammate is absent, proceed with un-polished text. **Out of scope for polish routing:** live captain-chat replies, short operational statuses (`pushed`, `tests green`, `PR opened`), tool-call outputs, commit messages, transient logs. Polish is a deliberate-draft discipline, not a live-turn reflex. Workers dispatched via `claude-team build` discover the same teammates automatically via their build-time prompt section — a `### Standing teammates available in your team` section is injected when standing-teammate mods in `{workflow_dir}/_mods/` match alive members in the team config. The FO does not add per-dispatch routing opt-ins manually.
 
 ## Completion and Gates
 
@@ -114,7 +114,7 @@ When this comparator forces fresh dispatch because of a model mismatch, the FO M
 
 SendMessage(to="{agent}-{slug}-{completed_stage}", message="Advancing to next stage: {next_stage_name}\n\n### Stage definition:\n\n[STAGE_DEFINITION — copy the full ### stage subsection from the README verbatim]\n\n### Completion checklist\n\n[CHECKLIST — assemble from step 2]\n\nContinue working on {entity title}. The entity file is at {entity_file_path}. Do the work described in the stage definition. Update the entity file body with your findings or outputs. Commit before sending your completion message.")
 
-**If fresh dispatch:** Check whether the next stage has `feedback-to` pointing at the completed stage. If yes, keep the completed agent alive only while it remains addressable and eligible for later reuse. Otherwise, shut down the agent explicitly. Run `status --next` and dispatch the next stage.
+**If fresh dispatch:** Check whether the next stage has `feedback-to` pointing at the completed stage. If yes, keep the completed agent alive only while it remains addressable and eligible for later reuse. Otherwise, explicitly shut down the agent. Run `status --next` and dispatch the next stage.
 
 If the stage is gated:
 - never self-approve
