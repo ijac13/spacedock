@@ -274,12 +274,12 @@ def cmd_build(args):
     )
 
     # 9. Standing teammates available (conditional: team mode, alive members found)
-    standing_teammates = enumerate_alive_standing_teammates(workflow_dir, team_name)
+    standing_teammates = enumerate_declared_standing_teammates(workflow_dir, team_name)
     if standing_teammates:
         lines = [
             '### Standing teammates available in your team',
             '',
-            'The FO has spawned these standing teammates; you MAY route to them via '
+            'These standing teammates are available in your team; you MAY route to them via '
             'SendMessage. Best-effort, non-blocking, 2-minute timeout; proceed with '
             'un-polished/un-reviewed content if no reply.',
             '',
@@ -449,27 +449,26 @@ def extract_runtime_models(jsonl_path: str) -> set[str]:
     return models
 
 
-def enumerate_alive_standing_teammates(workflow_dir: str, team_name) -> list[tuple[str, str, str]]:
-    """Return [(name, description, mod_path)] for alive standing teammates in the given team.
+def enumerate_declared_standing_teammates(workflow_dir: str, team_name) -> list[tuple[str, str, str]]:
+    """Return [(name, description, mod_path)] for declared standing teammates.
 
     Scans `{workflow_dir}/_mods/*.md` for mod files with `standing: true`
-    in frontmatter (parsed via parse_mod_metadata). For each such mod,
-    cross-references the declared name against the team's config.json
-    members list via member_exists. Returns only entries for teammates
-    that are currently alive in `team_name`.
+    in frontmatter (parsed via parse_mod_metadata). Returns all declared
+    standing teammates from mod metadata, regardless of whether they are
+    currently alive in the team. This supports lazy-spawn: teammates may
+    not yet be spawned at dispatch time.
 
     Degenerate cases return an empty list:
     - `team_name` is None or empty (bare mode)
     - no `_mods/` directory exists under `workflow_dir`
     - no `standing: true` mods found
-    - no declared teammate is alive in the team
 
-    The name used for the aliveness check comes from the mod's
-    `## Hook: startup` section (authoritative — this is the same name
-    `claude-team spawn-standing` hands to Agent() at spawn time). The
-    description comes from the mod frontmatter's `description` field.
-    The mod_path lets callers re-read the same mod for per-teammate
-    payload extras (e.g., `## Routing Usage`) without re-globbing.
+    The name comes from the mod's `## Hook: startup` section
+    (authoritative — this is the same name `claude-team spawn-standing`
+    hands to Agent() at spawn time). The description comes from the mod
+    frontmatter's `description` field. The mod_path lets callers re-read
+    the same mod for per-teammate payload extras (e.g., `## Routing
+    Usage`) without re-globbing.
     """
     if not team_name:
         return []
@@ -478,7 +477,7 @@ def enumerate_alive_standing_teammates(workflow_dir: str, team_name) -> list[tup
     if not os.path.isdir(mods_dir):
         return []
 
-    alive = []
+    declared = []
     for mod_path in sorted(glob.glob(os.path.join(mods_dir, "*.md"))):
         try:
             meta = parse_mod_metadata(mod_path)
@@ -490,11 +489,9 @@ def enumerate_alive_standing_teammates(workflow_dir: str, team_name) -> list[tup
         declared_name = hook_config.get("name") or meta["name"]
         if not declared_name:
             continue
-        if not member_exists(team_name, declared_name):
-            continue
         description = meta["frontmatter"].get("description", "")
-        alive.append((declared_name, description, mod_path))
-    return alive
+        declared.append((declared_name, description, mod_path))
+    return declared
 
 
 def member_exists(team: str, name: str) -> bool:
@@ -713,8 +710,9 @@ def cmd_list_standing(args: argparse.Namespace) -> int:
 
     Used at FO boot (before team members exist) to enumerate which standing
     mods to hand to `spawn-standing`. This is NOT the same predicate as
-    `enumerate_alive_standing_teammates`, which also filters by team
-    membership (member_exists). Keep the two call paths distinct.
+    `enumerate_declared_standing_teammates`, which returns tuples of
+    (name, description, mod_path) for dispatch-prompt assembly. Keep the
+    two call paths distinct.
 
     Output format: one absolute mod path per line, sorted alphabetically
     by filename. Paths are whitespace-free by `_mods/*.md` naming
