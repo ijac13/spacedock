@@ -10,7 +10,7 @@ verdict:
 worktree: .worktrees/spacedock-ensign-codex-plugin-scaffold-for-spacedock-install
 issue:
 pr:
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 Spacedock's Codex install story is still split across manual skill symlinks and legacy `.claude-plugin` packaging. That leaves users with two mismatched install paths and no clear Codex marketplace entry to discover locally. The current goal is packaging and install ergonomics only: make Spacedock installable as a Codex plugin without changing runtime behavior, workflow semantics, or stage execution logic.
