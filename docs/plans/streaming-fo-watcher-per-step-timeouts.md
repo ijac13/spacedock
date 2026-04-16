@@ -1,13 +1,13 @@
 ---
 id: 173
 title: "Streaming FO watcher with per-step timeouts and progressive assertions"
-status: ideation
+status: implementation
 source: "CL observation during 2026-04-16 session — PR #107 CI (claude-live-opus) took 24m38s to surface a test failure that could have failed in ~120s with per-step timeouts. Post-hoc log parsing hides where in the sequence things stalled."
 started: 2026-04-16T21:55:52Z
 completed:
 verdict:
 score: 0.75
-worktree:
+worktree: .worktrees/spacedock-ensign-streaming-fo-watcher-per-step-timeouts
 issue:
 pr:
 ---
