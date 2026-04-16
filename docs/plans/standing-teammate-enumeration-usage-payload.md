@@ -277,3 +277,68 @@ Ready for ideation gate review.
 ### Summary
 
 Shipped the auto-enumeration payload upgrade: `claude-team build` now splices each alive standing teammate's `## Routing Usage` section beneath its enumerated header line (bullets preserved under a one-level indent; fallback to the existing one-liner when the section is absent, empty, or whitespace-only). Shipped the helper-side enumeration subcommand `claude-team list-standing --workflow-dir {wd}` alongside it, and refitted the Claude FO runtime adapter to consume its newline-delimited output in place of the prior inline `grep each mod file` path — one parser of mod frontmatter, not two. The pilot `comm-officer.md` mod gains a 10-line `## Routing Usage` section covering all four caller patterns with trigger phrases and reply-format summary. Test coverage: 7 payload cases + 4 list-standing cases + 7 prose cases (all new). Final `make test-static`: 413 passed. Ready for validation review.
+
+## Stage Report (validation)
+
+1. **Entity body + ideation + implementation report read — DONE.** Treated ACs 1–12 and the five staff-review folds as the validation spec. Implementation report claims 413 passed and five focused commits on `spacedock-ensign/standing-teammate-enumeration-usage-payload`.
+2. **Per-commit scope inspection — DONE.** Verified the five declared commits plus the docs commit land only on their declared surfaces:
+   - `d8c2087a` → `skills/commission/bin/claude-team` only (+58/-8).
+   - `a70dfee2` → `skills/commission/bin/claude-team` only (+53).
+   - `20c37bc2` → `docs/plans/_mods/comm-officer.md` only (+11).
+   - `a40c79b2` → `skills/first-officer/references/claude-first-officer-runtime.md` only (+1/-1).
+   - `0a359b61` → `tests/test_claude_team_list_standing.py` (new), `tests/test_claude_team_spawn_standing.py`, `tests/test_standing_teammate_prose.py` (all tests, +515).
+   Plus `53527321` (docs-only: implementation stage report into entity file). No out-of-scope edits.
+3. **`make test-static` rerun — DONE.** Result: **413 passed, 22 deselected, 10 subtests passed in 7.49s.** Matches the implementation report's 413 count. No failures.
+4. **AC-1 through AC-5 (dispatch payload) — all PASSED.**
+   - AC-1 (body rendered under header): `TestRoutingUsagePayload::test_routing_usage_body_rendered_with_bullets_preserved` asserts `- **comm-officer**` header line + indented body line with `pattern X` — PASSED.
+   - AC-2 (heading excluded): `test_routing_usage_heading_excluded` asserts literal `## Routing Usage` does NOT appear in prompt — PASSED.
+   - AC-3 (terminates at next `##`): `test_routing_usage_terminates_at_next_heading` asserts the `## Agent Prompt` body ("You are the comm officer", "Reply with polished prose") does NOT leak into the section body — PASSED.
+   - AC-4 (fallback for absent/empty/whitespace body — three separate cases per Note 3): `test_missing_routing_usage_falls_back`, `test_empty_routing_usage_falls_back`, `test_whitespace_only_routing_usage_falls_back` all assert the literal fallback line — PASSED.
+   - AC-5 (non-standing stays invisible): `test_non_standing_mod_ignored` asserts `pr-merge` absent and `comm-officer` present — PASSED.
+5. **AC-9 through AC-11 (`list-standing`) — all PASSED.**
+   - AC-9 (sorted absolute paths, exit 0): `TestListStandingMixed::test_sorted_absolute_paths` asserts exact `aa-mod.md\nzz-mod.md\n` stdout — PASSED.
+   - AC-10 (missing `_mods/`): `TestListStandingMissingModsDir::test_missing_mods_dir_empty_stdout_exit_zero` asserts empty stdout exit 0, no helper-emitted `error:` — PASSED.
+   - AC-11 (only non-standing): `TestListStandingOnlyNonStanding::test_only_non_standing_mods_empty_stdout_exit_zero` asserts empty stdout exit 0 — PASSED.
+6. **AC-6, AC-7, AC-12 (static grep contracts) — all PASSED.**
+   - AC-6 (pilot mod heading + ≤25 lines + four trigger phrases): `TestCommOfficerRoutingUsage::test_routing_usage_heading_present` / `test_routing_usage_within_line_cap` / `test_four_trigger_phrases_present`. Pilot body is 9 content lines (9/25 cap). All four trigger phrases (`polish this file`, `polish and write to`, `polish and edit`, `text.?passthrough`) present — PASSED.
+   - AC-7 (scope-discipline stays in `## Routing guidance`): `test_scope_discipline_stays_in_routing_guidance` asserts `does NOT polish`, `Direct chat replies`, `operational statuses` appear in `## Routing guidance` and do NOT leak into `## Routing Usage`. Note: the AC spec named `captain-chat` literally; the pilot mod phrases the same concept as `Direct chat replies to the captain`. The substitution is faithful to the AC's spirit (scope-discipline language stays in the right section) — PASSED.
+   - AC-12 (adapter documents `claude-team list-standing`, drops `grep each mod file`, preserves verbatim-discipline): `TestClaudeAdapterListStandingPath` three sub-tests. Grep of `claude-first-officer-runtime.md:36` confirms `claude-team list-standing --workflow-dir {wd}`, the `grep each mod file` phrase is absent, step 4 retains `Forward that spec verbatim` — PASSED.
+7. **AC-8 (regression) — PASSED.** Pre-existing classes `TestSpawnAbsent`, `TestSpawnPresent`, `TestEnumValidation`, `TestErrorPaths`, `TestPilotMod` in `test_claude_team_spawn_standing.py` and `TestClaudeAdapterProse`, `TestSharedCoreConcept`, `TestFORoutingProse` in `test_standing_teammate_prose.py` all present and included in the green run (all within the 413 passed).
+8. **Five staff-review folds — all landed in code.**
+   - Note 1 (extraction terminates at `## ` or EOF, no special-case): **landed** at `skills/commission/bin/claude-team:548-551` — loop is `for i in range(start + 1, len(lines)): if lines[i].startswith("## "): end = i; break`. No `## Agent Prompt` special-case.
+   - Note 2 (bullet-preservation AC asserts indented `  - ` lines, not just body-string presence): **landed** at `tests/test_claude_team_spawn_standing.py:428-430` — `assert any(ln.startswith("  ") and "pattern X" in ln for ln in following)`.
+   - Note 3 (empty/whitespace-only → fallback; helper + three tests): **landed**. Helper at `skills/commission/bin/claude-team:554-559` strips leading/trailing blank lines then returns `None` when `body_lines` is empty. Three separate tests (`test_missing_routing_usage_falls_back`, `test_empty_routing_usage_falls_back`, `test_whitespace_only_routing_usage_falls_back`).
+   - Note 4 (scope-discipline assertion in the prose-test file, not helper-behaviour file): **landed** at `tests/test_standing_teammate_prose.py:147-164` (`TestCommOfficerRoutingUsage::test_scope_discipline_stays_in_routing_guidance`). No duplicate in the helper test file.
+   - Note 5 (`cmd_list_standing` docstring names the whitespace-free convention + `--json` / `-0` escape hatches): **landed** at `skills/commission/bin/claude-team:719-722` — docstring paragraph reads "Paths are whitespace-free by `_mods/*.md` naming convention (kebab-case) — if that ever changes, switch to `-0` NUL delimiting or `--json`."
+9. **Hidden-coupling constraint — PASSED.** `cmd_list_standing` (`skills/commission/bin/claude-team:711-751`) filters only on `meta["standing"]` — no `member_exists` call. `enumerate_alive_standing_teammates` (`skills/commission/bin/claude-team:452-497`) calls `member_exists(team_name, declared_name)` at line 493 and skips non-alive mods. The two predicates remain distinct. The list-standing docstring explicitly flags the difference ("This is NOT the same predicate as `enumerate_alive_standing_teammates`…").
+10. **Live spot-check — PASSED.**
+    - `claude-team list-standing --workflow-dir docs/plans` (run from the repo root of the worktree) emitted exactly one line: `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-standing-teammate-enumeration-usage-payload/docs/plans/_mods/comm-officer.md`. Exit 0.
+    - `claude-team build` (run against an isolated fixture that copies the worktree's pilot mod + a stage README + a minimal entity whose worktree field points to an existing dir + a live team containing a `comm-officer` member) produced the following `### Standing teammates available in your team` section:
+
+      ```
+      ### Standing teammates available in your team
+
+      The FO has spawned these standing teammates; you MAY route to them via SendMessage. Best-effort, non-blocking, 2-minute timeout; proceed with un-polished/un-reviewed content if no reply.
+
+      - **comm-officer** (Standing prose-polishing teammate for this workflow)
+        Four caller patterns (mirror Claude's Read/Edit/Write tool shapes). Pick the pattern first, then format the SendMessage body to match.
+
+        1. **Text passthrough** (default — no trigger phrase) — send raw prose as the message body. Reply: polished text first, then `---` + `**Polish notes**` block. Caller places the result.
+        2. **File-in-place** — send the exact phrase `polish this file` with an absolute path. Teammate Edits/Writes the file in place. Reply: one-line receipt + `---` + `**Polish notes**`.
+        3. **Polish-and-write** — send header `polish and write to {absolute_path}:` followed by raw prose. Teammate Writes the polished prose to that path (create-or-overwrite). Reply: one-line receipt + `---` + `**Polish notes**`.
+        4. **Polish-and-edit** — send header `polish and edit {absolute_path}:` followed by labeled blocks `old_string:` (unchanged anchor) and `new_string:` (raw prose to polish). Teammate polishes `new_string` and Edits the file at that anchor. Reply: one-line receipt + `---` + `**Polish notes**`.
+
+        Notes block fields: `Mode`, `Guide applied`, `Changes`, `Flagged for review`. Absolute paths required for patterns 2-4; no inferred targets. Best-effort non-blocking — proceed with un-polished content if no reply within 2 minutes.
+
+      Full routing contract: see `skills/first-officer/references/first-officer-shared-core.md` `## Standing Teammates`.
+      ```
+
+      Confirms: teammate header line `- **comm-officer** (...)` present, `## Routing Usage` body spliced beneath it under a two-space indent, bullets preserved, heading excluded, termination at next section boundary correct, `Full routing contract` footer intact.
+11. **Stage Report — DONE** (this section).
+12. **Commit on implementation branch — DONE.** Committed this validation report. No merge, no push.
+
+### Summary
+
+All 12 ACs PASSED. All 5 staff-review folds landed in code (verified at named source locations). Hidden-coupling constraint preserved (`list-standing` ≠ `enumerate_alive_standing_teammates` predicates). `make test-static` result: 413 passed, matches the implementation report. Live spot-check confirms `list-standing` emits the expected absolute path and `claude-team build` splices the pilot mod's `## Routing Usage` body beneath the teammate header with bullets preserved. No out-of-scope edits across the six commits.
+
+**Recommendation: PASSED.**
