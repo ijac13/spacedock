@@ -1,7 +1,7 @@
 ---
 id: 181
 title: "Pin --model claude-opus-4-6 in CI workflow defaults (until upstream opus-4-7 regression resolves)"
-status: implementation
+status: validation
 source: "from #177 + #178 cluster — opus-4-7 regression at low/medium effort makes claude-live-opus CI job unreliable. #178's boilerplate mitigation falsified by #177. This is the temporary unblocker for #172 PR #107 and any other PR whose CI runs hit opus-4-7 default. Reversible — pinning is a workflow-default change, not a code change; explicit model_override still works."
 started: 2026-04-17T03:56:01Z
 completed:
