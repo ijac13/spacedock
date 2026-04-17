@@ -1,13 +1,13 @@
 ---
 id: 180
 title: "Fix extra_args plumbing so workflow model_override reaches claude -p in live tests"
-status: backlog
+status: implementation
 source: "from #177 implementation outcome (AC-3 BROKEN, 2026-04-17 session) — workflow input model_override=claude-opus-4-6 was silently dropped because tests/test_standing_teammate_spawn.py:72 hardcodes --model opus and ignores pytest's --model CLI option"
-started:
+started: 2026-04-17T02:47:24Z
 completed:
 verdict:
 score: 0.7
-worktree:
+worktree: .worktrees/spacedock-ensign-model-override-plumbing-fix
 issue:
 pr:
 mod-block:
