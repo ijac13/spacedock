@@ -1,13 +1,13 @@
 ---
 id: 177
 title: "opus-4-7 ensign hallucination at low/medium effort — scope of impact across spacedock dispatches"
-status: ideation
+status: implementation
 source: "2026-04-16 session — PR #107/#105 CI failures bisected to Claude Code 2.1.110→2.1.111 default-alias flip from claude-opus-4-6 to claude-opus-4-7. Live-CI evidence + fo-log.jsonl artifacts confirm the ensign subagent on opus-4-7 fabricates tool-call outcomes rather than issuing the tool calls."
 started: 2026-04-17T01:23:21Z
 completed:
 verdict:
 score: 0.85
-worktree:
+worktree: .worktrees/spacedock-ensign-opus-4-7-ensign-hallucination-scope
 issue:
 pr:
 ---
