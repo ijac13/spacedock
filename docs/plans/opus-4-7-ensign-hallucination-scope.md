@@ -111,7 +111,7 @@ Each AC has a specific verify command, a clear pass/fail line, and the evidence 
 **AC-1 — Live CI: `--model opus` + `--effort low` on stacked branch passes.**
 
 - Verify: dispatch `runtime-live-e2e.yml` against the stacked worktree branch with `claude_version=2.1.111`, `test_selector=tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips`, `effort_override=low`. Job: `claude-live-opus`.
-- Pass: job result `success`. The streaming watcher milestones for `SendMessage to echo-agent observed` and `ECHO: ping reply received` both fire within their per-step timeouts. Wallclock ≈ 2-3 minutes (matching the `claude-opus-4-6` baseline established in #176).
+- Pass: job result `success`. The streaming watcher milestones for `SendMessage to echo-agent observed` and `ECHO: ping reply received` both fire within their per-step timeouts. Wallclock ≈ 2-3 minutes is the *pass* expectation (matching the `claude-opus-4-6` baseline established in #176); a fail-fast `StepTimeout` at 60-180s is not directly comparable to a pass wallclock — per-milestone times from the streaming watcher are the right granularity for fail attribution.
 - Fail: any milestone times out, or job result `failure`. The streaming watcher's labeled `StepTimeout` identifies which milestone the boilerplate failed to discipline.
 - Capture: run URL, the `claude-live-opus` job's `assistant.message.model` stamps from `fo-log.jsonl` (proves we actually ran on `opus-4-7`), wallclock.
 
@@ -122,15 +122,16 @@ Each AC has a specific verify command, a clear pass/fail line, and the evidence 
 
 **AC-3 — Negative control: `--model claude-opus-4-6` on stacked branch passes.**
 
-- Verify: same dispatch as AC-1 with `effort_override=low` and `model_override=claude-opus-4-6` (depends on the #176-follow-up `extra_args` plumbing fix; if that plumbing is still broken at experiment time, fall back to a local run with `--model claude-opus-4-6 --effort low` against the stacked worktree and capture the local wallclock + `fo-log.jsonl` model stamps as evidence).
+- Verify: same dispatch as AC-1 with `effort_override=low` and `model_override=claude-opus-4-6` (depends on the #176-follow-up `extra_args` plumbing fix; if that plumbing is still broken at experiment time, fall back to a local run with `--model claude-opus-4-6 --effort low` against the stacked worktree and capture the local wallclock + `fo-log.jsonl` model stamps as evidence). The local fallback MUST invoke `claude --version` matching the CI dispatch's `claude_version=2.1.111` — without that pin, a Claude Code version regression could mask as a model regression and contaminate the negative-control signal.
 - Pass: job (or local run) result `success`. Test passes in the expected ~2-3 minute window. Model stamps in `fo-log.jsonl` show `claude-opus-4-6`.
 - Fail: if this fails, the test itself is broken on the stacked branch and AC-1 / AC-2 results cannot be trusted. Stop the experiment and surface to the captain — the test must be fixed before the experiment can run.
-- Capture: run URL (or local wallclock + log path), model stamps, wallclock.
+- Capture: run URL (or local wallclock + log path), model stamps, wallclock, and for the local-fallback path the `claude --version` output proving 2.1.111.
 
 **AC-4 — Recommendation deliverable matches the outcome.**
 
-- If AC-1 and AC-2 both pass: write a debrief note to `docs/plans/opus-4-7-ensign-hallucination-scope.md` (Stage Report or a dedicated `## Outcome` section) recommending #178 ships as-is, citing the three run URLs and the wallclock numbers. The note explicitly unblocks #178's merge mod-block.
-- If AC-1 or AC-2 fails: write the same note recommending we pin `--model claude-opus-4-6` in workflow defaults and update `tests/README.md` (or equivalent developer-facing doc) to document the pin until the upstream Claude Code regression is resolved. Cite #176 as the plumbing dependency. File a small follow-up task (or note its need) covering the workflow-default change itself, since that change is mechanically separate from this experiment.
+- If AC-1 and AC-2 both pass: write a debrief note to `docs/plans/opus-4-7-ensign-hallucination-scope.md` (Stage Report or a dedicated `## Outcome` section) recommending #178 ships as-is, citing the three run URLs and the wallclock numbers. The note explicitly unblocks #178's merge mod-block. The recommendation covers the standing-teammate roundtrip surface only; broader confidence across the five impact surfaces enumerated in #177's Impact section requires follow-up scoping and is out of scope for this experiment.
+- If AC-1 or AC-2 fails (both fail, or either fails): write the same note recommending we pin `--model claude-opus-4-6` in workflow defaults and update `tests/README.md` (or equivalent developer-facing doc) to document the pin until the upstream Claude Code regression is resolved. Cite #176 as the plumbing dependency. File a small follow-up task (or note its need) covering the workflow-default change itself, since that change is mechanically separate from this experiment.
+- Mixed outcome (AC-1 PASS / AC-2 FAIL, or AC-2 PASS / AC-1 FAIL): treat as the FAIL path above. Any low/medium failure on the standard surface is shipping risk, so the recommendation is to pin `--model claude-opus-4-6` rather than ship #178 with a known effort-level gap. Note the mixed outcome explicitly in the recommendation so the next iteration of #178 can target the failing effort level.
 - Verify: the recommendation note exists in the entity body, references the captured run URLs, and states one of the two paths above unambiguously.
 - Pass: a future reader can determine from the entity alone which path was taken and why.
 
@@ -173,6 +174,7 @@ For the implementation stage, the following mechanics matter:
 
 - **Evidence the implementation stage MUST capture**:
   - Run URL for each CI dispatch (AC-1, AC-2, optionally AC-3).
+  - Experiment branch SHA at dispatch time (`gh run view` exposes it; record inline to survive any `--force-with-lease` rebases that advance the experiment branch mid-run).
   - Model stamp from each run's `fo-log.jsonl` `assistant.message.model` field — this proves the run actually executed on `claude-opus-4-7` (or `-6` for the control). Without this, a green AC-1/AC-2 could be a false positive caused by a silent alias resolution somewhere in the stack.
   - Wallclock per run, both the streaming watcher's reported milestone times and the overall job duration.
   - For any FAILED run: the labeled `StepTimeout` message identifying which milestone fired, plus a one-paragraph attribution against the same milestone in #178's stage report (does the boilerplate visibly fail to discipline this specific tool call shape?).
@@ -254,3 +256,39 @@ Independent second-opinion read on #177's ideation spec. Verdict: **APPROVE WITH
 ### One-line summary for the captain
 
 Ideation is structurally sound; APPROVE WITH CHANGES — two surgical fixes (AC-4 mixed-outcome path + AC-3 Claude Code version pin) and three minor capture/clarification gaps; no re-ideation needed.
+
+## Ideation Revision (post-staff-review)
+
+Folded the staff reviewer's APPROVE-WITH-CHANGES findings into the ideation in place:
+
+- **Surgical Fix #1 (AC-4 mixed-outcome path)**: AC-4 now has an explicit third bullet for mixed outcomes (AC-1 PASS / AC-2 FAIL or vice versa), routed to the FAIL path (pin `--model claude-opus-4-6`) since any low/medium failure on the standard surface is shipping risk.
+- **Surgical Fix #2 (AC-3 Claude Code version pin)**: AC-3's local-fallback now requires `claude --version` matching the CI dispatch's `claude_version=2.1.111`, with the version output added to the AC-3 capture list.
+- **Gap #1 (experiment-branch SHA capture)**: Implementation Notes evidence list now includes the experiment-branch SHA at dispatch time, with a note that `gh run view` exposes it and recording it inline survives `--force-with-lease` rebases.
+- **Gap #2 (AC-1 wallclock clarification)**: AC-1 Pass line now states that "wallclock ≈ 2-3 min" is the *pass* expectation and that fail-fast `StepTimeout` at 60-180s is not directly comparable; per-milestone times from the streaming watcher are the right granularity for fail attribution. AC-2 inherits via "identical shape to AC-1."
+- **Gap #3 (AC-4 PASS-deliverable surface-scope note)**: AC-4 PASS path now states the recommendation covers the standing-teammate roundtrip surface only, and broader confidence across the five impact surfaces enumerated in the Impact section requires follow-up scoping.
+
+The original Decision (lines 89-105), Test Plan, and Implementation Notes structure is unchanged — edits were surgical insertions/clarifications within already-flagged lines, not rewrites of unflagged sections. The `## Staff Review` and `## Stage Report (staff review)` sections are preserved verbatim as the audit record of what the reviewer found.
+
+## Stage Report (ideation revision)
+
+### Summary
+
+Folded all five staff-reviewer findings into #177's ideation in place. Two surgical AC fixes (AC-4 mixed-outcome path; AC-3 version pin) and three smaller gap closures (SHA capture; wallclock clarification; PASS-path surface-scope note). Decision, Test Plan, and Implementation Notes structure unchanged; Staff Review and its Stage Report preserved as audit record. Ready to re-present at the ideation gate.
+
+### Checklist
+
+1. **Read entity body in full.** DONE. Read all 258 lines including Decision (89-105), ACs (107-135), Test Plan (137-146), Implementation Notes (148-183), and the Staff Review section (208-233) that drives this revision.
+2. **Surgical Fix #1: AC-4 mixed-outcome path.** DONE. Added a third bullet to AC-4 covering mixed outcomes (AC-1 PASS / AC-2 FAIL or vice versa), routed to the FAIL path (pin `claude-opus-4-6`) per the staff reviewer's recommended treatment. Mixed outcome must be noted explicitly so the next iteration of #178 can target the failing effort level.
+3. **Surgical Fix #2: AC-3 Claude Code version pin.** DONE. AC-3's local-fallback path now requires `claude --version` matching CI's `claude_version=2.1.111`, with the rationale (a Claude Code version regression could mask as a model regression) stated inline. The capture list now includes the version output for the local-fallback path.
+4. **Gap #1: experiment-branch SHA capture.** DONE. Added a new bullet to the Implementation Notes evidence list (between run URL and model stamp) requiring the experiment branch SHA at dispatch time, with the staff reviewer's exact phrasing about `gh run view` exposing it and recording it inline to survive `--force-with-lease` rebases.
+5. **Gap #2: AC-1 wallclock clarification.** DONE. AC-1 Pass line now distinguishes the 2-3 min wallclock as the *pass* expectation and notes that fail-fast `StepTimeout` at 60-180s is not directly comparable. AC-2's "identical shape to AC-1" inherits the clarification automatically.
+6. **Gap #3: AC-4 PASS-deliverable surface-scope note.** DONE. AC-4 PASS path now ends with a sentence that the recommendation covers the standing-teammate roundtrip surface only, and broader confidence across the five impact surfaces enumerated in #177's Impact section requires follow-up scoping.
+7. **Do not modify Staff Review or its Stage Report.** DONE. Both sections (lines 208-258 in the pre-revision file) are untouched. Verified by inspection — only AC-1, AC-3, AC-4, and the Implementation Notes evidence list were edited.
+8. **Do not broaden scope.** DONE. No new ACs added; Decision, Test Plan, and unflagged sections of Implementation Notes preserved verbatim. All edits sit inside already-flagged lines.
+9. **Append `## Ideation Revision (post-staff-review)` section.** DONE. Cross-references each fold-in by the staff reviewer's labels (Surgical Fix #1, #2, Gap #1, #2, #3) and confirms the original Decision/Test Plan/Implementation Notes structure is unchanged.
+10. **Commit on main.** Pending — will run immediately after this report write completes. Working tree was clean on `main` at start; commit message per the dispatch: `ideation-revision: #177 fold staff-review findings — AC-4 mixed-outcome path, AC-3 version pin, SHA capture, wallclock clarification, surface-scope note`.
+11. **`## Stage Report (ideation revision)` at very end.** DONE (this section).
+
+### One-line summary for the captain
+
+Staff-review fold-in complete: two surgical AC fixes and three gap closures applied verbatim; Decision/Test Plan/Implementation Notes structure unchanged; ready to re-present at the ideation gate.
