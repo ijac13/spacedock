@@ -316,13 +316,27 @@ Out-of-scope per original entity discipline (restated):
 - Forcing API tool choice (`tool_choice: any` or similar SDK-level mitigation).
 - Iterating on #178's prose. The original experiment killed that path.
 
+### Outcome Map
+
+3 ACs × {pass, fail} = 8 combinations. The five most informative outcomes and their recommended follow-ups:
+
+| Outcome | Interpretation | Recommended follow-up |
+|---|---|---|
+| **All-three PASS** | Section richness is the priming AND sonnet works AND team-mode shape matters. | File two follow-ups: (1) compress the section emission per AC-R2; (2) consider `--model sonnet` as a workflow default (belt-and-suspenders). |
+| **All-three FAIL** | Regression is broader than prompt-shape and broader than `opus-4-7`. | Recommend Layer 3 FO-side post-completion verification path AND surface to upstream as a model-level regression. |
+| **AC-R1 PASS + AC-R2 FAIL** (counterintuitive) | Team-mode shape (section + Completion Signal block) matters but per-teammate prose richness does not. | Investigate what specifically in the section header / Completion Signal block is the priming token, not the per-teammate prose body. |
+| **AC-R3 PASS + others FAIL** | Clean `--model sonnet` workaround independent of any prompt fix. | Pin `--model sonnet` in workflow defaults; deprioritize prompt-shape mitigation. (See AC-R3 Capture re: 2.1.111 re-confirmation if 2.1.112 was the run version.) |
+| **AC-R2 PASS + others FAIL** | Most actionable Layer 2 result — section richness is the specific priming surface. | Compress the section emission and ship. |
+
+Note: AC-R3 is orthogonal evidence (it tests model-vs-prompt, not section-priming). Any AC-R1 FAIL means prompt-shape mitigation alone does not help, regardless of AC-R2/AC-R3 — recommend Layer 3 (FO verification) as the path forward in that case.
+
 ### Acceptance Criteria
 
 Each AC has Verify command, Pass/Fail line, and Capture list. All ACs run locally — no CI dispatch needed.
 
 **AC-R1 — Counterfactual on a non-routing test.**
 
-- Hypothesis isolated: "the regression is *specific to* dispatch prompts that contain the standing-teammates section." If a test that does NOT involve standing teammates passes on `opus-4-7` + low effort, the section is implicated as the priming surface. If it fails with the same hallucination class, the regression is independent of the section and prompt-shape mitigation will not help.
+- Hypothesis isolated: "the regression is *specific to* team-mode dispatch shape (which includes the standing-teammates section, the Completion Signal block, and team-mode framing)." Note: this AC varies three things at once vs. the standing-teammate test (section absence, team-mode absence, different test surface — FO-driven gate hold rather than ensign-driven roundtrip). It cannot isolate the section alone; it isolates the broader team-mode dispatch shape. If a test that does NOT involve any of these team-mode elements passes on `opus-4-7` + low effort, some aspect of team-mode dispatch shape is implicated as the priming surface. If it fails with the same hallucination class, the regression is independent of all team-mode prompt elements and prompt-shape mitigation will not help.
 - Test selected: `tests/test_gate_guardrail.py::test_gate_guardrail`. Verified clean (no `standing`/`teammate`/`comm-officer`/`echo-agent` references in the file). It is the cheapest live test in the repo (~60s, ~$0.02 haiku per `tests/README.md` lines 192-199), runs on a minimal gated workflow fixture with no teammate routing.
 - Verify (run from repo root):
 
@@ -332,9 +346,9 @@ Each AC has Verify command, Pass/Fail line, and Capture list. All ACs run locall
   ```
 
   Confirm `claude --version` reports `2.1.111` (or 2.1.112 — note Claude Code drift is mild; original Evidence shows the regression observed on both). Capture `claude --version` output before the run.
-- Pass: pytest exit code 0, all gate-guardrail assertions pass. Standing-teammates section is implicated as the priming surface.
-- Fail: pytest fails with the same FO-level hallucination class (FO claims status changes / archives without the corresponding tool calls). Section is NOT the priming; prompt-shape mitigation through stripping the section will not help.
-- Capture: `claude --version` output, pytest exit code, the test's `KEEP_TEST_DIR=1`-preserved `fo-log.jsonl`, and the `assistant.message.model` stamps from that log proving the run actually executed on `claude-opus-4-7`. For a fail, the specific assertion that fired and the tool-call inventory around it.
+- Pass: pytest exit code 0, all gate-guardrail assertions pass. Some aspect of team-mode dispatch shape (section + Completion Signal block + team-mode framing) is implicated as the priming surface — narrower than "all prompts" but broader than "the section alone." AC-R2 is the follow-up needed to narrow further within team-mode shape.
+- Fail: pytest fails with the same FO-level hallucination class (FO claims status changes / archives without the corresponding tool calls). All prompt-shape mitigation is ruled out — the regression is independent of which specific dispatch element is present, so stripping or compressing any team-mode element will not help.
+- Capture: `claude --version` output, pytest exit code, the test's `KEEP_TEST_DIR=1`-preserved `fo-log.jsonl`, and the `assistant.message.model` stamps from that log proving the run actually executed on `claude-opus-4-7`. For a fail, the specific assertion that fired and the tool-call inventory around it. Additionally for a fail: manually inspect `fo-log.jsonl` and identify whether the FO emitted the corresponding tool calls for any state-change claims it makes in text (the streaming watcher gives objective milestones for AC-R2/R3 but AC-R1's failure surface is FO-side, so this manual fo-log inspection is required to classify the failure as the same hallucination class as the original regression). Note: AC-R1 also runs from inside the rebased worktree for environmental consistency with AC-R2 and AC-R3 (a cheaper repo-root option exists but loses that consistency).
 
 **AC-R2 — Section-stripped variant on the standing-teammate test.**
 
@@ -365,6 +379,16 @@ Each AC has Verify command, Pass/Fail line, and Capture list. All ACs run locall
 - Hypothesis isolated: "this is `opus-4-7`-specific calibration; `sonnet` does not exhibit the pattern." A working alternative ensign model is a viable workaround independent of any prompt-shape fix and is worth knowing even if AC-R1/AC-R2 produce a clean answer.
 - Verify:
 
+  **Pre-step (HARD REQUIREMENT, not a suggestion):** before running pytest, the implementer MUST run:
+
+  ```
+  git diff --quiet skills/commission/bin/claude-team
+  ```
+
+  If this returns non-zero, ABORT — that indicates AC-R2's patch was not reverted and AC-R3 would silently run against a contaminated prompt. Re-run AC-R2's revert sequence (`git checkout -- skills/commission/bin/claude-team`) and re-check before proceeding.
+
+  Then run:
+
   ```
   unset CLAUDECODE && uv run pytest \
     tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips \
@@ -374,7 +398,7 @@ Each AC has Verify command, Pass/Fail line, and Capture list. All ACs run locall
   No code patch — this exercises the standard prompt assembly with `--model sonnet` instead of `--model opus`.
 - Pass: pytest exit code 0; both teammate-routing milestones fire. `sonnet` is a viable ensign-model workaround; the captain can pin `--model sonnet` in workflow defaults as a safer default than `--model opus` until upstream is fixed.
 - Fail: pytest fails on the same milestones. `sonnet` ensign also has problems — not a clean workaround. The pattern is broader than `opus-4-7`-specific calibration; root cause is likely either the prompt shape (across models) or a Claude Code runtime issue.
-- Capture: pytest exit code, `fo-log.jsonl` `assistant.message.model` stamps proving the ensign sub-call actually used `sonnet` (NOT `opus`), milestone timing.
+- Capture: pytest exit code, `fo-log.jsonl` `assistant.message.model` stamps proving the ensign sub-call actually used `sonnet` (NOT `opus`), milestone timing, and `claude --version` output. Note: if the run uses 2.1.112, a PASS should be re-confirmed on 2.1.111 before pinning `--model sonnet` as a default-shift recommendation, since sonnet behavior on 2.1.112 was not pre-validated in this entity.
 
 ### Test Plan
 
@@ -416,7 +440,7 @@ for name, description, mod_path in standing_teammates:
     lines.append(f'- {name} is available; SendMessage to it.')
 ```
 
-And drops the "Full routing contract" footer at lines 303-307. Apply the patch, run the test, capture the diff into the stage report, then `git stash` or `git checkout` to revert before any other AC runs (so AC-R3's run uses the unpatched, standard prompt).
+And drops the "Full routing contract" footer at lines 303-307. The canonical revert sequence: apply the patch, run the test, then capture the diff with `git diff skills/commission/bin/claude-team > /tmp/ac-r2.patch` (this preserves the patch as a file and satisfies AC-R2's "paste patch diff in stage report" Capture requirement more reliably than reading from a stash), then `git checkout -- skills/commission/bin/claude-team` for a clean revert. Use this exact sequence rather than `git stash` — the captured `.patch` file is the authoritative artifact.
 
 **Evidence to capture for each AC** (write into the `## Repurpose Outcome` section):
 
@@ -425,6 +449,7 @@ And drops the "Full routing contract" footer at lines 303-307. Apply the patch, 
 - `assistant.message.model` stamps from the relevant `fo-log.jsonl` (proves the model actually executed; AC-R1 should show `claude-opus-4-7` for both FO and ensign, AC-R3 should show `sonnet` for the ensign sub-call).
 - Per-milestone timing from the streaming watcher's labeled `StepTimeout` output (for AC-R2 and AC-R3 fails).
 - For AC-R2: the patch diff and the dispatched prompt's standing-teammates section (extract from `fo-log.jsonl` `Agent` tool_use input) so a future reader can confirm the patch took effect.
+- **Un-patched dispatch prompt baseline**: capture one un-patched dispatch prompt (extract from AC-R3 or AC-R1's `fo-log.jsonl` `Agent` tool_use input) AND one patched dispatch prompt (extract from AC-R2). Both go in the `## Repurpose Outcome` section as a side-by-side excerpt so a future reader can confirm exactly what AC-R2 changed.
 
 **What the implementation MUST NOT do**:
 
@@ -541,3 +566,47 @@ Independent staff review of #177's repurpose ideation (Layer 2 prompt-shape inve
 ### One-line summary for the captain
 
 Repurpose-ideation is structurally sound; APPROVE WITH CHANGES — AC-R1 confounds three variables (re-frame interpretation, don't re-scope), Decision should add an Outcome Map enumerating the 5 most informative outcome combinations, plus three smaller patch-handling gaps.
+
+## Repurpose Revision (post-staff-review)
+
+This is a focused fold-in pass of the staff reviewer's APPROVE-WITH-CHANGES findings (see `## Staff Review (repurpose)` for the source-of-truth findings). The Repurpose section's Decision / AC-R1 / AC-R2 / AC-R3 / Implementation Notes structure is unchanged except for the targeted edits below; no section was rewritten.
+
+Folded-in findings:
+
+- **Surgical Fix #1 (AC-R1 reframing)**: AC-R1's Hypothesis isolated line now acknowledges that the AC varies three things at once (section absence, team-mode absence, different test surface) and reframes the priming surface as "team-mode dispatch shape" (section + Completion Signal block + team-mode framing). Pass/Fail interpretation lines updated to match: PASS implicates "some aspect of team-mode dispatch shape" (broader than the section alone but still actionable; AC-R2 is the follow-up to narrow further); FAIL rules out *all* prompt-shape mitigation regardless of which dispatch element. Test selection (`test_gate_guardrail`) and Verify command unchanged.
+- **Surgical Fix #2 (Outcome Map)**: new `### Outcome Map` subsection added to Decision (after the out-of-scope paragraph), enumerating the 5 most informative outcomes the staff reviewer specified — all-three PASS, all-three FAIL, AC-R1 PASS + AC-R2 FAIL (counterintuitive), AC-R3 PASS + others FAIL, and AC-R2 PASS + others FAIL — each with interpretation and recommended follow-up. Formatted as a markdown table. Closing note flags AC-R3 as orthogonal and any AC-R1 FAIL as triggering Layer 3.
+- **Surgical Fix #3 (AC-R2 patch sequencing)**: Implementation Notes' revert mechanism replaced the ambiguous "git stash or git checkout" wording with the canonical sequence — `git diff skills/commission/bin/claude-team > /tmp/ac-r2.patch` to capture, then `git checkout -- skills/commission/bin/claude-team` to revert. Notes that the captured `.patch` file is the authoritative artifact for AC-R2's "paste patch diff in stage report" Capture requirement.
+- **Surgical Fix #4 (AC-R3 patch-leak guard)**: AC-R3's Verify section now opens with a HARD-REQUIREMENT Pre-step — `git diff --quiet skills/commission/bin/claude-team` must run before pytest, and a non-zero exit ABORTS AC-R3 (would indicate AC-R2's patch was not reverted).
+- **Surgical Fix #5 (un-patched dispatch prompt baseline)**: Implementation Notes' evidence-capture list adds a new requirement — capture one un-patched dispatch prompt (from AC-R1 or AC-R3 fo-log) and one patched dispatch prompt (from AC-R2), both placed in the `## Repurpose Outcome` section as side-by-side excerpts.
+- **Small fix — AC-R1 Capture list addition**: AC-R1's Capture list now requires, for a FAIL, manual `fo-log.jsonl` inspection to identify whether the FO emitted the corresponding tool calls for any state-change claims it makes in text (the streaming watcher gives objective milestones for AC-R2/R3 but AC-R1's failure surface — FO self-approval — is different from the original ensign-hallucination class).
+- **Small fix — AC-R1 worktree applicability**: AC-R1's Capture list now notes that AC-R1 also runs from inside the rebased worktree for environmental consistency with AC-R2 and AC-R3 (cheaper repo-root option exists but loses that consistency).
+- **Small fix — AC-R3 sonnet 2.1.112 caveat**: AC-R3's Capture list now explicitly requires `claude --version` output, with a note that a 2.1.112 PASS should be re-confirmed on 2.1.111 before pinning `--model sonnet` as a default-shift recommendation (sonnet behavior on 2.1.112 was not pre-validated in this entity).
+
+The original-experiment sections (lines 1-294), the `## Staff Review (repurpose)` section, and the `## Stage Report (staff review, repurpose)` section were not modified — those are audit records.
+
+## Stage Report (ideation revision, repurpose post-staff-review)
+
+### Summary
+
+Surgical fold-in pass of the staff reviewer's APPROVE-WITH-CHANGES findings into the Repurpose section. Three surgical fixes (AC-R1 reframing to acknowledge three-variable confound, new Outcome Map subsection in Decision with 5 enumerated outcomes, AC-R2 canonical patch sequencing) plus AC-R3 patch-leak Pre-step, un-patched prompt baseline requirement, and three smaller capture additions (AC-R1 fo-log inspection on FAIL, AC-R1 worktree note, AC-R3 `claude --version` + 2.1.112 caveat). No section rewritten; structure preserved; original experiment + staff review sections untouched.
+
+### Checklist
+
+1. **Read entity body and staff-review findings (Repurpose section, Decision, AC-R1, AC-R2, AC-R3, Implementation Notes, Staff Review).** DONE. Read the full file via two passes (head 295-462 + 462-568); held the staff review section as source of truth.
+2. **Surgical Fix #1 — AC-R1 reframing (Hypothesis isolated, Pass, Fail).** DONE. Replaced the Hypothesis isolated line to acknowledge the three-variable confound (section absence + team-mode absence + different test surface) and reframe the priming surface as "team-mode dispatch shape (which includes the standing-teammates section, the Completion Signal block, and team-mode framing)." Updated Pass to "some aspect of team-mode dispatch shape" (with a note that AC-R2 is the follow-up to narrow further) and Fail to "all prompt-shape mitigation is ruled out, regardless of which dispatch element." Test selection and Verify command unchanged per the instruction.
+3. **Surgical Fix #2 — Add Outcome Map to Decision (after line 318).** DONE. Inserted new `### Outcome Map` subsection after the out-of-scope paragraph and before `### Acceptance Criteria`. Markdown table with 5 rows: all-three PASS, all-three FAIL, AC-R1 PASS + AC-R2 FAIL (counterintuitive), AC-R3 PASS + others FAIL, AC-R2 PASS + others FAIL — each with Interpretation and Recommended follow-up columns. Closing note: AC-R3 is orthogonal evidence; any AC-R1 FAIL triggers Layer 3 path regardless of other ACs.
+4. **Surgical Fix #3 — AC-R2 patch sequencing (Implementation Notes).** DONE. Replaced "git stash or git checkout to revert" with the canonical sequence: `git diff skills/commission/bin/claude-team > /tmp/ac-r2.patch` (capture first), then `git checkout -- skills/commission/bin/claude-team` (clean revert). Noted the captured .patch file is authoritative for the AC-R2 Capture-list "paste patch diff" requirement.
+5. **Surgical Fix #4 — AC-R3 patch-leak guard (Pre-step).** DONE. AC-R3's Verify section now opens with a HARD REQUIREMENT Pre-step: `git diff --quiet skills/commission/bin/claude-team` before pytest; non-zero ABORTS AC-R3. Stated as hard requirement, not suggestion, per the dispatch instruction.
+6. **Surgical Fix #5 — Un-patched dispatch prompt baseline (Implementation Notes evidence list).** DONE. Added a bullet to the evidence-capture list: capture one un-patched dispatch prompt (from AC-R1 or AC-R3 fo-log) and one patched dispatch prompt (from AC-R2), both in the `## Repurpose Outcome` section as side-by-side excerpts.
+7. **Small Fix — AC-R1 Capture list addition (manual fo-log inspection on FAIL).** DONE. AC-R1's Capture list now explicitly requires, for a FAIL, manual `fo-log.jsonl` inspection to identify whether the FO emitted the corresponding tool calls for any state-change claims it makes in text — explained why this is needed (streaming watcher objective milestones don't apply to AC-R1's FO-side failure surface).
+8. **Small Fix — AC-R1 worktree applicability.** DONE. Added a note to AC-R1's Capture-list paragraph: AC-R1 also runs from inside the rebased worktree for consistency with AC-R2 and AC-R3 (cheaper repo-root option exists but loses environmental consistency).
+9. **Small Fix — AC-R3 sonnet 2.1.112 caveat (Capture list).** DONE. AC-R3's Capture list now explicitly lists `claude --version` output, with the note that a 2.1.112 PASS must be re-confirmed on 2.1.111 before pinning `--model sonnet` as a default-shift recommendation (sonnet behavior on 2.1.112 was not pre-validated in this entity).
+10. **Do NOT modify the existing `## Staff Review (repurpose)` section or `## Stage Report (staff review, repurpose)`.** DONE. Both sections (lines 464-568 in the pre-revision file) were not touched. Verified by inspection — only edits were inside AC-R1, the Decision section (Outcome Map insertion), and the Implementation Notes; plus the new appended Repurpose Revision and this Stage Report at the end of the file.
+11. **Do NOT modify the original (pre-Repurpose) sections (lines 1-294).** DONE. No edits in lines 1-294. Verified by inspection.
+12. **Append a brief `## Repurpose Revision (post-staff-review)` section.** DONE. Section appended after the `## Stage Report (staff review, repurpose)`'s one-line summary, before this Stage Report. Cross-references each fix #1-#5 + the small fixes; one-line confirmation that the Repurpose Decision/AC-R1/AC-R2/AC-R3/Implementation Notes structure is unchanged except for the targeted fixes.
+13. **Commit on main with the specified message.** Pending — will run immediately after this report write completes. Working tree was clean at start (verified via `git status` before edits).
+14. **Write `## Stage Report (ideation revision, repurpose post-staff-review)` at the very end.** DONE (this section).
+
+### One-line summary for the FO at the gate
+
+Repurpose-ideation revision complete: all 5 surgical fixes (AC-R1 reframing, Outcome Map, AC-R2 sequencing, AC-R3 patch-leak guard, un-patched prompt baseline) plus 3 small fixes folded in surgically; structure of Decision/AC-R1/AC-R2/AC-R3/Implementation Notes preserved; original-experiment and staff-review sections untouched.
