@@ -699,7 +699,11 @@ class TestBuildBareMode:
         out = json.loads(result.stdout)
         assert "name" not in out
         assert "team_name" not in out
-        assert "SendMessage" not in out["prompt"]
+        # The team-mode completion signal directive is absent in bare mode.
+        # The `### Tool-call discipline` boilerplate legitimately names
+        # SendMessage as an example tool, so we assert on the routing
+        # directive specifically rather than the bare word.
+        assert 'SendMessage(to="team-lead"' not in out["prompt"]
         assert "Completion Signal" not in out["prompt"]
 
 
