@@ -1,13 +1,13 @@
 ---
 id: 182
 title: "Diagnose opus-4-7 FO regression via local diff against opus-4-6 baseline"
-status: backlog
+status: implementation
 source: "from #177 cluster — knowing what was factual vs inferred, run the actual diagnostic that #178 should have been preceded by: local FO=opus-4-7 vs FO=opus-4-6 diff on the standing-teammate-roundtrip test."
-started:
+started: 2026-04-17T05:03:08Z
 completed:
 verdict:
 score: 0.8
-worktree:
+worktree: .worktrees/spacedock-ensign-diagnose-opus-4-7-fo-regression
 issue:
 pr:
 mod-block:
