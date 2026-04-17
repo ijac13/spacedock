@@ -19,9 +19,55 @@ from test_lib import (  # noqa: E402
     install_agents,
     read_entity_frontmatter,
     run_codex_first_officer,
-    run_first_officer,
+    run_first_officer_streaming,
     setup_fixture,
+    tool_use_matches,
 )
+
+
+def _run_claude_merge_case(
+    t: TestRunner,
+    agent_id: str,
+    workflow_dir: str,
+    claude_extra_args: list[str],
+    log_name: str,
+    *,
+    hook_expected: bool,
+) -> int:
+    """Drive the claude FO through a merge-hook pipeline with streaming milestones.
+
+    Milestones differ by fixture variant:
+      hook_expected=True  → ensign dispatched → hook-fired write observed → exit
+      hook_expected=False → ensign dispatched → exit (local-merge fallback)
+    """
+    abs_workflow = t.test_project_dir / workflow_dir
+    prompt = f"Process all tasks through the workflow at {abs_workflow}/ to completion."
+
+    with run_first_officer_streaming(
+        t,
+        prompt,
+        agent_id=agent_id,
+        extra_args=claude_extra_args,
+        log_name=log_name,
+    ) as w:
+        w.expect(
+            lambda e: tool_use_matches(e, "Agent", subagent_type="spacedock:ensign"),
+            timeout_s=180,
+            label="ensign Agent() dispatched",
+        )
+        print("[OK] ensign Agent() dispatched")
+
+        if hook_expected:
+            w.expect(
+                lambda e: tool_use_matches(e, "Bash", command="_merge-hook-fired.txt"),
+                timeout_s=300,
+                label="merge hook wrote _merge-hook-fired.txt",
+            )
+            print("[OK] merge hook fired (write to _merge-hook-fired.txt observed)")
+
+        return w.expect_exit(timeout_s=300)
+
+
 def _run_merge_case(
     t: TestRunner,
     runtime: str,
@@ -32,15 +78,12 @@ def _run_merge_case(
     codex_timeout_s: int,
     log_name: str,
     stop_checker: Callable[[Path], bool] | None = None,
+    hook_expected: bool = True,
 ) -> int:
     if runtime == "claude":
-        abs_workflow = t.test_project_dir / workflow_dir
-        return run_first_officer(
-            t,
-            f"Process all tasks through the workflow at {abs_workflow}/ to completion.",
-            agent_id=agent_id,
-            extra_args=claude_extra_args,
-            log_name=log_name,
+        return _run_claude_merge_case(
+            t, agent_id, workflow_dir, claude_extra_args, log_name,
+            hook_expected=hook_expected,
         )
     return run_codex_first_officer(
         t,
@@ -134,6 +177,7 @@ def test_merge_hook_guardrail(test_project, runtime, model, effort):
         stop_checker=_codex_terminal_state_ready(
             with_hook_project, "merge-hook-pipeline", "merge-hook-entity",
         ) if runtime == "codex" else None,
+        hook_expected=True,
     )
     if runtime == "codex":
         hook_stop_ready = _codex_merge_stop_ready(
@@ -215,6 +259,7 @@ def test_merge_hook_guardrail(test_project, runtime, model, effort):
         stop_checker=_codex_terminal_state_ready(
             nomods_project, "merge-hook-pipeline", "merge-hook-entity",
         ) if runtime == "codex" else None,
+        hook_expected=False,
     )
     if runtime == "codex":
         nomods_stop_ready = _codex_merge_stop_ready(

@@ -14,11 +14,12 @@ from test_lib import (  # noqa: E402
     CodexLogParser,
     LogParser,
     check_gate_hold_behavior,
+    entry_contains_text,
     git_add_commit,
     install_agents,
     read_entity_frontmatter,
     run_codex_first_officer,
-    run_first_officer,
+    run_first_officer_streaming,
     setup_fixture,
 )
 
@@ -44,12 +45,31 @@ def test_gate_guardrail(test_project, runtime):
     # --- Phase 2: Run the first officer ---
     print(f"--- Phase 2: Run first officer ({runtime}) ---")
     if runtime == "claude":
-        fo_exit = run_first_officer(
+        with run_first_officer_streaming(
             t,
             "Process all tasks through the workflow.",
             agent_id=agent_id,
             extra_args=["--max-budget-usd", "1.00"],
-        )
+        ) as w:
+            w.expect(
+                lambda e: entry_contains_text(
+                    e, r"gate review|recommend approve|recommend reject"
+                ),
+                timeout_s=240,
+                label="gate review presented",
+            )
+            print("[OK] gate review presented")
+
+            w.expect(
+                lambda e: entry_contains_text(
+                    e, r"gate|approval|approve|waiting for.*decision"
+                ),
+                timeout_s=120,
+                label="first officer reports at gate",
+            )
+            print("[OK] first officer reports at gate")
+
+            fo_exit = w.expect_exit(timeout_s=180)
         if fo_exit != 0:
             print("  (expected — session ends when budget runs out at gate)")
     else:

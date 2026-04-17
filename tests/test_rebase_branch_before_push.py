@@ -16,8 +16,9 @@ from test_lib import (  # noqa: E402
     git_add_commit,
     install_agents,
     read_entity_frontmatter,
-    run_first_officer,
+    run_first_officer_streaming,
     setup_fixture,
+    tool_use_matches,
 )
 
 
@@ -143,22 +144,46 @@ def test_rebase_branch_before_push(test_project, model, effort):
 
     print("--- Phase 4: Run first officer (this takes ~60-120s) ---")
     abs_workflow = t.test_project_dir / "push-main-pipeline"
+    prompt = (
+        f"Process the entity `push-main-entity` through the workflow at {abs_workflow}/ to completion. "
+        f"The entity is already at status 'done' on branch '{branch_name}' with work committed. "
+        "The branch needs to be rebased onto main and pushed as part of the pr-merge merge hook. "
+        "When the pr-merge merge hook fires and asks for approval, approve the push immediately — "
+        "say 'yes, go ahead' when asked. Do not wait for external input."
+    )
     original_path = os.environ.get("PATH", "")
     os.environ["PATH"] = f"{bin_dir}:{original_path}"
     try:
-        run_first_officer(
+        with run_first_officer_streaming(
             t,
-            (
-                f"Process the entity `push-main-entity` through the workflow at {abs_workflow}/ to completion. "
-                f"The entity is already at status 'done' on branch '{branch_name}' with work committed. "
-                "The branch needs to be rebased onto main and pushed as part of the pr-merge merge hook. "
-                "When the pr-merge merge hook fires and asks for approval, approve the push immediately — "
-                "say 'yes, go ahead' when asked. Do not wait for external input."
-            ),
+            prompt,
             agent_id="spacedock:first-officer",
             extra_args=["--model", model, "--effort", effort, "--max-budget-usd", "2.00"],
             log_name="fo-log.jsonl",
-        )
+        ) as w:
+            w.expect(
+                lambda e: tool_use_matches(e, "Bash", command="push origin main"),
+                timeout_s=240,
+                label="git push origin main observed",
+            )
+            print("[OK] git push origin main observed")
+
+            w.expect(
+                lambda e: tool_use_matches(e, "Bash", command=f"push origin {branch_name}")
+                or tool_use_matches(e, "Bash", command=f"push -u origin {branch_name}"),
+                timeout_s=180,
+                label="git push origin <branch> observed",
+            )
+            print("[OK] git push origin <branch> observed")
+
+            w.expect(
+                lambda e: tool_use_matches(e, "Bash", command="pr create"),
+                timeout_s=180,
+                label="gh pr create observed",
+            )
+            print("[OK] gh pr create observed")
+
+            w.expect_exit(timeout_s=180)
     finally:
         os.environ["PATH"] = original_path
     print()

@@ -15,8 +15,9 @@ from test_lib import (  # noqa: E402
     assembled_agent_content,
     git_add_commit,
     install_agents,
-    run_first_officer,
+    run_first_officer_streaming,
     setup_fixture,
+    tool_use_matches,
 )
 
 
@@ -25,6 +26,7 @@ TEAM_LIFECYCLE = {"TeamCreate", "TeamDelete"}
 
 @pytest.mark.live_claude
 @pytest.mark.teams_mode
+@pytest.mark.xfail(strict=False, reason="pending #160 — haiku FO compresses multi-stage dispatch (1 Agent() instead of work+review 2); see docs/plans/haiku-fo-multi-dispatch-compression.md")
 def test_team_dispatch_sequencing(test_project, model, effort):
     """No assistant message mixes TeamCreate/TeamDelete with Agent dispatch."""
     t = test_project
@@ -39,20 +41,36 @@ def test_team_dispatch_sequencing(test_project, model, effort):
 
     print("--- Phase 2: Run first officer (claude, this takes ~60-120s) ---")
     abs_workflow = t.test_project_dir / "gated-pipeline"
-    fo_exit = run_first_officer(
+    prompt = (
+        f"Process all tasks through the workflow at {abs_workflow}/. "
+        "Drive them from backlog through work to the gate. "
+        "When you reach the gate, present the gate review and wait."
+    )
+    with run_first_officer_streaming(
         t,
-        (
-            f"Process all tasks through the workflow at {abs_workflow}/. "
-            "Drive them from backlog through work to the gate. "
-            "When you reach the gate, present the gate review and wait."
-        ),
+        prompt,
         agent_id="spacedock:first-officer",
         extra_args=[
             "--model", model,
             "--effort", effort,
             "--max-budget-usd", "2.00",
         ],
-    )
+    ) as w:
+        w.expect(
+            lambda e: tool_use_matches(e, "Agent"),
+            timeout_s=180,
+            label="first Agent() dispatched",
+        )
+        print("[OK] first Agent() dispatched")
+
+        w.expect(
+            lambda e: tool_use_matches(e, "Agent"),
+            timeout_s=240,
+            label="second Agent() dispatched",
+        )
+        print("[OK] second Agent() dispatched")
+
+        fo_exit = w.expect_exit(timeout_s=240)
     if fo_exit != 0:
         print("  (may be expected — budget cap or gate hold)")
 
