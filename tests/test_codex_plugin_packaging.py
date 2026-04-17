@@ -56,12 +56,18 @@ def test_codex_marketplace_matches_approved_contract():
 
     marketplace = read_json(".agents/plugins/marketplace.json")
     assert marketplace["name"] == "spacedock"
-    assert marketplace["owner"] == {"name": "CL Kao"}
+    assert marketplace["interface"] == {"displayName": "Spacedock"}
     assert marketplace["plugins"] == [
         {
             "name": "spacedock",
-            "source": "./plugins/spacedock",
-            "description": "Turn directories of markdown files into structured workflows operated by AI agents",
+            "source": {
+                "source": "local",
+                "path": "./plugins/spacedock",
+            },
+            "policy": {
+                "installation": "AVAILABLE",
+                "authentication": "ON_INSTALL",
+            },
             "category": "workflow",
         }
     ]
