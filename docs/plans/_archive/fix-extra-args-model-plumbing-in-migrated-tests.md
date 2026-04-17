@@ -1,16 +1,17 @@
 ---
 id: 179
 title: "Fix extra_args model plumbing in migrated live tests — plumb pytest --model into extra_args"
-status: validation
+status: done
 source: "2026-04-16 session — #176 post-merge spot-check revealed model_override workflow input reaches pytest but stops at the test. Tests hardcode --model opus in extra_args, overriding the pytest --model fixture."
 started: 2026-04-17T00:27:17Z
-completed:
-verdict:
+completed: 2026-04-17T00:40:47Z
+verdict: PASSED
 score: 0.45
-worktree: .worktrees/spacedock-ensign-fix-extra-args-model-plumbing
+worktree: 
 issue:
 pr: #112
 mod-block: 
+archived: 2026-04-17T00:40:47Z
 ---
 
 ## Problem Statement
