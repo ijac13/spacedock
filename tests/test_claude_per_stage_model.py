@@ -34,7 +34,7 @@ def _agent_name(entry: dict) -> str:
     "PR #105 saw 0/34 (opus-4-7). See #171.",
     strict=False,
 )
-def test_per_stage_model_haiku_propagates(test_project, effort):
+def test_per_stage_model_haiku_propagates(test_project, model, effort):
     """stages.defaults.model: haiku must stamp the dispatched ensign with claude-haiku-*.
 
     Streaming-watcher variant: fail-fast within 240s after the ensign dispatches
@@ -60,7 +60,7 @@ def test_per_stage_model_haiku_propagates(test_project, effort):
         t,
         prompt,
         agent_id="spacedock:first-officer",
-        extra_args=["--model", "opus", "--effort", effort, "--max-budget-usd", "2.00"],
+        extra_args=["--model", model, "--effort", effort, "--max-budget-usd", "2.00"],
     ) as w:
         w.expect(
             lambda e: tool_use_matches(e, "Agent") and "ensign" in _agent_name(e).lower(),
