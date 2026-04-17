@@ -515,5 +515,58 @@ class TestRoutingUsagePayload:
         assert "pr-merge" not in prompt
 
 
+class TestToolCallDisciplineSection:
+    """AC-1 of #178: `claude-team build` emits the `### Tool-call discipline` section.
+
+    The section sits between the Completion checklist and the Summary placeholder
+    so the discipline rule is in the model's recent context when it starts
+    executing the checklist items.
+    """
+
+    def _build_minimal(self, tmp_path: Path) -> dict:
+        wf, entity = _write_build_workflow(tmp_path)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf),
+            "stage": "ideation",
+            "checklist": ["1. Do the thing"],
+            "team_name": "discipline-team",
+            "bare_mode": False,
+        }
+        _write_team_config_local(tmp_path, "discipline-team", [{"name": "team-lead"}])
+        result = _run_build_with_home(wf, inp, home=tmp_path)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        return json.loads(result.stdout)
+
+    def test_build_emits_tool_call_discipline_section(self, tmp_path):
+        out = self._build_minimal(tmp_path)
+        prompt = out["prompt"]
+
+        assert "### Tool-call discipline" in prompt
+        assert (
+            "requires emitting that tool call via the corresponding tool_use block"
+            in prompt
+        )
+        assert (
+            'If a step says "SendMessage to X with Y", you MUST emit a SendMessage '
+            "tool_use." in prompt
+        )
+        assert "The session stream is the source of truth" in prompt
+
+    def test_tool_call_discipline_between_checklist_and_summary(self, tmp_path):
+        out = self._build_minimal(tmp_path)
+        prompt = out["prompt"]
+
+        checklist_idx = prompt.index("### Completion checklist")
+        discipline_idx = prompt.index("### Tool-call discipline")
+        summary_idx = prompt.index("### Summary")
+
+        assert checklist_idx < discipline_idx < summary_idx, (
+            f"expected order checklist < discipline < summary, "
+            f"got {checklist_idx}, {discipline_idx}, {summary_idx}"
+        )
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
