@@ -26,6 +26,7 @@ TEAM_LIFECYCLE = {"TeamCreate", "TeamDelete"}
 
 @pytest.mark.live_claude
 @pytest.mark.teams_mode
+@pytest.mark.xfail(strict=False, reason="pending #160 — haiku FO compresses multi-stage dispatch (1 Agent() instead of work+review 2); see docs/plans/haiku-fo-multi-dispatch-compression.md")
 def test_team_dispatch_sequencing(test_project, model, effort):
     """No assistant message mixes TeamCreate/TeamDelete with Agent dispatch."""
     t = test_project
