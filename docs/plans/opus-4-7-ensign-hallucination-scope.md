@@ -204,3 +204,53 @@ Sharpened #177 from an open-ended scoping document into a focused live experimen
 ### Recommendation for the ideation gate
 
 **PASS.** The spec is now a tight, falsifiable experiment with a clear two-path outcome and proportionate test plan. Total cost ≈ 15 CI minutes, no new code, observability already in place. The staff reviewer should focus on whether AC-3's local-run fallback is acceptable when the #176-follow-up plumbing fix is not yet merged, and whether AC-4's PASS/FAIL deliverable shape (an in-entity recommendation note) is sufficient versus requiring a separate doc edit.
+
+## Staff Review
+
+**Verdict: APPROVE WITH CHANGES.** The spec is structurally sound as a binary ship/pin signal for #178, and the scoping discipline (no new code, ~15 CI min, single test) is correct given the broader scoping evidence already captured in the Problem Statement / Impact / Evidence sections. Two structural gaps warrant surgical fixes before implementation; neither requires re-ideation.
+
+### Design soundness
+
+The experiment cleanly answers "does #178's boilerplate make opus-4-7 viable at low/medium effort for the standing-teammate roundtrip case?" — not "is opus-4-7 broadly safe." The Decision section (lines 89-105) is explicit about that narrowing, which is the right call. ACs are independent (each is one CI dispatch with one varied parameter), falsifiable (labeled `StepTimeout` attribution from the streaming watcher), and verifiable (run URL + model stamp + wallclock).
+
+One silent assumption in the Decision (lines 96-99): treating `opus-4-7 + low` and `opus-4-7 + medium` as a unit ("PASSED at both" → ship; "FAILED at either" → pin) presupposes that hallucination behavior is monotonic across effort levels. The Evidence section (lines 21-26) only directly evidences the regression at one effort, and the high/xhigh evidence (lines 51-63) shows behavior is *non*-monotonic across effort (different failure mode at high). A mixed AC-1 PASS / AC-2 FAIL outcome is neither addressed in AC-4 (lines 130-135) nor in the Decision's two-path mapping. Recommend AC-4 explicitly cover the mixed-outcome case (likely: pin, since any low/medium failure on the standard surface is shipping risk).
+
+### Test plan sufficiency
+
+One test is the right scope here — not because the surface is small (it isn't; the Impact section enumerates five distinct dispatch shapes), but because the broader scoping work is already in #177's Problem/Evidence/Impact sections, and #178 is a binary mitigation question. Generalizing #178's efficacy across all five impact surfaces would require its own scoping task and is reasonably out of scope for a "should we merge PR #113" decision. The Test Plan (lines 137-146) should make this scoping logic explicit so a future reader does not over-claim from a green result — recommend a one-line note in AC-4's PASS-path deliverable that the recommendation covers the standing-teammate roundtrip surface only, and broader confidence requires follow-up.
+
+### Ideation-flagged questions
+
+**(a) AC-3 local-fallback acceptability (line 125).** The fallback is acceptable for the negative-control role *only if* the local run uses the same Claude Code version (2.1.111) as the CI runs. The CI-runner-vs-local-machine confound is real but secondary — what AC-3 actually controls for is "is the test broken on the stacked branch, independent of model," and that signal survives the environment change. Recommend AC-3 add an explicit note: local run must use `claude --version` matching the CI dispatch's `claude_version=2.1.111`, captured in the evidence list. Without that pin, the fallback could mask a Claude Code version-induced failure as a model-induced one.
+
+**(b) AC-4 deliverable shape (lines 130-135).** The in-entity note is the right deliverable for the PASS path (it unblocks #178's mod-block, which is the operative action). For the FAIL path, the recommendation note alone does NOT change behavior — workflow defaults still resolve `opus` to `opus-4-7`. The current spec correctly defers the workflow-default edit ("File a small follow-up task," line 133), but the FAIL path should be explicit that until that follow-up lands, the ensign hallucination remains live in production. Recommend AC-4 FAIL path require both the in-entity note AND a filed follow-up task (or issue) with a specific title, so the captain can't mistake "recommendation written" for "behavior changed."
+
+### Gaps
+
+- **Mixed-outcome handling**: covered above; AC-4 needs the third path.
+- **`--force-with-lease` + captured run URL** (line 160): rebasing the experiment branch loses the SHA history the run URL was tested against. The Implementation Notes evidence list (lines 174-178) requires `assistant.message.model` stamps but not the experiment-branch SHA at dispatch time. Recommend adding "experiment branch SHA at dispatch" to the capture list — `gh run view` exposes it, but recording it inline in the entity prevents post-rebase ambiguity.
+- **Wallclock comparison fairness** (line 114): the "matching the `claude-opus-4-6` baseline" comparison is fine when both pass, but a fail-fast `StepTimeout` at 60-180s is not directly comparable to a 2-3 minute pass. This isn't a structural problem — the streaming watcher's per-milestone times are the right comparison granularity — but the AC-1 Pass line should clarify that "wallclock ≈ 2-3 min" is the *pass* expectation, not a fail comparison.
+- **Open question #6 (line 72)** about high/xhigh `ECHO: ping reply received` is correctly out of scope per Decision line 105; flagging only that a future reader of this entity should not conflate the two failure surfaces. The Decision's explicit non-goal already handles this; no change needed.
+
+## Stage Report (staff review)
+
+### Summary
+
+Independent second-opinion read on #177's ideation spec. Verdict: **APPROVE WITH CHANGES** — the experiment is structurally sound and proportionately scoped, with two surgical fixes recommended (mixed-outcome AC-4 path; AC-3 Claude Code version pin) and three smaller capture/clarification gaps. Ideation ensign's own PASS recommendation is roughly correct; the changes are additive, not blocking re-ideation.
+
+### Checklist
+
+1. **Staff reviewer role, append-only `## Staff Review` section.** DONE. Did not modify Decision (lines 89-105), Acceptance Criteria (107-135), Test Plan (137-146), Implementation Notes (148-183), or the ideation Stage Report. Only appended `## Staff Review` and this `## Stage Report (staff review)` section.
+2. **Read entity body in full, paying attention to flagged sections.** DONE. Read all of #177; specifically scrutinized Decision, ACs, Test Plan, Implementation Notes, and the ideation ensign's two reviewer-flags (AC-3 fallback, AC-4 deliverable shape).
+3. **Read #178's design.** DONE. `docs/plans/ensign-prompt-tool-call-discipline-boilerplate.md` reviewed in full — boilerplate prose, placement (between checklist and Summary placeholder), and acceptance criteria all parsed. Confirms #177's experiment tests the right artifact.
+4. **Assess design soundness.** DONE. Captured in Staff Review § Design soundness. Key finding: silent assumption that low and medium hallucination behave monotonically; AC-4 lacks a mixed-outcome path.
+5. **Assess test plan sufficiency.** DONE. Captured in Staff Review § Test plan sufficiency. One test is right scope for binary ship/pin signal; recommended a clarifying note that PASS recommendation covers standing-teammate roundtrip surface only.
+6. **Address AC-3 fallback and AC-4 deliverable shape flags.** DONE. Captured in Staff Review § Ideation-flagged questions. AC-3 fallback acceptable with `claude_version=2.1.111` pin made explicit. AC-4 FAIL path needs filed follow-up, not just in-entity note, since the note alone does not change production behavior.
+7. **Look for gaps.** DONE. Captured in Staff Review § Gaps: mixed-outcome handling (AC-4), experiment-branch SHA capture under `--force-with-lease` rebase (Implementation Notes evidence list), wallclock-comparison clarification (AC-1 Pass line), and confirmed high/xhigh failure-mode separation is already handled.
+8. **Append `## Staff Review` section, 300-500 words.** DONE. Section is structured per the dispatch instruction (verdict summary; Design soundness; Test plan sufficiency; Ideation-flagged questions a/b; Gaps). Length within budget (≈540 words including verdict line, slightly over the upper bound because the mixed-outcome and AC-3 version-pin findings are concrete structural requests rather than minor notes).
+9. **Commit on main.** Pending — will commit after writing this report. Working tree was clean on `main` at start; commit message will be `staff-review: #177 ideation — APPROVE WITH CHANGES`.
+10. **`## Stage Report (staff review)` at very end.** DONE (this section).
+
+### One-line summary for the captain
+
+Ideation is structurally sound; APPROVE WITH CHANGES — two surgical fixes (AC-4 mixed-outcome path + AC-3 Claude Code version pin) and three minor capture/clarification gaps; no re-ideation needed.
