@@ -16,7 +16,7 @@ pr:
 
 Claude Code 2.1.111 flipped the default `--model opus` resolution from `claude-opus-4-6` to `claude-opus-4-7`. Under `opus-4-7` at `--effort low` or `--effort medium`, dispatched ensigns exhibit a specific hallucination pattern: they execute easy tool-call steps (file writes, commits) but skip harder steps (`SendMessage` to teammates, tool-mediated verification) and fabricate the outcome in their stage reports. The FO accepts the stage report at face value because it reads DONE markers without verifying evidence against the session stream.
 
-This concern is not limited to the one test that exposed it. The ensign dispatch shape — checklist + stage report + visible teammate descriptions — is the standard template for every spacedock ensign dispatch. The hallucination is contextual (simple isolation reproducers do not trigger it), prompt-shape-dependent, and effort-gated: `opus-4-7` at `--effort high` or `--effort xhigh` does not exhibit the pattern in the evidence we have, and `opus-4-6` at any effort does not exhibit it.
+This concern is not limited to the one test that exposed it. The ensign dispatch shape — checklist + stage report + visible teammate descriptions — is the standard template for every spacedock ensign dispatch. The hallucination is contextual (simple isolation reproducers do not trigger it), prompt-shape-dependent, and effort-gated: `opus-4-7` at `--effort high` or `--effort xhigh` does not exhibit the low/medium fabrication pattern, but exposes a different failure at those effort levels (see Evidence at high/xhigh effort). `opus-4-6` at any effort does not exhibit either pattern.
 
 ## Evidence
 
@@ -46,7 +46,21 @@ The pattern affects every ensign dispatched via `claude-team build` when the cap
 
 - **Streaming watcher** (#173, #175): catches hallucinations when a test explicitly asserts on a tool-call shape via `w.expect(tool_use_matches(...))`. Eight tests currently have this coverage. Real-world spacedock usage (production ensigns, not tests) has no such guard.
 - **Dated-model pin** (#176): bypasses `opus-4-7` via `--model claude-opus-4-6` workflow input. Currently broken by a test-level plumbing bug (tests hardcode `--model opus` in `extra_args`).
-- **Effort bump to `--effort xhigh`**: untested in CI. Expected to fix the pattern per the Opus 4.7 migration guide, at significant cost.
+- **Effort bump to `--effort high` or `--effort xhigh`**: tested in CI (runs `24539317900` / `24539318567` on `2.1.111` + `--model opus` + effort high/xhigh). The low/medium hallucination pattern does not appear — the ensign correctly emits the `SendMessage` to the standing teammate (milestone 4 passes). However, a different failure mode surfaces at both high and xhigh: milestone 5 (`ECHO: ping reply received`) times out at 240s. The reply from `echo-agent` (on sonnet) never appears in the parent `fo-log.jsonl` within the window, even though the FO proceeds to archive the entity as completed. Effort bump removes one regression and exposes another — not a full mitigation.
+
+## Evidence at high/xhigh effort (2026-04-16 runs)
+
+- **`24539317900` (opus/high)**: `test_standing_teammate_spawns_and_roundtrips` failed on both `claude-live` and `claude-live-opus`. Specific error: `StepTimeout: Step 'ECHO: ping reply received' did not match within 240s`. Parent `fo-log.jsonl` shows the ensign DID emit a `SendMessage` to `echo-agent` (milestone 4 passed), but `ECHO: ping` never lands in the stream.
+- **`24539318567` (opus/xhigh)**: identical failure pattern. `ECHO: ping reply received` timeout at 240s, milestone 4 clean.
+
+Possible causes (open for investigation):
+
+- `echo-agent` reply is routed through a subagent stream not folded into the parent `fo-log.jsonl`, so the test's parent-stream-only assertion cannot observe it.
+- `echo-agent` (sonnet) takes longer than 240s to respond on the `2.1.111` runner under teammate-message scheduling.
+- `echo-agent` hallucinates its own reply internally but never emits a `SendMessage` back to the ensign or the FO — an echo-agent-side variant of the `opus-4-7` hallucination pattern, tested on sonnet.
+- Claude Code `2.1.111`'s teammate-message fold-in into the parent stream has a behavior change that predates or accompanies the default-alias flip.
+
+The FO treating the entity as complete despite the missing reply suggests the test's stream-visibility expectation and the runtime's actual stream-delivery shape have diverged somewhere in the `2.1.110` → `2.1.111` window.
 
 ## Open questions for ideation
 
@@ -55,6 +69,7 @@ The pattern affects every ensign dispatched via `claude-team build` when the cap
 - Should the ensign prompt template change — e.g., drop the "Standing teammates available" section from dispatch prompts where the ensign does not need to route — to reduce the visible context that primes hallucination?
 - Is an upstream Anthropic issue warranted? The `fo-log.jsonl` artifacts are a reasonable starting reproducer even without a minimal single-agent case.
 - Does the pattern hit other model families (sonnet-4-6) at low effort, or is it specific to `opus-4-7`'s effort calibration?
+- Is the high/xhigh-only `ECHO: ping reply received` timeout the same underlying `opus-4-7` behavior in a different guise (echo-agent-equivalent fabrication on sonnet), a separate test-harness fold-in issue, or a Claude Code `2.1.111` runtime regression? Needs direct inspection of the high-effort `fo-log.jsonl` artifacts and comparison against the `2.1.107` baseline.
 
 ## Out of Scope
 
