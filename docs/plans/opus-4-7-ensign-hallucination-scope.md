@@ -83,4 +83,124 @@ The FO treating the entity as complete despite the missing reply suggests the te
 - #173 — streaming watcher; the only guard currently catching this in CI.
 - #174 / #176 — CI bisection and mitigation plumbing.
 - #175 — test migration expanding stream-based coverage to 6 more live tests.
+- #178 — tool-call-discipline boilerplate (PR #113, branch `spacedock-ensign/tool-call-discipline`). #177 is the live experiment that decides whether #178 ships or whether we fall back to pinning `--model claude-opus-4-6`.
 - A separate small task (not yet filed) will fix the `extra_args` plumbing bug so #176's `model_override` actually reaches `claude -p`. That unblocks the CI mitigation proof.
+
+## Decision
+
+This task is a **focused live experiment**, not a hallucination-mitigation thesis. The mitigation under test is #178 (the tool-call-discipline boilerplate already shipped on branch `spacedock-ensign/tool-call-discipline`, PR #113). #177's deliverable is a yes/no on whether that boilerplate makes `opus-4-7` viable at `--effort low` and `--effort medium` for the standing-teammate roundtrip case that originally exposed the regression.
+
+Mechanics:
+
+- Create a worktree stacked on top of `spacedock-ensign/tool-call-discipline` (NOT `main`), so the experiment runs against the #178 mitigation as it would actually ship.
+- Drive three CI runs of the smallest fail-fast test we have: `tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips`, on Claude Code `2.1.111`, against the stacked worktree. Two are the variables under test (`--model opus` + `--effort low`, `--effort medium`); one is a negative control (`--model claude-opus-4-6` to prove the test still passes when the 4-7 alias is bypassed).
+- Outcome maps cleanly to two paths:
+  - **PASSED at both low and medium**: recommend shipping #178 and leave the default `opus` alias alone. Capture this as a debrief note that unblocks #178's merge.
+  - **FAILED at either**: recommend pinning `--model claude-opus-4-6` in workflow defaults and developer docs. Cite #176 as the plumbing prerequisite and file (or note the need for) the small follow-up that fixes the `extra_args` plumbing so the pin actually reaches `claude -p` in CI.
+
+Explicitly **not** part of this task (per Out of Scope, restated for the staff reviewer):
+
+- No FO-side post-completion verification design. That is a larger, separate mitigation surface.
+- No further changes to the dispatch-prompt template beyond what #178 already ships. We are testing #178's prose, not iterating on it.
+- No work on the high/xhigh `ECHO: ping reply received` timeout. That failure mode is a different surface (likely either a parent-stream fold-in regression or an echo-agent-side issue) and warrants its own task once this experiment lands.
+
+## Acceptance Criteria
+
+Each AC has a specific verify command, a clear pass/fail line, and the evidence to capture.
+
+**AC-1 — Live CI: `--model opus` + `--effort low` on stacked branch passes.**
+
+- Verify: dispatch `runtime-live-e2e.yml` against the stacked worktree branch with `claude_version=2.1.111`, `test_selector=tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips`, `effort_override=low`. Job: `claude-live-opus`.
+- Pass: job result `success`. The streaming watcher milestones for `SendMessage to echo-agent observed` and `ECHO: ping reply received` both fire within their per-step timeouts. Wallclock ≈ 2-3 minutes (matching the `claude-opus-4-6` baseline established in #176).
+- Fail: any milestone times out, or job result `failure`. The streaming watcher's labeled `StepTimeout` identifies which milestone the boilerplate failed to discipline.
+- Capture: run URL, the `claude-live-opus` job's `assistant.message.model` stamps from `fo-log.jsonl` (proves we actually ran on `opus-4-7`), wallclock.
+
+**AC-2 — Live CI: `--model opus` + `--effort medium` on stacked branch passes.**
+
+- Verify: same dispatch as AC-1 with `effort_override=medium`.
+- Pass / Fail / Capture: identical shape to AC-1.
+
+**AC-3 — Negative control: `--model claude-opus-4-6` on stacked branch passes.**
+
+- Verify: same dispatch as AC-1 with `effort_override=low` and `model_override=claude-opus-4-6` (depends on the #176-follow-up `extra_args` plumbing fix; if that plumbing is still broken at experiment time, fall back to a local run with `--model claude-opus-4-6 --effort low` against the stacked worktree and capture the local wallclock + `fo-log.jsonl` model stamps as evidence).
+- Pass: job (or local run) result `success`. Test passes in the expected ~2-3 minute window. Model stamps in `fo-log.jsonl` show `claude-opus-4-6`.
+- Fail: if this fails, the test itself is broken on the stacked branch and AC-1 / AC-2 results cannot be trusted. Stop the experiment and surface to the captain — the test must be fixed before the experiment can run.
+- Capture: run URL (or local wallclock + log path), model stamps, wallclock.
+
+**AC-4 — Recommendation deliverable matches the outcome.**
+
+- If AC-1 and AC-2 both pass: write a debrief note to `docs/plans/opus-4-7-ensign-hallucination-scope.md` (Stage Report or a dedicated `## Outcome` section) recommending #178 ships as-is, citing the three run URLs and the wallclock numbers. The note explicitly unblocks #178's merge mod-block.
+- If AC-1 or AC-2 fails: write the same note recommending we pin `--model claude-opus-4-6` in workflow defaults and update `tests/README.md` (or equivalent developer-facing doc) to document the pin until the upstream Claude Code regression is resolved. Cite #176 as the plumbing dependency. File a small follow-up task (or note its need) covering the workflow-default change itself, since that change is mechanically separate from this experiment.
+- Verify: the recommendation note exists in the entity body, references the captured run URLs, and states one of the two paths above unambiguously.
+- Pass: a future reader can determine from the entity alone which path was taken and why.
+
+## Test Plan
+
+- **Cost in CI minutes**: ~3 runs × ~5 min wallclock (the streaming watcher fails fast at 60-180s if the regression appears; 5 min is a generous upper bound that includes runner spin-up). Total ≈ 15 CI minutes for the experiment, plus any retries.
+- **Risk level**: low. No new code beyond what #178 ships. The streaming watcher (#173, #175) provides the observability needed to attribute pass/fail to the specific milestone, so a flaky failure is distinguishable from a real regression.
+- **No new code is written by this task.** All implementation lives in #178; #177 only consumes it via the stacked worktree.
+- **Dependencies**:
+  - Implementation stage must branch from `spacedock-ensign/tool-call-discipline` (the #178 branch), not `main`.
+  - AC-3 ideally depends on the `extra_args` plumbing fix mentioned in Cross-references. If that fix is not merged at experiment time, AC-3 falls back to a local run as documented above — the experiment is not blocked on that follow-up.
+- **E2E tests**: yes, this entire task IS an E2E test. The unit tests for #178 already exist on the stacked branch (`test_claude_team_spawn_standing.py` extension); #177 does not add more.
+- **Static checks**: none new. Sufficiency is established by the streaming watcher's labeled milestones — pass/fail attribution is structural, not log-archaeology.
+
+## Implementation Notes
+
+For the implementation stage, the following mechanics matter:
+
+- **Worktree stack**: create the worktree from the #178 branch tip, e.g.
+
+  ```
+  git worktree add .worktrees/opus-4-7-experiment -b spacedock-ensign/opus-4-7-low-medium-experiment spacedock-ensign/tool-call-discipline
+  ```
+
+  This branches the experiment off the mitigation branch so CI dispatches against the experiment branch include #178's prose.
+
+- **If #178's branch advances during the experiment**: rebase the experiment branch onto the new tip (`git rebase spacedock-ensign/tool-call-discipline` from inside the worktree), force-push the experiment branch (`--force-with-lease`, never plain `--force`), and re-dispatch the affected CI runs. Document the rebase in the stage report so the captured run URLs are unambiguous about which #178 commit they tested.
+
+- **CI dispatch shape** (canonical form for AC-1):
+
+  ```
+  gh workflow run runtime-live-e2e.yml \
+    --ref spacedock-ensign/opus-4-7-low-medium-experiment \
+    -f claude_version=2.1.111 \
+    -f test_selector=tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips \
+    -f effort_override=low
+  ```
+
+  AC-2 swaps `effort_override=medium`. AC-3 adds `-f model_override=claude-opus-4-6` and depends on the plumbing fix; otherwise run locally inside the worktree with `make test-live-claude-opus` after editing the Makefile target's model flag (or invoke pytest directly).
+
+- **Evidence the implementation stage MUST capture**:
+  - Run URL for each CI dispatch (AC-1, AC-2, optionally AC-3).
+  - Model stamp from each run's `fo-log.jsonl` `assistant.message.model` field — this proves the run actually executed on `claude-opus-4-7` (or `-6` for the control). Without this, a green AC-1/AC-2 could be a false positive caused by a silent alias resolution somewhere in the stack.
+  - Wallclock per run, both the streaming watcher's reported milestone times and the overall job duration.
+  - For any FAILED run: the labeled `StepTimeout` message identifying which milestone fired, plus a one-paragraph attribution against the same milestone in #178's stage report (does the boilerplate visibly fail to discipline this specific tool call shape?).
+
+- **What the implementation stage should NOT do**:
+  - Do not modify #178's prose. If the boilerplate needs iteration, that is a separate task (a fail outcome on #177 + a new mitigation attempt).
+  - Do not try to reproduce the high/xhigh `ECHO: ping reply received` failure here. It is a different surface; out of scope per the Decision section.
+  - Do not file the workflow-default-pin change as part of this task in the FAIL path — write the recommendation note and let the captain triage filing.
+
+## Stage Report (ideation)
+
+### Summary
+
+Sharpened #177 from an open-ended scoping document into a focused live experiment spec. The experiment stacks on the #178 mitigation branch, runs three CI dispatches against `tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips` on Claude Code 2.1.111, and outputs a binary recommendation: PASS → ship #178; FAIL → pin `--model claude-opus-4-6`. No new code, ~15 CI minutes, observability already in place via the streaming watcher.
+
+### Checklist
+
+1. **Read entity body in full.** DONE. Problem Statement, Evidence, Impact, Not-affected, Current mitigations, Evidence at high/xhigh, Open questions, Out of Scope, and Cross-references all read. Substantive sections preserved unchanged per the dispatch instruction.
+2. **Read #178's design.** DONE. `docs/plans/ensign-prompt-tool-call-discipline-boilerplate.md` reviewed in full. Boilerplate text and placement (between Completion checklist and Summary placeholder) confirmed. Branch `spacedock-ensign/tool-call-discipline` has three commits including stage report; PR #113 is the open mitigation.
+3. **Skim #173, #175, #176 for context.** DONE. Found in `docs/plans/_archive/`. #173 shipped `FOStreamWatcher` + `run_first_officer_streaming` (PR #109). #175 migrated 6 more live tests to the streaming watcher pattern (PR #111). #176 added `model_override` workflow input (PR #110); the `extra_args` plumbing follow-up referenced in #177's Cross-references is noted as the AC-3 dependency. None of these were redesigned or duplicated.
+4. **`## Decision` section.** DONE. States plainly: focused live experiment, stacked on #178 (not main), three runs, two-path outcome (PASS → ship #178; FAIL → pin `--model claude-opus-4-6` per #176 plumbing). Explicit non-goals reiterated for the staff reviewer.
+5. **`## Acceptance Criteria` section.** DONE. Four ACs: AC-1 (live CI opus-4-7 + low), AC-2 (live CI opus-4-7 + medium), AC-3 (negative control on opus-4-6 with local-fallback if #176 plumbing not yet fixed), AC-4 (recommendation deliverable matching the outcome). Each AC has verify command, pass/fail line, and capture list.
+6. **`## Test Plan` section.** DONE. ~3 runs × ~5 min = ~15 CI minutes. Risk: low (no new code, observability via streaming watcher already shipped). E2E: yes (this task IS the E2E test). Static checks: none new — milestone-labeled `StepTimeout` handles attribution.
+7. **`## Implementation Notes` section.** DONE. Worktree command (`git worktree add ... -b spacedock-ensign/opus-4-7-low-medium-experiment spacedock-ensign/tool-call-discipline`), rebase mechanics if #178 advances mid-experiment (`--force-with-lease`, never plain force), canonical `gh workflow run` shape, evidence-capture list (run URLs, `assistant.message.model` stamps from `fo-log.jsonl`, wallclock, labeled `StepTimeout` for fails), explicit do-not list.
+8. **Update existing sections only if needed for sharpening.** PARTIAL. Added one line to `## Cross-references` linking #178 explicitly as the mitigation-under-test (the existing list mentioned #173/#174/#175/#176 but not #178). Problem Statement, Evidence, Impact, Not affected, Current mitigations, Evidence at high/xhigh, Open questions, and Out of Scope sections all preserved verbatim — they are correct and load-bearing.
+9. **Commit on main.** Pending — will execute after this report is written. On `main` (clean working tree at start), so the commit will be `ideation: #177 experiment spec — stack on #178, opus-4-7 low/medium live test`. Not in a worktree; the dispatch instruction's worktree-commit branch is N/A.
+10. **Stage Report.** DONE (this section).
+
+### Recommendation for the ideation gate
+
+**PASS.** The spec is now a tight, falsifiable experiment with a clear two-path outcome and proportionate test plan. Total cost ≈ 15 CI minutes, no new code, observability already in place. The staff reviewer should focus on whether AC-3's local-run fallback is acceptable when the #176-follow-up plumbing fix is not yet merged, and whether AC-4's PASS/FAIL deliverable shape (an in-entity recommendation note) is sufficient versus requiring a separate doc edit.
