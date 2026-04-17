@@ -292,3 +292,171 @@ Folded all five staff-reviewer findings into #177's ideation in place. Two surgi
 ### One-line summary for the captain
 
 Staff-review fold-in complete: two surgical AC fixes and three gap closures applied verbatim; Decision/Test Plan/Implementation Notes structure unchanged; ready to re-present at the ideation gate.
+
+## Repurpose: Layer 2 Mitigation Investigation
+
+**Proposed new title (FO updates frontmatter):** "opus-4-7 ensign hallucination — root cause investigation and Layer 2 mitigation experiments"
+
+### Preamble (captain-directed pivot)
+
+The original experiment (Decision lines 89-105, ACs lines 107-138, Outcome, Stage Reports, Staff Review) ran cleanly on 2026-04-16 and produced a definitive negative result: AC-1 and AC-2 both FAILED on the stacked #178 mitigation branch (boilerplate prose did not discipline `opus-4-7` at low/medium effort), and AC-3 was BROKEN (the negative-control surfaced an independent failure that contaminated the signal). Those sections above are PRESERVED VERBATIM as the audit trail that motivates this pivot — do not edit them.
+
+The captain has redirected this entity to investigate **Layer 2 prompt-shape mitigations**: hypotheses about *which part* of the dispatch prompt primes `opus-4-7`'s fabrication behavior, so that a future engineering task can target the actual priming surface rather than wrapping more boilerplate around it.
+
+### Decision
+
+This entity now investigates whether prompt-shape mitigations can address `opus-4-7` hallucination at low/medium effort. The primary hypothesis under test: the **rich teammate descriptions** in the dispatch prompt's `### Standing teammates available in your team` section (introduced in commit `0acd6501`, "claude-team build auto-enumerates alive standing teammates into dispatch prompts") prime `opus-4-7` to fabricate plausible tool-call outcomes. The full per-teammate routing usage body (Patterns 1-4 for `comm-officer`, four caller patterns with example syntax) is exactly the surface a model could use to compose a believable `SendMessage` outcome without emitting the call.
+
+Three independent experiments, each isolating a different variable, each ~5 minutes of local execution. Each experiment falsifies a distinct sub-hypothesis. Outcomes feed into a single `## Repurpose Outcome` section the implementation will write, recommending which prompt-shape mitigation (if any) should become a future engineering task.
+
+The history complication noted in the dispatch (test_standing_teammate_spawn.py was added in `8ac41339` *before* the standing-teammates section in `0acd6501`) means the naive "go back in time and re-run the test" approach does not isolate the section's contribution — the test inherently requires the section to pass. AC-R1 and AC-R2 work around this: AC-R1 picks a *different* test that does not exercise teammate routing at all (so the section's presence is irrelevant to the test's pass condition), and AC-R2 patches the section in place to keep it structurally present but strip its rich content.
+
+Out-of-scope per original entity discipline (restated):
+- Building new infrastructure as ACs (e.g., new prompt-assembly modes, FO-side post-completion verification).
+- Forcing API tool choice (`tool_choice: any` or similar SDK-level mitigation).
+- Iterating on #178's prose. The original experiment killed that path.
+
+### Acceptance Criteria
+
+Each AC has Verify command, Pass/Fail line, and Capture list. All ACs run locally — no CI dispatch needed.
+
+**AC-R1 — Counterfactual on a non-routing test.**
+
+- Hypothesis isolated: "the regression is *specific to* dispatch prompts that contain the standing-teammates section." If a test that does NOT involve standing teammates passes on `opus-4-7` + low effort, the section is implicated as the priming surface. If it fails with the same hallucination class, the regression is independent of the section and prompt-shape mitigation will not help.
+- Test selected: `tests/test_gate_guardrail.py::test_gate_guardrail`. Verified clean (no `standing`/`teammate`/`comm-officer`/`echo-agent` references in the file). It is the cheapest live test in the repo (~60s, ~$0.02 haiku per `tests/README.md` lines 192-199), runs on a minimal gated workflow fixture with no teammate routing.
+- Verify (run from repo root):
+
+  ```
+  unset CLAUDECODE && uv run pytest tests/test_gate_guardrail.py \
+    --runtime claude --model opus --effort low -v
+  ```
+
+  Confirm `claude --version` reports `2.1.111` (or 2.1.112 — note Claude Code drift is mild; original Evidence shows the regression observed on both). Capture `claude --version` output before the run.
+- Pass: pytest exit code 0, all gate-guardrail assertions pass. Standing-teammates section is implicated as the priming surface.
+- Fail: pytest fails with the same FO-level hallucination class (FO claims status changes / archives without the corresponding tool calls). Section is NOT the priming; prompt-shape mitigation through stripping the section will not help.
+- Capture: `claude --version` output, pytest exit code, the test's `KEEP_TEST_DIR=1`-preserved `fo-log.jsonl`, and the `assistant.message.model` stamps from that log proving the run actually executed on `claude-opus-4-7`. For a fail, the specific assertion that fired and the tool-call inventory around it.
+
+**AC-R2 — Section-stripped variant on the standing-teammate test.**
+
+- Hypothesis isolated: "the *richness* of teammate descriptions (full Patterns 1-4 prose, examples, routing contracts) is what primes fabrication, not the section's mere presence." A minimal one-line-per-teammate variant lets us keep the structural section but remove the prose surface. If the test passes, rich descriptions are the priming and the fix is to compress them. If it fails, the section's presence itself is the priming and a deeper change (remove the section entirely, or use a different routing-discovery mechanism) would be needed.
+- Patch target: `skills/commission/bin/claude-team` lines 276-308, the `enumerate_alive_standing_teammates` block. The MINIMAL variant emits only:
+
+  ```
+  ### Standing teammates available in your team
+
+  - {name} is available; SendMessage to it.
+  ```
+
+  one line per teammate, no descriptions, no per-pattern usage bodies, no "Full routing contract" footer. The implementation patches the loop in place inside the worktree (do NOT push or merge — this is an experimental local patch).
+- Verify: from inside the rebased worktree (see Implementation Notes), apply the minimal patch to `skills/commission/bin/claude-team`, then run:
+
+  ```
+  unset CLAUDECODE && uv run pytest \
+    tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips \
+    --runtime claude --model opus --effort low -v
+  ```
+
+- Pass: pytest exit code 0; both `SendMessage to echo-agent observed` and `ECHO: ping reply received` milestones fire. Rich descriptions are the priming surface; the engineering follow-up is to compress the section's emission.
+- Fail: same milestone timeouts as the original AC-1 failure (most likely `SendMessage to echo-agent observed` at 240s). Section presence (not its richness) is the priming, OR the priming sits elsewhere in the prompt entirely (Completion Signal block, "via SendMessage" mention in the section header, etc.). Engineering follow-up needs to investigate further before settling on a fix.
+- Capture: the patch diff (paste into the entity's stage report), pytest exit code, the preserved `fo-log.jsonl` model stamps, milestone timing breakdown from the streaming watcher's labeled output. For a fail, capture the dispatch prompt as it appeared with the patch applied (read the `Agent` tool_use input from `fo-log.jsonl`) so the next investigator can confirm the patch took effect.
+
+**AC-R3 — Different ensign model.**
+
+- Hypothesis isolated: "this is `opus-4-7`-specific calibration; `sonnet` does not exhibit the pattern." A working alternative ensign model is a viable workaround independent of any prompt-shape fix and is worth knowing even if AC-R1/AC-R2 produce a clean answer.
+- Verify:
+
+  ```
+  unset CLAUDECODE && uv run pytest \
+    tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips \
+    --runtime claude --model sonnet --effort low -v
+  ```
+
+  No code patch — this exercises the standard prompt assembly with `--model sonnet` instead of `--model opus`.
+- Pass: pytest exit code 0; both teammate-routing milestones fire. `sonnet` is a viable ensign-model workaround; the captain can pin `--model sonnet` in workflow defaults as a safer default than `--model opus` until upstream is fixed.
+- Fail: pytest fails on the same milestones. `sonnet` ensign also has problems — not a clean workaround. The pattern is broader than `opus-4-7`-specific calibration; root cause is likely either the prompt shape (across models) or a Claude Code runtime issue.
+- Capture: pytest exit code, `fo-log.jsonl` `assistant.message.model` stamps proving the ensign sub-call actually used `sonnet` (NOT `opus`), milestone timing.
+
+### Test Plan
+
+- **Mechanics**: each AC is a single local `pytest` invocation against a real Claude runtime. The streaming watcher (#173) provides per-milestone fail attribution; preserved `fo-log.jsonl` artifacts (set `KEEP_TEST_DIR=1`) provide the audit evidence (model stamps, tool-call inventory).
+- **Cost**: ~5 min per AC, ~15-20 min total. AC-R1 is the cheapest (gate-guardrail, no teammate roundtrip); AC-R2 and AC-R3 each run the standing-teammate test with its 4 milestone × 240s budget but typically fail-fast at ~60-180s when the regression appears.
+- **Local execution only**: no CI dispatch. The original experiment burned three CI dispatches; the Layer 2 investigation does not need them — local runs with the streaming watcher provide the same evidence quality. Cost in CI minutes: zero.
+- **Claude Code version**: ideally `2.1.111` to match the original experiment, but `2.1.112` is acceptable per the original Evidence (regression observed on both). Capture `claude --version` for each AC so the gate review can confirm version drift did not contaminate the result.
+- **Static checks**: none new. The streaming watcher's labeled milestones and the `fo-log.jsonl` model stamps are the structural evidence.
+- **E2E tests**: yes — these three ACs ARE E2E experiments. No new test code; AC-R2 patches existing infrastructure locally; AC-R1 and AC-R3 use existing tests with different CLI flags.
+
+### Implementation Notes
+
+**Worktree state**. The existing 177 worktree at `.worktrees/spacedock-ensign-opus-4-7-ensign-hallucination-scope` is checked out at #178's tip (`e1a087df`) and lacks #179's plumbing fix (#180, commit `addcbeee` on main). For the Layer 2 experiments, the implementer should:
+
+- **Option A (preferred)**: rebase the existing worktree onto current `main`. From inside the worktree:
+
+  ```
+  git fetch origin
+  git rebase origin/main
+  ```
+
+  This brings #179's plumbing fix and the latest `claude-team build` source code (which AC-R2 will patch).
+
+- **Option B**: discard the existing worktree and recreate from main. From the repo root:
+
+  ```
+  git worktree remove .worktrees/spacedock-ensign-opus-4-7-ensign-hallucination-scope
+  git worktree add .worktrees/spacedock-ensign-opus-4-7-ensign-hallucination-scope -b spacedock-ensign/opus-4-7-layer-2 main
+  ```
+
+  Cleaner but loses any in-progress local state from the original experiment.
+
+Either option gives the implementer up-to-date plumbing AND the latest claude-team source. Pick Option A unless the existing worktree has uncommitted state that makes rebase messy.
+
+**AC-R2 patch shape**. The patch replaces the loop body at `skills/commission/bin/claude-team:287-301` (the `for name, description, mod_path in standing_teammates:` block) with a single line per teammate:
+
+```python
+for name, description, mod_path in standing_teammates:
+    lines.append(f'- {name} is available; SendMessage to it.')
+```
+
+And drops the "Full routing contract" footer at lines 303-307. Apply the patch, run the test, capture the diff into the stage report, then `git stash` or `git checkout` to revert before any other AC runs (so AC-R3's run uses the unpatched, standard prompt).
+
+**Evidence to capture for each AC** (write into the `## Repurpose Outcome` section):
+
+- `claude --version` output (proves the runtime version).
+- pytest exit code and the specific assertion / milestone that fired (for fails).
+- `assistant.message.model` stamps from the relevant `fo-log.jsonl` (proves the model actually executed; AC-R1 should show `claude-opus-4-7` for both FO and ensign, AC-R3 should show `sonnet` for the ensign sub-call).
+- Per-milestone timing from the streaming watcher's labeled `StepTimeout` output (for AC-R2 and AC-R3 fails).
+- For AC-R2: the patch diff and the dispatched prompt's standing-teammates section (extract from `fo-log.jsonl` `Agent` tool_use input) so a future reader can confirm the patch took effect.
+
+**What the implementation MUST NOT do**:
+
+- Do not commit the AC-R2 patch. It is a local experimental patch; revert before AC-R3 runs.
+- Do not modify the original experiment's sections (Decision lines 89-105, ACs 107-138, Outcome, Stage Reports, Staff Review). Those are preserved audit trail.
+- Do not add a fourth experiment. The three are scoped to be independent; any further hypothesis goes into a follow-up entity.
+- Do not propose API-level mitigations (tool_choice forcing, SDK-level changes) — out of scope per the captain's directive.
+
+The actionable output is a `## Repurpose Outcome` section recommending which prompt-shape mitigation (if any) actually moves the needle, evidence-backed, ready to feed into a future engineering task.
+
+## Stage Report (ideation revision, repurpose)
+
+### Summary
+
+Repurposed #177 to investigate Layer 2 prompt-shape mitigations after the original experiment's AC-1/AC-2 FAIL + AC-3 BROKEN outcome falsified #178's boilerplate approach. Three independent local experiments (~15-20 min total): AC-R1 isolates the standing-teammates section's contribution via a non-routing test (`test_gate_guardrail`); AC-R2 isolates the section's *richness* via a minimal-content patch on `claude-team`; AC-R3 isolates `opus-4-7`-specific calibration via a `sonnet` ensign run. All original sections preserved verbatim as audit record.
+
+### Checklist
+
+1. **Read entity body in full and recognize the captain-directed pivot.** DONE. Read all 294 lines of the pre-repurpose file. Recognized the original experiment ran cleanly and is factual; AC-1/AC-2 failed and AC-3 broke as documented. The captain's pivot redirects to Layer 2 hypothesis testing while preserving the original sections as audit trail.
+2. **Read FO-as-API use-cases spec and #178 body.** DONE. `docs/superpowers/specs/2026-04-17-spacedock-fo-as-api-use-cases.md` reviewed (full architecture context; Use Case 4 directly cites #177 as the failure pattern motivating hallucination-resistant API mutations). `docs/plans/ensign-prompt-tool-call-discipline-boilerplate.md` reviewed (#178's boilerplate prose, placement between Completion checklist and Summary placeholder, AC-3 acknowledges the experiment may produce a negative result — which it did).
+3. **Investigate standing-teammate prompt section history.** DONE. `git log --oneline --all -S 'Standing teammates available in your team' -- skills/commission/bin/claude-team` returns one commit: `0acd6501 impl: #162 cycle 2 — claude-team build auto-enumerates alive standing teammates into dispatch prompts`. `git log --oneline --diff-filter=A -- tests/test_standing_teammate_spawn.py` returns `8ac41339 tests: #162 live E2E standing teammate spawn + roundtrip fixture`. Test was added BEFORE the section emission (the test inherently requires the section), so a naive "go back in time" experiment does not isolate the variable. Recorded in the Decision section's history-complication paragraph.
+4. **Identify candidate non-routing live tests.** DONE. Surveyed `tests/`: skipped/xfail tests (`test_scaffolding_guardrail`, `test_repo_edit_guardrail`, `test_rejection_flow`, `test_push_main_before_pr`, `test_dispatch_completion_signal`, etc.) are not viable. `test_gate_guardrail.py` is clean (verified no `standing`/`teammate`/`comm-officer`/`echo-agent` references via grep), is the cheapest live test in the repo per `tests/README.md` lines 192-199, and exercises the FO+ensign loop on a gated workflow fixture without teammate routing. Selected as AC-R1's test.
+5. **Append `## Repurpose: Layer 2 Mitigation Investigation` section after all existing sections.** DONE. Section appended after the existing `## Stage Report (ideation revision)` (line 294). Preamble explains the captain-directed pivot and links to the original AC-3 BROKEN finding as the trigger.
+6. **Write `### Decision` subsection.** DONE. Names the primary hypothesis (rich teammate descriptions in the dispatch prompt prime `opus-4-7` fabrication), three independent experiments, ~5 min cost each, single `## Repurpose Outcome` section as the actionable output. Out-of-scope items restated per original entity discipline.
+7. **Write `### Acceptance Criteria` for three experiments.** DONE. AC-R1 (counterfactual on `test_gate_guardrail`), AC-R2 (section-stripped variant on standing-teammate test, with explicit patch shape), AC-R3 (sonnet ensign on standing-teammate test). Each AC has Verify command, Pass/Fail line, and Capture list per the dispatch instruction.
+8. **Write `### Test Plan`.** DONE. Local-execution mechanics, `KEEP_TEST_DIR=1` for evidence preservation, streaming watcher per-milestone attribution, ~15-20 min total cost, no CI dispatch, Claude Code version capture (2.1.111 ideally; 2.1.112 acceptable per original Evidence).
+9. **Write `### Implementation Notes` with worktree state guidance.** DONE. Option A (rebase existing worktree onto main) preferred; Option B (recreate from main) as alternative. Both bring #179 plumbing + latest `claude-team` source. AC-R2 patch shape spelled out (replace loop body at `claude-team:287-301`; drop the routing-contract footer). Evidence-capture list and explicit must-not list included.
+10. **Update title in prose.** DONE. Proposed title at top of Repurpose section: "opus-4-7 ensign hallucination — root cause investigation and Layer 2 mitigation experiments" — for the FO to pick up in frontmatter.
+11. **Commit on main.** Pending — will run immediately after this report write completes. Working tree was clean on `main` at start.
+12. **Stage Report (ideation revision, repurpose) at very end.** DONE (this section).
+13. **Do NOT modify existing sections.** DONE. Original Decision (lines 89-105), Acceptance Criteria (107-138), Test Plan (137-146), Implementation Notes, Outcome, Stage Reports, Staff Review, and Stage Report (staff review) all preserved verbatim. Only appended new sections after line 294.
+
+### One-line summary for the FO at the gate
+
+Repurpose-ideation complete: three independent local experiments (AC-R1 non-routing test counterfactual, AC-R2 section-stripped patch, AC-R3 sonnet ensign) scoped at ~15-20 min total cost; each isolates a different priming hypothesis; original sections preserved as audit trail.
