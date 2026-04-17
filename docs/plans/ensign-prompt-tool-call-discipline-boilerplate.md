@@ -9,7 +9,7 @@ verdict:
 score: 0.55
 worktree: .worktrees/spacedock-ensign-tool-call-discipline
 issue:
-pr:
+pr: #113
 mod-block: merge:pr-merge
 ---
 
