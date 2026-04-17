@@ -41,7 +41,7 @@ MODEL_ENUM_LIST = 'must be one of: sonnet, opus, haiku'
 
 
 def extract_stage_subsection(readme_path, stage_name):
-    """Extract the full ### {stage_name} subsection from a workflow README.
+    r"""Extract the full ### {stage_name} subsection from a workflow README.
 
     Accepts both backtick-quoted (`### \`work\``) and bare (`### work`) headings
     so fixtures and hand-authored workflows both parse cleanly.

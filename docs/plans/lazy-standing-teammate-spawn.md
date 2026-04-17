@@ -298,3 +298,41 @@ No E2E tests needed. All changes are prose (runtime adapter, shared-core) and a 
     - The 22 deselected are live/codex-marked tests, consistent with `test-static` exclusion. No regressions.
 
 **Overall recommendation: PASSED.** All 7 ACs verified with evidence. Test suite green at 422/422. No out-of-scope edits. Implementation is minimal and well-scoped.
+
+## Fold-In: SyntaxWarning fix (claude-team line 46)
+
+(a) **Why folded in:** Captain-directed fold-in. The bug lives in the same file (`skills/commission/bin/claude-team`) that #172 already touches, so amending the diff here avoids a separate single-line PR and a second round-trip through validation. Not a 172 regression — pre-existing bug surfaced during the 172 work.
+
+(b) **Origin:** Introduced by commit `36ed45fb` on 2026-04-14 ("feat: harden dispatch helper + runtime adapter for verbatim-prompt discipline"). That commit added the `extract_stage_subsection` docstring with backslash-escaped backticks (`\``) inside a non-raw triple-quoted string, which Python 3.12+ flags as `SyntaxWarning: invalid escape sequence '\`'` on every import/run. Separate task from #172.
+
+(c) **Fix:** One-character change — converted the docstring at `skills/commission/bin/claude-team:44` from `"""..."""` to `r"""..."""`. The raw-string prefix tells Python to treat backslashes literally, so `\`` no longer triggers the warning. Smallest possible semantic-preserving change. Body of the docstring is byte-for-byte identical.
+
+(d) **Verification:**
+
+```
+$ python3 -W default -c "import py_compile; py_compile.compile('skills/commission/bin/claude-team', doraise=True)"
+(zero stderr, zero stdout, exit 0)
+
+$ python3 -W default skills/commission/bin/claude-team list-standing --workflow-dir /Users/clkao/git/spacedock/docs/plans
+/Users/clkao/git/spacedock/docs/plans/_mods/comm-officer.md
+(no SyntaxWarning prefix)
+
+$ unset CLAUDECODE && make test-static
+422 passed, 22 deselected, 10 subtests passed in 11.52s
+```
+
+## Stage Report (fold-in)
+
+1. Read entity to ground in original 172 scope — DONE. Confirmed 172 implementation and validation already complete; this is a captain-directed fold-in, not a validator rejection.
+2. Identify the bug — DONE. `skills/commission/bin/claude-team:44-48` docstring contained `\`` escape sequences inside a non-raw triple-quoted string, triggering `SyntaxWarning: invalid escape sequence '\`'` on every invocation.
+3. Apply minimal fix — DONE. Converted the docstring at line 44 to a raw string (`r"""..."""`). One-character change. No other edits to claude-team. Did not touch any other file.
+4. Verify warning is gone via `python3 -W default -c "import py_compile..."` — DONE. Zero stderr, zero stdout, exit 0.
+5. Sanity-check script runs via `python3 -W default skills/commission/bin/claude-team list-standing` — DONE. Output: `/Users/clkao/git/spacedock/docs/plans/_mods/comm-officer.md`. No SyntaxWarning prefix. (Note: the dispatch's `bash skills/commission/bin/claude-team list-standing` invocation from the worktree root failed because the file's shebang is `#!/usr/bin/env python3` and `bash` interprets it as shell. Re-ran via `python3` directly per the shebang's intent. Result confirms the fix.)
+6. Run `unset CLAUDECODE && make test-static` from worktree root — DONE. **422 passed, 22 deselected, 10 subtests passed** in 11.52s. Zero failures. Same green baseline as the original 172 validation.
+7. Append `## Fold-In` section to entity with rationale, origin commit, fix, and verification — DONE (above).
+8. Commit with message `fix: claude-team line 46 docstring escape (folded into #172)` — DONE (next step).
+9. Stage Report — DONE (this section).
+
+### Summary
+
+Folded a one-character docstring fix (raw-string prefix on `extract_stage_subsection`) into the 172 worktree to silence the `SyntaxWarning: invalid escape sequence '\`'` that fired on every `claude-team` invocation since commit `36ed45fb` on 2026-04-14. Verified via `py_compile`, direct `list-standing` run, and `make test-static` (422/422 green). One file changed: `skills/commission/bin/claude-team` (line 44, `"""` → `r"""`). New commit on top of the existing 172 commits — no amend, no reorder, no other files touched.
