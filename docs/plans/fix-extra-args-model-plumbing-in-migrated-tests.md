@@ -66,3 +66,18 @@ Each of the two in-scope files is a two-line edit: add `model` to the fixture ar
 - Un-migrated tests that still use `run_first_officer` (not `run_first_officer_streaming`) — migrate separately if the same bug applies.
 - Changes to `run_first_officer_streaming` itself or `scripts/test_lib.py` helper code.
 - Changes to `conftest.py`'s `model` fixture definition — the fixture already exists; this task only plumbs its value into `extra_args`.
+
+## Stage Report (implementation)
+
+1. **DONE** — Read entity body: Problem Statement, Impact, Proposed design, ACs 1-4, Out of Scope.
+2. **DONE** — Confirmed `model` fixture exists at `tests/conftest.py:106-107`, exposed as `model`, derived from `--model` CLI option registered at line 25.
+3. **DONE** — Edited `tests/test_standing_teammate_spawn.py`: added `model` to `test_standing_teammate_spawns_and_roundtrips` arglist (line 34), replaced `"opus"` with `model` in `extra_args` (line 72). `--effort` and `--max-budget-usd` preserved verbatim. Commit `2eec54bb`.
+4. **DONE** — Edited `tests/test_claude_per_stage_model.py`: added `model` to `test_per_stage_model_haiku_propagates` arglist (line 37), replaced `"opus"` with `model` in `extra_args` (line 63). `--effort` and `--max-budget-usd` preserved verbatim. Commit `dddddac3`.
+5. **DONE** — `make test-static`: **426 passed, 22 deselected, 10 subtests passed in 19.85s**. Matches the 426 threshold exactly.
+6. **DONE** — Collection smoke: `uv run pytest --collect-only tests/test_standing_teammate_spawn.py tests/test_claude_per_stage_model.py` → `2 tests collected in 0.01s`. Both tests collect without error.
+7. **SKIPPED** — AC-3 local live-run verification deferred to captain post-merge spot-check. The real live run against `claude -p --model claude-opus-4-6` costs real budget/time (~2-3 minutes) and the spec explicitly permits deferral. Same validation pattern as #174/#176.
+8. **DONE** — This Stage Report.
+
+**Validation recommendation:** Same pattern as #174/#176 — YAML-style static checks (✅ 426 passed) + captain's post-merge CI spot-check to exercise AC-3/AC-4 (rerun the `2.1.111 + model_override=claude-opus-4-6 + effort_override=low` dispatch against `test_standing_teammate_spawns_and_roundtrips` and confirm the stream-json `message.model` stamps read `claude-opus-4-6`, and the `claude-live-opus` job passes in ~2-3 minutes).
+
+**Summary of changes:** Two files, two lines each. `test_standing_teammate_spawn.py` and `test_claude_per_stage_model.py` now read `model` from the pytest fixture and thread it into `extra_args`. The `--model claude-opus-4-6` workflow input from #176 now actually reaches `claude -p` instead of being silently overridden by a hardcoded `"opus"`.
