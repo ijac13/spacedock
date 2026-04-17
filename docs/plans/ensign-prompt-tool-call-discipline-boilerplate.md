@@ -1,16 +1,16 @@
 ---
 id: 178
 title: "Add tool-call-discipline boilerplate to ensign dispatch prompts"
-status: validation
+status: done
 source: "CL directive during 2026-04-16 session — #177 identified opus-4-7 ensigns fabricating tool-call outcomes in stage reports at low/medium effort. This task tries the cheapest mitigation: explicit prose discipline in every dispatch prompt."
 started: 2026-04-17T00:27:17Z
-completed:
-verdict:
+completed: 2026-04-17T05:15:40Z
+verdict: REJECTED
 score: 0.55
-worktree: .worktrees/spacedock-ensign-tool-call-discipline
+worktree: 
 issue:
 pr: #113
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem Statement
