@@ -10,7 +10,7 @@ score: 0.8
 worktree: .worktrees/spacedock-ensign-diagnose-opus-4-7-fo-regression
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Why this matters
