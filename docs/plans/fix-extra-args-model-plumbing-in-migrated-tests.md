@@ -10,7 +10,7 @@ score: 0.45
 worktree: .worktrees/spacedock-ensign-fix-extra-args-model-plumbing
 issue:
 pr: #112
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem Statement
