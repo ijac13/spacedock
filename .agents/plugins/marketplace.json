@@ -1,19 +1,16 @@
 {
   "name": "spacedock",
-  "interface": {
-    "displayName": "Spacedock"
+  "owner": {
+    "name": "CL Kao"
+  },
+  "metadata": {
+    "description": "Turn directories of markdown files into structured workflows operated by AI agents"
   },
   "plugins": [
     {
       "name": "spacedock",
-      "source": {
-        "source": "local",
-        "path": "./plugins/spacedock"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
+      "source": "./plugins/spacedock",
+      "description": "Turn directories of markdown files into structured workflows operated by AI agents",
       "category": "workflow"
     }
   ]
