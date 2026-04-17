@@ -31,7 +31,7 @@ def _agent_input(entry: dict) -> dict:
 
 @pytest.mark.live_claude
 @pytest.mark.teams_mode
-def test_standing_teammate_spawns_and_roundtrips(test_project, effort):
+def test_standing_teammate_spawns_and_roundtrips(test_project, model, effort):
     """AC-12: standing: true mod spawns a teammate the FO can route to.
 
     Fixture declares one standing teammate (`echo-agent`) via
@@ -69,7 +69,7 @@ def test_standing_teammate_spawns_and_roundtrips(test_project, effort):
         t,
         prompt,
         agent_id="spacedock:first-officer",
-        extra_args=["--model", "opus", "--effort", effort, "--max-budget-usd", "2.00"],
+        extra_args=["--model", model, "--effort", effort, "--max-budget-usd", "2.00"],
     ) as w:
         w.expect(
             lambda e: tool_use_matches(e, "Bash", command="spawn-standing"),
