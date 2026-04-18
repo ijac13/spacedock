@@ -242,3 +242,36 @@ PASSED. Static suite holds at 437 (matches impl baseline, no regression). Target
 ### AC-4 coverage statement
 
 AC-4 specifies "3× runs each on opus-4-6, opus-4-7, claude-haiku-4-5 (bare mode)" for statistical distribution. Captain explicitly authorized partial-validation coverage: single-run each on the flaky target context. Coverage achieved: opus-4-6 teams (1 run, PASSED via Path A), opus-4-7 teams (1 run, PASSED), claude-haiku-4-5 bare (1 run from impl stage, PASSED via Path A). The 9-run distribution ideal is not met, but the targeted fix-validation is. Recommend the statistical 3×-per-model coverage be deferred to post-merge CI observation rather than a separate validation pass — CI will accumulate the distribution naturally.
+
+## Stage Report — implementation (scope expansion: bare+haiku xfails for #200)
+
+### Summary
+
+Added bare+haiku-4-5 runtime xfail guards to `tests/test_gate_guardrail.py::test_gate_guardrail` and `tests/test_feedback_keepalive.py::test_feedback_keepalive`, citing #200. Same guard shape as the pre-#190 xfail block (read `--team-mode` option with env fallback, fire `pytest.xfail(...)` at top of test after fixtures resolve). Both tests now report XFAIL on the `--team-mode=bare --model claude-haiku-4-5` matrix while remaining unaffected on every other combination. No assertion changes; static suite holds at 437.
+
+### Checklist
+
+1. **DONE — `test_gate_guardrail` xfail added.**
+   `tests/test_gate_guardrail.py:29-48`. Function signature gained `request` fixture parameter. Guard: `if runtime == "claude" and resolved_team_mode == "bare" and model == "claude-haiku-4-5"`. Reason string cites `pending #200 — haiku-bare FO bootstrap failure (cd-to-wrong-cwd + {PWD} brace-bug)`. Runtime guard intentionally narrowed to `runtime == "claude"` because the failure mode (claude-haiku-4-5 bootstrap) is claude-specific; codex runs on this same test must not be xfailed.
+
+2. **DONE — `test_feedback_keepalive` xfail added.**
+   `tests/test_feedback_keepalive.py:228-247`. Function signature gained `request` fixture parameter. Guard: `if resolved_team_mode == "bare" and model == "claude-haiku-4-5"`. Reason string cites `pending #200 — haiku-bare FO tool-shape discipline (subagent_type=None validation, SendMessage nested in Agent prompt)`. (No `runtime` clause needed — this test is `live_claude` only.)
+
+3. **DONE — Static green + local haiku-bare run confirms XFAIL dispositions.**
+   - `make test-static` → **437 passed, 22 deselected, 10 subtests passed in 19.89s**. Pristine baseline: 437. No regression.
+   - `unset CLAUDECODE && uv run pytest tests/test_gate_guardrail.py tests/test_feedback_keepalive.py --runtime claude --team-mode=bare --model claude-haiku-4-5 --effort low -v` → **2 xfailed in 0.11s**. Both tests reported as XFAIL (not FAILED). Output:
+     ```
+     tests/test_gate_guardrail.py::test_gate_guardrail XFAIL (pending #20...) [ 50%]
+     tests/test_feedback_keepalive.py::test_feedback_keepalive XFAIL (pen...) [100%]
+     ```
+     The 0.11s wallclock confirms `pytest.xfail(...)` short-circuits before any FO subprocess launches — no live-runtime cost on the bare+haiku combination.
+
+### Changes written
+
+- `tests/test_gate_guardrail.py:29` — added `request` fixture parameter
+- `tests/test_gate_guardrail.py:34-48` — runtime xfail guard reading `--team-mode` opt + env fallback, citing #200
+- `tests/test_feedback_keepalive.py:229` — added `request` fixture parameter
+- `tests/test_feedback_keepalive.py:233-246` — runtime xfail guard, citing #200
+- `docs/plans/test-feedback-keepalive-two-path-assertion.md` — this scope-expansion stage report. No YAML frontmatter changes.
+
+No changes to assertion bodies, `agents/`, `references/`, or any other test files.

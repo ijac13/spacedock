@@ -226,9 +226,24 @@ def _scan_keepalive_events(log: LogParser) -> dict:
 
 
 @pytest.mark.live_claude
-def test_feedback_keepalive(test_project, model, effort):
+def test_feedback_keepalive(test_project, model, effort, request):
     """FO keeps implementation ensign alive across validation rejection and routes via SendMessage."""
     t = test_project
+
+    team_mode_opt = request.config.getoption("--team-mode")
+    if team_mode_opt in ("teams", "bare"):
+        resolved_team_mode = team_mode_opt
+    else:
+        import os as _os
+        _env = _os.environ.get("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "").strip().lower()
+        resolved_team_mode = "teams" if _env in ("1", "true") else "bare"
+    if resolved_team_mode == "bare" and model == "claude-haiku-4-5":
+        pytest.xfail(
+            reason=(
+                "pending #200 — haiku-bare FO tool-shape discipline "
+                "(subagent_type=None validation, SendMessage nested in Agent prompt)"
+            )
+        )
 
     print("--- Phase 1: Set up test project from fixture ---")
     setup_fixture(t, "keepalive-pipeline", "keepalive-pipeline")

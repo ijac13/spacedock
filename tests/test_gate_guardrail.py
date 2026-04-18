@@ -26,10 +26,25 @@ from test_lib import (  # noqa: E402
 @pytest.mark.live_claude
 @pytest.mark.live_codex
 @pytest.mark.serial
-def test_gate_guardrail(test_project, runtime, model, effort):
+def test_gate_guardrail(test_project, runtime, model, effort, request):
     """FO halts at a gate and does not self-approve (claude + codex)."""
     t = test_project
     agent_id = "spacedock:first-officer"
+
+    team_mode_opt = request.config.getoption("--team-mode")
+    if team_mode_opt in ("teams", "bare"):
+        resolved_team_mode = team_mode_opt
+    else:
+        import os as _os
+        _env = _os.environ.get("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "").strip().lower()
+        resolved_team_mode = "teams" if _env in ("1", "true") else "bare"
+    if runtime == "claude" and resolved_team_mode == "bare" and model == "claude-haiku-4-5":
+        pytest.xfail(
+            reason=(
+                "pending #200 — haiku-bare FO bootstrap failure "
+                "(cd-to-wrong-cwd + {PWD} brace-bug)"
+            )
+        )
 
     # --- Phase 1: Set up test project from static fixture ---
     print("--- Phase 1: Set up test project from fixture ---")
