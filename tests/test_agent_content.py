@@ -643,6 +643,9 @@ def test_first_officer_shared_core_caps_checklist_at_three_linchpin_items():
     text = read_text("skills/first-officer/references/first-officer-shared-core.md")
     dispatch_section = section_text(text, "## Dispatch", (r"^## ",))
 
+    assert re.search(r"per-dispatch|stage-level", dispatch_section, re.IGNORECASE), (
+        "Dispatch section must frame the checklist as per-dispatch / stage-level"
+    )
     assert "linchpin" in dispatch_section.lower(), (
         "Dispatch section must frame checklist items as linchpins"
     )

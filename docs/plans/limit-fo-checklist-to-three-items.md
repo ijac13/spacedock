@@ -256,3 +256,18 @@ Added a short paragraph under step 2 of the Dispatch section in `skills/first-of
    440 passed, 22 deselected, 10 subtests passed in 20.14s
    ```
    Single commit to follow with both changes on branch `spacedock-ensign/limit-fo-checklist-to-three-items`.
+
+### Feedback Cycles — Cycle 1 (team-lead amendment during implementation)
+
+Team-lead requested a forward-compatibility amendment to keep #193's per-dispatch vs. entity-level framing aligned. Two narrow changes, same file/same test/same scope:
+
+1. **Prose lead rewritten.** The paragraph now opens with "The dispatch checklist is a **per-dispatch, stage-level** list of linchpin signals — at most 3 items — that demonstrate this specific dispatch's job is done well. It is distinct from entity-level acceptance criteria." Remaining sentences (0/1/2/3 valid, don't pad, boilerplate excluded, MUST NOT appear) unchanged.
+2. **Test assertion added.** `test_first_officer_shared_core_caps_checklist_at_three_linchpin_items` now greps the Dispatch section for `per-dispatch|stage-level` (case-insensitive) in addition to the previous five assertions. The test continues to pass.
+
+Grep evidence after amendment:
+```
+$ grep -n -E "per-dispatch|stage-level|linchpin" skills/first-officer/references/first-officer-shared-core.md
+62:   The dispatch checklist is a **per-dispatch, stage-level** list of linchpin signals — at most 3 items — that demonstrate this specific dispatch's job is done well. It is distinct from entity-level acceptance criteria. ...
+```
+
+`make test-static` re-run after amendment: 440 passed, 22 deselected.
