@@ -9,7 +9,7 @@ verdict:
 score: 0.7
 worktree: .worktrees/spacedock-ensign-cherry-pick-test-predicates-and-audit
 issue:
-pr:
+pr: #123
 mod-block: merge:pr-merge
 ---
 
