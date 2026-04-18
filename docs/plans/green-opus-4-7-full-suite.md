@@ -9,7 +9,7 @@ verdict:
 score: 0.7
 worktree: .worktrees/spacedock-ensign-green-opus-4-7-full-suite
 issue:
-pr:
+pr: #125
 mod-block: merge:pr-merge
 ---
 
