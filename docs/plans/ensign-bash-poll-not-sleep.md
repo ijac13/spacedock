@@ -121,3 +121,24 @@ Test method: implementation stage must include a short explicit decision in the 
 ### Summary
 
 Rewrote #183 for ideation stage: sharpened the problem statement, specified the target file (`ensign-shared-core.md`) and exact insertion point for the new `## Background Bash Discipline` subsection, supplied the full fenced-markdown body, and re-scoped AC-4 so it no longer depends on #182's removed Variant A prose. Acceptance criteria now include an evergreen-tone grep (AC-2) to enforce global-CLAUDE.md discipline, and the `#182` audit trail is isolated from content that would ship into the skill. Test plan is static + one live behavioral run; no CI dispatch.
+
+## Stage Report: implementation
+
+- DONE: Stay inside worktree `.worktrees/spacedock-ensign-ensign-bash-poll-not-sleep` on branch `spacedock-ensign/ensign-bash-poll-not-sleep`.
+  All file reads/writes under the worktree; no branch switches.
+- DONE: Apply the ideation-specified `## Background Bash Discipline` subsection into `skills/ensign/references/ensign-shared-core.md` verbatim, inserted after `## Rules` and before `## Stage Report Protocol`.
+  Edit placed the five-step polling rule plus the explicit anti-pattern paragraph.
+- DONE: AC-2 forbidden-token grep on the new subsection body.
+  Extracted subsection into `/tmp/bg-subsection.md` (13 lines). Grep results: `opus-` 0, `sonnet-` 0, `haiku-` 0, `#182` 0, `#183` 0, `(see #` 0, `observed` 0, `recently` 0, ` new ` 0, ` legacy ` 0, `improved` 0.
+- DONE: AC-5 evaluation — FO shared-core left unchanged.
+  Rationale: grep of `skills/first-officer/references/` for `run_in_background|BashOutput|background bash|sleep` returned no files, and first officers dispatch work through `SendMessage`/Task tools rather than launching multi-minute background shell commands. The anti-pattern surfaced in an ensign implementer loop, not in FO orchestration. If FOs later start launching long-running background shells themselves, the same subsection can be mirrored into `first-officer-shared-core.md` at that time; adding it preemptively violates YAGNI.
+- DONE: Run the static suite with `unset CLAUDECODE && make test-static`.
+  `426 passed, 22 deselected, 10 subtests passed in 20.40s` — meets the ≥ 426 threshold.
+- DONE: Commit changes on the worktree branch.
+  See commit SHA below (appended by the commit step).
+- DONE: Write this Stage Report section.
+  This section.
+
+### Summary
+
+Inserted the `## Background Bash Discipline` subsection into `skills/ensign/references/ensign-shared-core.md` between `## Rules` and `## Stage Report Protocol`, using the ideation body's fenced-markdown content verbatim. AC-2 evergreen-tone grep passes with zero forbidden-token hits; `make test-static` holds at 426 passed. FO shared-core left unchanged per AC-5 — FOs don't run multi-minute background bash, so mirroring the subsection would be speculative. AC-4 live behavioral verification is deferred to validation stage per the dispatch brief.
