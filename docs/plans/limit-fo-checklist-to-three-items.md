@@ -231,3 +231,28 @@ Audited recent FO-built checklists (median 10, max 11 items) against the 3-item 
 3. **Write refined ACs + test plan + concrete override path — DONE.** ACs restructured to AC-1 (mechanism enforcement with three-case unit test), AC-2 (shared-core prose with static-grep test), AC-3 (preamble line with unit test), AC-4 (commission SKILL.md doc with static-grep test), AC-5 (one live sanity dispatch), AC-6 (`make test-static` green). Test plan: ~$1-2 total, mostly static tests; single live dispatch for AC-5. Override path finalized as `dispatch.checklist.max-items` nested under `dispatch` in workflow README frontmatter; precedence and invalid-value handling specified.
 
 
+## Stage Report (implementation)
+
+### Summary
+Added a short paragraph under step 2 of the Dispatch section in `skills/first-officer/references/first-officer-shared-core.md` articulating the <= 3 linchpin cap (upper bound, not target) and the excluded boilerplate (read entity body, commit before signaling, write stage report). Added one static test `test_first_officer_shared_core_caps_checklist_at_three_linchpin_items` in `tests/test_agent_content.py` that greps the Dispatch section for the linchpin framing, the "at most 3" cap phrasing, the "upper bound, not a target" clarification, a boilerplate item name, and the "MUST NOT appear in the checklist" exclusion. Scope kept narrow per the Cycle 1 amendment: no `claude-team build` changes, no workflow README changes, no commission skill changes.
+
+### Checklist
+
+1. **Add prose paragraph to shared-core near line 60 — DONE.** Edited `skills/first-officer/references/first-officer-shared-core.md` to add the paragraph under step 2 of the Dispatch section (now at line 62). Covers the three required points: (a) `<=` 3 cap as upper bound with "0, 1, 2, or 3 items are all valid; do not pad to reach 3"; (b) linchpin framing ("linchpins — the few signals … that demonstrate this dispatch's job is done well"); (c) excluded boilerplate ("read the entity body, commit before signaling complete, and write a stage report … MUST NOT appear in the checklist"). Grep evidence:
+   ```
+   $ grep -n -E "linchpin|at most 3|upper bound|read the entity body|commit before signaling|write a stage report" skills/first-officer/references/first-officer-shared-core.md
+   62:   Checklist items are linchpins — the few signals (at most 3) that demonstrate this dispatch's job is done well. The cap is an upper bound, not a target: 0, 1, 2, or 3 items are all valid; do not pad to reach 3. This is not a work-breakdown. The ensign already knows how to read the entity body, commit before signaling complete, and write a stage report; those are covered by structural conventions and MUST NOT appear in the checklist. Name what separates a good outcome from a ceremonial one.
+   ```
+
+2. **Add static test asserting prose presence — DONE.** Added `test_first_officer_shared_core_caps_checklist_at_three_linchpin_items` to `tests/test_agent_content.py` (existing home for grep-based shared-core assertions; no separate `test_static_guardrails.py` exists). The test extracts the `## Dispatch` section with the existing `section_text` helper and asserts five regex/substring matches: (a) "linchpin" framing, (b) the `<=` 3 / "at most 3" cap, (c) the "upper bound, not a target" / "do not pad" clarification, (d) at least one excluded-boilerplate phrase, (e) the "MUST NOT appear in the checklist" exclusion. Test output:
+   ```
+   $ uv run pytest tests/test_agent_content.py::test_first_officer_shared_core_caps_checklist_at_three_linchpin_items -v
+   tests/test_agent_content.py::test_first_officer_shared_core_caps_checklist_at_three_linchpin_items PASSED [100%]
+   ============================== 1 passed in 0.05s ===============================
+   ```
+
+3. **Run `make test-static`, confirm green with count >= 439 — DONE.** Baseline before change was 439 passing; after change 440 passing (baseline + 1 new test), 22 deselected. Output tail:
+   ```
+   440 passed, 22 deselected, 10 subtests passed in 20.14s
+   ```
+   Single commit to follow with both changes on branch `spacedock-ensign/limit-fo-checklist-to-three-items`.

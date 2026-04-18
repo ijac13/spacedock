@@ -638,6 +638,32 @@ def test_shared_core_grep_over_read_discipline_for_entity_body():
     assert "field: old -> new" in discipline
 
 
+def test_first_officer_shared_core_caps_checklist_at_three_linchpin_items():
+    """#192: FO-built checklists are capped at <= 3 linchpin items; boilerplate excluded."""
+    text = read_text("skills/first-officer/references/first-officer-shared-core.md")
+    dispatch_section = section_text(text, "## Dispatch", (r"^## ",))
+
+    assert "linchpin" in dispatch_section.lower(), (
+        "Dispatch section must frame checklist items as linchpins"
+    )
+    assert re.search(r"at most 3|\u2264\s*3|<=\s*3", dispatch_section), (
+        "Dispatch section must state the <= 3 checklist cap"
+    )
+    assert re.search(r"upper bound, not a target|do not pad", dispatch_section, re.IGNORECASE), (
+        "Dispatch section must clarify the cap is an upper bound, not a target"
+    )
+    assert re.search(
+        r"read the entity body|commit before signaling|write a stage report",
+        dispatch_section,
+        re.IGNORECASE,
+    ), (
+        "Dispatch section must name at least one excluded boilerplate item"
+    )
+    assert re.search(r"MUST NOT appear in the checklist", dispatch_section), (
+        "Dispatch section must explicitly exclude boilerplate from the checklist"
+    )
+
+
 def test_claude_runtime_points_to_shared_core_entity_body_inspection_rule():
     """AC-2 (#159): the Claude runtime adapter carries a short pointer to the shared-core rule."""
     text = read_text("skills/first-officer/references/claude-first-officer-runtime.md")
