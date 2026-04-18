@@ -1,16 +1,17 @@
 ---
 id: 186
 title: "Green the full live test suite on opus-4-7 locally"
-status: implementation
+status: done
 source: "captain directive (2026-04-17 session) — after #181 pinned CI to opus-4-6 as a workaround, the fleet is running green on opus-4-6 but opus-4-7 remains a known-flaky target. Goal: enumerate and fix all opus-4-7-specific failures so the pin can eventually be lifted."
 started: 2026-04-18T00:12:20Z
-completed:
-verdict:
+completed: 2026-04-18T16:55:38Z
+verdict: PASSED
 score: 0.7
-worktree: .worktrees/spacedock-ensign-green-opus-4-7-full-suite
+worktree: 
 issue:
 pr: #125
-mod-block: merge:pr-merge
+mod-block: 
+archived: 2026-04-18T16:55:38Z
 ---
 
 ## Why this matters
