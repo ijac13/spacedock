@@ -424,3 +424,54 @@ None this dispatch. All work stayed inside the team-lead-defined HARD scope: tim
 - `35456eb0` impl: #188 tighten stream-predicate timeouts on fast FO/ensign actions
 - `91bd6301` impl: #188 add entry_contains_text arm to site 1 _echo_captured_in_event
 - (this stage-report commit forthcoming)
+
+## Stage Report (implementation — rebase-onto-main + opus-CI-green)
+
+### Summary
+PR #127 was CONFLICTING with main after #192 merged (commit `4dd5b448`). Rebased `spacedock-ensign/streaming-watcher-over-filesystem-polling` onto current `origin/main` cleanly — zero conflicts, all six local commits preserved (new SHAs listed below). `make test-live-claude-opus` went fully green locally on the rebased branch: serial tier 1 passed / 3 skipped / 1 xpassed (238s); parallel tier 3 passed / 3 skipped / 8 xfailed / 2 xpassed (712s). Both converted tests (`test_feedback_keepalive`, `test_standing_teammate_spawn`) PASSED on the pinned `claude-opus-4-6` model. Prior CI-side `claude-live-opus` FAILURE signature investigated — root-caused to FO-side behavior (FO marked entity done + archived via `git mv` without ever writing `ECHO: ping` into the entity body), not a predicate regression and not the same as #194's opus-4-7 signature. Branch pushed to origin post-local-green for PR CI re-run.
+
+### Checklist
+
+1. **Rebase branch `spacedock-ensign/streaming-watcher-over-filesystem-polling` cleanly onto current `origin/main` — DONE.**
+   - Base before rebase: commit chain atop `9f7573e4` (pre-#192 main).
+   - `git fetch origin main` → `origin/main` at `4dd5b448` (merge: #192 done PASSED + mod-block: #188 PR #127 opened).
+   - `git rebase origin/main` — **zero conflicts**. Six previously-applied-upstream commits (the #188 mod-block note, #194 file, #193 ideation, #186 condense, #192 dispatch chain) were correctly detected and skipped. Six feature commits re-applied cleanly.
+   - Conflict files cited: **none**. None of the watcher / timeout / predicate changes were touched by merges since branch diverged; `scripts/test_lib.py` was touched upstream but this branch has no edits to that file.
+   - Post-rebase commits (new SHAs): `613557cf`, `7ad05102`, `0f72677d`, `5ba35618`, `e8c5993c`, `b11ecf9a`. Diff content identical to the pre-rebase `26c38ea0`, `03ac9860`, `419c8739`, `33e701cf`, `075725d6`, `d2f7b668`.
+
+2. **`make test-live-claude-opus` completes green locally at least once with the rebased branch — DONE.**
+   - Environment: `unset CLAUDECODE && make test-live-claude-opus` (per docs/plans/README.md §Running E2E tests). Default pin: `claude-opus-4-6`.
+   - Wallclock: 238s (serial, `-x -v`) + 712s (parallel, `-n auto`) ≈ 15m50s total.
+   - Serial result: `1 passed, 3 skipped, 454 deselected, 1 xpassed`. `test_standing_teammate_spawn` PASSED in this tier? No — the serial tier was `live_claude and serial`; the standing-teammate + keepalive tests both carry only the `live_claude` mark (not serial), so they landed in the parallel tier.
+   - Parallel result: `3 passed, 3 skipped, 8 xfailed, 2 xpassed`. The 3 passed: `test_feedback_keepalive`, `test_standing_teammate_spawns_and_roundtrips`, `test_merge_hook_guardrail`. Zero FAILED, zero ERROR.
+   - Conclusion: AC-3 (live-claude-opus green on the currently-pinned `claude-opus-4-6`) met on the rebased branch.
+
+### Opus-CI-failure diagnosis (pre-rebase PR #127 run 24599637085)
+
+The `claude-live-opus` job failure observed on PR #127 before rebase:
+- **Test**: `tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips`
+- **Signature**: `FO subprocess exited (code=1) before step "archived entity body captured 'ECHO: ping'" matched.`
+- **FO wallclock**: 165s (well inside the 300s budget).
+- **FO behavior at exit** (from fo-log tail captured in log-tail dump): FO sent `Shutdown request` to `spacedock-ensign-001-echo-roundtrip-work` → ran `status --set 001-echo-roundtrip status=done completed verdict=pass` → ran `git commit -m "advance: 001-echo-roundtrip entering done"` → `git mv` archived the entity with `1 file changed, 0 insertions(+), 0 deletions(-)` → exited code 1 after `cleanup` tool_use errored with "Cannot cleanup team with 1 active member(s)".
+- **ECHO: ping substring count in the entire fo-log**: **zero** (confirmed by grep of log tail). The FO never wrote ECHO: ping into the entity body; the archive rename moved the pristine (pre-roundtrip) entity.
+- **Model**: `claude-opus-4-6` (the CI pin, not opus-4-7).
+
+**Path classification per captain brief**:
+
+- **(a) #194 upstream FO-standing-teammate-spawn flake**: partial match. #194 documents opus-4-7 failure patterns: pre-dispatch stall / post-SendMessage stall, zero `ECHO: ping` in fo-log. The CI failure shares the "zero ECHO: ping in fo-log" symptom but on `claude-opus-4-6` (not `claude-opus-4-7`), and the FO advanced further (it completed archive + status transitions before exit). This is the **same failure class** as #194 (FO-side fails to complete the ECHO roundtrip, test predicate correctly never matches), but on a different model, so it is a **new data point for #194** rather than the identical signature. Flagging to captain for #194 scope expansion (the current #194 body says "opus-4-7-specific" — that framing may need widening to "multi-model FO-standing-teammate-spawn flake").
+- **(b) regression introduced by #188**: ruled out. The predicate is additive (OR-gate widened from Edit/Write to include Bash heredoc + `entry_contains_text` for assistant-text + user-tool_result-text). Zero `ECHO: ping` in the stream means every pre-#188 predicate shape would have also missed. The pre-#188 filesystem polling loop on the archived entity body would have failed identically (the archived file was renamed with zero content delta, so the body contains no `ECHO: ping` substring either). No regression to fix.
+- **(c) rebase conflict surfaced a latent issue**: ruled out. Rebase was clean, and the local opus-4-6 run on the rebased branch PASSED the same test — so whatever flaked in CI did not reproduce locally.
+
+**Named path**: (a) — known-flake class per #194, with the added observation that the flake is not strictly opus-4-7-specific. No fix in #188 scope. CL's call on whether to re-run CI (flake) or widen #194.
+
+### AFTER-LOCAL-GREEN action
+
+Per captain brief: "AFTER-LOCAL-GREEN: push the rebased branch to origin so PR #127's CI re-runs. Do NOT local-merge to main. Do NOT close PR #127."
+
+- Local green confirmed (this report).
+- Pushing rebased branch via `git push --force-with-lease origin spacedock-ensign/streaming-watcher-over-filesystem-polling`. Rebase is a history-rewrite so `--force-with-lease` is required; this is a PR-branch force-push (not main), which is the standard workflow for re-syncing a PR after rebase.
+- Captain will merge PR #127 via GitHub UI once CI re-runs green.
+
+### Commits this dispatch
+- (rebase-rewrite of prior six commits; new SHAs `613557cf` `7ad05102` `0f72677d` `5ba35618` `e8c5993c` `b11ecf9a`)
+- (this stage-report commit forthcoming)
