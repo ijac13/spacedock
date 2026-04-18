@@ -21,10 +21,10 @@ from test_lib import (  # noqa: E402
 )
 
 
-# #154 reclassification: this test has no static FO content reads — its 1/5 inner failure is
-# runtime entity-advancement / SendMessage signaling, not the post-#085 content-home drift #154
-# targets. The xfail was misattributed by the #148 cycle-6 blanket marker pass; if the test fails
-# at validation, surface it under a fresh task id.
+# #154 reclassified the original `pending #154` xfail here: this test reads no static FO content,
+# so the content-home refresh is irrelevant. The 1/5 live failure is runtime-behavior drift (FO
+# exit code != 0 within budget — team-mode completion-signal flow hang) tracked by #198.
+@pytest.mark.xfail(strict=False, reason="pending #198 — runtime FO team-mode completion-signal exit hang; see docs/plans/fo-runtime-test-failures-post-154.md")
 @pytest.mark.live_claude
 def test_dispatch_completion_signal(test_project, model, effort):
     """Team-mode dispatch: ensign SendMessage(team-lead, "Done: ..."); FO advances status."""

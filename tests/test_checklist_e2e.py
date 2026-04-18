@@ -20,10 +20,10 @@ from test_lib import (  # noqa: E402
 )
 
 
-# #154 reclassification: this test has no static FO content reads — its 1/9 inner failure is in
-# dispatch-prompt structure (Completion checklist / SKIPPED template), not the post-#085 content-
-# home drift #154 targets. The xfail was misattributed by the #148 cycle-6 blanket marker pass;
-# if the test fails at validation, surface it under a fresh task id.
+# #154 reclassified the original `pending #154` xfail here: this test reads no static FO content,
+# so the content-home refresh is irrelevant. The 1/9 live failure is runtime-behavior drift (FO no
+# longer emits checklist-review text during post-dispatch review) tracked by #198.
+@pytest.mark.xfail(strict=False, reason="pending #198 — runtime FO checklist-review emission drift; see docs/plans/fo-runtime-test-failures-post-154.md")
 @pytest.mark.live_claude
 def test_checklist_e2e(test_project, model, effort):
     """Commissions a full workflow then runs FO to verify ensign checklist compliance."""

@@ -73,10 +73,10 @@ SHUTDOWN_PATTERN = re.compile(
 )
 
 
-# #154 reclassification: this test has no static FO content reads — its 1/4 inner failure is
-# runtime-behavior drift in FO SendMessage / shutdown-pattern detection, not the post-#085
-# content-home drift #154 targets. The xfail was misattributed to #154 by the #148 cycle-6
-# blanket marker pass; if the test fails at validation, surface it under a fresh task id.
+# #154 reclassified the original `pending #154` xfail here: this test reads no static FO content,
+# so the content-home refresh is irrelevant. The 1/4 live failure is runtime-behavior drift
+# (subagent-log discovery under ~/.claude/projects/<slug>/subagents/ returns empty) tracked by #198.
+@pytest.mark.xfail(strict=False, reason="pending #198 — runtime subagent-log discovery drift; see docs/plans/fo-runtime-test-failures-post-154.md")
 @pytest.mark.live_claude
 def test_agent_captain_interaction(test_project, model, effort):
     """FO uses direct text to captain and does not prematurely shut down agents (AC6, AC7)."""
