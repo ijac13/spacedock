@@ -164,3 +164,44 @@ No YAML keys modified. No changes to agents/ or references/. No changes to propo
 ### Ideation assessment
 
 Entity is gate-ready. ACs follow #193 entity-level format with explicit `Test method:` clauses. Score 0.7 is appropriate — not >= 0.8 so staff review not triggered, but close enough that careful implementation is warranted. Main residual risk: Path-B's filesystem-based signals could race with FO teardown (entity body written, then status flipped). Implementation stage should verify signal-check order handles partial writes.
+
+## Stage Report (implementation)
+
+### Summary
+
+Rewrote the third watcher in `tests/test_feedback_keepalive.py` into a two-path observer (`_await_validation_path`) that returns `"dispatch"` (Path A — fresh validation ensign Agent dispatch in the stream) or `"inline-process"` (Path B — conjunctive three-signal filesystem check: `### Feedback Cycles` body + `Goodbye, World!` in greeting.txt + `status: done` frontmatter). Tier-1 assertion branches on the return value; Path A runs the existing no-premature-shutdown check; Path B asserts no premature shutdown AND verifies the terminal-state-on-disk conjunction. Also removed the bare-mode-haiku `pytest.xfail` block (AC-3) and downstream dead bindings (`resolved_team_mode`, `request` fixture). The feedback-cycle watcher is now gated on Path A (Path B already captures the feedback-cycle evidence via disk state).
+
+### Checklist
+
+1. **DONE — Third watcher rewritten to two-path observation.**
+   New helper `_await_validation_path(w, entity_file, archive_file, greeting_file, timeout_s)` at `tests/test_feedback_keepalive.py:84-138` replaces the single `w.expect(...)` formerly at lines 219-224. Path-A predicate (fresh validation ensign Agent dispatch) is evaluated per drained stream entry; Path-B predicate (`_inline_process_complete` at lines 44-81) is evaluated per poll tick. Stream check runs before filesystem check so an in-flight dispatch is never misattributed when both signals could land in the same tick. Tier-1 branch at lines 378-417: Path A runs the existing `no shutdown SendMessage between completion and validation dispatch` check; Path B runs `no shutdown SendMessage before inline-process completion` plus `inline-process reached terminal state on disk`. AC-1 verified: `grep -c 'validation ensign dispatched (keepalive crossed the transition)' tests/test_feedback_keepalive.py` → 0. AC-2 verified by inspection of the Tier-1 block — the "no shutdown" check is duplicated across both paths with path-appropriate labels; no silent weakening.
+
+2. **DONE — xfail removed.**
+   `grep -c 'pytest.xfail' tests/test_feedback_keepalive.py` → 0. Removed the 11-line block (old lines 140-150) plus the now-dead `team_mode_opt` / `resolved_team_mode` derivation and the unused `request` pytest fixture argument. AC-3 satisfied.
+
+3. **DONE — Path-B race handling + local verification.**
+   `_inline_process_complete` uses a same-tick conjunction over all three signals: a partial-write window (body section written before status flips, or vice versa) returns False transiently and re-succeeds on the next 0.2s poll tick once both invariants hold. Files are read with `errors="ignore"` to tolerate mid-write UTF-8 truncation; missing files return False rather than raising. The race-handling rationale is documented in the helper's docstring (lines 56-60). `make test-static` → **437 passed** (baseline on pristine `b8d60f51` was also 437 — entity's `~439` reference was stale; no regression). Local haiku-bare live run of `test_feedback_keepalive`: PASSED in 164s via Path A (1 implementation dispatch + 1 validation dispatch, both ensigns). Path B not exercised in this smoke run — validation stage's full multi-model live coverage (AC-4) belongs to validation stage with the $25-40 budget.
+
+### Changes written
+
+- `tests/test_feedback_keepalive.py`:
+  - Added `time` import (line 9) for the custom polling loop
+  - Added `_STATUS_DONE_RE` compiled regex (line 41)
+  - Added `_inline_process_complete(entity_file, archive_file, greeting_file) -> bool` (lines 44-81)
+  - Added `_await_validation_path(w, entity_file, archive_file, greeting_file, timeout_s) -> str` (lines 84-138)
+  - Removed `pytest.xfail` block + `resolved_team_mode` derivation + `request` fixture parameter
+  - Replaced the `w.expect(...)` third watcher with a `_await_validation_path(...)` call that sets `validation_signal` (lines 300-312)
+  - Gated the subsequent feedback-cycle `w.expect(...)` watcher on `validation_signal == "dispatch"` (lines 314-344)
+  - Branched the `t.check("FO dispatched Agent() for validation stage", ...)` assertion on `validation_signal` (lines 363-369)
+  - Branched the Tier-1 assertion block on `validation_signal`, keeping Path A's existing check and adding Path B's "no shutdown + terminal-state-on-disk" pair (lines 378-417)
+- `docs/plans/test-feedback-keepalive-two-path-assertion.md`: this Stage Report (implementation) section. No YAML frontmatter changes.
+
+No changes to `agents/`, `references/`, other tests, or any file outside `tests/test_feedback_keepalive.py` and this entity file.
+
+### Evidence
+
+- `tests/test_feedback_keepalive.py:84` — `_await_validation_path` helper entry
+- `tests/test_feedback_keepalive.py:300` — call site replacing the old third watcher
+- `tests/test_feedback_keepalive.py:378` — Tier-1 branch on `validation_signal`
+- `make test-static` → 437 passed (matches pristine-branch baseline)
+- Single haiku-bare run: `uv run pytest tests/test_feedback_keepalive.py --runtime claude --team-mode=bare --model claude-haiku-4-5 --effort low` → PASSED (163.98s, Path A fired)
