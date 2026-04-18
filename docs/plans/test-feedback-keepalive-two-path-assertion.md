@@ -9,7 +9,7 @@ verdict:
 score: 0.7
 worktree: .worktrees/spacedock-ensign-test-feedback-keepalive-two-path-assertion
 issue:
-pr:
+pr: #132
 mod-block: merge:pr-merge
 ---
 
