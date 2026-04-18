@@ -163,6 +163,27 @@ Do:
 - #185 — test-predicate cherry-pick + audit (addresses Category A)
 - CI run 24590771304 — latest #182 branch full-suite run showing the C1 failure pattern
 
+### Feedback Cycles
+
+**Cycle 1 — 2026-04-18, ideation gate bounce-back (captain-initiated after independent staff review).**
+
+Reviewer findings requiring revision (cited by line number in this file pre-revision):
+
+1. **Lines 63-66 (C1 block):** rewrite symptom candidates in terms directly observable in `fo-log.jsonl`. Strike fix surfaces (a) "tighten TaskUpdate tool schema" and (c) "tighten M4 milestone" — both are phantoms. `task_id` appears nowhere in the spacedock codebase (the `<tool_use_error>` is from Claude Code's built-in TaskUpdate/TodoWrite SDK primitive, not a spacedock-owned schema). `M4` is terminology from `_archive/migrate-live-tests-to-streaming-watcher.md`; the current watcher uses caller-supplied lambda predicates with no milestone concept.
+2. **Line 63 (evidence framing):** stop treating the `task_id` error as a spacedock-owned symptom. Add to AC-3: identify the emitting tool before assuming it's in scope.
+3. **Line 65 (fix surface C1(b)):** `run_first_officer_streaming` is in the test harness (`scripts/test_lib.py:741`), not production. Clarify whether the fix would live test-side (and how that helps production FOs) or production-side (and name the production file). As currently stated this surface is ambiguous.
+4. **Line 66 (prose back-door):** remove the "Prose is a fallback" sentence OR elevate prose fallback to require explicit captain-approval exception. AC-4's flat "no prose-only commits" prohibition must not have an implementer-discretion escape hatch.
+5. **Line 70 (C3 teardown ordering):** make explicitly out-of-scope for #186 OR explicitly a follow-up task. "Revisit at implementation time" is soft enough to smuggle in a second load-bearing fix.
+6. **Line 100 (AC-3):** require the artifact summary to cite fo-log line numbers / timestamps for the load-bearing event. "Produce a per-run artifact summary" is subjective as written.
+7. **Line 103 (AC-4):** raise 4/5 threshold to 5/5 on first pass, OR add a defined orthogonal-flake exception with explicit criteria for what "same symptom" means (implementer-judged "same symptom" is what #182 showed is unreliable).
+8. **Lines 130-131 (dependencies):** clarify whether B-category flake (blocking `sleep` in ensign) can confound C1 diagnosis. If yes, #183 is a HARD block for implementation start, not a convenience block.
+9. **Missing branch:** add an explicit fork in AC-3/AC-4: "if AC-3 diagnosis concludes C1 is actually a test-predicate bug (Category A), bounce findings to #185; #186 implementation does not proceed to AC-4." Closes the #185 overlap gap.
+10. **Line 145 (budget):** recompute from the doc's own per-test math. Per-run cost ~$2; full suite serial+parallel ≈ $15-27 per run; 2 consecutive clean runs = $30-54; C-category diagnosis ~$22; total ≈ $70-80 worst case, not $45-50.
+
+Reviewer approved as-is: scope fence around unpinning (AC-7), A→#185 / B→#183 decomposition, the "no prose shortcut" discipline citations (lines 119, 32).
+
+Revised ideation must pass the same ideation gate again.
+
 ## Stage Report (ideation)
 
 - **DONE — Read the seed entity body in full.** Confirmed seed body captured the pre-ideation framing; rewrote with inventory + acceptance criteria.
