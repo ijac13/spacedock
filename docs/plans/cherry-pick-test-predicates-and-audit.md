@@ -345,3 +345,56 @@ Combined scope-expansion cost: ~$1.05-1.50. Plus the prior cycle-2 consumption o
 ### Cycle 2 Scope-Expansion Summary
 
 Option A applied. Both brittle predicates in `test_feedback_keepalive.py` now use data-flow assertions that accept any of three workflow-artifact signals. The end-of-test poll matches the mid-run watcher's shape exactly, keeping the two predicates consistent and equally tolerant of runtime-mode variance. Bare-mode haiku now passes end-to-end in 95s (previously failed at 415s). Opus-4-6 non-bare still passes in 130s with no regression. AC-8, AC-9, AC-10, AC-11 all verified with direct live-run evidence. Cycle 2 is complete pending captain review.
+
+## Stage Report (validation, cycle 2)
+
+This cycle-2 validation covers only the scope-expansion ACs (AC-8/9/10/11) plus an AC-4 regression check. Cycle-1 ACs (AC-1..7) were already PASSED by the cycle-1 validator and are not re-run here (AC-3 standing-teammate and AC-6 gate-guardrail live tests are explicitly out of scope for this cycle per the dispatch).
+
+1. **Read implementation stage reports (cycle 2 watcher 1 + Option-A expansion)** — DONE. Noted: cycle-2 first pass (`efd339f3`) converted the mid-run `implementation ensign dispatched` watcher (watcher 1) to a three-signal data-flow poll; bare-mode haiku run then exposed a SECOND brittle predicate (the end-of-test `### Feedback Cycles` poll) which was not in the original cycle-2 scope. Captain reopened scope → Option A (`f25f7ed6`) broadened the end-of-test predicate to the same three-signal shape (substring + dual-path entity body, validation-expected greeting content, ≥2 ensign Agent dispatches). Both edits are test-only — `skills/` hard scope fence honored.
+
+2. **AC-1 spot-check (cherry-pick correctness, regression verify)** — DONE.
+   - `git diff main...HEAD -- skills/` returned 0 bytes (empty). Scope fence intact through both cycle-2 commits.
+   - `git log --oneline main..HEAD` shows 11 commits: 3 cherry-picks (`e91165d5`, `56f651c2`, `cd6b4777`), 2 gate-guardrail conversion commits (`4cf24ced`, `cbe888c3`), 1 cycle-1 impl report (`23d2f37a`), 1 cycle-1 validation report (`67ff8b1d`), 2 cycle-2 fix commits (`efd339f3` watcher 1 + `f25f7ed6` Option A), 2 cycle-2 reports (`c9466276` + `88b6f14a`). Matches the narrative in both implementation reports.
+
+3. **AC-8 verification (mid-run narration watcher removed)** — DONE. `grep -n 'implementation ensign dispatched' tests/test_feedback_keepalive.py` returned no matches (exit 1). No regression from cycle-1 grep result.
+
+4. **AC-10 verification (both predicates are three-signal data-flow OR-gates, no narration or single-signal watchers remain)** — DONE.
+   - Grepped `tests/test_feedback_keepalive.py` for `entry_contains_text`, the literal `### Feedback Cycles` heading, and `implementation ensign dispatched` — **all three return no matches**. No narration-shaped predicate survives in this file.
+   - Inspected both polling loops directly (entity file lines 179-205 and 217-248):
+     - **Mid-run watcher** (`_impl_signal_observed`): ORs three signals — (b) `greeting.txt` existence, (a) `"Feedback Cycles"` substring across live OR archive entity paths, (c) ANY Agent tool_use with `subagent_type="spacedock:ensign"` in `fo-log.jsonl`. 240s deadline.
+     - **End-of-test teardown poll** (`_feedback_cycle_observed`): ORs three signals — (a) `"Feedback Cycles"` substring across live OR archive entity paths, (b) `greeting.txt` contains `"Hello, World!"`, (c) ≥2 Agent tool_uses with `subagent_type="spacedock:ensign"`. 300s deadline.
+   - Only remaining `w.expect` call in the fixture (line 209-214) is a structured tool_use field match on `subagent_type="spacedock:ensign"` + `_agent_targets_stage(..., "validation")` — that inspects structured tool_use input fields, not narration prose. Consistent with AC-10 intent.
+
+5. **AC-9 verification (live bare-mode haiku independent re-run)** — DONE, **PASS**. Invocation: `unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --team-mode=bare --model claude-haiku-4-5 --effort low -v -s` (matches CI `claude-live-bare` shape per `.github/workflows/runtime-live-e2e.yml:337-357` — there is no `live_claude_bare` marker; bare-mode uses the `live_claude` marker with `--team-mode=bare`). Result: **`1 passed in 115.11s`**. Evidence:
+   - `[OK] implementation data-flow signal observed (greeting file, feedback cycle section, or ensign Agent dispatch)` — watcher 1 fires.
+   - `[OK] validation ensign dispatched — implementation agent survived the transition` — structured tool_use watcher fires.
+   - `[OK] feedback-cycle data-flow signal observed (Feedback Cycles section, validation-expected greeting, or second ensign dispatch)` — Option-A teardown poll fires.
+   - `[Tier 1 — Keepalive at Transition] PASS: no shutdown SendMessage targets implementation agent between completion and validation dispatch`.
+   - `8 passed, 0 failed (out of 8 checks)`. Independent re-run confirms the implementer's 95s result (115s here; both comfortably under the 300s+240s deadline budget).
+
+6. **AC-11 / AC-4 verification (live opus-4-6 non-bare independent re-run)** — DONE, **PASS**. Invocation: `unset CLAUDECODE && uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --model claude-opus-4-6 --effort low -v -s`. Result: **`1 passed in 120.85s`**. Evidence:
+   - All three data-flow `[OK]` markers fire (mirrors AC-9 pattern).
+   - `[Tier 1 — Keepalive at Transition] PASS`. `8 passed, 0 failed (out of 8 checks)`.
+   - Teams-mode (opus-4-6 non-bare) does NOT regress from the two new data-flow predicates. Independent re-run confirms implementer's 129.99s (120.85s here).
+
+7. **Static suite** — DONE. `unset CLAUDECODE && make test-static` reports `426 passed, 22 deselected, 10 subtests passed in 20.99s`. Meets the ≥426 threshold.
+
+8. **Recommendation** — **PASSED**.
+   - All four scope-expansion ACs verified with direct live-run evidence (AC-8 grep clean; AC-10 grep clean + inspection of both OR-gates; AC-9 live bare haiku green in 115.11s; AC-11/AC-4 live opus-4-6 green in 120.85s).
+   - Static suite at 426 passes, matching the cycle-1 baseline (no regression).
+   - Cherry-pick correctness still intact (`skills/` diff empty).
+   - Both live runs show the three data-flow `[OK]` signals firing in both bare-mode-haiku and teams-mode-opus-4-6 — confirming the Option-A shape is runtime-mode agnostic.
+   - No failure or partial-signal observation across either live run.
+
+9. **Write this Stage Report (validation, cycle 2)** — DONE (this section).
+
+### Cycle 2 validation budget
+
+Two live runs consumed:
+- AC-9 bare-mode haiku: 115.11s wallclock, haiku tokens — ~$0.30-0.50.
+- AC-11 opus-4-6: 120.85s wallclock, opus tokens — ~$0.75-1.00.
+- Combined: ~$1.05-1.50. Well within the ~$2-3 guidance for cycle-2 validation.
+
+### Cycle 2 Validation Summary
+
+Independent re-verification of cycle-2 scope-expansion ACs. All green. AC-8 (mid-run narration watcher removed) and AC-10 (both polling loops are three-signal data-flow OR-gates with no narration or single-signal shape remaining) confirmed by grep + direct inspection. AC-9 bare-mode haiku and AC-11/AC-4 opus-4-6 both PASS on independent live re-runs, with all three data-flow `[OK]` markers firing in each. Static suite at 426 passes. `skills/` diff remains empty. Recommendation: **PASSED**.
