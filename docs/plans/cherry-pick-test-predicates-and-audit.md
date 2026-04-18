@@ -146,6 +146,32 @@ This is the same anti-pattern #185 already addresses for the *end-of-test* signa
 
 **No prose mitigations.** Fix is test-side only. Do NOT edit `skills/first-officer/references/*`.
 
+**Cycle 3 — 2026-04-18, xfail bare-mode haiku instead of chasing a third shortcut-path watcher.**
+
+Post-cycle-2 CI on #185 (run 24594245273, job 71921082763) surfaced a third brittle predicate:
+
+```
+FAILED tests/test_feedback_keepalive.py::test_feedback_keepalive
+- test_lib.StepFailure: FO subprocess exited (code=0) before step
+  'validation ensign dispatched (keepalive crossed the transition)' matched.
+```
+
+Root cause: fo-log shows the FO completed the full workflow (implementation → validation → merged → terminal PASSED, all entity state transitions visible in `git log`). But the watcher at `tests/test_feedback_keepalive.py:209-215` expects an `Agent` tool_use with `subagent_type="spacedock:ensign"` AND `_agent_targets_stage(..., "validation")`. Bare-mode haiku's shortcut paths (reusing implementation agent, inline editing, etc.) complete validation without emitting that specific tool_use shape.
+
+Cycle 2 already converted two other watchers in this file to three-signal OR-gates. Continuing that approach for the third predicate would add further complexity. Captain's decision: xfail the `--team-mode=bare` + `--model=claude-haiku-4-5` combination instead of rewriting the watcher. The test's keepalive assertions implicitly require fresh Agent dispatch at stage boundaries; haiku in bare mode doesn't reliably produce that shape even when the workflow succeeds.
+
+**Scope for cycle 3:**
+
+1. Add an **early xfail** inside `test_feedback_keepalive` when `--model` resolves to `claude-haiku-4-5` AND `--team-mode` resolves to `bare`. Use `pytest.xfail(reason=...)` near the top of the test body. Reason text must be evergreen — no `(see #185)`, no "observed in CI run …", no model-version cargo.
+2. Do NOT touch any of the three watcher/poll sites. Cycle 2 handled two; xfail covers the third.
+3. No prose edits to `skills/first-officer/references/*`.
+4. **AC-12:** `grep -n pytest.xfail tests/test_feedback_keepalive.py` returns a match guarded by a haiku-bare conditional. Inspection confirms the reason is evergreen (no forbidden tokens — same check as AC-2 tokens from #183, run the same grep here).
+5. **AC-13:** bare-mode haiku invocation short-circuits to `XFAIL` status (not `FAIL`). Skip live regression on this path — the xfail is structurally verifiable by reading pytest output from a single local invocation, or by inspection of the test body.
+6. **AC-14:** opus-4-6 teams-mode invocation still PASSES. Verify with one live run (~$1-2 budget).
+7. Suggested xfail reason: *"In bare-mode dispatch on haiku-class models, the first officer may take shortcut paths — reusing the implementation agent across stages, inline file edits, skipping the explicit per-stage Agent tool_use — that complete the workflow end-to-end but do not emit the distinct Agent dispatches this test asserts on at stage boundaries. The workflow is correct; the test's keepalive assertions presume a shape the model does not consistently produce in this dispatch mode."*
+
+**Merge discipline for this cycle:** captain instruction — after the xfail lands and the PR body is updated, merge directly without waiting for the full CI re-run. The xfail's correctness is statically verifiable from the pytest output (`XFAIL` vs `FAIL`) and the live opus-4-6 regression check covers the path that actually blocks merge today.
+
 ## Stage Report (ideation)
 
 1. **Read the seed entity body** — DONE. Read `/Users/clkao/git/spacedock/docs/plans/cherry-pick-test-predicates-and-audit.md` at its pre-ideation state; preserved the Cross-references, Out-of-scope items, and Scope bullets while expanding the approach section.
