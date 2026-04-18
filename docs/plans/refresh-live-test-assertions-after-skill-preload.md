@@ -200,7 +200,31 @@ Static checks cover the content-home-refresh intent. Live dispatch is required f
 - `test_team_health_check` — does not exist; dropped
 - First-officer runtime behavior — sibling tasks if runtime-drift surfaces
 
-## Stage Report
+## Feedback Cycles
+
+### Cycle 1 — PR #131 CI REJECTED (2026-04-18)
+
+**Validation surface:** PR #131 CI run `24609449049` — full claude-tier under merge-ref checkout (post-#186 merge).
+
+**Static side:** ✅ green (437 passed, 22 deselected). xfail cleanup verified per AC-7.
+
+**Live side:** ❌ 6-7 tests failed across all 3 claude jobs. Single big positive: `test_commission` improved from 19/65 failing (pre-#154) to **3/63 failing** (~84% of the static-content drift correctly addressed). Remaining concerns:
+
+| Test | claude-live | claude-live-bare | claude-live-opus | Likely cause |
+|------|---|---|---|---|
+| `test_commission` | 3/63 ❌ | ❌ | ❌ | Residual assertion-content mismatches; further `assembled_agent_content` swaps needed for the last 3 |
+| `test_output_format` | ❌ | ❌ | ❌ | Impl assumed "already correct path-wise" — empirically wrong; static side missed something |
+| `test_reuse_dispatch` | ❌ | ❌ | ❌ | Same as above |
+| `test_repo_edit_guardrail` | ❌ | ❌ | ❌ | Same as above |
+| `test_agent_captain_interaction` | 1/4 ❌ | ❌ | ❌ | Reclassified runtime-only — needs fresh task ID per AC-6 |
+| `test_checklist_e2e` | – | ❌ | ❌ | Reclassified runtime-only — needs fresh task ID per AC-6 |
+| `test_dispatch_completion_signal` | – | – | ❌ | Reclassified runtime-only — needs fresh task ID per AC-6 |
+| `test_feedback_keepalive` | ❌ | ❌ | ✅ opus | NOT #154 scope — #190 brittle-watcher class (fix in flight on a separate branch) |
+| `test_standing_teammate` | – | – | ❌ | NOT #154 scope — #194 known flake |
+
+**Captain's directive for cycle 2:** "make sure we run locally for the tests involved." Implementation must verify each affected test passes locally on at least haiku before signaling done.
+
+**Routed to:** implementation worker (still alive; reuse_ok per context-budget at 59.5%).
 
 1. **Convert AC block to #193 entity-level format** — **DONE**. Replaced the provisional 4-bullet AC list with 10 `**AC-N — {end-state property}**` items, each followed by `Verified by:` referencing a concrete `pytest` invocation, grep check, or CI signal. Each AC names a post-merge repo property, not a stage action.
 2. **Per-test mapping table** — **DONE**. Added a 7-row table naming the current source-of-truth file for each test's assertions, a 1-line strategy per test (path-swap / assembled-contract grep / reclassify), and a strategy summary. Corrected two errors in the provisional draft: `test_team_health_check` does not exist (dropped); `test_codex_packaged_agent_e2e`'s `xfail` cites #161, not #154 (dropped). The task prompt's reference paths (`references/first-officer-shared-core.md`) were wrong — actual home is `skills/first-officer/references/`; corrected throughout. Three tokens asserted by `test_commission` (`initialPrompt`, `MUST use the Agent tool`, `Report.*ONCE`) are not literally present in any skill file — AC-9 calls for impl-time resolution (restore-or-delete-with-rationale).
