@@ -174,66 +174,20 @@ Do:
 - #185 — test-predicate cherry-pick + audit (addresses Category A)
 - CI run 24590771304 — latest #182 branch full-suite run showing the C1 failure pattern
 
-### Feedback Cycles
+### Feedback Cycles — compact history
 
-**Cycle 1 — 2026-04-18, ideation gate bounce-back (captain-initiated after independent staff review).**
+**Cycle 1 (ideation bounce):** Staff reviewer found 2 phantom fix surfaces (TaskUpdate schema, M4 milestone — both nonexistent in codebase), weak AC-3 artifact spec, and prose back-door at C1. Cycle 2 applied all 10 reviewer edits after independent codebase verification (`task_id` and `M4` grep confirmed phantom).
 
-Reviewer findings requiring revision (cited by line number in this file pre-revision):
+**Cycle 3 (scope expansion: unpin now in scope):** captain directed AC-7 flip from "not in scope" to "terminal step in #186 if mechanism-fix verifies 5/5 opus-4-7." Unpin targets: `Makefile OPUS_MODEL ?= opus`, `.github/workflows/runtime-live-e2e.yml` default → `opus`. Unpin is gated on 5/5 verify.
 
-1. **Lines 63-66 (C1 block):** rewrite symptom candidates in terms directly observable in `fo-log.jsonl`. Strike fix surfaces (a) "tighten TaskUpdate tool schema" and (c) "tighten M4 milestone" — both are phantoms. `task_id` appears nowhere in the spacedock codebase (the `<tool_use_error>` is from Claude Code's built-in TaskUpdate/TodoWrite SDK primitive, not a spacedock-owned schema). `M4` is terminology from `_archive/migrate-live-tests-to-streaming-watcher.md`; the current watcher uses caller-supplied lambda predicates with no milestone concept.
-2. **Line 63 (evidence framing):** stop treating the `task_id` error as a spacedock-owned symptom. Add to AC-3: identify the emitting tool before assuming it's in scope.
-3. **Line 65 (fix surface C1(b)):** `run_first_officer_streaming` is in the test harness (`scripts/test_lib.py:741`), not production. Clarify whether the fix would live test-side (and how that helps production FOs) or production-side (and name the production file). As currently stated this surface is ambiguous.
-4. **Line 66 (prose back-door):** remove the "Prose is a fallback" sentence OR elevate prose fallback to require explicit captain-approval exception. AC-4's flat "no prose-only commits" prohibition must not have an implementer-discretion escape hatch.
-5. **Line 70 (C3 teardown ordering):** make explicitly out-of-scope for #186 OR explicitly a follow-up task. "Revisit at implementation time" is soft enough to smuggle in a second load-bearing fix.
-6. **Line 100 (AC-3):** require the artifact summary to cite fo-log line numbers / timestamps for the load-bearing event. "Produce a per-run artifact summary" is subjective as written.
-7. **Line 103 (AC-4):** raise 4/5 threshold to 5/5 on first pass, OR add a defined orthogonal-flake exception with explicit criteria for what "same symptom" means (implementer-judged "same symptom" is what #182 showed is unreliable).
-8. **Lines 130-131 (dependencies):** clarify whether B-category flake (blocking `sleep` in ensign) can confound C1 diagnosis. If yes, #183 is a HARD block for implementation start, not a convenience block.
-9. **Missing branch:** add an explicit fork in AC-3/AC-4: "if AC-3 diagnosis concludes C1 is actually a test-predicate bug (Category A), bounce findings to #185; #186 implementation does not proceed to AC-4." Closes the #185 overlap gap.
-10. **Line 145 (budget):** recompute from the doc's own per-test math. Per-run cost ~$2; full suite serial+parallel ≈ $15-27 per run; 2 consecutive clean runs = $30-54; C-category diagnosis ~$22; total ≈ $70-80 worst case, not $45-50.
+**Cycle 4 (AC scope reframe):** PR #125 CI failed opus-4-7 on `test_standing_teammate_spawn` (120s watcher timeout) and `test_gate_guardrail` (2/7 Phase-3). Captain reframed unpin gate: "1× full-suite green on opus-4-7 local" instead of "3× one test." Ensign ran full suite once; all 4 non-XFAIL tests passed; unpin commit `a7308582` retained. Discipline captured: every named AC is mandatory; "deferred to validation" is not valid for implementation-owned ACs.
 
-Reviewer approved as-is: scope fence around unpinning (AC-7), A→#185 / B→#183 decomposition, the "no prose shortcut" discipline citations (lines 119, 32).
+**Cycle 5 (isolation re-runs, captured 2 real bugs):**
+- `test_feedback_keepalive` 3/3 PASS on opus-4-7 isolation — predicate is robust.
+- `test_standing_teammate_spawn` 0/2 FAIL on opus-4-7 isolation (reproducible, not CI-env-specific). Root causes: (a) the watcher's `entry_contains_text(e, r"ECHO:\s*ping")` regex matches the FO's own SendMessage prose to echo-agent, not the ensign's ECHO reply tool_result. Predicate bug, #185 audit miss. (b) On opus-4-7, the FO tears down echo-agent before the ensign completes — Category C3 — tracked separately in #194.
+- `test_gate_guardrail` 2/2 PASS but VACUOUS — `tests/test_gate_guardrail.py:48-52` passes no `--model` to `extra_args` and the test signature has no `model` fixture. Both isolation runs silently ran on `claude-sonnet-4-6`, not opus-4-7. Cycle 4's "full suite green on opus-4-7" claim was materially false for this test.
 
-Revised ideation must pass the same ideation gate again.
-
-### Feedback Cycles — Cycle 3 (captain-directed unpin scope expansion)
-
-**2026-04-18.** Blocked-path prep landed on branch. #183 / #185 / #172 have now all merged to main — the hard-block on implementation is cleared. Captain directed: once #186's mechanism fix lands and verifies 5/5 pass on opus-4-7 local, **ALSO flip the CI default back from `claude-opus-4-6` to `claude-opus-4-7`** (undo #181's pin).
-
-**AC-7 supersedes the earlier "explicitly NOT in scope" wording.** Unpinning is now a terminal step inside #186, gated on: (a) mechanism fix in place, (b) 5/5 clean on opus-4-7 `test_feedback_keepalive` at `--effort low`, (c) static suite green.
-
-**Unpin locations (reverse of #181's change):**
-- `Makefile` — `OPUS_MODEL ?= claude-opus-4-6` reverts to `OPUS_MODEL ?= opus` (the pre-#181 default; confirm by looking at #181's diff in main's history — merged commit `99fb7e01`)
-- `.github/workflows/runtime-live-e2e.yml` — both `MODEL_FLAG` and `EFFECTIVE_MODEL` default blocks that #181 set to `claude-opus-4-6` revert to `opus`
-- Both files had inline `# Pinned to claude-opus-4-6 due to opus-4-7 ensign hallucination regression ...; see #177 / #181. Reversible — restore default to opus once upstream resolves.` comments that should be removed cleanly along with the revert
-
-**Discipline:** unpin is the LAST step of implementation. If 5/5 doesn't hold, unpin does NOT happen — the mechanism fix goes back to the drawing board, or the task bounces to the captain with evidence.
-
-**Implementation order:**
-1. AC-3 live diagnosis (3 × opus-4-7 runs with `KEEP_TEST_DIR=1`)
-2. identify load-bearing symptom per fo-log line-number citations
-3. AC-3/AC-4 fork decision (per cycle-2 ideation edits 9): symptom (ii) → bounce to a follow-up, no unpin; symptom (iii) → timeout bump + unpin; symptom (i) → mechanism change + unpin
-4. If mechanism fix: implement ONE minimal production-side change (NO prose per captain rule), run 5 × opus-4-7 verifications
-5. If 5/5 holds: flip defaults per above; commit as final step; update entity body Stage Report
-6. Budget ceiling: ~$80 total (includes diagnosis + mechanism + 5 verify + 1 regression on opus-4-6 post-unpin to confirm the OR-gates still work on both models)
-
-### Feedback Cycles — Cycle 4 (captain bounce-back: AC scope was too narrow)
-
-**2026-04-18.** PR #125 opened with cycle-3's unpin + 5/5 `test_feedback_keepalive` evidence. CI promptly failed on opus-4-7 for two tests cycle 3 did not sample:
-
-- **`test_standing_teammate_spawn`** (claude-live, run 24596758787 job 71928128940): `StepTimeout: Step 'claude-team spawn-standing invoked' did not match within 120s`. This is exactly what AC-5 (C2 status check) was supposed to catch. Cycle 3 **deferred AC-5** with rationale that it was a "10-minute validation-stage follow-up." That framing was wrong — AC-5 is an acceptance criterion, not a nice-to-have.
-- **`test_gate_guardrail`** (claude-live-opus, run 24596758787 job 71928128939): `AssertionError: 2 of 7 checks failed in test_gate_guardrail`. Not in the original failure-mode inventory. Latent surface the unpin exposed.
-
-**Captain's scope reframe for cycle 4:** drop the narrow "3× one test" framing. The correct gate for unpin is **1× the full live-claude-opus suite passing on opus-4-7 locally**. If any test fails in that run, either (a) fix it, (b) document as explicit out-of-scope residual with captain approval, or (c) the unpin does not land. CI's continuous runs handle the "prove it's not a one-off" reliability check — not the ensign.
-
-**Discipline reminder (entered at the rule level for this cycle):** every AC named in the entity body is mandatory. "Deferred to validation" is not a valid outcome for an implementation-owned AC. Every AC in the stage report must either (a) claim DONE with concrete evidence, (b) SKIPPED only with captain-approved rationale recorded before the skip, or (c) FAILED with diagnosis.
-
-**Scope for cycle 4:**
-
-1. Run `unset CLAUDECODE && make test-live-claude-opus OPUS_MODEL=opus` (serial + parallel tiers) ONCE on current main post-rebase. Capture every failure with fo-log line citations + tool_use_id references.
-2. For each failing test: (a) diagnose root cause, (b) fix test or production code, OR (c) pause and request captain approval to document as explicit out-of-scope residual. NO prose mitigations to `skills/first-officer/references/*` without pause-and-ask.
-3. Re-run the full make target ONE more time. Every non-XFAIL/non-SKIP test must pass. If green: keep the unpin commit. If red: revert the unpin commit and report.
-
-**Unpin gate:** 1× clean full-suite on opus-4-7 local. That's the only gate — not 3× narrow, not 5× one test. CI handles reliability.
+**Cycle 6 (coming next, captain-directed):** bounded scope — fix `test_gate_guardrail` model fixture, narrow `test_standing_teammate_spawn` predicate (inherits #188's `entry_contains_text` arm once #188 lands), re-run 1× opus-4-6 plus 1× opus-4-7 on the two previously-failing tests. If green, unpin stands. If red, revert unpin and report. **First step of cycle 6 is to condense the verbose implementation stage reports on the branch into a compact cycle summary** so future ensigns don't absorb 300+ lines of history.
 
 ## Stage Report (ideation)
 
