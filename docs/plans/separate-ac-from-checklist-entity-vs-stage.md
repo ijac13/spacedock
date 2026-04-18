@@ -10,7 +10,7 @@ score: 0.7
 worktree: .worktrees/spacedock-ensign-separate-ac-from-checklist-entity-vs-stage
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Why this matters
