@@ -96,3 +96,28 @@ Test method: implementation stage must include a short explicit decision in the 
 
 - **#182** — the diagnostic-workflow entity whose implementer iteration surfaced this anti-pattern. #182 itself is being rejected for scope drift (it added a "Completion Signal Discipline" Variant A prose block to `claude-first-officer-runtime.md` that exceeded #182's scope); that Variant A has been removed and #183 does not depend on it.
 - **Earlier AC-4 dependency removed:** a prior draft of this entity required "no regression on #182's Variant A discipline." That clause is obsolete — Variant A no longer exists in the runtime file — and has been dropped. The current AC-4 is scoped to the new subsection alone.
+
+## Stage Report: ideation
+
+- DONE: Read the current #183 entity body in full.
+  Confirmed existing body, pre-rewrite, in `docs/plans/ensign-bash-poll-not-sleep.md`.
+- DONE: Note the scope change (#182 rejected, Variant A removed) and re-scope AC-4.
+  Grep of `skills/first-officer/references/claude-first-officer-runtime.md` for "Completion Signal Discipline|Variant A" returned zero matches; AC-4 rewritten to verify polling call pattern only, and a standalone audit note records the removed dependency.
+- DONE: Refine problem statement in evergreen operational terms.
+  Rewrote "Problem" and "Root cause" sections; no model-version, no "observed in #NNN", no temporal phrasing in sections that become skill prose.
+- DONE: Propose targeted approach with exact before/after shape.
+  "Proposed approach" names the target file (`skills/ensign/references/ensign-shared-core.md`), insertion point (after `## Rules`, before `## Stage Report Protocol`), and provides the full fenced-markdown body for the new `## Background Bash Discipline` subsection.
+- DONE: Rewrite acceptance criteria with explicit test methods per criterion; keep list short.
+  Five criteria (AC-1..AC-5), each with a named test method; static grep checks for shape and evergreen tone, one live behavioral check, one FO-runtime evaluation note.
+- DONE: Write test plan (static + behavioral + cost estimate; live-CI judgement).
+  Test plan lists static, behavioral, and evaluation costs; total ~15 min wallclock and <$1 agent budget; no CI dispatch needed.
+- DONE: Preserve #182 cross-reference for audit; keep proposed skill prose evergreen.
+  Cross-references moved to a tail section explicitly labeled "audit trail — not for inclusion in skill prose"; the proposed `## Background Bash Discipline` body contains no model-version names, no `(see #NNN)`, no temporal phrasing. AC-2 enforces this with a grep check.
+- DONE: Commit the updated entity body on main.
+  See commit SHA below (appended by the commit step).
+- DONE: Append this Stage Report section.
+  This section.
+
+### Summary
+
+Rewrote #183 for ideation stage: sharpened the problem statement, specified the target file (`ensign-shared-core.md`) and exact insertion point for the new `## Background Bash Discipline` subsection, supplied the full fenced-markdown body, and re-scoped AC-4 so it no longer depends on #182's removed Variant A prose. Acceptance criteria now include an evergreen-tone grep (AC-2) to enforce global-CLAUDE.md discipline, and the `#182` audit trail is isolated from content that would ship into the skill. Test plan is static + one live behavioral run; no CI dispatch.
