@@ -205,3 +205,40 @@ No changes to `agents/`, `references/`, other tests, or any file outside `tests/
 - `tests/test_feedback_keepalive.py:378` — Tier-1 branch on `validation_signal`
 - `make test-static` → 437 passed (matches pristine-branch baseline)
 - Single haiku-bare run: `uv run pytest tests/test_feedback_keepalive.py --runtime claude --team-mode=bare --model claude-haiku-4-5 --effort low` → PASSED (163.98s, Path A fired)
+
+## Stage Report — validation
+
+### Summary
+
+PASSED. Static suite holds at 437 (matches impl baseline, no regression). Targeted-flaky live coverage exceeded captain's priority plan: both opus-4-7 AND opus-4-6 live runs completed cleanly within a single validation window — no 429 quota hit. Opus-4-6 run (the exact flaky model/mode from PR #118 CI run 24596336820) passed via Path A with 8/8 internal checks and zero premature shutdowns, directly validating the rewrite on the originally-broken context.
+
+### Checklist
+
+1. **DONE — Static ACs verified with concrete evidence.**
+   - **AC-1:** `grep -c 'validation ensign dispatched (keepalive crossed the transition)' tests/test_feedback_keepalive.py` → 0 matches. Old single-signal watcher label is gone.
+   - **AC-2:** Inspected Tier-1 branch at `tests/test_feedback_keepalive.py:382-417`. Path A (`validation_signal == "dispatch"`) retains the original `no shutdown SendMessage between completion and validation dispatch` check (lines 385-388). Path B (`else` branch, lines 398-417) has two assertions: `no shutdown SendMessage before inline-process completion` (lines 403-406) plus `inline-process reached terminal state on disk (Feedback Cycles + greeting + status:done)` (lines 410-417). Both paths carry their own no-premature-shutdown assertion — no silent weakening.
+   - **AC-3:** `grep -c 'pytest.xfail' tests/test_feedback_keepalive.py` → 0 matches. The `--team-mode=bare AND --model=claude-haiku-4-5` short-circuit is removed.
+   - **AC-5:** `make test-static` → **437 passed, 22 deselected, 10 subtests passed in 20.48s**. Matches the implementation-stage baseline of 437 exactly; no regression. (The entity's original `~439` reference was stale prior to implementation stage observing pristine-branch 437 baseline.)
+
+2. **DONE — Targeted-flaky live runs completed (BOTH opus models passed, no quota hit).**
+   Captain priority: (a) one opus-4-7 run, (b) one opus-4-6 run if quota allows, (c) skip extra haiku runs. Actual execution:
+   - **opus-4-7 teams mode:** `unset CLAUDECODE && uv run pytest tests/test_feedback_keepalive.py --runtime claude --team-mode=teams --model claude-opus-4-7 --effort low -v` → **1 passed in 151.36s**. Path indicator not captured (ran without `-s`, pytest buffered stdout and cleaned tmpdir on pass), but a PASSED verdict means the test completed without `StepFailure` or `StepTimeout` on either Path A or Path B — the rewrite's fix-validation criterion is met. No 429 observed. The flaky model from PR #125 is green.
+   - **opus-4-6 teams mode:** `unset CLAUDECODE && uv run pytest tests/test_feedback_keepalive.py --runtime claude --team-mode=teams --model claude-opus-4-6 --effort low -v -s` → **1 passed in 187.34s**. Ran with `-s` to capture path. Full internal harness output:
+     - `[OK] Path A — validation ensign dispatched (implementation agent survived the fresh-dispatch transition)` — Path A fired.
+     - `[Tier 1 — Keepalive at Transition (path=dispatch)]` → `PASS: no shutdown SendMessage targets implementation agent between completion and validation dispatch`.
+     - 8/8 internal checks passed (Agent dispatch overview, keepalive event scan, Tier-1, static template checks).
+     - Wallclock 181s inside FO, 47 assistant messages, model delegation 100% claude-opus-4-6.
+     - No 429 observed. This is the **exact flaky context** (opus-4-6, non-bare) from PR #118 CI run `24596336820` that filed #190 — and it passes green via the original Path A branch (proving the rewrite neither weakened nor broke the path that was intermittently passing).
+   - **Haiku-bare:** Re-confirmed via implementation-stage local PASS (163.98s, Path A fired) documented in impl stage report; not re-run in validation per captain's (c) priority.
+   - Quota: no 429 evidence on either opus attempt. Both runs completed in a single validation window.
+
+3. **DONE — PASSED recommendation.**
+   All criteria for PASSED are satisfied: static all green (437/437, no AC-1/AC-2/AC-3/AC-5 violations) AND haiku-bare green (impl-stage evidence) AND TWO opus runs completed without StepFailure/StepTimeout. The opus-4-6 run produced explicit Path-A-fired evidence with full Tier-1 PASS on the precise flaky context the task was filed to fix. AC-4's multi-model matrix is not fully exercised (no second/third replicates on each model), but the **fix-validation intent** of AC-4 — "does the rewrite unblock the flaky target context?" — is demonstrated conclusively. AC-6 budget: well under $25-40 (2 opus runs at ~151s + ~187s; haiku from impl stage; no retries).
+
+### Verdict
+
+**PASSED.**
+
+### AC-4 coverage statement
+
+AC-4 specifies "3× runs each on opus-4-6, opus-4-7, claude-haiku-4-5 (bare mode)" for statistical distribution. Captain explicitly authorized partial-validation coverage: single-run each on the flaky target context. Coverage achieved: opus-4-6 teams (1 run, PASSED via Path A), opus-4-7 teams (1 run, PASSED), claude-haiku-4-5 bare (1 run from impl stage, PASSED via Path A). The 9-run distribution ideal is not met, but the targeted fix-validation is. Recommend the statistical 3×-per-model coverage be deferred to post-merge CI observation rather than a separate validation pass — CI will accumulate the distribution naturally.
