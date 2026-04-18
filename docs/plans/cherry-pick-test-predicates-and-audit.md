@@ -302,3 +302,46 @@ Combined cycle-2 cost: ~$2.00-2.50, within the ~$2-3 budget.
 ### Cycle 2 Summary
 
 The mid-run `implementation ensign dispatched` watcher in `test_feedback_keepalive.py` has been converted from a prompt-format-sensitive `_agent_targets_stage` check to a three-signal data-flow poll (greeting.txt presence, `"Feedback Cycles"` substring across live and archive entity paths, or any Agent ensign tool_use in fo-log.jsonl). AC-8 satisfied (grep returns empty). AC-4 opus-4-6 regression check PASSED at 184.60s — no teams-mode regression from the new watcher. AC-9 bare-mode haiku run FAILED, but NOT at the watcher I replaced — my new data-flow watcher printed its `[OK]` signal and the test progressed further. The AC-9 failure is at a different, pre-existing brittle predicate (the teardown `### Feedback Cycles` poll at line 221 which mismatches H2 vs H3 and doesn't check the archive path). That predicate is in the same brittle class but was explicitly not in cycle-2's scope per the dispatch's step-4 naming and the hard-scope-fence instruction. Recommend a follow-up cycle (or inclusion in cycle 3 if the captain reopens scope) to convert the teardown poll using the same substring + dual-path pattern used for watcher 1.
+
+## Stage Report (implementation, cycle 2 — scope expansion: Option A)
+
+Captain reopened scope after the first pass — CI on #185 (PR #123, run 24593325202) showed BOTH `claude-live` (opus-4-6) and `claude-live-bare` (haiku) jobs failing at a SECOND brittle predicate (the end-of-test `### Feedback Cycles` 300s poll), independently of the mid-run watcher. Captain's preferred option: **Option A — broaden the end-of-test predicate to data-flow, same shape as the mid-run fix**. New ACs: AC-10 (both predicates use data-flow; no narration/single-signal shape remains) and AC-11 (opus-4-6 live re-verify covers the end-of-test fix).
+
+1. **Factor both failure modes into the same fix** — DONE. The end-of-test polling loop at `tests/test_feedback_keepalive.py:217-228` (pre-edit) was converted to an Option-A three-signal poll, mirroring the mid-run watcher's shape but tuned for "feedback cycle has progressed past rejection" semantics.
+
+2. **New end-of-test predicate** — DONE. Any of:
+   - **(a)** `"Feedback Cycles"` substring (H2 or H3 agnostic) in the entity body at EITHER the live path (`keepalive-pipeline/keepalive-test-task.md`) OR the archive path (`keepalive-pipeline/_archive/keepalive-test-task.md`). This is the primary signal and covers the case where the FO records the feedback cycle section in-place as well as the case where it archives the entity before the poll runs.
+   - **(b)** `greeting.txt` contains `"Hello, World!"` — the validation-expected content. On the opus-4-6 non-bare path this is the post-rejection impl fix landing. (Bare-mode haiku sometimes fabricates alternate expected content, so this signal is advisory, not required — it's ORed with the other two.)
+   - **(c)** Two or more Agent tool_uses with `subagent_type="spacedock:ensign"` in `fo-log.jsonl`. A second ensign dispatch IS the post-rejection re-spawn (bare-mode) or a fresh-impl dispatch on the feedback path (teams-mode). This signal is runtime-mode and narration agnostic.
+   - 300s deadline preserved; triggering on any one signal.
+
+3. **Verify AC-8** — DONE. `grep -n 'implementation ensign dispatched' tests/test_feedback_keepalive.py` returns empty (exit 1). No regression from cycle-1.
+
+4. **Verify AC-10 (both predicates data-flow, no narration or single-signal)** — DONE. Grepped `tests/test_feedback_keepalive.py` for `entry_contains_text`, the literal `### Feedback Cycles` heading, and `implementation ensign dispatched` — all absent after the two edits. The only `w.expect` remaining in the Phase-2 body is the validation-ensign-dispatched watcher at line 209-214, which inspects a structured tool_use field (`subagent_type="spacedock:ensign"` plus `_agent_targets_stage(..., "validation")`) — not narration. Staff Phase-3 checks use `re.search` against `fo_text_output` but those are post-hoc verdict checks (intentional narration-presence assertions), not flow-control predicates.
+
+5. **Static suite re-verify** — DONE. `unset CLAUDECODE && make test-static` reports `426 passed, 22 deselected, 10 subtests passed in 19.95s`.
+
+6. **Verify AC-9 (live bare-mode haiku)** — DONE, **PASS**. Invocation: `unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --team-mode=bare --model claude-haiku-4-5 --effort low -v -s` (matches CI `claude-live-bare` job per `.github/workflows/runtime-live-e2e.yml:337-357`). `1 passed in 95.00s`. Evidence:
+   - `[OK] implementation data-flow signal observed (greeting file, feedback cycle section, or ensign Agent dispatch)` — watcher 1 (cycle-1 fix) fires.
+   - `[OK] feedback-cycle data-flow signal observed (Feedback Cycles section, validation-expected greeting, or second ensign dispatch)` — new Option-A teardown poll fires.
+   - `[Tier 1 — Keepalive at Transition] PASS`.
+   - `8 passed, 0 failed (out of 8 checks)`.
+
+7. **Verify AC-11 / AC-4 (live opus-4-6 non-bare re-run covers end-of-test fix)** — DONE, **PASS**. Invocation: `unset CLAUDECODE && uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --model claude-opus-4-6 --effort low -v -s`. `1 passed in 129.99s`. Evidence mirrors AC-9: both `[OK]` messages print, `[Tier 1] PASS`, `8/8 checks` green. No teams-mode regression from the new end-of-test predicate.
+
+8. **Commit on branch** — DONE. Commit `f25f7ed6`: `fix: #185 test_feedback_keepalive end-of-test feedback-cycle poll — data-flow (Option A)`. Sibling to cycle-2 initial commit `efd339f3` (watcher-1 fix).
+
+9. **Write this Stage Report (cycle-2 scope expansion)** — DONE (this section).
+
+### Cycle 2 scope-expansion budget consumption
+
+Two additional live runs beyond the initial cycle-2 budget:
+
+- AC-9 bare-mode haiku re-verify (post scope-expansion fix): 95.00s wallclock. Haiku tokens — ~$0.30-0.50 estimate.
+- AC-11 opus-4-6 re-verify: 129.99s wallclock. Opus tokens — ~$0.75-1.00 estimate.
+
+Combined scope-expansion cost: ~$1.05-1.50. Plus the prior cycle-2 consumption of ~$2.00-2.50 = cycle-2 total of ~$3.00-4.00. Slightly over the original ~$2-3 guidance due to the scope expansion mid-flight, but captain explicitly authorized the additional verification under the same budget spirit.
+
+### Cycle 2 Scope-Expansion Summary
+
+Option A applied. Both brittle predicates in `test_feedback_keepalive.py` now use data-flow assertions that accept any of three workflow-artifact signals. The end-of-test poll matches the mid-run watcher's shape exactly, keeping the two predicates consistent and equally tolerant of runtime-mode variance. Bare-mode haiku now passes end-to-end in 95s (previously failed at 415s). Opus-4-6 non-bare still passes in 130s with no regression. AC-8, AC-9, AC-10, AC-11 all verified with direct live-run evidence. Cycle 2 is complete pending captain review.
