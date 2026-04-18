@@ -1,16 +1,17 @@
 ---
 id: 188
 title: "Convert test filesystem-polling loops to FOStreamWatcher event-driven predicates"
-status: implementation
+status: done
 source: "captain observation during #185 CI triage — the 300s polling loops cherry-picked from #182's e40ff353 are a regression from the event-driven FOStreamWatcher pattern. Same work should be expressible as stream predicates on FO-emitted tool_use events."
 started: 2026-04-18T03:50:49Z
-completed:
-verdict:
+completed: 2026-04-18T08:43:46Z
+verdict: PASSED
 score: 0.5
-worktree: .worktrees/spacedock-ensign-streaming-watcher-over-filesystem-polling
+worktree: 
 issue:
 pr: #127
 mod-block: 
+archived: 2026-04-18T08:43:53Z
 ---
 
 ## Problem
