@@ -10,7 +10,7 @@ score: 0.7
 worktree: .worktrees/spacedock-ensign-fork-pr-live-e2e-pull-request-target
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Why this matters
