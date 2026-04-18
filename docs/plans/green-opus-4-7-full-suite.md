@@ -244,3 +244,105 @@ Bounce-back from cycle-1 ideation gate. Applied all 10 reviewer edits; re-verifi
 ### Summary
 
 Cycle 2 applied all 10 reviewer edits after independently verifying the two phantom-citation claims (`task_id`, `M4`) via codebase grep. Load-bearing changes: (a) C1 symptom candidates are now stated in directly-observable fo-log terms, (b) phantom fix surfaces struck, (c) Category A bounce fork added (symptom (ii) routes to #185 without AC-4 work), (d) AC-4 threshold raised to 5/5 with no flake exception, (e) C3 explicitly out of scope, (f) #183 hard-block rationale stated in evidence-integrity terms, (g) budget recomputed to ~$56-78 worst-case (planning upper bound $80). All 10 edits committed on `main` in the cycle-2 commit; ready for re-presentation at the ideation gate.
+
+## Stage Report (implementation)
+
+Worktree: `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7-full-suite`. Branch: `spacedock-ensign/green-opus-4-7-full-suite`, forked off `spacedock-ensign/cherry-pick-test-predicates-and-audit` (#185 tip `31932009`). #185's 12 commits (test-predicate fixes, data-flow OR-gates in `test_feedback_keepalive` and `test_standing_teammate_spawn`) are present at the base of this branch.
+
+### Critical dependency check — #183 status at implementation kickoff (2026-04-18)
+
+- **#183 `status: validation`**, NOT `status: done`. Frontmatter also shows `mod-block: merge:pr-merge` and `pr: #122`. The skill-prose change for BashOutput polling has not merged to `main`.
+- Per dispatch step 3 and the entity body's Dependencies section, **#183 is a HARD block on AC-3 live-run start**. The rationale (entity body, Dependencies): if ensigns dispatched during AC-3 runs still exhibit Category-B blocking-`sleep` behavior, the `fo-log.jsonl` timing is dominated by ensign-side sleep rather than FO-side behavior, and the symptom-(i)/(ii)/(iii)/(iv) distinction becomes unreliable. Running AC-3 now risks mis-attributing the load-bearing symptom.
+- Implementation therefore completes AC-1 + AC-2 + AC-3 prep scaffolding only. AC-3 live runs, AC-4 mechanism fix, AC-5 re-validation, AC-6 full-suite greening are SKIPPED with rationale "#183 not yet done."
+
+### Completion checklist
+
+1. **DONE — Worktree + branch verified.** `git rev-parse HEAD` = `31932009bf2e401c8de90d2cc264f97107a5e21c` (= #185's cycle-2 validation tip). `git status` clean. #185's 12 commits intact beneath this branch's tip.
+2. **DONE — Re-read entity body in full.** Confirmed the cycle-2 ideation (lines 16-252), Category A/B/C/D inventory, AC-1..AC-7, and the Dependencies section's HARD-block framing on #183.
+3. **DONE — Critical dependency check on #183.** `cat docs/plans/ensign-bash-poll-not-sleep.md | grep -E '^(status|verdict|completed):'` reports `status: validation`, empty `verdict`, empty `completed`. #183 is NOT `status: done`. AC-3 live runs are blocked per the entity body's evidence-integrity rationale. (See AC-3 result below for the prep-only path taken.)
+4. **SKIPPED — AC-3 live diagnosis (3 × `test_feedback_keepalive` opus-4-7 `--effort low` with `KEEP_TEST_DIR=1`).** Rationale: #183 is at `status: validation` with `mod-block: merge:pr-merge`, not yet merged to `main`. Running AC-3 now would produce fo-logs whose timing is dominated by ensign-side blocking-sleep rather than FO-side behavior (per the entity body's Dependencies rationale). Scaffolding prepared below so AC-3 can start as soon as #183 lands.
+5. **SKIPPED — AC-3 sub-step: identify emitter of `<tool_use_error>Missing required parameter: task_id</tool_use_error>` from CI run 24590771304.** This sub-step requires the same AC-3 live runs (needs a preserved `fo-log.jsonl` with `KEEP_TEST_DIR=1` to trace `tool_use_id` / `parent_tool_use_id`). Deferred alongside AC-3. Evidence-base note from the ideation already states the likely emitter is Claude Code's built-in TaskUpdate/TodoWrite SDK primitive (the string `task_id` appears nowhere in this repo per the cycle-2 phantom check). If AC-3 confirms that attribution, the symptom is out of spacedock scope and should be reported to Claude Code SDK rather than fixed here.
+6. **SKIPPED — AC-3/AC-4 fork application.** Cannot apply the fork without AC-3 diagnosis output. The fork path (symptom (i) mechanism fix vs (ii) bounce to #185 vs (iii) timeout bump vs (iv) causal-vs-independent) is well-specified in the entity body; the implementer running AC-3 after #183 merges should follow that fork mechanically.
+7. **SKIPPED — AC-4 mechanism fix.** Cannot name a fix surface without AC-3 output. Hard-rule reminder from dispatch step 7: no prose edits to `skills/first-officer/references/*` without explicit captain approval. This constraint persists across the #183 block and into the next implementation attempt.
+8. **SKIPPED — AC-4 re-runs (5/5 on opus-4-7 `--effort low`).** Downstream of AC-4 fix; blocked on #183 via AC-3.
+9. **SKIPPED — Commits for mechanism changes.** No production code change to commit in this blocked cycle. Only this stage report will be committed (documentation of the blocked state). #185's 12 commits remain intact on the branch base.
+10. **DONE — Stage report (this section).**
+
+### AC-1 — Failure-mode inventory complete and categorized — DONE (verified)
+
+Re-verified at implementation start that the entity body contains the inventory (lines 41-84 in `## Failure-mode inventory`): Category A (test-construct, owned by #185), Category B (ensign-side, owned by #183), Category C (FO-side mechanism, owned by #186 — C1 is the load-bearing work, C2 is the C1-coupled flake, C3 is explicitly out of scope), Category D (pre-existing XFAIL/SKIP, out of scope). Each entry names symptom, fix surface, and owner.
+
+### AC-2 — Dependency map resolved — DONE (at implementation kickoff)
+
+Status at 2026-04-18 (this dispatch):
+
+- **#183 — HARD block for #186 implementation.** Status: `validation`, PR #122 open, `mod-block: merge:pr-merge`. NOT yet on `main`. #186 implementation MUST NOT start live runs until #183 merges. This entry is the load-bearing gate for this dispatch — blocks AC-3 through AC-6.
+- **#185 — Non-blocking dependency.** Status: `validation`, branch tip `31932009` is the base of this branch. `test_feedback_keepalive` and `test_standing_teammate_spawn` already carry the three-signal data-flow OR-gates. Not blocking; #186 inherits the fixes from day one.
+- **#184 — Independent.** `find_subagent_jsonl` narrowing on a separate surface. No ordering constraint.
+
+Path taken at implementation kickoff: **blocked path** — AC-1/AC-2/AC-3 prep only. Rationale documented in the critical dependency check above.
+
+### AC-3 prep scaffolding (live-run-ready, dispatch-pending)
+
+Recorded here so the next implementation pass can start immediately after #183 merges without rediscovering the invocation.
+
+**Test invocation (single-test, matches `.github/workflows/runtime-live-e2e.yml:525`):**
+
+```
+unset CLAUDECODE
+KEEP_TEST_DIR=1 uv run pytest tests/test_feedback_keepalive.py::test_feedback_keepalive \
+  --runtime claude --model opus --effort low -v
+```
+
+Notes:
+- `--model opus` selects the `opus-4-7` alias per the Makefile's `OPUS_MODEL` convention (current default in `make test-live-claude-opus`). Verify with `uv run pytest --help` if the alias binding changes.
+- `unset CLAUDECODE` matches `Makefile:22,35` — required so the nested `claude` subprocess uses its own auth/context rather than inheriting CLAUDECODE from the parent harness.
+- `KEEP_TEST_DIR=1` preserves the per-test scratch directory with its `fo-log.jsonl`; the preserved path prints to stderr at test teardown.
+- Run 3 times per AC-3. Each run should be annotated with timestamp + wallclock + pass/fail + preserved-test-dir path.
+
+**Artifact-capture shell snippet (run after each of the 3 invocations):**
+
+```
+TEST_DIR="$(ls -td /tmp/pytest-of-$USER/pytest-*/test_feedback_keepalive* | head -1)"
+echo "Preserved test dir: $TEST_DIR"
+wc -l "$TEST_DIR/fo-log.jsonl"
+# First Agent tool_use, if any:
+grep -n '"type":"tool_use"' "$TEST_DIR/fo-log.jsonl" | grep -n '"name":"Agent"' | head -5
+# task_id tool_use_error occurrence + surrounding lines:
+grep -n 'task_id' "$TEST_DIR/fo-log.jsonl" || echo "no task_id match"
+# Stage report from FO:
+ls "$TEST_DIR/docs/plans/" 2>/dev/null
+```
+
+**Per-event artifact summary template (AC-3 requires, per entity body):**
+
+For each failing run, cite:
+- (a) absolute `fo-log.jsonl` line number (use `grep -n`)
+- (b) event `timestamp` from the record
+- (c) `tool_use_id` or `parent_tool_use_id` anchoring the event
+- (d) which C1 symptom candidate (i, ii, iii, iv) the evidence supports
+
+A reviewer must be able to `grep -n` the cited line and see the claimed event. Summaries lacking any of (a)-(d) do not satisfy AC-3 per entity-body line 107-108.
+
+**Test predicate the watcher applies (already data-flow after #185):**
+
+The keepalive watcher in `tests/test_feedback_keepalive.py` uses `_agent_targets_stage(_agent_input_dict(e), "validation")` to match the validation-stage Agent dispatch. The `_agent_input_dict` helper extracts the first `Agent` `tool_use` block from an assistant entry. Symptom-candidate mapping:
+- (i) No Agent dispatch at all — no matching `"tool_use"` record with `"name":"Agent"` present within 240s of the impl-ensign Done signal.
+- (ii) Agent dispatch present but predicate rejects — `"tool_use"` with `"name":"Agent"` present, but `_agent_targets_stage(..., "validation")` returns False. Grep-for-yourself: look at the `input` field of the matched tool_use block and compare with what `_agent_targets_stage` checks.
+- (iii) Dispatch present and matches, but timestamp delta > 240s — same grep as (ii) plus a timestamp diff against the impl-ensign Done event.
+- (iv) `task_id` `tool_use_error` record — identify its `parent_tool_use_id`, trace to which caller emitted it; decide causal vs independent to the timeout.
+
+### AC-3 sub-step prep: `task_id` tool_use_error emitter attribution
+
+From the entity body's cycle-2 phantom check: the string `task_id` appears nowhere in spacedock source. The error is almost certainly from Claude Code's built-in TaskUpdate/TodoWrite SDK primitive. To confirm at AC-3 time: in the preserved `fo-log.jsonl`, locate the `tool_use_error` record, read its `parent_tool_use_id`, and grep for that id's originating `tool_use` entry. The `name` field of that originating entry will identify the emitter. If it is `TaskUpdate`, `TodoWrite`, or another SDK-built-in primitive, the finding is: out of spacedock scope, do not fix here, report to Claude Code SDK.
+
+### SKIPPED — AC-4 / AC-5 / AC-6 / AC-7
+
+- **AC-4 — SKIPPED.** Blocked on AC-3 output, which is blocked on #183.
+- **AC-5 — SKIPPED.** Downstream of AC-4.
+- **AC-6 — SKIPPED.** Downstream of AC-4/AC-5.
+- **AC-7 — N/A in this blocked cycle.** Grep of `.github/workflows/` for this branch shows zero diffs from the base commit; CI pin is untouched (expected — the block means no implementation work happened). AC-7 will be re-verified at the next implementation attempt.
+
+### Summary
+
+Implementation kickoff caught the HARD block on #183 (`status: validation`, PR #122 not yet merged). Per the entity body's evidence-integrity rationale, AC-3 live diagnosis is not safe to run until #183 lands on `main` — blocking-sleep behavior in dispatched ensigns would dominate fo-log timing and defeat the symptom-(i)/(ii)/(iii)/(iv) distinction. Taken the prep-only path: AC-1 re-verified, AC-2 dependency map written, AC-3 test invocation + artifact-capture scaffolding + per-event summary template + emitter-attribution plan all recorded so the next implementation pass (after #183 merges) can start AC-3 immediately without rediscovery. AC-3 / AC-4 / AC-5 / AC-6 are SKIPPED with rationale "#183 not yet done" per dispatch step 3. No production-code edits made; this stage report is the sole deliverable committed on the branch tip above #185's 12 inherited commits.
