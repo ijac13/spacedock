@@ -195,6 +195,27 @@ Reviewer approved as-is: scope fence around unpinning (AC-7), A→#185 / B→#18
 
 Revised ideation must pass the same ideation gate again.
 
+### Feedback Cycles — Cycle 3 (captain-directed unpin scope expansion)
+
+**2026-04-18.** Blocked-path prep landed on branch. #183 / #185 / #172 have now all merged to main — the hard-block on implementation is cleared. Captain directed: once #186's mechanism fix lands and verifies 5/5 pass on opus-4-7 local, **ALSO flip the CI default back from `claude-opus-4-6` to `claude-opus-4-7`** (undo #181's pin).
+
+**AC-7 supersedes the earlier "explicitly NOT in scope" wording.** Unpinning is now a terminal step inside #186, gated on: (a) mechanism fix in place, (b) 5/5 clean on opus-4-7 `test_feedback_keepalive` at `--effort low`, (c) static suite green.
+
+**Unpin locations (reverse of #181's change):**
+- `Makefile` — `OPUS_MODEL ?= claude-opus-4-6` reverts to `OPUS_MODEL ?= opus` (the pre-#181 default; confirm by looking at #181's diff in main's history — merged commit `99fb7e01`)
+- `.github/workflows/runtime-live-e2e.yml` — both `MODEL_FLAG` and `EFFECTIVE_MODEL` default blocks that #181 set to `claude-opus-4-6` revert to `opus`
+- Both files had inline `# Pinned to claude-opus-4-6 due to opus-4-7 ensign hallucination regression ...; see #177 / #181. Reversible — restore default to opus once upstream resolves.` comments that should be removed cleanly along with the revert
+
+**Discipline:** unpin is the LAST step of implementation. If 5/5 doesn't hold, unpin does NOT happen — the mechanism fix goes back to the drawing board, or the task bounces to the captain with evidence.
+
+**Implementation order:**
+1. AC-3 live diagnosis (3 × opus-4-7 runs with `KEEP_TEST_DIR=1`)
+2. identify load-bearing symptom per fo-log line-number citations
+3. AC-3/AC-4 fork decision (per cycle-2 ideation edits 9): symptom (ii) → bounce to a follow-up, no unpin; symptom (iii) → timeout bump + unpin; symptom (i) → mechanism change + unpin
+4. If mechanism fix: implement ONE minimal production-side change (NO prose per captain rule), run 5 × opus-4-7 verifications
+5. If 5/5 holds: flip defaults per above; commit as final step; update entity body Stage Report
+6. Budget ceiling: ~$80 total (includes diagnosis + mechanism + 5 verify + 1 regression on opus-4-6 post-unpin to confirm the OR-gates still work on both models)
+
 ## Stage Report (ideation)
 
 - **DONE — Read the seed entity body in full.** Confirmed seed body captured the pre-ideation framing; rewrote with inventory + acceptance criteria.
