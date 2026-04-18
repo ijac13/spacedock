@@ -9,7 +9,7 @@ verdict:
 score: 0.70
 worktree: .worktrees/spacedock-ensign-refresh-live-test-assertions-after-skill-preload
 issue:
-pr:
+pr: #131
 mod-block: merge:pr-merge
 ---
 
