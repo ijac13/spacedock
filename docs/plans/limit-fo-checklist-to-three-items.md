@@ -1,13 +1,13 @@
 ---
 id: 192
 title: "Limit FO-built checklists to 3 items by default; allow workflow README override"
-status: ideation
+status: implementation
 source: "captain directive — FO dispatch checklists currently drift toward 8-14 items (observed throughout 2026-04-17/18 session). That enumerates mechanical steps instead of forcing the FO to name the 3 things that matter. Cognitive load on both ensign (reading) and FO (tracking) increases with length; prioritization erodes. A 3-item ceiling by default, overridable per workflow, forces the FO to compress."
 started: 2026-04-18T04:40:02Z
 completed:
 verdict:
 score: 0.6
-worktree:
+worktree: .worktrees/spacedock-ensign-limit-fo-checklist-to-three-items
 issue:
 pr:
 mod-block:
@@ -188,6 +188,34 @@ dispatch:
 ```
 
 Precedence: per-workflow override (if present and valid) > default 3. Invalid values (non-integer, ≤0) rejected at `claude-team build` with clear error naming the file and key path.
+
+### Feedback Cycles — Cycle 1 (captain amendment at ideation gate)
+
+**2026-04-18.** Captain approved with four narrowing amendments that simplify implementation scope:
+
+1. **No mechanism enforcement at `claude-team build`.** Prose-only. The AC-1 claude-team validation + unit test is DROPPED. Rationale: at this point, FO discipline via prose is sufficient; mechanism can be added later if prose drift proves insufficient.
+2. **No workflow README frontmatter override.** The `dispatch.checklist.max-items` field and all supporting parsing logic is DROPPED. AC-3's adoption question becomes vacuous. Rationale: don't add configurability until multiple workflows actually need different caps.
+3. **"Up to 3" not "exactly 3".** The cap is an upper bound. 0, 1, 2, or 3 items are all valid. The FO must NOT pad to hit 3. Rationale: forcing 3 items would re-introduce the ceremonial-filler problem the original complaint was about.
+4. **Reframe as "linchpins" not "mandatory items".** The prose guidance should describe checklist items as the few things that demonstrate the job is done well — linchpins, not a complete work-breakdown. Suggested phrasing: *"Checklist items are linchpins — the few signals (at most 3) that demonstrate this dispatch's job is done well. Not a work breakdown; the ensign already knows how to read the entity body, commit, and write a stage report. Name what separates a good outcome from a ceremonial one."*
+
+### Revised scope for implementation (post-amendment)
+
+- **Single edit location:** `skills/first-officer/references/first-officer-shared-core.md` near line 60 (currently reads "Build a numbered checklist from stage outputs and entity acceptance criteria"). Add guidance that:
+  - Checklists are capped at ≤ 3 items (upper bound, not a target)
+  - Items should be linchpins — signals that demonstrate the dispatch's job is done well
+  - The boilerplate (read entity body, commit before signaling, write stage report) is covered by structural conventions and MUST NOT appear in the checklist
+- **No `claude-team build` changes.** No workflow README changes. No entity template changes.
+- **Static test:** grep-based assertion in `tests/test_static_guardrails.py` (or equivalent) that the shared-core prose contains the ≤ 3 cap and the "linchpins" framing.
+
+### Revised acceptance criteria (post-amendment)
+
+**AC-1 (entity-level)** — `skills/first-officer/references/first-officer-shared-core.md` has a short paragraph (near line 60) articulating the ≤ 3 cap, the linchpin framing, and the excluded boilerplate. Verified by grep + file inspection.
+
+**AC-2 (entity-level)** — Static test (new or existing) asserts the prose is present with both the "3" cap and the "linchpin" framing. Verified by `make test-static` adding 1 passing test.
+
+**AC-3 (entity-level)** — `make test-static` green on main after the change.
+
+Previous AC-2 (mechanism enforcement), AC-3 (workflow adoption), AC-4 (commission skill), AC-5 (budget discipline) all DROPPED per amendments.
 
 ## Stage Report (ideation)
 
