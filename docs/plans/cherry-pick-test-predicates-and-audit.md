@@ -186,3 +186,33 @@ Cycle 2 already converted two other watchers in this file to three-signal OR-gat
 ### Summary
 
 Ideation produced a concrete cherry-pick plan (with explicit e40ff353 split), a completed audit of all `entry_contains_text` callers (one needs conversion, two are fine), a conversion spec for `test_gate_guardrail.py` with a primary approach and fallback, seven acceptance criteria each paired with its test, and a timeout-bump decision (not adopted, with reasoning). Implementation is ready to start.
+
+## Stage Report (implementation)
+
+1. **Stay in worktree `spacedock-ensign-cherry-pick-test-predicates-and-audit` on branch `spacedock-ensign/cherry-pick-test-predicates-and-audit`** — DONE. All git operations executed against this worktree; branch unchanged.
+2. **Read entity body (approach, cherry-pick plan, gate-guardrail conversion spec, AC-1..7)** — DONE.
+3. **Cherry-pick 9c59d143 and ab238078** — DONE. Both applied cleanly (`git cherry-pick` exit 0, no conflicts). Resulting commits: `dd1d3c6a` and `96c081e6`.
+4. **Cherry-pick e40ff353 with split** — DONE. `git cherry-pick --no-commit e40ff353` reported conflicts in the two rejected files (`skills/first-officer/references/claude-first-officer-runtime.md`, `docs/plans/diagnose-opus-4-7-fo-regression.md`); `git restore --staged --worktree` on both cleared the conflicts and left only `tests/test_feedback_keepalive.py` staged. Commit message notes the split: `fix: #185 test_feedback_keepalive predicate (test-only portion of #182's e40ff353; skills/ + docs/ dropped as scope drift)`. Commit: `46329890`.
+5. **Verify AC-1** — DONE. `git diff HEAD~3 HEAD -- skills/` returned empty (no bytes). `git diff HEAD~3 HEAD -- tests/` showed exactly `tests/test_feedback_keepalive.py` (19 lines) + `tests/test_standing_teammate_spawn.py` (27 lines) — matches the union of the three source-branch test-file diffs.
+6. **Apply gate-guardrail conversion** — DONE. Primary approach (SendMessage tool_use to captain) was inapplicable: the gated-pipeline fixture has no teammates and the FO's captain is the Claude Code user via direct text output per `claude-first-officer-runtime.md`, not via SendMessage. First attempt (commit `4ca5e6af`) used Agent tool_use + entity mtime polling as a substitute data-flow signal; the live AC-6 run failed because the fixture pre-populates `## Stage Report: work`, so `status --boot` reported no DISPATCHABLE entries and the FO presented the gate review directly without ever dispatching an ensign or mutating the entity file. Simplified per spec fallback (commit `8a8d06f4`): removed both mid-run `entry_contains_text` watchers entirely and now rely on Phase 3's `check_gate_hold_behavior` (entity status check + archive absence — both data-flow) plus the post-hoc narration `re.search` as the verdict. `expect_exit(timeout_s=420)` bounds wallclock.
+7. **Verify AC-5** — DONE. `grep -n entry_contains_text tests/test_gate_guardrail.py` returns no matches (exit 1).
+8. **Verify AC-2** — DONE. `unset CLAUDECODE && make test-static` reports `426 passed, 22 deselected, 10 subtests passed` (meets the ≥426 threshold).
+9. **Verify AC-3 (live opus-4-6 on test_standing_teammate_spawn)** — DONE. PASS in 153.81s. Evidence: `[OK] archived entity body captured 'ECHO: ping' (data-flow assertion)`, `[OK] aggregate: echo-agent Agent() dispatched 2 time(s)`.
+10. **Verify AC-4 (live opus-4-6 on test_feedback_keepalive)** — DONE. PASS in 206.79s. Evidence: `[OK] entity body recorded feedback cycle section (data-flow assertion)`, `8 passed, 0 failed (out of 8 checks)`.
+11. **Verify AC-6 (live opus-4-6 on test_gate_guardrail after conversion)** — DONE. PASS in 78.78s after the simplification in step 6. Evidence: `PASS: entity did NOT advance past gate (status: work)`, `PASS: entity was NOT archived (gate held)`, `PASS: first officer did NOT self-approve`, `7 passed, 0 failed (out of 7 checks)`. (The first attempt on commit `4ca5e6af` failed; re-run on `8a8d06f4` passed.)
+12. **Commit conversion separately from cherry-picks** — DONE. Conversion is in two commits on this branch (`4ca5e6af` first attempt, `8a8d06f4` simplified follow-up) — distinct from the three cherry-pick commits (`dd1d3c6a`, `96c081e6`, `46329890`).
+13. **Write Stage Report (implementation) with AC-7 audit preserved** — DONE (this section). AC-7 audit table is preserved in the `### Audit of remaining entry_contains_text callers` section of the approach (lines 51-59 in the ideation body) — intentionally not re-pasted here to avoid duplication.
+
+### Live-run budget
+
+Three live opus-4-6 runs consumed (based on result-stream `total_cost_usd` where visible):
+
+- test_standing_teammate_spawn: ~$1.50 equivalent (consistent with estimate).
+- test_feedback_keepalive: ~$1.00 equivalent.
+- test_gate_guardrail first attempt: ~$0.27 (result-stream `total_cost_usd`); second attempt: similar.
+
+Total roughly within the ~$4 budget. Two gate-guardrail runs were needed because the first-attempt predicate was wrong for this fixture — documented above.
+
+### Summary
+
+Cherry-picked three test-only commits from the #182 source branch cleanly (9c59d143 + ab238078 verbatim, e40ff353 split to keep only the test file). Audited all `entry_contains_text` callers per AC-7; converted `test_gate_guardrail.py`'s two mid-run narration watchers to a Phase-3-only data-flow verdict after a first-attempt Agent-dispatch signal proved incompatible with the pre-populated fixture. All seven acceptance criteria verified: AC-1 cherry-pick correctness, AC-2 static suite at 426 passes, AC-3/AC-4/AC-6 live opus-4-6 runs all green, AC-5 narration watchers removed, AC-7 audit preserved in the approach section.
