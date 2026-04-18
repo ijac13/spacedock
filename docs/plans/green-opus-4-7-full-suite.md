@@ -10,7 +10,7 @@ score: 0.7
 worktree: .worktrees/spacedock-ensign-green-opus-4-7-full-suite
 issue:
 pr:
-mod-block:
+mod-block: 
 ---
 
 ## Why this matters
@@ -215,6 +215,25 @@ Revised ideation must pass the same ideation gate again.
 4. If mechanism fix: implement ONE minimal production-side change (NO prose per captain rule), run 5 × opus-4-7 verifications
 5. If 5/5 holds: flip defaults per above; commit as final step; update entity body Stage Report
 6. Budget ceiling: ~$80 total (includes diagnosis + mechanism + 5 verify + 1 regression on opus-4-6 post-unpin to confirm the OR-gates still work on both models)
+
+### Feedback Cycles — Cycle 4 (captain bounce-back: AC scope was too narrow)
+
+**2026-04-18.** PR #125 opened with cycle-3's unpin + 5/5 `test_feedback_keepalive` evidence. CI promptly failed on opus-4-7 for two tests cycle 3 did not sample:
+
+- **`test_standing_teammate_spawn`** (claude-live, run 24596758787 job 71928128940): `StepTimeout: Step 'claude-team spawn-standing invoked' did not match within 120s`. This is exactly what AC-5 (C2 status check) was supposed to catch. Cycle 3 **deferred AC-5** with rationale that it was a "10-minute validation-stage follow-up." That framing was wrong — AC-5 is an acceptance criterion, not a nice-to-have.
+- **`test_gate_guardrail`** (claude-live-opus, run 24596758787 job 71928128939): `AssertionError: 2 of 7 checks failed in test_gate_guardrail`. Not in the original failure-mode inventory. Latent surface the unpin exposed.
+
+**Captain's scope reframe for cycle 4:** drop the narrow "3× one test" framing. The correct gate for unpin is **1× the full live-claude-opus suite passing on opus-4-7 locally**. If any test fails in that run, either (a) fix it, (b) document as explicit out-of-scope residual with captain approval, or (c) the unpin does not land. CI's continuous runs handle the "prove it's not a one-off" reliability check — not the ensign.
+
+**Discipline reminder (entered at the rule level for this cycle):** every AC named in the entity body is mandatory. "Deferred to validation" is not a valid outcome for an implementation-owned AC. Every AC in the stage report must either (a) claim DONE with concrete evidence, (b) SKIPPED only with captain-approved rationale recorded before the skip, or (c) FAILED with diagnosis.
+
+**Scope for cycle 4:**
+
+1. Run `unset CLAUDECODE && make test-live-claude-opus OPUS_MODEL=opus` (serial + parallel tiers) ONCE on current main post-rebase. Capture every failure with fo-log line citations + tool_use_id references.
+2. For each failing test: (a) diagnose root cause, (b) fix test or production code, OR (c) pause and request captain approval to document as explicit out-of-scope residual. NO prose mitigations to `skills/first-officer/references/*` without pause-and-ask.
+3. Re-run the full make target ONE more time. Every non-XFAIL/non-SKIP test must pass. If green: keep the unpin commit. If red: revert the unpin commit and report.
+
+**Unpin gate:** 1× clean full-suite on opus-4-7 local. That's the only gate — not 3× narrow, not 5× one test. CI handles reliability.
 
 ## Stage Report (ideation)
 
