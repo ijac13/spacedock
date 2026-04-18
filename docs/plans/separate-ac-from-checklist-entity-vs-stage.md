@@ -322,3 +322,43 @@ All three Edit blocks applied on branch `spacedock-ensign/separate-ac-from-check
 2. **Edit 2 (`docs/plans/README.md`) — DONE.** Ideation-stage AC-entity-level paragraph appended as a new bullet under the existing "Acceptance criteria must include how each criterion will be tested" bullet. Validation-stage cross-check sentence appended as a bullet after "Verify each acceptance criterion with evidence". Task Template at the bottom replaced per spec — `## Acceptance criteria` heading with the "Each AC names a property" guidance line and a `**AC-1 — ...**` exemplar followed by a `Verified by:` line. AC-3 grep (`Acceptance criteria are \*\*entity-level\*\*`), AC-4 grep (`Pull every \`\*\*AC-N\*\*\` item`), and AC-5 grep (`## Acceptance criteria` inside the Task Template) all pass.
 
 3. **Edit 3 (`skills/commission/SKILL.md`) + static test — DONE.** Generated-README Entity Template mirrors the new `## Acceptance criteria` block (heading, guidance line, AC-1 exemplar, `Verified by:` line). The per-stage Outputs-guidance sentence is appended inline in the existing Outputs bullet description (same paragraph as the "become checklist items at dispatch time" prose). `tests/test_commission_template.py` gains `test_entity_label_template_has_acceptance_criteria_block` asserting the generated-template block contains the `## Acceptance criteria` heading, the `Each AC names a property` guidance, and a `Verified by:` exemplar line. `make test-static` green (438 passed). AC-6 grep returns matches; AC-8 holds.
+
+## Stage Report — validation
+
+### Summary
+
+Re-verified all 7 mechanical ACs against the branch `spacedock-ensign/separate-ac-from-checklist-entity-vs-stage` at commit `9b05fa8c`: every static grep matches as specified, `make test-static` is green (438 passed, 22 deselected), and #192's linchpin paragraph is preserved verbatim. The required behavioral spot-check ran on haiku against the `spike-gated` fixture with an AC block injected in the new template shape — evidence confirms both behavioral signals #193 prescribes: (a) the FO-built dispatch checklist is distinct from the entity's AC list (the checklist has 1 stage-level linchpin, the entity retains 2 entity-level ACs; neither copies the other), and (b) the FO's gate-review prose names AC Coverage as a separate section from the DONE/SKIPPED/FAILED checklist accounting. The spot-check cost ~$0.01 (1,119k cache-read, 75 output tokens on haiku, 65s wallclock). Recommendation: PASSED.
+
+### Checklist
+
+1. **All 7 mechanical ACs re-verified with concrete evidence — DONE.**
+   - **AC-1** (shared-core distinguishes AC from checklist): `grep` for `Entity-level acceptance criteria (AC) are properties of the finished entity` in `skills/first-officer/references/first-officer-shared-core.md` → 1 match at line 62 (inside the `## Dispatch` section, appended to the #192 linchpin paragraph).
+   - **AC-2** (shared-core gate review adds AC coverage cross-check): `grep` for `AC coverage cross-check` in the same file → 1 match at line 98 inside `## Completion and Gates`. The prose references `**AC-N**` anchors and names the REJECT condition.
+   - **AC-3** (`docs/plans/README.md` ideation names the AC-vs-stage-action rule): `grep` for `Acceptance criteria are \*\*entity-level\*\*` → 1 match at line 75 under `### ideation`.
+   - **AC-4** (validation stage names the cross-check): `grep` for `Pull every \`\*\*AC-N\*\*\` item` → 1 match at line 101 under `### validation`.
+   - **AC-5** (task template includes `## Acceptance criteria` section): read of `docs/plans/README.md` lines 155–167 confirms the Task Template ends with a `## Acceptance criteria` heading, the "Each AC names a property" guidance, and a `**AC-1 — {End-state property.}**` exemplar with a `Verified by:` line.
+   - **AC-6** (commission SKILL.md generated template mirrors the convention): `grep` for `## Acceptance criteria` in `skills/commission/SKILL.md` → match at line 326; `grep` for `Each AC names a property` → match at line 328. Commission-harness test `test_entity_label_template_has_acceptance_criteria_block` at `tests/test_commission_template.py:62` asserts the heading, the guidance line, and the `Verified by:` exemplar all appear inside the `## {Entity_label} Template` block.
+   - **AC-8** (static suite green): `make test-static` returns `438 passed, 22 deselected, 10 subtests passed in 20.16s`.
+   - **#192 linchpin preservation cross-check:** `grep` for `at most 3 items` and `Name what separates a good outcome from a ceremonial one` in shared-core → both return 1 match each at line 62 (same paragraph as the AC-distinction sentence). #192's framing is intact verbatim.
+
+2. **Behavioral spot-check executed — DONE.** Single live FO dispatch on haiku against a throwaway `spike-gated` fixture, with an AC block in the new `## Acceptance criteria` template shape injected into `test-entity.md` (AC-1: "task body contains 'Spike test complete.'", AC-2: "task file remains valid UTF-8"). The FO dispatched an ensign into the `work` stage (gated), and the ensign returned; the FO produced its gate review. Evidence for both required signals:
+
+   **(a) FO-built checklist is distinct from the entity's AC list.** The dispatch prompt's `### Completion checklist` section contains exactly one item — `1. Append a brief summary of work to the task body containing "Spike test complete."` — derived from the stage's `Outputs:` bullet, not enumerated from the entity's AC block. The entity body (which the ensign reads directly per the `Read the entity file at ...` instruction) retains its 2 entity-level ACs (AC-1, AC-2). The prompt does NOT copy the `## Acceptance criteria` block into the checklist, which is the correct behavior under #193 — AC items are entity-level properties the ensign reads from the body, not stage-level checklist work.
+
+   **(b) FO gate-review names AC-coverage separately from DONE/SKIPPED/FAILED accounting.** The FO's gate-review text contains two distinctly labeled sections:
+
+   > **Assessment:** 1 done, 0 skipped, 0 failed.
+   >
+   > **AC Coverage:**
+   > - **AC-1** (task body contains "Spike test complete.") — ✓ Verified. Work Summary section on line 17 contains the exact required string.
+   > - **AC-2** (task file remains valid UTF-8) — ✓ Verified. File is well-formed UTF-8.
+   >
+   > **Recommendation: APPROVE**
+
+   The `**Assessment:**` line is the checklist accounting; the `**AC Coverage:**` subsection is the AC cross-check with per-AC reproduction evidence. They are distinctly named and independently reported — exactly the discipline `## Completion and Gates` prescribes after Edit 1 landed.
+
+   Run metadata: claude-haiku-4-5-20251001, 65s wallclock, 14,787 input / 75 output tokens, 1,119,461 cache-read, FO exit 0. Cost well under the $1-3 behavioral budget.
+
+### Verdict
+
+**PASSED.** All 7 mechanical ACs verified with reproducible evidence; behavioral spot-check demonstrates both prescribed signals (checklist-distinct-from-AC, gate-review-separates-AC-coverage) in a live FO dispatch; #192's linchpin framing survives the rewrite verbatim; static suite green. The entity is ready to advance past validation.
