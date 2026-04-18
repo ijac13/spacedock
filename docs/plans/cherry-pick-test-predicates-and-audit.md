@@ -1,16 +1,16 @@
 ---
 id: 185
 title: "Cherry-pick test-predicate data-flow fixes from #182 + audit remaining narration-match callers"
-status: implementation
+status: validation
 source: "carved out of #182 — test-predicate data-flow fixes are sound and independently mergeable. Captain also asked: check if other tests carry the same incorrect-expectation pattern. Known offender per debrief: tests/test_gate_guardrail.py."
 started: 2026-04-18T00:12:20Z
 completed:
-verdict:
+verdict: PASSED
 score: 0.7
 worktree: .worktrees/spacedock-ensign-cherry-pick-test-predicates-and-audit
 issue:
 pr: #123
-mod-block: 
+mod-block: merge:pr-merge
 ---
 
 ## Problem statement
