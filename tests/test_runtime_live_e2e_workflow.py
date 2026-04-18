@@ -57,10 +57,57 @@ def section(text: str, heading: str) -> str:
 def test_runtime_live_e2e_workflow_supports_pr_and_manual_triggers():
     text = read_workflow()
 
+    # pull_request_target runs with base-branch secrets even for fork PRs.
+    # Env-approval gate is the sole protection; see top-of-file security comment.
+    assert "pull_request_target:" in text
+    assert "types: [opened, synchronize, reopened]" in text
     assert "workflow_dispatch:" in text
-    assert "pull_request:" in text
-    assert "pr_number:" in text
-    assert "required: true" in text
+    # pr_number dispatch input is dropped — head-SHA checkout makes it redundant.
+    assert "pr_number:" not in text
+    # Manual-dispatch operator knobs are preserved.
+    for knob in ("claude_version:", "test_selector:", "effort_override:", "model_override:"):
+        assert knob in text
+
+
+def test_runtime_live_e2e_workflow_checks_out_pr_head_with_persist_credentials_false():
+    """Security-critical: every live-e2e checkout must target the PR head SHA
+    and MUST set persist-credentials: false so GITHUB_TOKEN is not persisted
+    into .git/config where post-checkout steps could use it."""
+    text = read_workflow()
+
+    checkout_count = text.count("actions/checkout@v4")
+    head_ref_count = text.count("ref: ${{ github.event.pull_request.head.sha }}")
+    # Each checkout must have a matching head-SHA ref.
+    assert checkout_count == 4
+    assert head_ref_count == checkout_count, (
+        f"Every checkout@v4 must pin to the PR head SHA "
+        f"(found {checkout_count} checkouts, {head_ref_count} head-SHA refs)"
+    )
+    # persist-credentials: false appears on every checkout step AND is documented
+    # in the top-of-file security comment — so count is checkout_count + 1.
+    persist_false_count = text.count("persist-credentials: false")
+    assert persist_false_count == checkout_count + 1, (
+        f"Expected persist-credentials: false on all {checkout_count} checkouts "
+        f"+ 1 reference in the security comment, got {persist_false_count}"
+    )
+
+
+def test_runtime_live_e2e_workflow_narrows_default_permissions():
+    text = read_workflow()
+
+    assert "permissions:\n  contents: read\n  pull-requests: read\n" in text
+
+
+def test_runtime_live_e2e_workflow_documents_security_model_at_top():
+    """Because pull_request_target runs fork PR code with repo secrets, the
+    env-approval gate is load-bearing. Maintainers must see this before
+    editing the workflow."""
+    text = read_workflow()
+
+    assert "SECURITY MODEL" in text
+    assert "env-approval gate" in text
+    assert "ONLY protection" in text
+    assert "review the head SHA" in text
 
 
 def test_runtime_live_e2e_workflow_has_expected_runtime_jobs():
@@ -159,10 +206,16 @@ def test_runtime_live_e2e_workflow_uses_stable_make_targets_and_provenance_field
     assert 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"' in claude_opus_section
     assert 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0"' in claude_bare_section
 
+    # Provenance field labels under the pull_request_target design:
+    # - "Base SHA" replaces the old "Tested workflow SHA" (workflow now always runs
+    #   against base-branch definition but checks out head-SHA code, so "Base SHA"
+    #   is the more accurate label for the workflow-definition commit).
+    # - "PR head SHA (checked out)" replaces the old "Current PR head SHA" to make
+    #   explicit that this SHA is what the tests actually validate.
     for field in (
         "PR number",
-        "Tested workflow SHA",
-        "Current PR head SHA",
+        "Base SHA",
+        "PR head SHA (checked out)",
         "same-repo",
         "fork",
         "Approval context",
@@ -170,10 +223,12 @@ def test_runtime_live_e2e_workflow_uses_stable_make_targets_and_provenance_field
     ):
         assert field in text
 
-    assert "github.event.pull_request.number" in text
-    assert "inputs.pr_number" in text
-    assert "TRIGGER_SOURCE" in text
-    assert "DISPATCH_PR_NUMBER" in text
+    # pull_request_target makes the PR payload directly available — no REST
+    # lookup, no dispatch-vs-pr disambiguation needed.
+    assert "context.payload.pull_request" in text
+    assert "inputs.pr_number" not in text
+    assert "TRIGGER_SOURCE" not in text
+    assert "DISPATCH_PR_NUMBER" not in text
     assert "continue-on-error" not in text
     assert "|| true" not in text
 
@@ -259,7 +314,7 @@ def test_tests_readme_documents_runtime_live_e2e_workflow():
 
     assert "runtime-live-e2e.yml" in text
     assert "workflow_dispatch" in text
-    assert "pull_request" in text
+    assert "pull_request_target" in text
     assert "CI-E2E" in text
     assert "CI-E2E-OPUS" in text
     assert "claude-live" in text
@@ -268,10 +323,13 @@ def test_tests_readme_documents_runtime_live_e2e_workflow():
     assert "ANTHROPIC_API_KEY" in text
     assert "OPENAI_API_KEY" in text
     assert "PR number" in text
-    assert "Tested workflow SHA" in text
-    assert "Current PR head SHA" in text
+    assert "Base SHA" in text
+    assert "PR head SHA" in text
     assert "same-repo vs fork" in text
     assert "approval/reviewer context" in text
     assert "Trigger source" in text
     assert "job stays red" in text
     assert "pending environment review" in text
+    # The env-approval gate is the security guarantee for fork-PR runs —
+    # README must tell maintainers what to review before approving.
+    assert "env-approval gate" in text or "environment approval" in text
