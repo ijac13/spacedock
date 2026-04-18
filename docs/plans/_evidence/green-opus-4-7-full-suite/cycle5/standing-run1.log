@@ -1,0 +1,138 @@
+No entry for terminal type "xterm-ghostty";
+using dumb terminal settings.
+============================= test session starts ==============================
+platform darwin -- Python 3.12.9, pytest-9.0.3, pluggy-1.6.0 -- /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7-full-suite/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7-full-suite
+configfile: pyproject.toml
+plugins: xdist-3.8.0
+collecting ... collected 1 item
+
+tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips === test_standing_teammate_spawns_and_roundtrips ===
+Repo root:  /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7-full-suite
+Test dir:   /var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmpuq0_88y7
+
+--- Phase 1: Set up fixture (workflow in subdir) ---
+
+--- Phase 2: Run first officer with streaming watcher ---
+[OK] claude-team spawn-standing invoked
+[OK] echo-agent Agent() dispatched
+[OK] ensign dispatch prompt includes standing-teammates section with echo-agent
+[OK] SendMessage to echo-agent observed
+WARNING: first officer exited with code 143
+=== Stats: fo ===
+  Wallclock:        215s
+  Messages:         56 assistant, 0 tool_result
+  Model delegation: claude-opus-4-7: 56
+  Input tokens:     231
+  Output tokens:    1,312
+  Cache read:       2,363,528
+  Cache write:      121,846
+FAILED
+
+=================================== FAILURES ===================================
+_________________ test_standing_teammate_spawns_and_roundtrips _________________
+
+test_project = <test_lib.TestRunner object at 0x102f76a50>
+model = 'claude-opus-4-7', effort = 'low'
+
+    @pytest.mark.live_claude
+    @pytest.mark.teams_mode
+    def test_standing_teammate_spawns_and_roundtrips(test_project, model, effort):
+        """AC-12: standing: true mod spawns a teammate the FO can route to.
+    
+        Fixture declares one standing teammate (`echo-agent`) via
+        `_mods/echo-agent.md`. Progressive per-step assertions ensure fail-fast
+        diagnostics: each milestone names the step that stalled.
+    
+        1. Invoke `claude-team spawn-standing` (bash tool call).
+        2. Spawn `echo-agent` via Agent() (tool_use with subagent_type +
+           name=echo-agent in team config).
+        3. Dispatch an ensign Agent() whose prompt contains the standing-teammates
+           section listing echo-agent (AC-14).
+        4. Route a SendMessage to echo-agent and receive a reply containing
+           `ECHO: ping`.
+        """
+        t = test_project
+    
+        print("--- Phase 1: Set up fixture (workflow in subdir) ---")
+        setup_fixture(t, "standing-teammate", "standing-teammate")
+        install_agents(t, include_ensign=True)
+        git_add_commit(t.test_project_dir, "setup: standing-teammate fixture")
+        print()
+    
+        print("--- Phase 2: Run first officer with streaming watcher ---")
+        abs_workflow = t.test_project_dir / "standing-teammate"
+        prompt = (
+            f"Process the workflow at {abs_workflow}/ to terminal completion. "
+            "During startup, spawn every standing teammate declared in "
+            "_mods/*.md with standing: true. Then drive task 001 through its "
+            "stages. The task instructs its ensign to SendMessage echo-agent "
+            "with 'ping' and capture the reply — do not skip that step. Stop "
+            "once the entity is archived."
+        )
+    
+        with run_first_officer_streaming(
+            t,
+            prompt,
+            agent_id="spacedock:first-officer",
+            extra_args=["--model", model, "--effort", effort, "--max-budget-usd", "2.00"],
+        ) as w:
+            w.expect(
+                lambda e: tool_use_matches(e, "Bash", command="spawn-standing"),
+                timeout_s=120,
+                label="claude-team spawn-standing invoked",
+            )
+            print("[OK] claude-team spawn-standing invoked")
+    
+            w.expect(
+                lambda e: tool_use_matches(e, "Agent", name="echo-agent"),
+                timeout_s=120,
+                label="echo-agent Agent() dispatched",
+            )
+            print("[OK] echo-agent Agent() dispatched")
+    
+            ensign_dispatch = w.expect(
+                lambda e: tool_use_matches(e, "Agent")
+                and "echo-agent" not in _agent_input(e).get("name", ""),
+                timeout_s=240,
+                label="ensign Agent() dispatched",
+            )
+            ensign_prompt = _agent_input(ensign_dispatch).get("prompt", "")
+            assert "### Standing teammates available in your team" in ensign_prompt, (
+                "Ensign dispatch prompt missing the standing-teammates section. "
+                f"Prompt preview: {ensign_prompt[:200]!r}"
+            )
+            assert "echo-agent" in ensign_prompt, (
+                "Standing-teammates section did not list echo-agent by name. "
+                f"Prompt preview: {ensign_prompt[:200]!r}"
+            )
+            print("[OK] ensign dispatch prompt includes standing-teammates section with echo-agent")
+    
+            w.expect(
+                lambda e: tool_use_matches(e, "SendMessage", to="echo-agent"),
+                timeout_s=240,
+                label="SendMessage to echo-agent observed",
+            )
+            print("[OK] SendMessage to echo-agent observed")
+    
+            archived = abs_workflow / "_archive" / "001-echo-roundtrip.md"
+            archive_deadline = time.monotonic() + 300
+            while time.monotonic() < archive_deadline:
+                if archived.is_file() and "ECHO: ping" in archived.read_text():
+                    break
+                time.sleep(1.0)
+            else:
+>               raise AssertionError(
+                    f"Archived entity with 'ECHO: ping' did not appear at {archived} within 300s"
+                )
+E               AssertionError: Archived entity with 'ECHO: ping' did not appear at /var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmpuq0_88y7/test-project/standing-teammate/_archive/001-echo-roundtrip.md within 300s
+
+tests/test_standing_teammate_spawn.py:119: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips
+======================== 1 failed in 403.24s (0:06:43) =========================
+Test dir preserved at: /var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmpuq0_88y7
+real 403.44
+user 3.14
+sys 1.71

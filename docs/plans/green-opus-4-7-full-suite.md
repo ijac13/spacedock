@@ -460,3 +460,54 @@ Worktree: `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7
 ### Summary
 
 Cycle-4 ran the full live-claude opus-4-7 suite once per the captain's reframed unpin gate. Exit code 0: serial tier 1 passed + 1 xpassed, parallel tier 3 passed + 2 xpassed + 8 xfailed + 3 skipped, wallclock ~18 min. All four non-XFAIL/non-SKIP tests (`test_gate_guardrail`, `test_feedback_keepalive`, `test_merge_hook_guardrail`, `test_standing_teammate_spawn`) PASSED. Cycle-3's two CI-surfaced failures (`test_standing_teammate_spawn` StepTimeout, `test_gate_guardrail` Phase-3 checks) did not reproduce locally. Unpin commit `a7308582` retained; no new production-side change required. Budget spend this cycle: ~$17-28 for the single full-suite run (well under the $30 single-iteration ceiling and cumulative $80 target).
+
+## Stage Report (implementation, cycle 5)
+
+Worktree: `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7-full-suite`. Branch: `spacedock-ensign/green-opus-4-7-full-suite` at `84ad66f6` pre-run (unpin commit `a7308582` retained). Cycle-5 scope: 2 more isolation observations per test on opus-4-7 low-effort with `KEEP_TEST_DIR=1` to distinguish CI-flaky from CI-environment-specific for the two previously-CI-failing tests.
+
+### Completion checklist
+
+1. **DONE — Four isolation runs on opus-4-7 `--effort low` with `KEEP_TEST_DIR=1`.** Per-run table below. Evidence preserved under `docs/plans/_evidence/green-opus-4-7-full-suite/cycle5/`.
+
+   | Test | Attempt | Wallclock | Exit | Outcome | Key evidence |
+   |---|---|---|---|---|---|
+   | `test_standing_teammate_spawn` | 1 | 403s (test) / 215s (fo) | FAIL | `AssertionError: Archived entity with 'ECHO: ping' did not appear within 300s`. FO hit `error_max_budget_usd` ($2.24 of $2.00 cap) stuck in retry loop. | `standing-run1-fo-log.jsonl` L58 (first SendMessage to echo-agent was FO's **shutdown_request** at t=t0+215s; L72/85/96/108 "Cannot cleanup team with 2 active member(s)" loop; L127 result subtype=`error_max_budget_usd`); archived entity body (`standing-run1-archived.md`) shows ensign's own stage report saying "sent ping… no reply received from echo-agent within 2-minute non-blocking window." |
+   | `test_standing_teammate_spawn` | 2 | 388s (test) / 95s (fo) | FAIL | Same assertion. FO exited cleanly at $1.52 budget (no cap hit). | `standing-run2-fo-log.jsonl` L41 ensign dispatch → L54/55 FO shutdown_requests to ensign+echo-agent before ensign roundtrip completes → L67 Bash `Advance to done and archive`. Archive body (pulled from test dir) has "work done" but NO `ECHO: ping` (and no stage report section). First SendMessage to echo-agent in fo-log is also a shutdown_request, not a ping. |
+   | `test_gate_guardrail` | 1 | 100s (test) / 91s (fo) | PASS | All 7 Phase-3 checks PASS. | `gate-run1-fo-log.jsonl` L1 `init model=claude-sonnet-4-6` — **the test does not honor `--model claude-opus-4-7`**; FO ran on sonnet. |
+   | `test_gate_guardrail` | 2 | 51s (test) / 34s (fo) | PASS | All 7 Phase-3 checks PASS. | Same — FO ran on sonnet (`gate-run2-fo-log.jsonl`). |
+
+2. **DONE — Interpretation.** **Mixed outcomes between the two tests; for standing_teammate, clearly failure-mode-is-local (not CI-environment-specific); for gate_guardrail, evidence is vacuous wrt opus-4-7.**
+
+   - **`test_standing_teammate_spawn`: 0/2 on opus-4-7.** Failure mode reproduces reliably in isolation. NOT CI-environment-specific. The test predicate for "SendMessage to echo-agent observed" matches ANY SendMessage with `to=echo-agent`, including the FO's **`shutdown_request`** during teardown — which is what matched in both runs (standing-run1 L58, standing-run2 L55 — both runs' first SendMessage to echo-agent is a `shutdown_request`, not a `ping`). The actual failure mode is a test-predicate bug (Category A per the entity body's inventory): the watcher stops waiting at the wrong event. The real ping→ECHO roundtrip happens inside the ensign subagent transcript, which is NOT visible in the parent `fo-log.jsonl` at all. Even if the ensign sent ping perfectly, the watcher has no way to observe it. In both runs, the ensign's own stage report (run 1) or absence thereof (run 2) shows the roundtrip was not completed before the FO issued teardown. This is consistent with **C3 (teardown ordering) per the failure-mode inventory** — but C3 was explicitly declared out-of-scope for #186, AND the predicate-matching bug is Category A (pre-existing #185 surface that was missed).
+
+   - **`test_gate_guardrail`: 2/2 PASS — but evidence is vacuous for opus-4-7.** Both runs' FO ran on `claude-sonnet-4-6` because the test source code (`tests/test_gate_guardrail.py:48-52`) passes `extra_args=["--max-budget-usd", "1.00"]` with no `--model` forwarding, and the test signature takes `(test_project, runtime)` but NOT the `model` fixture. The `--model claude-opus-4-7` pytest CLI flag is silently ignored for this test. These two PASS observations add zero new evidence about opus-4-7 behavior on this test — they only confirm sonnet passes. The cycle-4 full-suite run that showed `test_gate_guardrail` PASS was on the same path, so its "on opus-4-7" framing was also not quite accurate.
+
+   - **Recommendation: BOUNCE for investigation, NOT merge.** The unpin commit `a7308582` should NOT be merged until standing-teammate's failure mode is understood. Two separate threads to pull:
+     1. **Category A (test-predicate)**: the "SendMessage to echo-agent" predicate in `tests/test_standing_teammate_spawn.py:103` (`w.expect(lambda e: tool_use_matches(e, "SendMessage", to="echo-agent"), timeout_s=240, ...)`) needs to either (a) reject `shutdown_request` type messages, or (b) be replaced with a direct check on the ensign subagent's output / the archived entity body (the polling loop at line 108-120 that checks for `ECHO: ping` in the archive is the correct signal — the intermediate SendMessage predicate is redundant at best, misleading at worst). This is a pre-existing #185-scope bug that #185's audit missed.
+     2. **Category C3 (teardown ordering)**: the FO tears down standing teammates before the ensign's roundtrip completes, on opus-4-7. Run 2 is the starkest case — FO exited cleanly at $1.52 budget in 95s, ensign never got its reply, archive has no stage report. This matches the "opus-4-7 tears down teammates earlier" signal from #182's Variant A documentation. The entity body explicitly declared C3 out of scope for #186; that decision needs to be revisited, or #186 should bounce to a new entity that owns C3 as its load-bearing work.
+     - **Note on gate_guardrail**: before any future cycle claims opus-4-7 coverage for this test, the test needs `model` + `effort` fixtures plumbed through to `extra_args` (similar to how `test_feedback_keepalive.py` does it). Otherwise no amount of `--model opus-4-7` flags will change behavior.
+
+3. **DONE — Budget accounting.** Spend this cycle (from per-run `total_cost_usd` in each fo-log `result` record):
+   - standing-run1: $2.25 (hit `max_budget_usd` cap — budget exceeded)
+   - standing-run2: $1.52
+   - gate-run1: ~$0.4 (sonnet is cheap)
+   - gate-run2: ~$0.2 (sonnet, short run)
+   - **Total: ~$4.4**, well under the ~$10 budget for the four runs.
+
+### AC-mapping recap (cycle 5)
+
+- **AC-1 — DONE (carried forward).** Inventory unchanged. Cycle 5 adds new evidence that Category A overlaps with standing-teammate's failure mode (a predicate-match issue #185 did not catch) and Category C3 is live rather than latent (FO tears down before ensign roundtrip).
+- **AC-2 — DONE (carried forward).** Dependency merges held since cycle 3.
+- **AC-3 — Re-validated (cycle 3 evidence still holds for `test_feedback_keepalive` specifically; cycle-5 did not re-run that test).** Cycle-5 work focused on the two cycle-4 deferred tests at captain's request.
+- **AC-4 — DONE (cycle 3: 5/5 on `test_feedback_keepalive`; cycle 4 +1; cycle 5 did not rerun this test).**
+- **AC-5 — NEW FAILING EVIDENCE: `test_standing_teammate_spawn` 0/2 on opus-4-7 in isolation on cycle 5.** Prior cycles' 1 PASS observations (cycle-4 full-suite run) are NOT reliable — cycle 5 shows the test regresses when run in isolation at opus-4-7 low-effort. AC-5's original 3/3 requirement is NOT met on opus-4-7.
+- **AC-6 — UNKNOWN.** Cycle 4's single full-suite pass did include a `test_standing_teammate_spawn` PASS, but cycle 5's isolation evidence suggests that pass was stochastic (possibly the watcher matched the FO's teardown shutdown_request as in cycle 5's run 1 — the test reports `[OK] SendMessage to echo-agent observed` but that doesn't mean the roundtrip actually completed; cycle-5 captures the smoking gun).
+- **AC-7 — HOLD.** Unpin commit `a7308582` stays on the branch but the captain should **not merge the branch** until the standing-teammate failure mode is addressed. Merging now would re-green CI on opus-4-7 only because CI also has the same flake window; the underlying bug is real.
+
+### Commits on this branch (cycle 5)
+
+Proposed: a single evidence + stage-report commit landing under `docs/plans/_evidence/green-opus-4-7-full-suite/cycle5/` + this section appended to the entity body. No production code or test-code changes in cycle 5 (the findings are for captain-directed follow-up).
+
+### Summary
+
+Cycle-5 ran four isolation runs on opus-4-7 `--effort low` with `KEEP_TEST_DIR=1`. **`test_standing_teammate_spawn` FAILED 2/2** with clean reproduction of the failure mode: the test's watcher predicate for "SendMessage to echo-agent" matches ANY such message (including the FO's own `shutdown_request` during teardown — which is what matched in both runs), and the ensign's ping→ECHO roundtrip completes inside a subagent transcript invisible to the parent `fo-log.jsonl`. The archived entity body in both runs lacks `ECHO: ping`, failing the final assertion. This is **not CI-environment-specific** — it reproduces reliably locally. Two bugs: (A) a Category-A test-predicate bug #185 missed; and (C3) a teardown-ordering issue #186 explicitly declared out of scope (FO tears down standing teammates before ensign roundtrip completes, starkly visible in run 2 where the FO exited cleanly at $1.52/95s with no `ECHO: ping` ever in the archive). **`test_gate_guardrail` PASSED 2/2 — but the evidence is vacuous**: the test does not honor the `--model` CLI flag (source: `tests/test_gate_guardrail.py:48-52` passes no `--model` to `extra_args`, and the test signature doesn't accept the `model` fixture), so both runs were on `claude-sonnet-4-6`, not opus-4-7. **Recommendation: bounce for investigation**, NOT merge. The standing-teammate failure mode needs a fix (Category A predicate rewrite + captain decision on re-opening C3 scope). `test_gate_guardrail` needs model-fixture plumbing before any future cycle can claim opus-4-7 coverage. Budget spend ~$4.4 of ~$10 allotted.

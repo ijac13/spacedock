@@ -1,0 +1,8 @@
+=== Stats: fo ===
+  Wallclock:        34s
+  Messages:         21 assistant, 0 tool_result
+  Model delegation: claude-sonnet-4-6: 21
+  Input tokens:     1,567
+  Output tokens:    365
+  Cache read:       384,176
+  Cache write:      47,973
