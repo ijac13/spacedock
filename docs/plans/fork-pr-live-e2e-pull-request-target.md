@@ -1,7 +1,7 @@
 ---
 id: 189
 title: "Replace workflow_dispatch + pr_number pattern with pull_request_target + env-gate for fork PR live-e2e"
-status: implementation
+status: validation
 source: "captain design directive during #118 merge triage — the current workflow_dispatch + pr_number design records provenance metadata but tests main, not the PR head. pull_request_target with env-gated PR-head checkout is the cleaner pattern and makes the CI signal actually mean 'PR code works'."
 started: 2026-04-18T03:15:00Z
 completed:
