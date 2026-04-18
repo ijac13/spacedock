@@ -1,9 +1,9 @@
 ---
 id: 192
 title: "Limit FO-built checklists to 3 items by default; allow workflow README override"
-status: backlog
+status: ideation
 source: "captain directive — FO dispatch checklists currently drift toward 8-14 items (observed throughout 2026-04-17/18 session). That enumerates mechanical steps instead of forcing the FO to name the 3 things that matter. Cognitive load on both ensign (reading) and FO (tracking) increases with length; prioritization erodes. A 3-item ceiling by default, overridable per workflow, forces the FO to compress."
-started:
+started: 2026-04-18T04:40:02Z
 completed:
 verdict:
 score: 0.6
