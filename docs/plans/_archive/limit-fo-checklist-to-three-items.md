@@ -1,16 +1,17 @@
 ---
 id: 192
 title: "Limit FO-built checklists to 3 items by default; allow workflow README override"
-status: implementation
+status: done
 source: "captain directive — FO dispatch checklists currently drift toward 8-14 items (observed throughout 2026-04-17/18 session). That enumerates mechanical steps instead of forcing the FO to name the 3 things that matter. Cognitive load on both ensign (reading) and FO (tracking) increases with length; prioritization erodes. A 3-item ceiling by default, overridable per workflow, forces the FO to compress."
 started: 2026-04-18T04:40:02Z
-completed:
-verdict:
+completed: 2026-04-18T07:16:18Z
+verdict: PASSED
 score: 0.6
-worktree: .worktrees/spacedock-ensign-limit-fo-checklist-to-three-items
+worktree: 
 issue:
 pr: #126
-mod-block: merge:pr-merge
+mod-block: 
+archived: 2026-04-18T07:16:18Z
 ---
 
 ## Why this matters
