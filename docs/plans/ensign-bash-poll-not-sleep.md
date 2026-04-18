@@ -1,7 +1,7 @@
 ---
 id: 183
 title: "Ensign skill prose: use BashOutput polling for background tasks instead of blocking sleep"
-status: implementation
+status: validation
 source: "from #182's test_feedback_keepalive iteration cycle (2026-04-17 session) — implementer used `sleep 540 && tail -30 /tmp/log` to wait on a 9-min background bash, blocking even after the underlying test completed in 206s. Captain interrupted (Exit 137) and noted the inefficiency. Same pattern likely repeats across other ensign uses of background bash."
 started: 2026-04-18T00:09:23Z
 completed:
