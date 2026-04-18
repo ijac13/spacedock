@@ -10,7 +10,7 @@ score: 0.5
 worktree: .worktrees/spacedock-ensign-ensign-bash-poll-not-sleep
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem
