@@ -1,7 +1,7 @@
 ---
 id: 185
 title: "Cherry-pick test-predicate data-flow fixes from #182 + audit remaining narration-match callers"
-status: validation
+status: implementation
 source: "carved out of #182 — test-predicate data-flow fixes are sound and independently mergeable. Captain also asked: check if other tests carry the same incorrect-expectation pattern. Known offender per debrief: tests/test_gate_guardrail.py."
 started: 2026-04-18T00:12:20Z
 completed:
@@ -10,7 +10,7 @@ score: 0.7
 worktree: .worktrees/spacedock-ensign-cherry-pick-test-predicates-and-audit
 issue:
 pr: #123
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem statement
@@ -123,6 +123,28 @@ E2E live runs are required (not just static) because the point of the conversion
 - #186 — downstream "green full suite on opus-4-7" task
 - PR #117 — the merged-then-partially-rejected PR these fixes originated in
 - Independent reviewer of #117 — flagged the 300s→420s timeout bump (decision above: not adopted, with reasoning)
+
+### Feedback Cycles
+
+**Cycle 1 — 2026-04-18, captain-directed scope expansion mid-merge.**
+
+During CI on PRs #107 (#172) and #122 (#183), `test_feedback_keepalive` on `claude-live-bare` failed with:
+
+```
+test_lib.StepTimeout: Step 'implementation ensign dispatched' did not match within 180s.
+```
+
+Root cause (from CI logs, run 24592781341 job 71916879865 and run 24592907925 job 71917261650): in bare mode on `claude-haiku-4-5`, the FO observes the validation REJECTED report, reads the entity body, and **applies the feedback fix itself via direct Bash+Edit on `greeting.txt`** instead of dispatching a fresh implementation ensign. The file gets updated to `Goodbye, World!` and the `### Feedback Cycles` entry gets recorded, but no `Agent` tool_use fires → the mid-run watcher times out at 180s.
+
+This is the same anti-pattern #185 already addresses for the *end-of-test* signal (narration / tool_use match → data-flow assertion on entity artifact). The mid-run `'implementation ensign dispatched'` watcher was NOT touched in the original #185 scope. Captain directed folding the fix in rather than filing a separate entity.
+
+**Scope expansion for this cycle:**
+
+- Replace the mid-run `'implementation ensign dispatched'` watcher in `tests/test_feedback_keepalive.py` with a data-flow assertion. Suggested approach: poll for any of (a) `### Feedback Cycles` appearing in the entity body, (b) `greeting.txt` contents changing to the validation-expected value, (c) an `Agent` tool_use for implementation — whichever happens first. Any of these indicates the feedback cycle is being processed, whether the FO dispatched or inline-edited.
+- AC-8 added: verify no mid-run `'implementation ensign dispatched'` watcher remains (grep `tests/test_feedback_keepalive.py`).
+- AC-9 added: re-run `test_feedback_keepalive` on a bare-mode path locally against `claude-haiku-4-5` (the failing model) and confirm PASS.
+
+**No prose mitigations.** Fix is test-side only. Do NOT edit `skills/first-officer/references/*`.
 
 ## Stage Report (ideation)
 
