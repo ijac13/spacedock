@@ -1,16 +1,17 @@
 ---
 id: 184
 title: "Cherry-pick claude-team find_subagent_jsonl narrowing from #182 branch"
-status: validation
+status: done
 source: "carved out of #182 — the find_subagent_jsonl narrowing change is independently valuable and passed independent review; unbundling it from #182's rejected prose mitigations to land on its own."
 started: 2026-04-18T00:12:20Z
-completed:
-verdict:
+completed: 2026-04-18T03:51:23Z
+verdict: PASSED
 score: 0.6
-worktree: .worktrees/spacedock-ensign-cherry-pick-claude-team-narrowing
+worktree: 
 issue:
 pr: #121
-mod-block: merge:pr-merge
+mod-block: 
+archived: 2026-04-18T03:51:27Z
 ---
 
 ## Problem statement
