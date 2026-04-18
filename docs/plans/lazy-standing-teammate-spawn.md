@@ -223,3 +223,200 @@ No E2E tests needed. All changes are prose (runtime adapter, shared-core) and a 
 9. Stage Report — DONE (this section).
 
 **Recommendation:** Ready for ideation gate review. The design is minimal (prose changes + one function rename), addresses all open questions, and avoids the ensign-cannot-spawn pitfall that a naive "spawn on first SendMessage" approach would hit.
+
+## Stage Report (implementation)
+
+1. Read the entity ideation output (Decision, Protocol, Changes Required, AC-1 through AC-7, Test Plan) — DONE. All sections read and understood as the implementation spec.
+2. Rename `enumerate_alive_standing_teammates` to `enumerate_declared_standing_teammates` — DONE. Removed `member_exists` call inside the loop. Updated docstring to reflect declared-not-alive semantics. Updated `cmd_build` call site. Updated `cmd_list_standing` docstring cross-reference. Return shape `[(name, description, mod_path)]` preserved.
+3. Update preamble in `cmd_build` — DONE. Changed from "The FO has spawned these standing teammates" to "These standing teammates are available in your team".
+4. Update `claude-first-officer-runtime.md` — DONE. (a) Renamed heading to `### Standing teammate discovery pass`, replaced 6-step eager protocol with 2-step discovery (list-standing + record mod paths, no spawn at boot). (b) Added `### Standing teammate lazy-spawn` subsection describing first-dispatch trigger with `spawn-standing`, `already-alive` handling, fire-and-forget discipline. (c) Updated bare-mode/single-entity/Degraded Mode skip notes: discovery still runs, lazy-spawn skipped.
+5. Update `first-officer-shared-core.md` — DONE. (a) Updated Standing Teammates intro and first-boot-wins bullet to note spawn is deferred to first dispatch. (b) Confirmed FO routing paragraph at line 82 still references `member_exists`.
+6. Update `test_standing_teammate_prose.py` — DONE. Changed heading grep from `Standing teammate spawn pass` to `Standing teammate discovery pass`. Added assertion that old heading is absent. Added `test_lazy_spawn_heading_present`. Added `test_discovery_does_not_call_spawn_standing` (AC-1). Added `test_lazy_spawn_mentions_spawn_standing` (AC-2). Added `TestSharedCoreLazySpawn` class with AC-5 grep for 'deferred'/'lazy'. Added `TestLazySpawnSkipConditions` class with AC-6 grep for skip conditions.
+7. Update `test_claude_team_spawn_standing.py` — DONE. Added `_load_claude_team_module` helper for direct import. Added `TestEnumerateDeclaredStandingTeammates` class with unit test: standing mod with no team config on disk, `enumerate_declared_standing_teammates` returns the mod (would have been empty under old function). Added bare-mode test returning empty list.
+8. Update `test_claude_team_spawn_standing.py` with AC-4 test — DONE. Added `TestBuildDeclaredTeammatesSection` class: run `cmd_build` with standing mod but no team config member, assert `### Standing teammates available in your team` section appears and preamble reads "These standing teammates are available". Also updated `test_claude_team.py`: renamed `test_build_omits_standing_section_when_absent` to `test_build_emits_standing_section_for_declared_but_not_alive` (expectation flipped — section now appears for declared-but-not-alive teammates).
+9. Run `make test-static` — DONE. 422 passed, 22 deselected, 10 subtests passed. Zero failures.
+10. Commits — DONE. Four focused commits: (i) helper code rename + filter removal + preamble, (ii) runtime adapter prose, (iii) shared-core prose, (iv) tests. Entity stage report commit follows.
+11. Stage Report — DONE (this section).
+
+**Summary:** Implemented lazy-spawn for standing teammates. Boot no longer calls `spawn-standing`; it only runs `list-standing` (discovery). Spawn is deferred to the first team-mode `Agent()` dispatch. The dispatch prompt now enumerates declared (not alive) teammates, so ensigns see standing teammates before they are spawned. All 7 ACs are covered by the test suite.
+
+**Recommendation:** Ready for validation.
+
+## Stage Report (validation)
+
+1. Read the entity's full body (ideation Decision, Protocol, Changes Required, ACs 1-7, Test Plan) and implementation Stage Report — DONE. All sections read and cross-referenced with the implementation output.
+
+2. Inspect the implementation branch commits — DONE. Five commits on the branch (excluding the stage-report commit):
+   - `e3e2338d` — `skills/commission/bin/claude-team` only (rename + filter removal + preamble). Scope: correct.
+   - `c51f4603` — `skills/first-officer/references/claude-first-officer-runtime.md` only (adapter prose). Scope: correct.
+   - `1fea3a32` — `skills/first-officer/references/first-officer-shared-core.md` only (shared-core prose). Scope: correct.
+   - `f358adb5` — `tests/test_claude_team.py`, `tests/test_claude_team_spawn_standing.py`, `tests/test_standing_teammate_prose.py` only (tests). Scope: correct.
+   - `58d51ae6` — `docs/plans/lazy-standing-teammate-spawn.md` only (stage report). Scope: correct.
+   No out-of-scope edits detected.
+
+3. Run `make test-static` — DONE. **422 passed, 22 deselected, 10 subtests passed** in 7.64s. Zero failures.
+
+4. **AC-1: Boot no longer calls spawn-standing** — PASSED.
+   - The heading `### Standing teammate discovery pass` exists at line 32 of `claude-first-officer-runtime.md`.
+   - The old heading `### Standing teammate spawn pass` does not exist (grep confirms absent).
+   - The discovery-pass section body (lines 34-39) does not contain `spawn-standing`. It only references `list-standing` and "Record the returned mod paths in session memory. **No spawn calls at boot.**"
+   - Test `test_discovery_does_not_call_spawn_standing` extracts the section and asserts `spawn-standing` not in body.
+
+5. **AC-2: Lazy-spawn triggers at first team-mode dispatch** — PASSED.
+   - `### Standing teammate lazy-spawn` subsection exists at line 41 of `claude-first-officer-runtime.md`.
+   - The subsection body describes: "Before the first `Agent()` call that uses a `team_name`" trigger, `spawn-standing` invocation (line 46), `member_exists` aliveness check via `already-alive` status handling (line 47), fire-and-forget discipline (line 49).
+   - Tests `test_lazy_spawn_heading_present` and `test_lazy_spawn_mentions_spawn_standing` confirm heading and content.
+
+6. **AC-3: Function rename** — PASSED.
+   - `enumerate_declared_standing_teammates` exists at line 452 of `claude-team`.
+   - `enumerate_alive_standing_teammates` does not appear anywhere in `claude-team` (grep returns zero matches in the script; only appears in archived plan docs).
+   - `member_exists` is NOT called inside `enumerate_declared_standing_teammates` (lines 452-494). The function scans `_mods/*.md` for `standing: true` and returns entries directly. `member_exists` is only used in `cmd_spawn_standing` (line 693).
+   - Return shape `[(name, description, mod_path)]` preserved (line 452 type hint, line 493 `.append((declared_name, description, mod_path))`).
+   - Test `TestEnumerateDeclaredStandingTeammates::test_returns_declared_mod_without_team_config` confirms a standing mod is returned even with no team config on disk.
+
+7. **AC-4: Dispatch prompt enumerates declared teammates** — PASSED.
+   - `cmd_build` calls `enumerate_declared_standing_teammates(workflow_dir, team_name)` at line 277.
+   - Preamble reads "These standing teammates are available in your team" (line 282), not "The FO has spawned these".
+   - Test `TestBuildDeclaredTeammatesSection::test_section_appears_without_team_config_member` runs `cmd_build` with a standing mod but no team config member and asserts the section appears with correct preamble.
+   - `test_claude_team.py::test_build_emits_standing_section_for_declared_but_not_alive` (renamed from `test_build_omits_standing_section_when_absent`) confirms the section now appears for declared-but-not-alive teammates.
+
+8. **AC-5: Shared-core prose updated** — PASSED.
+   - `## Standing Teammates` section (line 217 of `first-officer-shared-core.md`) contains: "defers spawn to the first team-mode dispatch" (line 219) and "Spawn is deferred to first dispatch, not boot" (line 221).
+   - `member_exists` still appears in the Dispatch section at line 82: "Check team-config membership via `member_exists` before routing."
+   - Test `TestSharedCoreLazySpawn::test_deferred_or_lazy_in_standing_teammates_section` greps the section for 'deferred' or 'lazy'.
+   - Test `TestFORoutingProse::test_member_exists_check_mentioned` asserts `member_exists` present.
+
+9. **AC-6: Skip conditions documented** — PASSED.
+   - The lazy-spawn subsection closing paragraph (line 53): "In single-entity (bare) mode and in Degraded Mode, skip lazy-spawn (same as the discovery-pass skip note above)."
+   - The discovery-pass section (line 39): "In single-entity (bare) mode and in Degraded Mode, discovery still runs (it is cheap — just `list-standing`), but lazy-spawn is skipped in those modes (no team to spawn into)."
+   - All three conditions (bare-mode, single-entity, Degraded Mode) are documented.
+   - Test `TestLazySpawnSkipConditions::test_skip_conditions_documented` greps the lazy-spawn section for 'bare', 'single-entity', or 'degraded'.
+
+10. **AC-7: Existing tests pass after rename** — PASSED.
+    - `make test-static` returned 422 passed, 22 deselected, 10 subtests passed, zero failures.
+    - All pre-existing test classes pass: `test_standing_teammate_prose.py` (updated heading greps), `test_claude_team_spawn_standing.py` (all original classes pass plus new ones), `test_claude_team_list_standing.py` (unchanged, still passes), `test_claude_team.py` (renamed test expectation flipped correctly).
+    - The 22 deselected are live/codex-marked tests, consistent with `test-static` exclusion. No regressions.
+
+**Overall recommendation: PASSED.** All 7 ACs verified with evidence. Test suite green at 422/422. No out-of-scope edits. Implementation is minimal and well-scoped.
+
+## Fold-In: SyntaxWarning fix (claude-team line 46)
+
+(a) **Why folded in:** Captain-directed fold-in. The bug lives in the same file (`skills/commission/bin/claude-team`) that #172 already touches, so amending the diff here avoids a separate single-line PR and a second round-trip through validation. Not a 172 regression — pre-existing bug surfaced during the 172 work.
+
+(b) **Origin:** Introduced by commit `36ed45fb` on 2026-04-14 ("feat: harden dispatch helper + runtime adapter for verbatim-prompt discipline"). That commit added the `extract_stage_subsection` docstring with backslash-escaped backticks (`\``) inside a non-raw triple-quoted string, which Python 3.12+ flags as `SyntaxWarning: invalid escape sequence '\`'` on every import/run. Separate task from #172.
+
+(c) **Fix:** One-character change — converted the docstring at `skills/commission/bin/claude-team:44` from `"""..."""` to `r"""..."""`. The raw-string prefix tells Python to treat backslashes literally, so `\`` no longer triggers the warning. Smallest possible semantic-preserving change. Body of the docstring is byte-for-byte identical.
+
+(d) **Verification:**
+
+```
+$ python3 -W default -c "import py_compile; py_compile.compile('skills/commission/bin/claude-team', doraise=True)"
+(zero stderr, zero stdout, exit 0)
+
+$ python3 -W default skills/commission/bin/claude-team list-standing --workflow-dir /Users/clkao/git/spacedock/docs/plans
+/Users/clkao/git/spacedock/docs/plans/_mods/comm-officer.md
+(no SyntaxWarning prefix)
+
+$ unset CLAUDECODE && make test-static
+422 passed, 22 deselected, 10 subtests passed in 11.52s
+```
+
+## Stage Report (fold-in)
+
+1. Read entity to ground in original 172 scope — DONE. Confirmed 172 implementation and validation already complete; this is a captain-directed fold-in, not a validator rejection.
+2. Identify the bug — DONE. `skills/commission/bin/claude-team:44-48` docstring contained `\`` escape sequences inside a non-raw triple-quoted string, triggering `SyntaxWarning: invalid escape sequence '\`'` on every invocation.
+3. Apply minimal fix — DONE. Converted the docstring at line 44 to a raw string (`r"""..."""`). One-character change. No other edits to claude-team. Did not touch any other file.
+4. Verify warning is gone via `python3 -W default -c "import py_compile..."` — DONE. Zero stderr, zero stdout, exit 0.
+5. Sanity-check script runs via `python3 -W default skills/commission/bin/claude-team list-standing` — DONE. Output: `/Users/clkao/git/spacedock/docs/plans/_mods/comm-officer.md`. No SyntaxWarning prefix. (Note: the dispatch's `bash skills/commission/bin/claude-team list-standing` invocation from the worktree root failed because the file's shebang is `#!/usr/bin/env python3` and `bash` interprets it as shell. Re-ran via `python3` directly per the shebang's intent. Result confirms the fix.)
+6. Run `unset CLAUDECODE && make test-static` from worktree root — DONE. **422 passed, 22 deselected, 10 subtests passed** in 11.52s. Zero failures. Same green baseline as the original 172 validation.
+7. Append `## Fold-In` section to entity with rationale, origin commit, fix, and verification — DONE (above).
+8. Commit with message `fix: claude-team line 46 docstring escape (folded into #172)` — DONE (next step).
+9. Stage Report — DONE (this section).
+
+### Summary
+
+Folded a one-character docstring fix (raw-string prefix on `extract_stage_subsection`) into the 172 worktree to silence the `SyntaxWarning: invalid escape sequence '\`'` that fired on every `claude-team` invocation since commit `36ed45fb` on 2026-04-14. Verified via `py_compile`, direct `list-standing` run, and `make test-static` (422/422 green). One file changed: `skills/commission/bin/claude-team` (line 44, `"""` → `r"""`). New commit on top of the existing 172 commits — no amend, no reorder, no other files touched.
+
+## Stage Report (validation, post-fold)
+
+Re-validation after captain-directed fold-in commit `951b4882`. Re-confirms the original 7 ACs still hold and the fold itself is surgical and warning-free.
+
+1. **Read entity to ground in original 7 ACs and fold-in scope** — DONE. Original 7 ACs (AC-1 through AC-7) verified at f4eaf3c2 in the prior validation report. Fold-in is a one-character `"""` → `r"""` raw-string prefix on the `extract_stage_subsection` docstring at `skills/commission/bin/claude-team:44` to silence a pre-existing `SyntaxWarning` introduced by `36ed45fb` on 2026-04-14 (not a 172 regression).
+
+2. **Verify fold commit exists and is surgical** — DONE.
+
+   `git -C ... log --oneline -3`:
+   ```
+   951b4882 fix: claude-team line 46 docstring escape (folded into #172)
+   f4eaf3c2 validation: #172 lazy-spawn standing teammates — all 7 ACs PASSED
+   9e809cfe stage report: #172 lazy-spawn implementation complete
+   ```
+
+   `git -C ... show 951b4882 --stat`:
+   ```
+   commit 951b488248a3f649f178ab7ca6520831bc0bbaee
+   Author: CL Kao <clkao@datarecce.io>
+   Date:   Thu Apr 16 18:21:27 2026 -0700
+
+       fix: claude-team line 46 docstring escape (folded into #172)
+
+    docs/plans/lazy-standing-teammate-spawn.md | 38 ++++++++++++++++++++++++++++++
+    skills/commission/bin/claude-team          |  2 +-
+    2 files changed, 39 insertions(+), 1 deletion(-)
+   ```
+
+   The fold commit sits on top of f4eaf3c2 as expected. The code change in `skills/commission/bin/claude-team` is the expected ~1-line edit (2 lines reported by git stat — 1 insertion + 1 deletion for the single-character `"""` → `r"""` swap, which `--stat` counts as 1 changed line shown as `2` in the line-count column reflecting `+1 -1`). The 38-line addition to the entity body is the fold-in stage report section (acceptable per dispatch — entity body documentation, not code). No other files touched.
+
+3. **Verify SyntaxWarning is gone** — DONE.
+
+   ```
+   $ cd /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-lazy-standing-teammate-spawn
+   $ python3 -W default -c "import py_compile; py_compile.compile('skills/commission/bin/claude-team', doraise=True)"
+   EXIT: 0
+   ```
+
+   Zero stderr, zero stdout, exit 0. SyntaxWarning eliminated.
+
+4. **Verify claude-team still functions** — DONE.
+
+   ```
+   $ python3 skills/commission/bin/claude-team list-standing --workflow-dir /Users/clkao/git/spacedock/docs/plans
+   /Users/clkao/git/spacedock/docs/plans/_mods/comm-officer.md
+   ```
+
+   Single-line output, no SyntaxWarning prefix. The script correctly enumerates the declared standing teammate.
+
+5. **Re-verify AC-7 (existing tests pass after fold) via static suite** — DONE.
+
+   `unset CLAUDECODE && make test-static` final line (verbatim):
+   ```
+   422 passed, 22 deselected, 10 subtests passed in 7.83s
+   ```
+
+   Same 422/422 green baseline as the original 172 validation. Zero regressions from the fold.
+
+6. **Re-verify representative subset of original 7 ACs against worktree state** — DONE.
+
+   AC-1 (`spawn-standing` only in lazy-spawn subsection of runtime adapter):
+   ```
+   $ grep -n 'spawn-standing' skills/first-officer/references/claude-first-officer-runtime.md
+   46:   a. Run `claude-team spawn-standing --mod {abs_path_to_mod} --team {team_name}`.
+   ```
+   Single match at line 46, inside the lazy-spawn subsection (heading at line 41 per prior validation). Discovery-pass section (lines 32-39) contains no `spawn-standing` reference. AC-1 holds.
+
+   AC-3 (`enumerate_declared_standing_teammates` is in use):
+   ```
+   $ grep -n 'enumerate_declared_standing_teammates' skills/commission/bin/claude-team
+   277:    standing_teammates = enumerate_declared_standing_teammates(workflow_dir, team_name)
+   452:def enumerate_declared_standing_teammates(workflow_dir: str, team_name) -> list[tuple[str, str, str]]:
+   713:    `enumerate_declared_standing_teammates`, which returns tuples of
+   ```
+   Function defined at line 452, called from `cmd_build` at line 277, referenced in cross-doc at line 713. The old name `enumerate_alive_standing_teammates` is absent from the script. AC-3 holds.
+
+   AC-7 (test suite green): covered by step 5 above — 422/422.
+
+7. **Stage Report written** — DONE (this section).
+
+8. **Commit stage report on worktree branch** — DONE in next step. Message: `validation: #172 post-fold re-verify — 422/422 green, ACs hold`. No push.
+
+**Recommendation: PASSED — fold is surgical, original 7 ACs hold, suite at 422/422 green**

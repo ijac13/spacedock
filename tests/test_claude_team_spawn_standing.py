@@ -515,5 +515,88 @@ class TestRoutingUsagePayload:
         assert "pr-merge" not in prompt
 
 
+def _load_claude_team_module():
+    """Import the claude-team script as a module for direct function testing."""
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("claude_team", str(SCRIPT))
+    spec = importlib.util.spec_from_file_location("claude_team", str(SCRIPT), loader=loader)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestEnumerateDeclaredStandingTeammates:
+    """AC-3: enumerate_declared_standing_teammates returns entries without member_exists check."""
+
+    def test_returns_declared_mod_without_team_config(self, tmp_path):
+        """Standing mod is returned even when no team config exists on disk."""
+        ct = _load_claude_team_module()
+        wf = tmp_path / "workflow"
+        wf.mkdir()
+        mods = wf / "_mods"
+        mods.mkdir()
+        (mods / "comm-officer.md").write_text(PILOT_MOD_FIXTURE)
+
+        # Use a fake HOME so member_exists finds no team config
+        orig_home = os.environ.get("HOME")
+        try:
+            os.environ["HOME"] = str(tmp_path)
+            result = ct.enumerate_declared_standing_teammates(str(wf), "nonexistent-team")
+        finally:
+            if orig_home is not None:
+                os.environ["HOME"] = orig_home
+
+        assert len(result) == 1
+        name, description, mod_path = result[0]
+        assert name == "comm-officer"
+        assert description == "Standing prose-polishing teammate for this workflow"
+        assert mod_path.endswith("comm-officer.md")
+
+    def test_returns_empty_in_bare_mode(self, tmp_path):
+        """Bare mode (team_name=None) returns empty list."""
+        ct = _load_claude_team_module()
+        wf = tmp_path / "workflow"
+        wf.mkdir()
+        mods = wf / "_mods"
+        mods.mkdir()
+        (mods / "comm-officer.md").write_text(PILOT_MOD_FIXTURE)
+
+        result = ct.enumerate_declared_standing_teammates(str(wf), None)
+        assert result == []
+
+
+class TestBuildDeclaredTeammatesSection:
+    """AC-4: cmd_build enumerates declared teammates and uses correct preamble."""
+
+    def test_section_appears_without_team_config_member(self, tmp_path):
+        """Standing mod appears in dispatch prompt even when not alive in team config."""
+        wf, entity = _write_build_workflow(tmp_path)
+        mods_dir = wf / "_mods"
+        mods_dir.mkdir()
+        (mods_dir / "comm-officer.md").write_text(PILOT_MOD_FIXTURE)
+        # Team config exists but does NOT include comm-officer as a member
+        _write_team_config_local(tmp_path, "test-team", [{"name": "team-lead"}])
+
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf),
+            "stage": "ideation",
+            "checklist": ["1. Item"],
+            "team_name": "test-team",
+            "bare_mode": False,
+        }
+        result = _run_build_with_home(wf, inp, home=tmp_path)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        prompt = out["prompt"]
+
+        assert "### Standing teammates available in your team" in prompt
+        assert "These standing teammates are available in your team" in prompt
+        assert "The FO has spawned" not in prompt
+        assert "comm-officer" in prompt
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

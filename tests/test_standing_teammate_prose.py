@@ -23,11 +23,41 @@ def read(path: Path) -> str:
 
 
 class TestClaudeAdapterProse:
-    """AC-8: Claude runtime adapter documents the standing teammate spawn pass."""
+    """AC-8: Claude runtime adapter documents standing teammate discovery + lazy-spawn."""
 
-    def test_heading_present(self):
+    def test_discovery_heading_present(self):
         text = read(CLAUDE_RUNTIME)
-        assert re.search(r"^### Standing teammate spawn pass$", text, re.MULTILINE)
+        assert re.search(r"^### Standing teammate discovery pass$", text, re.MULTILINE)
+
+    def test_old_spawn_pass_heading_absent(self):
+        text = read(CLAUDE_RUNTIME)
+        assert not re.search(r"^### Standing teammate spawn pass$", text, re.MULTILINE)
+
+    def test_lazy_spawn_heading_present(self):
+        text = read(CLAUDE_RUNTIME)
+        assert re.search(r"^### Standing teammate lazy-spawn$", text, re.MULTILINE)
+
+    def test_discovery_does_not_call_spawn_standing(self):
+        """AC-1: spawn-standing must not appear in the discovery-pass section."""
+        text = read(CLAUDE_RUNTIME)
+        discovery_match = re.search(
+            r"^### Standing teammate discovery pass$(.*?)^### ",
+            text, re.MULTILINE | re.DOTALL,
+        )
+        assert discovery_match, "discovery pass section not found"
+        discovery_body = discovery_match.group(1)
+        assert "spawn-standing" not in discovery_body
+
+    def test_lazy_spawn_mentions_spawn_standing(self):
+        """AC-2: lazy-spawn subsection must reference spawn-standing."""
+        text = read(CLAUDE_RUNTIME)
+        lazy_match = re.search(
+            r"^### Standing teammate lazy-spawn$(.*?)(?:^## |\Z)",
+            text, re.MULTILINE | re.DOTALL,
+        )
+        assert lazy_match, "lazy-spawn subsection not found"
+        lazy_body = lazy_match.group(1)
+        assert "spawn-standing" in lazy_body
 
     def test_helper_invocation_mentioned(self):
         text = read(CLAUDE_RUNTIME)
@@ -95,6 +125,39 @@ class TestFORoutingProse:
         text = read(SHARED_CORE)
         assert "discover the same teammates automatically via their build-time prompt section" in text
         assert "### Standing teammates available in your team" in text
+
+
+class TestSharedCoreLazySpawn:
+    """AC-5: shared-core Standing Teammates section mentions deferred spawn."""
+
+    def test_deferred_or_lazy_in_standing_teammates_section(self):
+        text = read(SHARED_CORE)
+        section_match = re.search(
+            r"^## Standing Teammates$(.*?)(?:^## |\Z)",
+            text, re.MULTILINE | re.DOTALL,
+        )
+        assert section_match, "## Standing Teammates section not found"
+        body = section_match.group(1)
+        assert "deferred" in body.lower() or "lazy" in body.lower(), (
+            "Standing Teammates section must mention 'deferred' or 'lazy' spawn"
+        )
+
+
+class TestLazySpawnSkipConditions:
+    """AC-6: runtime adapter documents skip conditions near the lazy-spawn subsection."""
+
+    def test_skip_conditions_documented(self):
+        text = read(CLAUDE_RUNTIME)
+        lazy_match = re.search(
+            r"^### Standing teammate lazy-spawn$(.*?)(?:^## |\Z)",
+            text, re.MULTILINE | re.DOTALL,
+        )
+        assert lazy_match, "lazy-spawn subsection not found"
+        lazy_body = lazy_match.group(1)
+        assert "bare" in lazy_body.lower() or "single-entity" in lazy_body.lower() or \
+               "degraded" in lazy_body.lower(), (
+            "lazy-spawn subsection must document skip conditions for bare/single-entity/degraded modes"
+        )
 
 
 def _extract_section(text: str, heading: str) -> str:
