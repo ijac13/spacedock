@@ -73,3 +73,13 @@ So the remaining flakiness is genuinely upstream — not something test-side har
 - **#186** — full-suite opus-4-7 green attempt (cycle 5 in flight)
 - **#188** — streaming-watcher conversion (surfaced the 0/3 pattern during AC-5)
 - Budget note: must respect post-#182 rules on prose-mitigation bans.
+
+## 2026-04-18 session observation — not opus-4-7-specific
+
+While diagnosing a CI failure on PR #127 (entity #188 `streaming-watcher-over-filesystem-polling`), the `claude-live-opus` job failed on `test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips`. The pinned model was `claude-opus-4-6`, NOT `claude-opus-4-7`.
+
+Failure signature is the same CLASS as the one #194 already tracks: zero `ECHO: ping` substring anywhere in fo-log; FO advanced through ensign dispatch + shutdown + status transitions + git mv archive, then errored on `cleanup` tool ("Cannot cleanup team with 1 active member(s)") and exited code 1 at 165s wallclock. Predicate correctly never matched because FO never wrote the ECHO string.
+
+Local `make test-live-claude-opus` on the rebased #188 branch PASSED the same test (same claude-opus-4-6 pin). Confirms the flake is non-deterministic, not deterministic.
+
+**Scope widening implication:** the title and frontmatter currently say "opus-4-7 FO flakiness." The flake manifests on opus-4-6 too. The underlying issue appears to be FO-side standing-teammate-spawn completion, not model-specific. Future ideation should consider whether to rename/re-scope the entity to "multi-model FO-side standing-teammate-spawn flake" or similar.
