@@ -1,13 +1,13 @@
 ---
 id: 164
 title: "`claude-team build` path-doubles when entity_path is passed as a worktree-absolute path"
-status: ideation
+status: implementation
 source: "FO observation during 2026-04-16 session while dispatching #162 implementation — initial build invocation produced entity paths with `.worktrees/` prefix duplicated twice"
 started: 2026-04-18T07:59:13Z
 completed:
 verdict:
 score: 0.40
-worktree:
+worktree: .worktrees/spacedock-ensign-claude-team-build-path-doubling
 issue:
 pr:
 ---
