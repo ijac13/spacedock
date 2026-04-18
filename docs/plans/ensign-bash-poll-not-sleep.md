@@ -15,14 +15,14 @@ mod-block:
 
 ## Problem
 
-When an ensign launches a long-running command via `Bash(run_in_background: true)`, the shell returns a `bash_id` and the command runs asynchronously. The correct way to wait on it is `BashOutput(bash_id=...)` polling: sleep briefly between polls, inspect the returned `status`, and proceed once `status == "completed"`.
+When an ensign launches a long-running command via `Bash(run_in_background: true)`, the shell returns a `bash_id` and the command runs asynchronously. The correct pattern is `BashOutput(bash_id=...)` polling: sleep briefly between polls, inspect the returned `status`, and proceed once `status == "completed"`.
 
-The anti-pattern: issuing a single blocking `sleep N && tail -n … /tmp/log` sized to the worst-case duration. Two concrete costs:
+The anti-pattern: a single blocking `sleep N && tail -n … /tmp/log` sized to the worst-case duration. Two concrete costs:
 
-1. **Wallclock waste.** Whenever the task finishes before the sleep budget, the agent stays idle for the remainder. On a 9-minute sleep budget with a 3-minute task, 6 minutes per cycle are wasted; across several iterations this dominates total run time and token cost (the agent stays resident in the conversation).
-2. **Uninterruptibility.** A blocking sleep inside the agent process cannot be preempted by captain messages. Incoming SendMessages queue but are not observed until the sleep returns. Recovery requires killing the turn (Exit 137), which is coarse and throws away in-flight context.
+1. **Wallclock waste.** When the task finishes before the sleep budget expires, the agent idles for the remainder. On a 9-minute sleep budget with a 3-minute task, 6 minutes per cycle are wasted; across several iterations this dominates total run time and token cost (the agent also stays resident in the conversation while sleeping).
+2. **Uninterruptibility.** A blocking sleep cannot be preempted by captain messages. Incoming `SendMessage`s queue but go unobserved until the sleep returns. Recovery requires killing the turn (Exit 137), which discards in-flight context.
 
-`BashOutput` polling avoids both: the agent wakes at each poll interval, so captain messages land promptly, and the loop exits as soon as the task is actually done.
+`BashOutput` polling avoids both: the agent wakes at each poll interval so captain messages land promptly, and the loop exits as soon as the task finishes.
 
 ## Root cause of the anti-pattern
 
