@@ -224,7 +224,9 @@ Some live tests are currently marked `xfail` or `skipif` on the `#148` branch �
 
 ## PR Runtime Live E2E
 
-The expensive runtime-backed PR suite lives in `.github/workflows/runtime-live-e2e.yml`. It triggers on `pull_request` so the runtime jobs show up on the PR alongside Static CI, and it still supports `workflow_dispatch` for targeted reruns.
+The expensive runtime-backed PR suite lives in `.github/workflows/runtime-live-e2e.yml`. It triggers on `pull_request_target` (types `opened`, `synchronize`, `reopened`) so the runtime jobs show up on the PR alongside Static CI, and it still supports `workflow_dispatch` for targeted reruns. The jobs check out the PR head SHA (`github.event.pull_request.head.sha`) with `persist-credentials: false`, so tests actually validate PR code — including fork PRs — and the `GITHUB_TOKEN` is not persisted into `.git/config` for later steps to abuse.
+
+The security model relies on a single gate: the environment's required-reviewer approval. Because `pull_request_target` runs with base-branch context, repo secrets are available even for fork PRs — so the env-approval gate is the ONLY protection against malicious PR code running with secrets. Maintainers: review the head SHA's diff BEFORE approving the env deployment. If the diff looks malicious, refuse approval — secrets never reach the bad code. The workflow-level `permissions: { contents: read, pull-requests: read }` narrows the default `GITHUB_TOKEN` surface as an extra containment layer.
 
 The default PR-triggered path is intentionally fixed. When a PR opens, GitHub creates four live jobs:
 
@@ -269,10 +271,12 @@ Each environment has its own approval gate, so `claude-live-opus` can be release
 Open a PR and then approve the pending environment review to release the live runtime checks. For targeted reruns, API-driven launches, or future release-branch matrix runs, invoke the workflow manually from Actions or with:
 
 ```bash
-gh workflow run runtime-live-e2e.yml --ref <pr-branch> -f pr_number=<N>
+gh workflow run runtime-live-e2e.yml --ref <branch>
 ```
 
-`workflow_dispatch` inputs are supplied when the run is created, not when the environment approval is granted. That makes manual dispatch the right entrypoint for any future parameterized or matrix live runs.
+Manual dispatch runs whatever branch the `--ref` points at (no head-SHA pin, no PR association) — use it for on-main bisection or parameterized investigations. The `pr_number` input is gone; when you want to validate a specific PR's code, push to its branch and let the `pull_request_target` auto-trigger fire — the head SHA is captured automatically and rendered in the job summary.
+
+`workflow_dispatch` inputs are supplied when the run is created, not when the environment approval is granted. That makes manual dispatch the right entrypoint for any parameterized or matrix live runs.
 
 ### Bisection inputs (`runtime-live-e2e.yml`)
 
@@ -293,7 +297,6 @@ To narrow a Claude Code regression to a single version, dispatch the same test a
 
 ```bash
 gh workflow run runtime-live-e2e.yml --ref main \
-  -f pr_number=<N> \
   -f claude_version=2.1.107 \
   -f test_selector=tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips \
   -f effort_override=low
@@ -307,7 +310,6 @@ When a Claude Code version flips a model alias in a way that breaks a test (e.g.
 
 ```bash
 gh workflow run runtime-live-e2e.yml --ref main \
-  -f pr_number=<N> \
   -f claude_version=2.1.111 \
   -f test_selector=tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips \
   -f effort_override=low \
@@ -330,8 +332,8 @@ Operators should expect each job summary to show the run provenance explicitly:
 
 - Trigger source
 - PR number
-- Tested workflow SHA
-- Current PR head SHA
+- Base SHA (the workflow definition commit from base branch)
+- PR head SHA (the commit the tests actually validate — checked out by `actions/checkout@v4`)
 - same-repo vs fork status
 - approval/reviewer context
 
