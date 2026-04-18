@@ -10,7 +10,7 @@ score: 0.5
 worktree: .worktrees/spacedock-ensign-streaming-watcher-over-filesystem-polling
 issue:
 pr: #127
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 ## Problem
