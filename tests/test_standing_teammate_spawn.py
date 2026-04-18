@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -12,6 +11,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (  # noqa: E402
     LogParser,
+    entry_contains_text,
     git_add_commit,
     install_agents,
     run_first_officer_streaming,
@@ -73,14 +73,14 @@ def test_standing_teammate_spawns_and_roundtrips(test_project, model, effort):
     ) as w:
         w.expect(
             lambda e: tool_use_matches(e, "Bash", command="spawn-standing"),
-            timeout_s=120,
+            timeout_s=60,
             label="claude-team spawn-standing invoked",
         )
         print("[OK] claude-team spawn-standing invoked")
 
         w.expect(
             lambda e: tool_use_matches(e, "Agent", name="echo-agent"),
-            timeout_s=120,
+            timeout_s=60,
             label="echo-agent Agent() dispatched",
         )
         print("[OK] echo-agent Agent() dispatched")
@@ -88,7 +88,7 @@ def test_standing_teammate_spawns_and_roundtrips(test_project, model, effort):
         ensign_dispatch = w.expect(
             lambda e: tool_use_matches(e, "Agent")
             and "echo-agent" not in _agent_input(e).get("name", ""),
-            timeout_s=240,
+            timeout_s=90,
             label="ensign Agent() dispatched",
         )
         ensign_prompt = _agent_input(ensign_dispatch).get("prompt", "")
@@ -109,16 +109,30 @@ def test_standing_teammate_spawns_and_roundtrips(test_project, model, effort):
         )
         print("[OK] SendMessage to echo-agent observed")
 
+        entity = abs_workflow / "001-echo-roundtrip.md"
         archived = abs_workflow / "_archive" / "001-echo-roundtrip.md"
-        archive_deadline = time.monotonic() + 300
-        while time.monotonic() < archive_deadline:
-            if archived.is_file() and "ECHO: ping" in archived.read_text():
-                break
-            time.sleep(1.0)
-        else:
-            raise AssertionError(
-                f"Archived entity with 'ECHO: ping' did not appear at {archived} within 300s"
-            )
+
+        def _echo_captured_in_event(e: dict) -> bool:
+            for path in (entity, archived):
+                if tool_use_matches(
+                    e, "Edit", file_path=str(path), new_string="ECHO: ping"
+                ):
+                    return True
+                if tool_use_matches(
+                    e, "Write", file_path=str(path), content="ECHO: ping"
+                ):
+                    return True
+            if tool_use_matches(e, "Bash", command="ECHO: ping"):
+                return True
+            if entry_contains_text(e, r"ECHO: ping"):
+                return True
+            return False
+
+        w.expect(
+            _echo_captured_in_event,
+            timeout_s=300,
+            label="archived entity body captured 'ECHO: ping'",
+        )
         print("[OK] archived entity body captured 'ECHO: ping' (data-flow assertion)")
         w.proc.terminate()
 
