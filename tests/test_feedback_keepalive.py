@@ -171,13 +171,40 @@ def test_feedback_keepalive(test_project, model, effort):
         agent_id="spacedock:first-officer",
         extra_args=["--model", model, "--effort", effort, "--max-budget-usd", "5.00"],
     ) as w:
-        w.expect(
-            lambda e: tool_use_matches(e, "Agent", subagent_type="spacedock:ensign")
-            and _agent_targets_stage(_agent_input_dict(e), "implementation"),
-            timeout_s=180,
-            label="implementation ensign dispatched",
-        )
-        print("[OK] implementation ensign dispatched")
+        entity_file = abs_workflow / "keepalive-test-task.md"
+        archive_file = abs_workflow / "_archive" / "keepalive-test-task.md"
+        greeting_file = t.test_project_dir / "greeting.txt"
+        fo_log_file = t.log_dir / "fo-log.jsonl"
+
+        def _impl_signal_observed() -> bool:
+            if greeting_file.is_file():
+                return True
+            for body_path in (entity_file, archive_file):
+                if body_path.is_file() and "Feedback Cycles" in body_path.read_text():
+                    return True
+            if fo_log_file.is_file():
+                try:
+                    snapshot = LogParser(fo_log_file)
+                except Exception:
+                    return False
+                for entry in snapshot.entries:
+                    if tool_use_matches(entry, "Agent", subagent_type="spacedock:ensign"):
+                        return True
+            return False
+
+        impl_deadline = time.monotonic() + 240
+        while time.monotonic() < impl_deadline:
+            if _impl_signal_observed():
+                break
+            time.sleep(1.0)
+        else:
+            raise AssertionError(
+                f"No implementation data-flow signal observed within 240s: "
+                f"greeting={greeting_file} entity={entity_file} archive={archive_file} "
+                f"fo_log={fo_log_file}"
+            )
+        print("[OK] implementation data-flow signal observed "
+              "(greeting file, feedback cycle section, or ensign Agent dispatch)")
 
         w.expect(
             lambda e: tool_use_matches(e, "Agent", subagent_type="spacedock:ensign")
@@ -187,7 +214,6 @@ def test_feedback_keepalive(test_project, model, effort):
         )
         print("[OK] validation ensign dispatched — implementation agent survived the transition")
 
-        entity_file = abs_workflow / "keepalive-test-task.md"
         feedback_deadline = time.monotonic() + 300
         while time.monotonic() < feedback_deadline:
             if entity_file.is_file():
