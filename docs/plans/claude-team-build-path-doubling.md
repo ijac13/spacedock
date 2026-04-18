@@ -1,7 +1,7 @@
 ---
 id: 164
 title: "`claude-team build` path-doubles when entity_path is passed as a worktree-absolute path"
-status: implementation
+status: validation
 source: "FO observation during 2026-04-16 session while dispatching #162 implementation — initial build invocation produced entity paths with `.worktrees/` prefix duplicated twice"
 started: 2026-04-18T07:59:13Z
 completed:
