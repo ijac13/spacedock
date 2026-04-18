@@ -9,7 +9,7 @@ verdict:
 score: 0.40
 worktree: .worktrees/spacedock-ensign-claude-team-build-path-doubling
 issue:
-pr:
+pr: #129
 mod-block: merge:pr-merge
 ---
 
