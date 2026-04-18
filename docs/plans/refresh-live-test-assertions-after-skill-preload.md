@@ -10,7 +10,7 @@ score: 0.70
 worktree: .worktrees/spacedock-ensign-refresh-live-test-assertions-after-skill-preload
 issue:
 pr: #131
-mod-block: merge:pr-merge
+mod-block: 
 ---
 
 The #148 pytest migration surfaced a class of test failures that had been masked by the pre-migration Makefile's `&&` short-circuit. The failures are deterministic (identical counts across concurrency modes and models — 19/65 on `test_commission` on claude-live, claude-live-bare, and claude-live-opus), not concurrency-induced, and not caused by #148's harness. They are **pre-existing test-content drift**: the tests assert that `agents/first-officer.md` contains tokens like `TeamCreate`, `Agent(`, `Event Loop`, `initialPrompt`, `Fresh stage property`, `feedback protocol instructions`, `_archive convention`, `discovers plugin-shipped mods`, etc.
