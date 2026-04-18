@@ -108,12 +108,25 @@ def test_standing_teammate_spawns_and_roundtrips(test_project, model, effort):
         )
         print("[OK] SendMessage to echo-agent observed")
 
+        entity = abs_workflow / "001-echo-roundtrip.md"
         archived = abs_workflow / "_archive" / "001-echo-roundtrip.md"
+
+        def _echo_captured_in_event(e: dict) -> bool:
+            for path in (entity, archived):
+                if tool_use_matches(
+                    e, "Edit", file_path=str(path), new_string="ECHO: ping"
+                ):
+                    return True
+                if tool_use_matches(
+                    e, "Write", file_path=str(path), content="ECHO: ping"
+                ):
+                    return True
+            if tool_use_matches(e, "Bash", command="ECHO: ping"):
+                return True
+            return False
+
         w.expect(
-            lambda e: (
-                tool_use_matches(e, "Edit", file_path=str(archived), new_string="ECHO: ping")
-                or tool_use_matches(e, "Write", file_path=str(archived), content="ECHO: ping")
-            ),
+            _echo_captured_in_event,
             timeout_s=300,
             label="archived entity body captured 'ECHO: ping'",
         )

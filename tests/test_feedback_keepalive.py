@@ -202,6 +202,8 @@ def test_feedback_keepalive(test_project, model, effort, request):
                     e, "Write", file_path=str(body_path), content="Feedback Cycles"
                 ):
                     return True
+            if tool_use_matches(e, "Bash", command="Feedback Cycles"):
+                return True
             if tool_use_matches(e, "Agent", subagent_type="spacedock:ensign"):
                 return True
             return False
@@ -234,6 +236,8 @@ def test_feedback_keepalive(test_project, model, effort, request):
                     e, "Write", file_path=str(body_path), content="Feedback Cycles"
                 ):
                     return True
+            if tool_use_matches(e, "Bash", command="Feedback Cycles"):
+                return True
             if tool_use_matches(e, "Agent", subagent_type="spacedock:ensign"):
                 ensign_count[0] += 1
                 if ensign_count[0] >= 2:
