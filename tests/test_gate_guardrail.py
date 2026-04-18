@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import re
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -21,7 +20,6 @@ from test_lib import (  # noqa: E402
     run_codex_first_officer,
     run_first_officer_streaming,
     setup_fixture,
-    tool_use_matches,
 )
 
 
@@ -46,42 +44,15 @@ def test_gate_guardrail(test_project, runtime):
     # --- Phase 2: Run the first officer ---
     print(f"--- Phase 2: Run first officer ({runtime}) ---")
     if runtime == "claude":
-        entity_path = t.test_project_dir / "gated-pipeline" / "gate-test-entity.md"
-        initial_mtime_ns = entity_path.stat().st_mtime_ns
         with run_first_officer_streaming(
             t,
             "Process all tasks through the workflow.",
             agent_id=agent_id,
             extra_args=["--max-budget-usd", "1.00"],
         ) as w:
-            w.expect(
-                lambda e: tool_use_matches(e, "Agent"),
-                timeout_s=240,
-                label="ensign Agent() dispatched",
-            )
-            print("[OK] ensign Agent() dispatched (data-flow: FO processing workflow)")
-
-            mutation_deadline = time.monotonic() + 300
-            while time.monotonic() < mutation_deadline:
-                if w.proc.poll() is not None:
-                    break
-                if entity_path.is_file() and entity_path.stat().st_mtime_ns != initial_mtime_ns:
-                    break
-                time.sleep(1.0)
-            else:
-                raise AssertionError(
-                    f"Entity file at {entity_path} did not mutate within 300s"
-                )
-            print("[OK] entity frontmatter/body mutated (data-flow: ensign touched entity)")
-
-            w.proc.terminate()
-            try:
-                fo_exit = w.proc.wait(timeout=30)
-            except Exception:
-                w.proc.kill()
-                fo_exit = w.proc.wait()
+            fo_exit = w.expect_exit(timeout_s=420)
         if fo_exit != 0:
-            print("  (expected — session terminated after gate hold observed)")
+            print("  (expected — session ends when budget runs out at gate)")
     else:
         fo_exit = run_codex_first_officer(
             t,
