@@ -308,3 +308,17 @@ Three blocking amendments from staff review applied in-place on main (non-worktr
 ### Summary
 
 Staff-review blockers landed. Edit 1 now merges lines 60 and 62 verbatim + append, preserving #192's linchpin framing while adding the AC-vs-checklist distinction. AC-7's `Verified by:` clause is now internally consistent (captain judgment for a meta-AC). Behavioral spot-check is required, not optional. Non-blocking nice-to-haves from the staff review (diagnostic-class exemplar, legacy-entities note, evidence-reproduction cost cap) were captain-deferred and remain out of scope.
+
+## Stage Report — implementation
+
+### Summary
+
+All three Edit blocks applied on branch `spacedock-ensign/separate-ac-from-checklist-entity-vs-stage`. Edit 1 preserved #192's linchpin paragraph verbatim and appended the AC-vs-checklist sentence; item 2 was rewritten to drop the conflated source wording. Edit 2 appended two sentences (ideation + validation) and replaced the Task Template with one that includes a `## Acceptance criteria` block. Edit 3 mirrored the template block into the commission generator's Entity Template and added the per-stage Outputs-guidance sentence. A new static assertion `test_entity_label_template_has_acceptance_criteria_block` covers AC-6. `make test-static` is green (438 passed, 22 deselected). Committed as `implement: #193 separate AC (entity-level) from checklist (stage-level)` in a single coherent commit.
+
+### Checklist
+
+1. **Edit 1 (shared-core) — DONE.** Line 60 rewritten to the new single sentence framing the checklist as dispatch-specific linchpins sourced from stage `Outputs:` plus stage-appropriate AC advancement. The #192 linchpin paragraph below it is preserved verbatim with the AC-vs-checklist sentence appended as its final sentence. The `AC coverage cross-check` paragraph is added in `## Completion and Gates` directly after the `{N} done, {N} skipped, {N} failed` line. AC-1 grep (`Entity-level acceptance criteria (AC) are properties of the finished entity`) returns 1 match; AC-2 grep (`AC coverage cross-check`) returns 1 match.
+
+2. **Edit 2 (`docs/plans/README.md`) — DONE.** Ideation-stage AC-entity-level paragraph appended as a new bullet under the existing "Acceptance criteria must include how each criterion will be tested" bullet. Validation-stage cross-check sentence appended as a bullet after "Verify each acceptance criterion with evidence". Task Template at the bottom replaced per spec — `## Acceptance criteria` heading with the "Each AC names a property" guidance line and a `**AC-1 — ...**` exemplar followed by a `Verified by:` line. AC-3 grep (`Acceptance criteria are \*\*entity-level\*\*`), AC-4 grep (`Pull every \`\*\*AC-N\*\*\` item`), and AC-5 grep (`## Acceptance criteria` inside the Task Template) all pass.
+
+3. **Edit 3 (`skills/commission/SKILL.md`) + static test — DONE.** Generated-README Entity Template mirrors the new `## Acceptance criteria` block (heading, guidance line, AC-1 exemplar, `Verified by:` line). The per-stage Outputs-guidance sentence is appended inline in the existing Outputs bullet description (same paragraph as the "become checklist items at dispatch time" prose). `tests/test_commission_template.py` gains `test_entity_label_template_has_acceptance_criteria_block` asserting the generated-template block contains the `## Acceptance criteria` heading, the `Each AC names a property` guidance, and a `Verified by:` exemplar line. `make test-static` green (438 passed). AC-6 grep returns matches; AC-8 holds.
