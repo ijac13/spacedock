@@ -6,7 +6,6 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -192,38 +191,28 @@ def test_feedback_keepalive(test_project, model, effort, request):
     ) as w:
         entity_file = abs_workflow / "keepalive-test-task.md"
         archive_file = abs_workflow / "_archive" / "keepalive-test-task.md"
-        greeting_file = t.test_project_dir / "greeting.txt"
-        fo_log_file = t.log_dir / "fo-log.jsonl"
 
-        def _impl_signal_observed() -> bool:
-            if greeting_file.is_file():
-                return True
+        def _impl_signal_in_event(e: dict) -> bool:
             for body_path in (entity_file, archive_file):
-                if body_path.is_file() and "Feedback Cycles" in body_path.read_text():
+                if tool_use_matches(
+                    e, "Edit", file_path=str(body_path), new_string="Feedback Cycles"
+                ):
                     return True
-            if fo_log_file.is_file():
-                try:
-                    snapshot = LogParser(fo_log_file)
-                except Exception:
-                    return False
-                for entry in snapshot.entries:
-                    if tool_use_matches(entry, "Agent", subagent_type="spacedock:ensign"):
-                        return True
+                if tool_use_matches(
+                    e, "Write", file_path=str(body_path), content="Feedback Cycles"
+                ):
+                    return True
+            if tool_use_matches(e, "Agent", subagent_type="spacedock:ensign"):
+                return True
             return False
 
-        impl_deadline = time.monotonic() + 240
-        while time.monotonic() < impl_deadline:
-            if _impl_signal_observed():
-                break
-            time.sleep(1.0)
-        else:
-            raise AssertionError(
-                f"No implementation data-flow signal observed within 240s: "
-                f"greeting={greeting_file} entity={entity_file} archive={archive_file} "
-                f"fo_log={fo_log_file}"
-            )
+        w.expect(
+            _impl_signal_in_event,
+            timeout_s=240,
+            label="implementation data-flow signal",
+        )
         print("[OK] implementation data-flow signal observed "
-              "(greeting file, feedback cycle section, or ensign Agent dispatch)")
+              "(Feedback Cycles section edit or ensign Agent dispatch)")
 
         w.expect(
             lambda e: tool_use_matches(e, "Agent", subagent_type="spacedock:ensign")
@@ -233,38 +222,31 @@ def test_feedback_keepalive(test_project, model, effort, request):
         )
         print("[OK] validation ensign dispatched — implementation agent survived the transition")
 
-        def _feedback_cycle_observed() -> bool:
+        ensign_count = [0]
+
+        def _feedback_signal_in_event(e: dict) -> bool:
             for body_path in (entity_file, archive_file):
-                if body_path.is_file() and "Feedback Cycles" in body_path.read_text():
+                if tool_use_matches(
+                    e, "Edit", file_path=str(body_path), new_string="Feedback Cycles"
+                ):
                     return True
-            if greeting_file.is_file() and "Hello, World!" in greeting_file.read_text():
-                return True
-            if fo_log_file.is_file():
-                try:
-                    snapshot = LogParser(fo_log_file)
-                except Exception:
-                    return False
-                ensign_dispatch_count = 0
-                for entry in snapshot.entries:
-                    if tool_use_matches(entry, "Agent", subagent_type="spacedock:ensign"):
-                        ensign_dispatch_count += 1
-                        if ensign_dispatch_count >= 2:
-                            return True
+                if tool_use_matches(
+                    e, "Write", file_path=str(body_path), content="Feedback Cycles"
+                ):
+                    return True
+            if tool_use_matches(e, "Agent", subagent_type="spacedock:ensign"):
+                ensign_count[0] += 1
+                if ensign_count[0] >= 2:
+                    return True
             return False
 
-        feedback_deadline = time.monotonic() + 300
-        while time.monotonic() < feedback_deadline:
-            if _feedback_cycle_observed():
-                break
-            time.sleep(1.0)
-        else:
-            raise AssertionError(
-                f"No feedback-cycle data-flow signal observed within 300s: "
-                f"entity={entity_file} archive={archive_file} greeting={greeting_file} "
-                f"fo_log={fo_log_file}"
-            )
+        w.expect(
+            _feedback_signal_in_event,
+            timeout_s=300,
+            label="feedback-cycle data-flow signal",
+        )
         print("[OK] feedback-cycle data-flow signal observed "
-              "(Feedback Cycles section, validation-expected greeting, or second ensign dispatch)")
+              "(Feedback Cycles section edit or second ensign dispatch)")
         w.proc.terminate()
 
     print("--- Phase 3: Validation ---")

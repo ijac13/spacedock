@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -110,15 +109,14 @@ def test_standing_teammate_spawns_and_roundtrips(test_project, model, effort):
         print("[OK] SendMessage to echo-agent observed")
 
         archived = abs_workflow / "_archive" / "001-echo-roundtrip.md"
-        archive_deadline = time.monotonic() + 300
-        while time.monotonic() < archive_deadline:
-            if archived.is_file() and "ECHO: ping" in archived.read_text():
-                break
-            time.sleep(1.0)
-        else:
-            raise AssertionError(
-                f"Archived entity with 'ECHO: ping' did not appear at {archived} within 300s"
-            )
+        w.expect(
+            lambda e: (
+                tool_use_matches(e, "Edit", file_path=str(archived), new_string="ECHO: ping")
+                or tool_use_matches(e, "Write", file_path=str(archived), content="ECHO: ping")
+            ),
+            timeout_s=300,
+            label="archived entity body captured 'ECHO: ping'",
+        )
         print("[OK] archived entity body captured 'ECHO: ping' (data-flow assertion)")
         w.proc.terminate()
 
