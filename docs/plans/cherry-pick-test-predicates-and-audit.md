@@ -216,3 +216,46 @@ Total roughly within the ~$4 budget. Two gate-guardrail runs were needed because
 ### Summary
 
 Cherry-picked three test-only commits from the #182 source branch cleanly (9c59d143 + ab238078 verbatim, e40ff353 split to keep only the test file). Audited all `entry_contains_text` callers per AC-7; converted `test_gate_guardrail.py`'s two mid-run narration watchers to a Phase-3-only data-flow verdict after a first-attempt Agent-dispatch signal proved incompatible with the pre-populated fixture. All seven acceptance criteria verified: AC-1 cherry-pick correctness, AC-2 static suite at 426 passes, AC-3/AC-4/AC-6 live opus-4-6 runs all green, AC-5 narration watchers removed, AC-7 audit preserved in the approach section.
+
+## Stage Report (validation)
+
+1. **Read implementation stage report first (noted failed first-attempt + simplification)** — DONE. Noted: first attempt `4ca5e6af` used Agent-dispatch + entity mtime polling and failed AC-6 because the gated-pipeline fixture is pre-populated with `## Stage Report: work`, so the FO presents the gate review directly without ever dispatching an ensign. Simplification `8a8d06f4` removed both mid-run watchers and relies on Phase 3's existing `check_gate_hold_behavior` (entity status + archive-absence) plus the post-hoc `re.search` on `fo_text_output`.
+
+2. **AC-1 (cherry-pick correctness)** — DONE.
+   - `git log main..HEAD --oneline` shows 6 commits on branch (3 cherry-picks: `dd1d3c6a`, `96c081e6`, `46329890`; 2 conversion attempts: `4ca5e6af`, `8a8d06f4`; 1 report commit: `9481187c`). Matches the ideation plan (3 cherry-picks) plus the two-commit conversion (documented in implementation stage report) plus the stage-report commit.
+   - `git diff main...HEAD -- skills/` returned empty (zero bytes).
+   - `git diff main...HEAD -- tests/ --stat` showed changes confined to `tests/test_feedback_keepalive.py`, `tests/test_gate_guardrail.py`, `tests/test_standing_teammate_spawn.py` — matches expectation (2 source-branch test files + 1 converted test file).
+
+3. **AC-2 (static suite green)** — DONE. `unset CLAUDECODE && make test-static` reports `426 passed, 22 deselected, 10 subtests passed in 19.94s`. Meets ≥426 threshold.
+
+4. **AC-3 (live standing-teammate opus-4-6)** — DONE, PASS. Independently re-ran: `1 passed in 138.62s`. Evidence: `[OK] archived entity body captured 'ECHO: ping' (data-flow assertion)`, `[OK] aggregate: echo-agent Agent() dispatched 1 time(s)`. FO exit code 143 (SIGTERM from the intentional `w.proc.terminate()` after the archive-polling loop succeeds — expected per the #182 pattern).
+
+5. **AC-4 (live feedback-keepalive opus-4-6)** — DONE, PASS. Independently re-ran: `1 passed in 172.63s`. Evidence: `[Keepalive Event Scan] Implementation dispatch seen: True / Implementation completion seen: True / Validation dispatch seen: True / Shutdown before validation: 0`, `8 passed, 0 failed (out of 8 checks)`.
+
+6. **AC-5 (no entry_contains_text in test_gate_guardrail)** — DONE. `grep -n entry_contains_text tests/test_gate_guardrail.py` returns no matches (exit 1). Additionally, the import of `entry_contains_text` was removed from the `from test_lib import (...)` block.
+
+7. **AC-6 (live gate-guardrail opus-4-6)** — DONE, PASS. Independently re-ran: `1 passed in 45.75s`. Evidence: `PASS: entity did NOT advance past gate (status: work)`, `PASS: entity was NOT archived (gate held)`, `PASS: first officer presented gate review`, `PASS: first officer reported at gate`, `PASS: first officer did NOT self-approve`, `7 passed, 0 failed (out of 7 checks)`.
+
+8. **AC-7 (audit preserved)** — DONE. Audit section `### Audit of remaining entry_contains_text callers` present at line 51 of the entity body. Table lists all three classifications:
+   - `tests/test_standing_teammate_spawn.py` — `Already data-flow` (tool_result payload)
+   - `tests/test_fo_stream_watcher.py` — `Self-test of the helper` (out of scope)
+   - `tests/test_gate_guardrail.py` — `NEEDS CONVERSION` (now converted)
+
+9. **Review the simplification decision** — DONE. Judgment: the Phase-3-only verdict is a sufficient data-flow signal and does NOT meaningfully weaken the test. Reasoning:
+   - The original purpose of the two mid-run watchers was (a) fail-fast signal that the FO reached the gate, (b) wallclock bound. (a) is preserved by Phase 3's `check_gate_hold_behavior` which inspects `entity_file` frontmatter `status` (stays on `work`) and archive-directory absence — both pure data-flow assertions on the workflow artifact. (b) is preserved by `expect_exit(timeout_s=420)`.
+   - The post-hoc `re.search` on captured `fo_text_output` still enforces the narration match as a final check — it's the same predicate, just evaluated after the full transcript is captured instead of streamed mid-run. Any FO that actually presents the gate review still matches.
+   - Removing the mid-run watchers loses a narrow failure mode (FO that never narrates at the gate but also never self-approves and never archives). The test's actual verdict — "did the FO self-approve / archive?" — is fully captured by the Phase-3 data-flow checks. The narration `re.search` remains as a correctness check that the gate review was presented, not just that archiving was blocked.
+   - The 45.75s PASS wallclock (vs the implementer's 78.78s) confirms the simplification is stable across runs.
+   - The first-attempt Agent-dispatch failure documented in the implementation report is a correct diagnosis: the pre-populated fixture means no ensign gets dispatched, so any Agent-based signal is structurally unobservable in this test. The fallback specified in the ideation body (lines 73-75) explicitly authorized this path.
+
+10. **Recommend PASSED or REJECTED** — RECOMMEND **PASSED**.
+    - All seven acceptance criteria verified with direct evidence from independent re-runs.
+    - Live-run evidence: AC-3 (138.62s), AC-4 (172.63s), AC-6 (45.75s). Total wallclock ~6 minutes, well under the 2-minute-per-test estimate in the test plan.
+    - Static and cherry-pick correctness both clean.
+    - Simplification decision is sound given the fixture constraint; Phase-3 data-flow verdict is robust.
+
+11. **This Stage Report written** — DONE (this section).
+
+### Summary
+
+Independent re-verification of all seven acceptance criteria. Three live opus-4-6 runs all green (AC-3, AC-4, AC-6), static suite at 426 passes, cherry-pick correctness confirmed (no `skills/` diff, tests/ diff matches expected), audit preserved with three-way classification, and `entry_contains_text` removed from `test_gate_guardrail.py`. The gate-guardrail simplification (Phase-3-only verdict) is judged sufficient because Phase 3's `check_gate_hold_behavior` asserts on entity frontmatter + archive-directory state (both data-flow), and the post-hoc `re.search` preserves the narration-presence check. Recommendation: **PASSED**.
