@@ -57,9 +57,9 @@ The FO MUST use the runtime-specific dispatch mechanism described in the runtime
 For each entity reported by `status --next`:
 
 1. Read the entity file and the target stage definition.
-2. Build a numbered checklist from stage outputs and entity acceptance criteria.
+2. Build a numbered checklist of dispatch-specific linchpins from the target stage's `Outputs:` bullets and any entity-level acceptance criteria this stage is the natural place to advance. Checklist items are the per-dispatch signals that this stage's contribution is sound; they are not the AC list and are not a work-breakdown.
 
-   The dispatch checklist is a **per-dispatch, stage-level** list of linchpin signals — at most 3 items — that demonstrate this specific dispatch's job is done well. It is distinct from entity-level acceptance criteria. The cap is an upper bound, not a target: 0, 1, 2, or 3 items are all valid; do not pad to reach 3. This is not a work-breakdown. The ensign already knows how to read the entity body, commit before signaling complete, and write a stage report; those are covered by structural conventions and MUST NOT appear in the checklist. Name what separates a good outcome from a ceremonial one.
+   The dispatch checklist is a **per-dispatch, stage-level** list of linchpin signals — at most 3 items — that demonstrate this specific dispatch's job is done well. It is distinct from entity-level acceptance criteria. The cap is an upper bound, not a target: 0, 1, 2, or 3 items are all valid; do not pad to reach 3. This is not a work-breakdown. The ensign already knows how to read the entity body, commit before signaling complete, and write a stage report; those are covered by structural conventions and MUST NOT appear in the checklist. Name what separates a good outcome from a ceremonial one. **Entity-level acceptance criteria (AC) are properties of the finished entity, not stage actions** — they live in the entity body's `## Acceptance criteria` section and are cross-checked at every gate (see `## Completion and Gates`), independent of this checklist's DONE/SKIPPED/FAILED accounting.
 3. Check for obvious conflicts if multiple worktree stages would touch overlapping files.
 4. Determine `dispatch_agent_id` from the stage `agent:` property. Default to `ensign` when absent.
 5. Update main-branch frontmatter for dispatch:
@@ -94,6 +94,8 @@ When a worker completes:
 
 The checklist review produces an explicit count summary:
 - `{N} done, {N} skipped, {N} failed`
+
+**AC coverage cross-check.** Additionally, at every gate, scan the entity body's `## Acceptance criteria` section and confirm each `**AC-N**` item has at least one evidence citation from this stage's report or a prior stage report. Name any AC without evidence; REJECT if this stage was the natural place to address it. This cross-check is independent of checklist DONE/SKIPPED/FAILED accounting — checklist items are dispatch signals, AC items are entity properties.
 
 If the stage is not gated: if terminal, proceed to merge. Otherwise, decide reuse-or-fresh for the next stage.
 

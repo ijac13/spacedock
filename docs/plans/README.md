@@ -72,6 +72,7 @@ A task moves to ideation when a pilot starts fleshing out the idea: clarify the 
 - **Inputs:** The seed description and any relevant context (existing code, user feedback, related tasks)
 - **Outputs:** A fleshed-out task body with problem statement, proposed approach, acceptance criteria, and a test plan
   - Acceptance criteria must include how each criterion will be tested
+  - Acceptance criteria are **entity-level** — they describe properties of the finished task (end-state facts a future reader can verify), not stage actions. Items that describe stage work ("run X 3 times", "produce analysis Y") belong in the stage report's checklist, not in the AC list. If an AC item reads as an imperative verb phrase ("Run …", "Produce …", "Capture …"), rewrite it as the end-state property it produces ("Test X passes reliably", "Analysis Y concludes with cited evidence", "File Z contains string W").
   - Test plan: what tests verify the implementation, estimated cost/complexity, whether E2E tests are needed
   - For template changes: specific before/after wording, not just "change X"
 - **Good:** Clearly scoped, actionable, addresses a real need, considers edge cases, test plan proportional to risk (static checks for simple wording, E2E for behavioral guarantees)
@@ -97,6 +98,7 @@ A task moves to validation after implementation is complete. The work here is to
     - Use `tests/README.md` to choose the right harness and entrypoint before running tests
     - Prefer the stable repo-level entrypoints when they fit the task: `make test-static` for the offline suite, `make test-live-claude` / `make test-live-codex` for tier-aware live runs, and `make test-e2e TEST=... RUNTIME=...` for single-file runtime-specific E2E checks
   - Verify each acceptance criterion with evidence
+  - Pull every `**AC-N**` item from the entity body's `## Acceptance criteria` section; reproduce the evidence cited in each "Verified by" clause; flag any AC without evidence. Validation's job is cross-check, not re-derive.
   - A PASSED/REJECTED recommendation
 - **Good:** Thorough testing against acceptance criteria, clear evidence of pass/fail, honest assessment
 - **Bad:** Rubber-stamping without actually testing, ignoring failing edge cases, validating against wrong criteria
@@ -154,7 +156,14 @@ score:
 worktree:
 ---
 
-Description of this task and what it aims to achieve.
+Brief description of this task and what it aims to achieve.
+
+## Acceptance criteria
+
+Each AC names a property of the finished entity (not a stage action) and how it is verified.
+
+**AC-1 — {End-state property.}**
+Verified by: {grep / test name / file path / command a future reader can reproduce.}
 ```
 
 ## Testing Resources

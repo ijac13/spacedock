@@ -57,3 +57,25 @@ def test_entity_label_template_section_has_yaml_fence():
     assert "```yaml" in match.group(1), (
         "## {Entity_label} Template section must contain a ```yaml fence"
     )
+
+
+def test_entity_label_template_has_acceptance_criteria_block():
+    text = read_skill()
+    match = re.search(
+        r"^## \{Entity_label\} Template\n(.*?)^## Commit Discipline",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert match, "Could not find ## {Entity_label} Template section in SKILL.md"
+    body = match.group(1)
+    assert "## Acceptance criteria" in body, (
+        "## {Entity_label} Template must include an '## Acceptance criteria' "
+        "heading so generated workflows inherit the AC convention"
+    )
+    assert "Each AC names a property" in body, (
+        "## {Entity_label} Template must include the 'Each AC names a property' "
+        "guidance line from the AC convention"
+    )
+    assert "Verified by:" in body, (
+        "## {Entity_label} Template must include a 'Verified by:' exemplar line"
+    )
