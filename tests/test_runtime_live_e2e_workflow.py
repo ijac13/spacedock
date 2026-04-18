@@ -70,22 +70,34 @@ def test_runtime_live_e2e_workflow_supports_pr_and_manual_triggers():
 
 
 def test_runtime_live_e2e_workflow_checks_out_pr_head_with_persist_credentials_false():
-    """Security-critical: every checkout in this workflow must target the PR head
-    SHA and MUST set persist-credentials: false so GITHUB_TOKEN is not persisted
-    into .git/config where post-checkout steps could use it.
+    """Security-critical: every checkout in this workflow must target the PR
+    merge ref (refs/pull/<N>/merge — PR head merged into the target) and MUST
+    set persist-credentials: false so GITHUB_TOKEN is not persisted into
+    .git/config where post-checkout steps could use it.
+
+    Testing the merge ref (not the bare PR head) catches base-drift: a PR that
+    was green against an older main may fail once new commits land. The trust
+    boundary (env-approval before the job starts) is unchanged.
 
     Five checkouts in current shape: 4 live-e2e jobs (claude-live, claude-live-bare,
     claude-live-opus, codex-live) + 1 static-offline gate job. All five must
-    satisfy the head-SHA + persist-credentials invariant."""
+    satisfy the merge-ref + persist-credentials invariant."""
     text = read_workflow()
 
     checkout_count = text.count("actions/checkout@v4")
-    head_ref_count = text.count("ref: ${{ github.event.pull_request.head.sha }}")
-    # Each checkout must have a matching head-SHA ref.
+    merge_ref_count = text.count(
+        "ref: refs/pull/${{ github.event.pull_request.number }}/merge"
+    )
+    # Each checkout must target the PR merge ref.
     assert checkout_count == 5
-    assert head_ref_count == checkout_count, (
-        f"Every checkout@v4 must pin to the PR head SHA "
-        f"(found {checkout_count} checkouts, {head_ref_count} head-SHA refs)"
+    assert merge_ref_count == checkout_count, (
+        f"Every checkout@v4 must pin to the PR merge ref "
+        f"(found {checkout_count} checkouts, {merge_ref_count} merge-ref refs)"
+    )
+    # The bare PR head SHA must NOT appear as a checkout ref — that would skip
+    # the merge-with-target step and reintroduce base-drift blind spots.
+    assert "ref: ${{ github.event.pull_request.head.sha }}" not in text, (
+        "Checkout ref must be the merge ref, not the bare PR head SHA"
     )
     # persist-credentials: false appears on every checkout step AND is documented
     # in the top-of-file security comment — so count is checkout_count + 1.
@@ -128,7 +140,8 @@ def test_runtime_live_e2e_workflow_documents_security_model_at_top():
     assert "SECURITY MODEL" in text
     assert "env-approval gate" in text
     assert "ONLY protection" in text
-    assert "review the head SHA" in text
+    assert "review the PR head SHA" in text
+    assert "refs/pull/<N>/merge" in text
 
 
 def test_runtime_live_e2e_workflow_has_expected_runtime_jobs():
@@ -227,16 +240,19 @@ def test_runtime_live_e2e_workflow_uses_stable_make_targets_and_provenance_field
     assert 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"' in claude_opus_section
     assert 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "0"' in claude_bare_section
 
-    # Provenance field labels under the pull_request_target design:
-    # - "Base SHA" replaces the old "Tested workflow SHA" (workflow now always runs
-    #   against base-branch definition but checks out head-SHA code, so "Base SHA"
-    #   is the more accurate label for the workflow-definition commit).
-    # - "PR head SHA (checked out)" replaces the old "Current PR head SHA" to make
-    #   explicit that this SHA is what the tests actually validate.
+    # Provenance field labels under the pull_request_target + merge-ref design:
+    # - "Base SHA" is the workflow-definition commit on the target branch.
+    # - "PR head SHA (diff under review)" is the PR head — the thing a
+    #   maintainer inspects before approving the env deployment.
+    # - "Checkout ref" names the merge ref the job checks out.
+    # - The "Resolved merge SHA" printer step emits the post-merge HEAD so the
+    #   audit trail records what actually ran (merge-ref resolution is dynamic).
     for field in (
         "PR number",
         "Base SHA",
-        "PR head SHA (checked out)",
+        "PR head SHA (diff under review)",
+        "Checkout ref",
+        "Resolved merge SHA",
         "same-repo",
         "fork",
         "Approval context",

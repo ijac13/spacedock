@@ -1,0 +1,82 @@
+unset CLAUDECODE && { \
+	  uv run pytest tests/ --ignore=tests/fixtures \
+	    -m "live_claude and serial" --runtime claude --model opus --effort low -x -v ; SEQ=$? ; \
+	  uv run pytest tests/ --ignore=tests/fixtures \
+	    -m "live_claude and not serial" --runtime claude --model opus --effort low \
+	    -n 4 -v ; PAR=$? ; \
+	  test $SEQ -eq 0 -a $PAR -eq 0 ; \
+	}
+No entry for terminal type "xterm-ghostty";
+using dumb terminal settings.
+============================= test session starts ==============================
+platform darwin -- Python 3.12.9, pytest-9.0.3, pluggy-1.6.0 -- /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7-full-suite/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7-full-suite
+configfile: pyproject.toml
+plugins: xdist-3.8.0
+collecting ... collected 461 items / 456 deselected / 5 selected
+
+tests/test_gate_guardrail.py::test_gate_guardrail PASSED                 [ 20%]
+tests/test_interactive_poc.py::test_interactive_poc_live SKIPPED (re...) [ 40%]
+tests/test_push_main_before_pr.py::test_push_main_before_pr SKIPPED      [ 60%]
+tests/test_rebase_branch_before_push.py::test_rebase_branch_before_push XPASS [ 80%]
+tests/test_single_entity_mode.py::test_single_entity_mode SKIPPED (r...) [100%]
+
+===== 1 passed, 3 skipped, 456 deselected, 1 xpassed in 161.44s (0:02:41) ======
+Test dir preserved at: /var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmpwhkyrv85
+Test dir preserved at: /var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmp35mio__s
+No entry for terminal type "xterm-ghostty";
+using dumb terminal settings.
+No entry for terminal type "xterm-ghostty";
+using dumb terminal settings.
+No entry for terminal type "xterm-ghostty";
+using dumb terminal settings.
+No entry for terminal type "xterm-ghostty";
+using dumb terminal settings.
+No entry for terminal type "xterm-ghostty";
+using dumb terminal settings.
+============================= test session starts ==============================
+platform darwin -- Python 3.12.9, pytest-9.0.3, pluggy-1.6.0 -- /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7-full-suite/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7-full-suite
+configfile: pyproject.toml
+plugins: xdist-3.8.0
+created: 4/4 workers
+4 workers [16 items]
+
+scheduling tests via LoadScheduling
+
+tests/test_feedback_keepalive.py::test_feedback_keepalive 
+tests/test_dispatch_completion_signal.py::test_dispatch_completion_signal 
+tests/test_claude_per_stage_model.py::test_per_stage_model_haiku_propagates 
+tests/test_agent_captain_interaction.py::test_agent_captain_interaction 
+[gw0] [  6%] XFAIL tests/test_agent_captain_interaction.py::test_agent_captain_interaction 
+tests/test_checklist_e2e.py::test_checklist_e2e 
+[gw1] [ 12%] XFAIL tests/test_claude_per_stage_model.py::test_per_stage_model_haiku_propagates 
+tests/test_commission.py::test_commission 
+[gw3] [ 18%] PASSED tests/test_feedback_keepalive.py::test_feedback_keepalive 
+tests/test_merge_hook_guardrail.py::test_merge_hook_guardrail 
+[gw2] [ 25%] XPASS tests/test_dispatch_completion_signal.py::test_dispatch_completion_signal 
+tests/test_dispatch_names.py::test_dispatch_names 
+[gw1] [ 31%] XFAIL tests/test_commission.py::test_commission 
+tests/test_rejection_flow.py::test_rejection_flow 
+[gw1] [ 37%] SKIPPED tests/test_rejection_flow.py::test_rejection_flow 
+tests/test_scaffolding_guardrail.py::test_scaffolding_guardrail 
+[gw1] [ 43%] SKIPPED tests/test_scaffolding_guardrail.py::test_scaffolding_guardrail 
+tests/test_single_entity_team_skip.py::test_single_entity_team_skip 
+[gw1] [ 50%] SKIPPED tests/test_single_entity_team_skip.py::test_single_entity_team_skip 
+tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips 
+[gw1] [ 56%] PASSED tests/test_standing_teammate_spawn.py::test_standing_teammate_spawns_and_roundtrips 
+tests/test_team_dispatch_sequencing.py::test_team_dispatch_sequencing 
+[gw3] [ 62%] PASSED tests/test_merge_hook_guardrail.py::test_merge_hook_guardrail 
+tests/test_repo_edit_guardrail.py::test_repo_edit_guardrail 
+[gw1] [ 68%] XFAIL tests/test_team_dispatch_sequencing.py::test_team_dispatch_sequencing 
+[gw3] [ 75%] XFAIL tests/test_repo_edit_guardrail.py::test_repo_edit_guardrail 
+[gw2] [ 81%] XPASS tests/test_dispatch_names.py::test_dispatch_names 
+tests/test_reuse_dispatch.py::test_reuse_dispatch 
+[gw2] [ 87%] XFAIL tests/test_reuse_dispatch.py::test_reuse_dispatch 
+[gw0] [ 93%] XFAIL tests/test_checklist_e2e.py::test_checklist_e2e 
+tests/test_output_format.py::test_output_format 
+[gw0] [100%] XFAIL tests/test_output_format.py::test_output_format 
+
+======== 3 passed, 3 skipped, 8 xfailed, 2 xpassed in 913.70s (0:15:13) ========

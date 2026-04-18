@@ -1,0 +1,8 @@
+=== Stats: fo ===
+  Wallclock:        215s
+  Messages:         56 assistant, 0 tool_result
+  Model delegation: claude-opus-4-7: 56
+  Input tokens:     231
+  Output tokens:    1,312
+  Cache read:       2,363,528
+  Cache write:      121,846

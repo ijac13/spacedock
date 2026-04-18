@@ -2,19 +2,27 @@
 #
 # This workflow runs under `pull_request_target`, which means it executes in the
 # base-branch context with repository secrets available, even for fork PRs.
-# Fork-PR code is checked out via `ref: github.event.pull_request.head.sha` so
-# the tests actually validate the PR head, not main.
+# Fork-PR code is checked out via `ref: refs/pull/<N>/merge` — the PR head
+# merged into the target branch. Testing the merged tree (not the bare PR head)
+# catches base-drift: a PR that was green before a landed change on main may
+# fail against main-as-of-now, and we want CI to reflect that.
 #
-# The env-approval gate is the ONLY protection against malicious PR code
-# running with secrets. Each job uses an `environment:` with required reviewers
-# (CI-E2E, CI-E2E-OPUS, CI-E2E-CODEX). Every run pauses in `waiting` until a
-# maintainer approves the deployment.
+# The merge ref still runs in the target-branch context with secrets; the trust
+# boundary is unchanged. The env-approval gate below is the ONLY protection
+# against malicious PR code running with secrets. Each job uses an
+# `environment:` with required reviewers (CI-E2E, CI-E2E-OPUS, CI-E2E-CODEX).
+# Every run pauses in `waiting` until a maintainer approves the deployment.
 #
-# Maintainers: review the head SHA's code BEFORE approving the env deployment.
-# If the diff looks malicious, refuse approval — secrets never reach bad code.
+# Maintainers: review the PR head SHA's diff BEFORE approving the env
+# deployment. The merge ref composes the PR head with the current target — if
+# the PR head diff looks malicious, refuse approval regardless of how benign
+# the merge commit looks. Secrets never reach bad code.
 # `persist-credentials: false` on checkout prevents GITHUB_TOKEN persistence in
 # `.git/config` so post-checkout steps cannot use it. Workflow-level
 # `permissions:` narrows the default token surface to read-only.
+# The per-job provenance printer records both the PR head SHA (the diff under
+# review) and the resolved merge SHA (what actually ran) so audit links stay
+# meaningful.
 
 name: Runtime Live E2E
 
@@ -58,8 +66,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
           persist-credentials: false
+
+      - name: Record resolved merge SHA
+        if: github.event_name == 'pull_request_target'
+        run: |
+          MERGE_SHA="$(git rev-parse HEAD)"
+          echo "- Resolved merge SHA (what ran): \`$MERGE_SHA\`" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/setup-python@v5
         with:
@@ -115,15 +129,22 @@ jobs:
               .addRaw(`- Trigger source: pull_request_target\n`)
               .addRaw(`- PR number: #${pull.number}\n`)
               .addRaw(`- Base SHA: \`${pull.base.sha}\`\n`)
-              .addRaw(`- PR head SHA (checked out): \`${pull.head.sha}\`\n`)
+              .addRaw(`- PR head SHA (diff under review): \`${pull.head.sha}\`\n`)
+              .addRaw(`- Checkout ref: \`refs/pull/${pull.number}/merge\` (PR head merged into \`${pull.base.ref}\`)\n`)
               .addRaw(`- Branch source: ${sameRepo ? "same-repo" : `fork (${pull.head.repo?.full_name ?? "unknown"})`}\n`)
               .addRaw(`- Approval context: ${approvers.length ? approvers.join(", ") : "none recorded"}\n`)
               .write();
 
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
           persist-credentials: false
+
+      - name: Record resolved merge SHA
+        if: github.event_name == 'pull_request_target'
+        run: |
+          MERGE_SHA="$(git rev-parse HEAD)"
+          echo "- Resolved merge SHA (what ran): \`$MERGE_SHA\`" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/setup-python@v5
         with:
@@ -260,15 +281,22 @@ jobs:
               .addRaw(`- Trigger source: pull_request_target\n`)
               .addRaw(`- PR number: #${pull.number}\n`)
               .addRaw(`- Base SHA: \`${pull.base.sha}\`\n`)
-              .addRaw(`- PR head SHA (checked out): \`${pull.head.sha}\`\n`)
+              .addRaw(`- PR head SHA (diff under review): \`${pull.head.sha}\`\n`)
+              .addRaw(`- Checkout ref: \`refs/pull/${pull.number}/merge\` (PR head merged into \`${pull.base.ref}\`)\n`)
               .addRaw(`- Branch source: ${sameRepo ? "same-repo" : `fork (${pull.head.repo?.full_name ?? "unknown"})`}\n`)
               .addRaw(`- Approval context: ${approvers.length ? approvers.join(", ") : "none recorded"}\n`)
               .write();
 
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
           persist-credentials: false
+
+      - name: Record resolved merge SHA
+        if: github.event_name == 'pull_request_target'
+        run: |
+          MERGE_SHA="$(git rev-parse HEAD)"
+          echo "- Resolved merge SHA (what ran): \`$MERGE_SHA\`" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/setup-python@v5
         with:
@@ -405,15 +433,22 @@ jobs:
               .addRaw(`- Trigger source: pull_request_target\n`)
               .addRaw(`- PR number: #${pull.number}\n`)
               .addRaw(`- Base SHA: \`${pull.base.sha}\`\n`)
-              .addRaw(`- PR head SHA (checked out): \`${pull.head.sha}\`\n`)
+              .addRaw(`- PR head SHA (diff under review): \`${pull.head.sha}\`\n`)
+              .addRaw(`- Checkout ref: \`refs/pull/${pull.number}/merge\` (PR head merged into \`${pull.base.ref}\`)\n`)
               .addRaw(`- Branch source: ${sameRepo ? "same-repo" : `fork (${pull.head.repo?.full_name ?? "unknown"})`}\n`)
               .addRaw(`- Approval context: ${approvers.length ? approvers.join(", ") : "none recorded"}\n`)
               .write();
 
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
           persist-credentials: false
+
+      - name: Record resolved merge SHA
+        if: github.event_name == 'pull_request_target'
+        run: |
+          MERGE_SHA="$(git rev-parse HEAD)"
+          echo "- Resolved merge SHA (what ran): \`$MERGE_SHA\`" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/setup-python@v5
         with:
@@ -461,8 +496,7 @@ jobs:
           if [ -n "$MODEL_OVERRIDE" ]; then
             EFFECTIVE_MODEL="$MODEL_OVERRIDE"
           else
-            # Pinned to claude-opus-4-6 due to opus-4-7 ensign hallucination regression at low/medium effort; see #177 / #181. Reversible — restore default to opus once upstream resolves.
-            EFFECTIVE_MODEL="claude-opus-4-6"
+            EFFECTIVE_MODEL="opus"
           fi
           {
             echo "### Tool versions"
@@ -485,8 +519,7 @@ jobs:
           if [ -n "$MODEL_OVERRIDE" ]; then
             MODEL_FLAG="$MODEL_OVERRIDE"
           else
-            # Pinned to claude-opus-4-6 due to opus-4-7 ensign hallucination regression at low/medium effort; see #177 / #181. Reversible — restore default to opus once upstream resolves.
-            MODEL_FLAG="claude-opus-4-6"
+            MODEL_FLAG="opus"
           fi
           if [ -n "$TEST_SELECTOR" ]; then
             echo "Running selector: $TEST_SELECTOR"
@@ -556,15 +589,22 @@ jobs:
               .addRaw(`- Trigger source: pull_request_target\n`)
               .addRaw(`- PR number: #${pull.number}\n`)
               .addRaw(`- Base SHA: \`${pull.base.sha}\`\n`)
-              .addRaw(`- PR head SHA (checked out): \`${pull.head.sha}\`\n`)
+              .addRaw(`- PR head SHA (diff under review): \`${pull.head.sha}\`\n`)
+              .addRaw(`- Checkout ref: \`refs/pull/${pull.number}/merge\` (PR head merged into \`${pull.base.ref}\`)\n`)
               .addRaw(`- Branch source: ${sameRepo ? "same-repo" : `fork (${pull.head.repo?.full_name ?? "unknown"})`}\n`)
               .addRaw(`- Approval context: ${approvers.length ? approvers.join(", ") : "none recorded"}\n`)
               .write();
 
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
           persist-credentials: false
+
+      - name: Record resolved merge SHA
+        if: github.event_name == 'pull_request_target'
+        run: |
+          MERGE_SHA="$(git rev-parse HEAD)"
+          echo "- Resolved merge SHA (what ran): \`$MERGE_SHA\`" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/setup-python@v5
         with:

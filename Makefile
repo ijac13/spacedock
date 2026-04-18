@@ -6,8 +6,7 @@ TEST ?= tests/
 RUNTIME ?= claude
 LIVE_CLAUDE_WORKERS ?= 4
 LIVE_CODEX_WORKERS ?= 4
-# Pinned to claude-opus-4-6 due to opus-4-7 ensign hallucination regression at low/medium effort; see #177 / #181. Reversible — override with `make test-live-claude-opus OPUS_MODEL=opus` to re-test on opus-4-7.
-OPUS_MODEL ?= claude-opus-4-6
+OPUS_MODEL ?= opus
 
 test-static:
 	unset CLAUDECODE && uv run pytest tests/ --ignore=tests/fixtures \

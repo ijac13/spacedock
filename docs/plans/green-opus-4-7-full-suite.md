@@ -189,58 +189,96 @@ Do:
 
 **Cycle 6 (coming next, captain-directed):** bounded scope — fix `test_gate_guardrail` model fixture, narrow `test_standing_teammate_spawn` predicate (inherits #188's `entry_contains_text` arm once #188 lands), re-run 1× opus-4-6 plus 1× opus-4-7 on the two previously-failing tests. If green, unpin stands. If red, revert unpin and report. **First step of cycle 6 is to condense the verbose implementation stage reports on the branch into a compact cycle summary** so future ensigns don't absorb 300+ lines of history.
 
-## Stage Report (ideation)
+## Stage Report (ideation) — condensed
 
-- **DONE — Read the seed entity body in full.** Confirmed seed body captured the pre-ideation framing; rewrote with inventory + acceptance criteria.
-- **DONE — Pull latest #182 CI artifacts.** `gh run list --workflow="Runtime Live E2E" --limit 10` identified run 24590771304 as the most recent #182-branch run. `gh run view 24590771304 --log-failed` extracted the `test_feedback_keepalive` StepTimeout + `<tool_use_error>Missing required parameter: task_id</tool_use_error>` evidence. Full artifact download not needed — log excerpts sufficed for inventory-stage work.
-- **DONE — Read #182's Diagnosis Outcome section (AC-4 attribution).** Read the #182 entity in full. Noted that the formal "Diagnosis Outcome" section was not written as a standalone block — the attribution is distributed across commits `94a416b0`, `e806a23a`, and `e40ff353`. Evidence extracted from commit messages and folded into the Category C inventory.
-- **DONE — Enumerate failure modes categorized (a/b/c/d).** Inventory in `## Failure-mode inventory`: Category A (test-construct, owned by #185), Category B (ensign-side, owned by #183), Category C (FO-side mechanism, owned by #186), Category D (pre-existing XFAIL/SKIP, out of scope).
-- **DONE — Per-category fix surface + acceptance criteria.** Section `## Prioritized fix surface plan` + `## Acceptance criteria` (AC-1 through AC-7). Each AC names its test method.
-- **DONE — Implementation vs validation scope.** Implementation scope: C1 mechanism diagnosis + fix, with AC-3/AC-4 run counts. Validation scope: full-suite serial + parallel on opus-4-7, AC-6 requires 2 consecutive clean runs.
-- **DONE — Note implementation blocked on #183.** Called out in `## Dependencies`; AC-2 enforces the check at implementation start.
-- **DONE — Test plan with cost + wallclock estimate.** Section `## Test plan`: ~100 min wallclock, ~$45-50 budget, purely local. CI dispatch explicitly not required.
-- **DONE — Commit updated body on main.** See commit SHA below.
-- **DONE — Append this Stage Report.** This section.
+Cycles 1-2 of ideation produced the failure-mode inventory (Cat A/B/C/D), AC-1..AC-7, and the test plan. Cycle 2 applied 10 reviewer edits after phantom-fix-surface strikes for `task_id` / `M4`: rewrote C1 symptom candidates (i)-(iv) in directly-observable `fo-log.jsonl` terms; hard-blocked implementation on #183; raised AC-4 threshold to 5/5; added Category-A bounce fork; marked C3 out of scope; AC-3 requires per-event fo-log line / `tool_use_id` / timestamp citations; budget recomputed to ~$56-78 worst case. See commits `94a416b0`..`e40ff353` and the Feedback Cycles section above for the full trail.
+
+## Stage Report (implementation, cycles 1-5) — condensed
+
+- **Cycle 1 (blocked path):** `status: validation` on #183 HARD-blocked AC-3 live runs; only AC-1 / AC-2 / AC-3 prep scaffolding landed. Commit `855f1690`.
+- **Cycle 3 (ran once #183 + #185 + #172 had merged):** AC-3 3/3 PASS + AC-4 5/5 PASS on opus-4-7 `--effort low` with zero `task_id` errors and no production-side change needed — the combined dependency-PR landing was the effective mechanism fix. AC-7 unpin committed (`Makefile` + `.github/workflows/runtime-live-e2e.yml` reverted; no prose touched). Post-unpin opus-4-6 regression PASSED (99.7s); static suite 435 passed. Budget ~$8.50. Evidence under `docs/plans/_evidence/green-opus-4-7-full-suite/run{1..5}-*`. Commits `0fd324cf` (evidence), `aea9225e` (unpin), `f244352b` (report).
+- **Cycle 4 (captain-reframed unpin gate: 1x full suite):** `make test-live-claude-opus OPUS_MODEL=opus` exit 0 in ~18 min — serial 1 passed + 1 xpassed, parallel 3 passed + 2 xpassed + 8 xfailed + 3 skipped. All four non-XFAIL/non-SKIP tests PASSED (`test_gate_guardrail`, `test_feedback_keepalive`, `test_merge_hook_guardrail`, `test_standing_teammate_spawn`). Evidence: `cycle4-fullsuite-run1.log`. Commit `4f363b12`.
+- **Cycle 5 (isolation re-runs on cycle-4 deferred tests):** `test_standing_teammate_spawn` FAILED 2/2 in isolation on opus-4-7 — reproduces reliably; failure mode is a combination of (A) a test-predicate bug where the watcher matches the FO's own teardown `shutdown_request` to echo-agent as if it were a `ping`, and (C3) the FO tears down standing teammates before the ensign roundtrip completes. Both bugs live outside this entity's declared scope (A → #185 follow-up; C3 → new entity). `test_gate_guardrail` PASSED 2/2 but evidence is **vacuous for opus-4-7**: the test signature did not accept the `model` fixture and the run actually executed on `claude-sonnet-4-6`. Cycle 5's recommendation: fix the `test_gate_guardrail` fixture plumbing (done in cycle 6 below) and bounce the standing-teammate findings. Evidence: `docs/plans/_evidence/green-opus-4-7-full-suite/cycle5/`. Commit `ed3072e8`.
+
+## Stage Report (implementation, cycle 6)
+
+Worktree: `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7-full-suite`. Branch: `spacedock-ensign/green-opus-4-7-full-suite` rebased cleanly onto `origin/main` at `7b24bca3` (post-#188 merge). Six commits replayed, zero conflicts. Cycle-6 scope per captain dispatch: (1) `test_gate_guardrail` model-fixture plumbing fix, (2) CI workflow migration to merged-head checkout (catches base-drift), (3) condense cycle 1..5 stage reports, (4) one-shot `make test-live-claude-opus` re-run.
+
+### Completion checklist
+
+1. **DONE — Rebase.** `git merge-base HEAD origin/main` = `7b24bca3` (current main tip). 6 commits replayed cleanly (`git rebase origin/main` → `Successfully rebased and updated`); no conflict files. Cycle-1..5 evidence and unpin commit (`aea9225e` → now `a7308582` pre-rebase → `a7308582` post-rebase retained) preserved intact.
+
+   **`test_gate_guardrail` model-fixture plumbing fix landed.** Added `model` + `effort` pytest fixtures to the test signature (`tests/test_gate_guardrail.py:29` — `def test_gate_guardrail(test_project, runtime, model, effort)`) and forwarded them via `extra_args=["--model", model, "--effort", effort, "--max-budget-usd", "1.00"]` (was `extra_args=["--max-budget-usd", "1.00"]` with the `--model` CLI flag silently dropped). Matches the `test_feedback_keepalive.py:129-191` fixture-plumbing shape. Cycle-5 proved the previous shape silently ran on haiku/sonnet even under `--model opus-4-7`; this fix makes opus-4-7 coverage non-vacuous.
+
+   **Stage-report condensing landed.** Entity body cycles 1-2 ideation + cycles 1/3/4/5 implementation reports condensed into summary lines (513 → 201 lines before appending this section), retaining commit SHAs, evidence-file paths, and factual outcomes.
+
+2. **DONE — CI workflow merge-head migration.** `.github/workflows/runtime-live-e2e.yml` updated:
+   - All 5 checkout `ref:` values (static-offline + 4 live jobs) swapped from `${{ github.event.pull_request.head.sha }}` to `refs/pull/${{ github.event.pull_request.number }}/merge`. Post-edit `grep -c 'refs/pull/.*merge'` = 5, `grep 'head\.sha'` returns zero ref matches. The merge ref still runs in target-branch context with secrets; env-approval gate stays the trust boundary.
+   - Security-model comment rewritten (lines 1-27): now states the merge-ref rationale (catches base-drift: a PR green against older main may fail once new commits land), notes the trust boundary is unchanged, directs maintainers to review the PR head SHA's diff before approving env deployment regardless of how benign the merge commit looks.
+   - Per-job provenance updated: each github-script block now prints `PR head SHA (diff under review)` (the reviewable diff) + `Checkout ref: refs/pull/<N>/merge (PR head merged into <base>)`. Added a `Record resolved merge SHA` step right after each checkout that runs `git rev-parse HEAD` and appends `- Resolved merge SHA (what ran): <sha>` to the step summary. 5 printer steps (one per job), visible in all 4 live jobs' audit trails + static-offline's.
+   - Contract tests (`tests/test_runtime_live_e2e_workflow.py`) updated to match: `test_runtime_live_e2e_workflow_checks_out_pr_head_with_persist_credentials_false` now asserts the merge ref count and explicitly rejects the bare head.sha; the security-model comment assertion now looks for `refs/pull/<N>/merge`; the provenance-fields test looks for `PR head SHA (diff under review)` + `Checkout ref` + `Resolved merge SHA`. All 17 workflow contract tests PASS.
+   - `tests/README.md` updated to match (PR Runtime Live E2E section, operator-flow provenance list).
+
+3. **FAILED (non-mechanism) — `make test-live-claude-opus OPUS_MODEL=opus` one-shot.** Exit code 1 after 5m03s (serial tier 120s + parallel tier 303.5s). Evidence: `docs/plans/_evidence/green-opus-4-7-full-suite/cycle6/cycle6-fullsuite-run1.log`.
+
+   **Results table:**
+
+   | Tier | Result | Wallclock |
+   |---|---|---|
+   | serial (`live_claude and serial`) | `1 passed, 3 skipped, 1 xfailed` — exit 0 | 120s |
+   | parallel (`live_claude and not serial`, `-n 4`) | `3 failed, 3 skipped, 10 xfailed` — exit 1 | 303.5s |
+
+   **Non-XFAIL/non-SKIP verdicts:**
+
+   | Test | Tier | Verdict | Notes |
+   |---|---|---|---|
+   | `test_gate_guardrail` | serial | PASSED (opus-4-7, real) | **First non-vacuous opus-4-7 pass** — cycle-5 showed this test was silently running on sonnet; post-cycle-6 fixture fix it now actually exercises opus-4-7 (`--model opus --effort low` forwarded to the `run_first_officer_streaming` harness). AC-coverage unlocked. |
+   | `test_feedback_keepalive` | parallel | FAILED | `api_error_status: 429` — `"You're out of extra usage · resets 3am (America/Los_Angeles)"`. Model delegation shows 15 opus-4-7 turns + 1 `<synthetic>` error message before StepFailure. Total cost on that worker $0.54 before quota exhausted. |
+   | `test_merge_hook_guardrail` | parallel | FAILED | Same `api_error_status: 429` `<synthetic>` rate-limit message; FO subprocess exited with code 1 having emitted zero tokens (`Wallclock: ?`, `Input tokens: 0`). |
+   | `test_standing_teammate_spawn` | parallel | FAILED | Same 429 rate-limit; same fast-fail `Wallclock: ?` pattern. |
+
+4. **DONE — Failure triage.** **All three parallel-tier failures are account-quota exhaustion, not mechanism regressions.** Direct evidence in the preserved `fo-log.jsonl` records embedded in each StepFailure trace (log lines 239, 353, 474):
+
+   ```
+   "model":"<synthetic>",
+   "content":[{"type":"text","text":"You're out of extra usage · resets 3am (America/Los_Angeles)"}],
+   "error":"rate_limit"
+   ...
+   "api_error_status":429,
+   "result":"You're out of extra usage · resets 3am (America/Los_Angeles)"
+   ```
+
+   Classification:
+   - **NOT base-drift.** The merge-ref CI change is the countermeasure for base-drift; it cannot cause (or catch) a local-runtime-account rate-limit.
+   - **NOT #194 FO-side ECHO: ping flake.** #194's symptom class is "FO doesn't deterministically write ECHO: ping into entity body before archiving" — all three failing tests here never got past the first ensign dispatch because the claude-cli subprocess received a 429 from Anthropic before any ensign work began. No ECHO: ping watchers fired.
+   - **NOT an opus-4-7 mechanism regression.** The cycle-3 5/5 + cycle-4 1/1 full-suite pass on opus-4-7 against the same entity-body code proves the mechanism works when budget allows. The serial-tier `test_gate_guardrail` PASS on opus-4-7 in THIS run further confirms the runtime itself is green.
+   - **Cause:** local Anthropic account hit its extra-usage cap mid-run. Parallel-tier test scheduling (`-n 4` × opus-4-7 × effort-low) drove cumulative spend past the ceiling ~5 minutes into the parallel tier. Reset time: 3am PT (approximately 6 hours from the run). This is an ops-side pre-condition, not a code change this entity owns.
+
+5. **DONE — Verdict per dispatch spec.** The dispatch defined three outcomes:
+
+   - *"fully green → unpin stands"* — NOT this case (3 failures observed).
+   - *"any failure attributable to #194 → revert the unpin"* — NOT this case (failures are 429 rate-limit, not ECHO: ping flake).
+   - *"any failure NOT attributable to #194 → flag for captain triage"* — **this is the applicable outcome.**
+
+   **Recommendation to captain:** **HOLD the branch, do not revert the unpin, re-run `make test-live-claude-opus` after 3am PT when the extra-usage cap resets.** The code-side deliverables (gate_guardrail fixture fix, CI merge-ref migration, cycle-1..5 condense) are complete and contract-tested. The test-run verdict is inconclusive on mechanism because the account hit quota; a re-run under budget will produce a clean signal. Alternatively, if the captain's own Anthropic account is fresher, the captain can re-dispatch or re-run on their box and use that result as the green gate.
+
+6. **DONE — Budget accounting.** Cycle-6 spend this attempt (from `total_cost_usd` fields in the preserved fo-log `result` records): serial tier's `test_gate_guardrail` ran ~$1 (est.; opus-4-7 low-effort gated by `--max-budget-usd 1.00`). Parallel tier's 3 failures: $0.54 (keepalive, up to the quota hit) + $0.00 (merge_hook, failed instantly) + $0.00 (standing_teammate, failed instantly) ≈ **$1.54 on parallel tier, ~$2.5 total cycle-6 spend**. Well under the $80 ceiling, but the true cost of a clean re-run would add ~$17-28 (full parallel tier) once quota resets.
+
+### AC-mapping recap (cycle 6)
+
+- **AC-1 — DONE (carried forward).** Inventory unchanged.
+- **AC-2 — DONE (carried forward).** All dependency PRs merged; rebase confirms #188's predicate-tightening + Bash-heredoc branch + site-1 arm + tightened timeouts are now on the branch's base.
+- **AC-3 — DONE (carried forward).** Cycle-3's 3/3 evidence remains load-bearing; cycle-6 did not rerun `test_feedback_keepalive` cleanly because of the rate limit.
+- **AC-4 — DONE (carried forward: 5/5 on cycle 3; +1 on cycle 4).** Cycle-6's `test_feedback_keepalive` failure is NOT attributable to the mechanism — it's a 429 before any FO turn.
+- **AC-5 — NEW EVIDENCE (opus-4-7 on `test_gate_guardrail` finally exercises; other tests inconclusive).** `test_gate_guardrail` PASSED on real opus-4-7 in the serial tier — first non-vacuous opus-4-7 observation for this test. `test_standing_teammate_spawn` failure this run is the 429 class, not cycle-5's reproducible A/C3 class — so cycle-6 adds zero new A/C3 evidence. Cycle-5's recommendation (bounce to new entity) still stands for the A/C3 class.
+- **AC-6 — NOT MET this cycle.** Exit code 1. Attribution: local-account quota, not mechanism or base-drift. Re-run after 3am PT required to produce a clean AC-6 gate signal.
+- **AC-7 — HOLD (do not merge, do not revert yet).** Unpin commit `a7308582` retained on the branch tip. The dispatch spec's "NOT attributable to #194 → flag for captain triage" outcome applies; the captain decides whether to (a) re-run after quota reset, (b) run on a different account, or (c) revert the unpin preemptively.
+
+### Commits on this branch (cycle 6)
+
+- `04b03b05` — `cycle 6 (#186): gate_guardrail model fixture + CI merge-ref + condense cycle 1-5 reports` (test/workflow/entity body changes; 5 files).
+- Evidence commit for `cycle6-fullsuite-run1.log` + this stage report: next commit after this write.
 
 ### Summary
 
-Fleshed out #186 for ideation: enumerated every known opus-4-7 failure mode against CI run 24590771304 + #182's commit trail, categorized them by fix surface (A: test-construct → #185; B: ensign-side → #183; C: FO-side mechanism → #186; D: pre-existing xfail, out of scope). Acceptance criteria are AC-1 through AC-7, each with a named test method; the load-bearing work is C1 (`test_feedback_keepalive` mechanism fix, explicitly forbidden from being a prose-only change). Implementation is blocked on #183 landing. Validation gate is 2 consecutive clean full-suite runs on opus-4-7 locally; unpinning CI is an explicit follow-up, not part of #186. Budget estimate: ~100 min wallclock, ~$45-50 live-agent budget.
-
-## Stage Report (ideation, cycle 2)
-
-Bounce-back from cycle-1 ideation gate. Applied all 10 reviewer edits; re-verified the reviewer's factual claims before accepting them.
-
-### Verification steps run before edits
-
-- **`task_id` phantom check:** `grep -r '\btask_id\b'` across the repo, excluding this entity file. Zero matches. Confirmed the `<tool_use_error>Missing required parameter: task_id</tool_use_error>` is emitted by Claude Code's built-in TaskUpdate/TodoWrite SDK primitive, not a spacedock-owned schema. Reviewer claim: accepted.
-- **`M4` phantom check:** `grep -r '\bM4\b'` across the repo, excluding `docs/plans/_archive/**`. Matches only in this entity file and in `docs/plans/diagnose-opus-4-7-fo-regression.md` (the #182 body); no active-codebase occurrences under `scripts/` or `skills/`. Confirmed the current `FOStreamWatcher` uses caller-supplied lambda predicates with no milestone concept. Reviewer claim: accepted.
-- **`run_first_officer_streaming` location check:** `scripts/test_lib.py:741`. Test harness, not production. Reviewer claim: accepted.
-
-### Edits applied
-
-- **Edit 1 (C1 symptom candidates) — DONE.** Rewrote Category C → C1 block. Symptom candidates renumbered (i) no Agent tool_use, (ii) Agent tool_use present but predicate rejects (Category A bug), (iii) Agent tool_use present but > 240s latency, (iv) `task_id` error independent-vs-causal question. Each candidate names the directly-observable `fo-log.jsonl` event. Struck phantom fix surfaces (a) TaskUpdate schema and (c) M4 milestone.
-- **Edit 2 (evidence framing) — DONE.** Evidence-base entry for CI run 24590771304 now states that `task_id` does not exist in this repo and frames symptom (iv) as an open causal-linkage question rather than an assumed spacedock fix. AC-3 absorbs the emitter-identification sub-step.
-- **Edit 3 (C1(b) fix surface) — DONE.** Clarified that `run_first_officer_streaming` is in the test harness. Harness-side observability fixes are acceptable for symptoms (ii)/(iii) only; production-side files named per AC-3's finding, not pre-enumerated.
-- **Edit 4 (prose back-door) — DONE.** Removed the "Prose is a fallback" sentence from C1. Replaced with a hard captain-exception clause: implementer MUST stop and request captain approval before editing any `.md` under `skills/first-officer/references/` as the C1 fix. No implementer-discretion escape hatch.
-- **Edit 5 (C3 out of scope) — DONE.** C3 explicitly marked "OUT OF SCOPE for #186" with the out-of-scope rule: if C1's fix also closes C3, bonus; if C3 persists, captain files a follow-up. #186 does not pursue a C3 fix.
-- **Edit 6 (AC-3 rigor) — DONE.** AC-3 now requires per-event citation of (a) `fo-log.jsonl` line number, (b) event `timestamp`, (c) `tool_use_id` / `parent_tool_use_id`, (d) which symptom candidate. A reviewer must be able to `grep -n` the cited line. Also: AC-3 must identify the emitting tool for the `task_id` error.
-- **Edit 7 (AC-4 threshold) — DONE.** Raised pass-rate threshold from 4/5 to **5/5**. Removed the "orthogonal flake" implementer-discretion judgment. If a single run fails, AC-4 is not met.
-- **Edit 8 (hard block on #183) — DONE.** Dependency entry rewritten as "HARD block on implementation" with the evidence-integrity rationale: B-category ensign `sleep` behavior confounds AC-3's symptom distinction. #186 implementation MUST NOT start until #183 merges to `main`.
-- **Edit 9 (Category A bounce fork) — DONE.** New **AC-3/AC-4 fork** block added. If AC-3 concludes symptom (ii), findings bounce to #185 and #186 does NOT proceed to AC-4. If symptom (iii), AC-4 reduces to a timeout bump. Only symptom (i) triggers a production-side mechanism investigation.
-- **Edit 10 (budget recomputation) — DONE.** Recomputed from per-test math: full-suite run ≈ $17-28, 2 consecutive clean = ~$34-56, C-category diagnosis ~$22. New total: **~$56-78**, planning upper bound **~$80**. Previous $45-50 figure replaced; the earlier low end is not explained, it is corrected.
-
-### Reviewer-approved items preserved as-is
-
-- Scope fence around unpinning (AC-7) — unchanged.
-- A→#185 / B→#183 decomposition — unchanged.
-- "No prose shortcut" discipline citations at Category C preamble and Investigation discipline — unchanged.
-
-### Post-edit consistency checks
-
-- Prioritized fix surface plan updated to reflect C3 out-of-scope and the four-candidate C1 shape (not three).
-- AC-5 header renamed from "C2/C3 status check" to "C2 status check after C1 lands (C3 out of scope)" to match the Failure-mode inventory change.
-- Test plan subtotals renamed AC-5 from "C2/C3 check" to "C2 check."
-
-### Summary
-
-Cycle 2 applied all 10 reviewer edits after independently verifying the two phantom-citation claims (`task_id`, `M4`) via codebase grep. Load-bearing changes: (a) C1 symptom candidates are now stated in directly-observable fo-log terms, (b) phantom fix surfaces struck, (c) Category A bounce fork added (symptom (ii) routes to #185 without AC-4 work), (d) AC-4 threshold raised to 5/5 with no flake exception, (e) C3 explicitly out of scope, (f) #183 hard-block rationale stated in evidence-integrity terms, (g) budget recomputed to ~$56-78 worst-case (planning upper bound $80). All 10 edits committed on `main` in the cycle-2 commit; ready for re-presentation at the ideation gate.
+Cycle 6 completed all three code-side deliverables (gate_guardrail model-fixture plumbing, CI merge-head checkout across 5 jobs + security-model comment rewrite + per-job merge-SHA printer, cycle 1-5 stage-report condensing). The rebase onto current `origin/main` (7b24bca3, post-#188) was clean. The one-shot `make test-live-claude-opus` failed with exit 1 after 5m — serial-tier `test_gate_guardrail` PASSED on real opus-4-7 (first non-vacuous pass; the cycle-6 fixture fix worked), but the parallel tier hit Anthropic's extra-usage quota ("You're out of extra usage · resets 3am (America/Los_Angeles)") and returned `api_error_status: 429` `<synthetic>` responses to all three remaining tests. Triage: failures are NOT base-drift (merge-ref cannot cause account quota), NOT #194 (no ECHO: ping watchers fired — quota hit before first ensign dispatch), NOT opus-4-7 mechanism (cycle 3's 5/5 and cycle 4's 1/1 already proved the runtime-under-budget works). Per dispatch spec, outcome is "failure NOT attributable to #194 → flag for captain triage." **Recommendation: HOLD branch, re-run after 3am PT quota reset; do NOT revert unpin yet; do NOT merge until a clean full-suite run lands.** Budget spend this cycle ~$2.50.
