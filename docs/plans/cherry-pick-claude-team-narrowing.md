@@ -161,3 +161,18 @@ land the cherry-pick.
 ### Summary
 
 Confirmed `b09051f4` is a clean, single-file cherry-pick onto current `main`. Expanded the entity body with a problem statement, approach with pre/post code shape, five acceptance criteria (each with a test column), and a proportional test plan (static suite required, cheap unit test with four cases flagged optional, no live CI). The independent reviewer's stderr-warning question is captured as informational only — the warning fires only on narrowed-succeeded-but-empty, not on every normal run. Scope kept tight: no prose changes, no test-predicate changes, no warning-tuning. Implementation stage is unblocked.
+
+## Stage Report (implementation)
+
+1. **Stay inside worktree `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-cherry-pick-claude-team-narrowing` on branch `spacedock-ensign/cherry-pick-claude-team-narrowing`.** — **DONE.** All commands executed inside the worktree; `git branch --show-current` confirmed the expected branch before and after cherry-pick.
+2. **Read the entity body's approach + acceptance criteria + test plan sections.** — **DONE.** Scope confirmed: cherry-pick `b09051f4`, verify single-file diff, run static suite; optional unit test evaluated below.
+3. **Cherry-pick commit `b09051f4` from `origin/spacedock-ensign/diagnose-opus-4-7-fo-regression`.** — **DONE.** Fetched origin ref, ran `git cherry-pick b09051f4`; applied cleanly with no conflicts. New commit on branch: `3d5b8f15`.
+4. **Verify the cherry-picked changes touch ONLY `skills/commission/bin/claude-team`.** — **DONE.** `git show HEAD --stat` reports `1 file changed, 63 insertions(+), 10 deletions(-)` against `skills/commission/bin/claude-team`. No other paths touched.
+5. **Run the static suite.** — **DONE.** `unset CLAUDECODE && make test-static` → `426 passed, 22 deselected, 10 subtests passed in 20.32s`. No new failures vs `main`. Pre-existing `SyntaxWarning` on line 46 of `claude-team` surfaces as noted in dispatch — out of scope per captain triage, left alone.
+6. **Evaluate optional unit test for narrowed helper.** — **SKIPPED.** Rationale: the entity's test plan explicitly flags this as optional and "not required to land the cherry-pick"; the dispatch scope says "Do NOT modify tests unless the entity's approach specifies a unit test addition" — the approach section does not mandate it. Also, adding the test would expand scope beyond a pure cherry-pick and introduce surface area (fixture scaffolding, `os.path.expanduser` monkey-patching) that the dispatch explicitly warns against. Acceptance criterion #5 (fallback path) is indirectly exercised by the static suite's import+parse path and the helper's contract (unchanged return shape) matches the pre-commit behavior; follow-up task can add the four-case unit test if operational data motivates it.
+7. **Commit changes on the worktree branch.** — **DONE.** Cherry-pick produced commit `3d5b8f15` on `spacedock-ensign/cherry-pick-claude-team-narrowing`. Stage report commit follows this write.
+8. **Write this Stage Report (implementation) section.** — **DONE** (this section).
+
+### Summary
+
+Cherry-picked `b09051f4` onto `spacedock-ensign/cherry-pick-claude-team-narrowing` with no conflicts (new commit `3d5b8f15`). Verified single-file scope — `skills/commission/bin/claude-team` (+63/−10). Static suite green: 426 passed, 22 deselected, 0 failures. Skipped the optional four-case unit test with rationale (entity flags optional, dispatch scope excludes test additions not mandated in approach). Pre-existing `SyntaxWarning` on line 46 left untouched per captain triage. Ready for validation.
