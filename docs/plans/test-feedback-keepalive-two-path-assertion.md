@@ -2,7 +2,7 @@
 id: 190
 title: "Rewrite test_feedback_keepalive core assertion to cover both dispatch and inline-process FO paths"
 status: ideation
-source: "PR #118 CI surfaced the third brittle watcher (tests/test_feedback_keepalive.py:209-215) failing on non-bare claude-live opus-4-6, not just bare-mode haiku. #185 cycle 3 xfailed only the bare-mode haiku combination — the scope was too narrow. The underlying issue is architectural: the test's core assertion presumes per-stage fresh Agent dispatch, which some FO model/mode combinations don't consistently produce even when the workflow completes correctly."
+source: "PR #118 CI surfaced the third brittle watcher (tests/test_feedback_keepalive.py:219-224 post-#188) failing on non-bare claude-live opus-4-6, not just bare-mode haiku. #185 cycle 3 xfailed only the bare-mode haiku combination — the scope was too narrow. The underlying issue is architectural: the test's core assertion presumes per-stage fresh Agent dispatch, which some FO model/mode combinations don't consistently produce even when the workflow completes correctly."
 started: 2026-04-18T16:56:26Z
 completed:
 verdict:
@@ -17,7 +17,7 @@ mod-block:
 
 `tests/test_feedback_keepalive.py` is the keepalive-across-transition test. Its core assertion pattern:
 
-1. **Mid-run watcher** at line 209-215 — `w.expect(...)` matching `Agent` tool_use with `subagent_type="spacedock:ensign"` AND `_agent_targets_stage(..., "validation")`. Blocks until fresh validation ensign is dispatched.
+1. **Mid-run watcher** at line 219-224 (post-#188 shift; was 209-215 when #190 was filed) — `w.expect(...)` matching `Agent` tool_use with `subagent_type="spacedock:ensign"` AND `_agent_targets_stage(..., "validation")`. Blocks until fresh validation ensign is dispatched.
 2. **Post-watcher Tier-1 assertion** — "no shutdown SendMessage targets implementation agent between completion and validation dispatch." This anchors a time-window between two events.
 
 **The problem:** some FO model/mode combinations (initially observed on bare-mode haiku-4-5; then on claude-live opus-4-6 in PR #118 CI run `24596336820`) take shortcut paths:
@@ -121,3 +121,46 @@ Test method: ~$25-40 total (9 live runs across 3 models) — tracked in stage re
 - **#186** — likely lands unpin before this task starts; may affect which model is the CI default
 - **#188** — converts the other two polling loops in this same file; do NOT conflict
 - **PR #118 CI run 24596336820 job 71926922426** — concrete evidence of the failure on opus-4-6 non-bare
+
+## Stage Report
+
+### Summary
+
+Light verification pass. Ground-truth line numbers against current codebase (post-#188 merge) and fixed two references in the entity body. Proposed approach (Path A / Path B), ACs, and xfail target all validated — no logic changes needed.
+
+### Checklist
+
+1. **DONE — Line numbers updated, label confirmed.**
+   `grep -n 'validation ensign dispatched' tests/test_feedback_keepalive.py` output:
+   ```
+   223:            label="validation ensign dispatched (keepalive crossed the transition)",
+   225:        print("[OK] validation ensign dispatched — implementation agent survived the transition")
+   ```
+   The `w.expect(...)` block is now at lines 219-224 (not 209-215 as filed). #188's merge added a preceding `w.expect` for the "implementation data-flow signal" (lines 211-215), shifting the third watcher down by ~10 lines. Label string `'validation ensign dispatched (keepalive crossed the transition)'` is unchanged and still accurate. Updated two body references: `source:` frontmatter line (YAML value edit, not key rename) and the "Why this matters" list item.
+
+2. **DONE — Path-A / Path-B signals grounded.**
+   - **Path A (fresh validation Agent dispatch):** Matches existing predicate at line 220-221 (`tool_use_matches(e, "Agent", subagent_type="spacedock:ensign") and _agent_targets_stage(_agent_input_dict(e), "validation")`). This is observable in fo-log.jsonl as `tool_use` events with `name=Agent` and `input.subagent_type="spacedock:ensign"`. Confirmed: same predicate shape already used at line 207 and 220, proving the signal is streamable.
+   - **Path B (inline-process evidence):** Three signals proposed —
+     (a) `### Feedback Cycles` section in entity body (filesystem read, not stream event);
+     (b) `greeting.txt` contains `Goodbye, World!` (the validation-requested content per keepalive-pipeline fixture);
+     (c) `status: done` in entity frontmatter (terminal state).
+     Signals (a) and (c) are filesystem polls — no fo-log events required. Signal (b) is the workflow-specific output the validation stage gates on. Grounding: the existing `_impl_signal_in_event` helper (line 195-209) already reads `Feedback Cycles` markers from entity Edit/Write tool_uses, so the signal is observable both in-stream (as Edit events) and on-disk (as eventual file state). Path B's filesystem-based approach is equivalent-or-stronger coverage.
+     **No concrete CI fo-log artifact dump inspected** — grounding is by reading the predicate helpers already in the test file. Sufficient for ideation stage; implementation stage should verify against a real failing-run fo-log capture.
+
+3. **DONE — xfail location confirmed.**
+   `grep -n 'pytest.xfail' tests/test_feedback_keepalive.py` output:
+   ```
+   141:        pytest.xfail(
+   ```
+   Exactly one match. The xfail is guarded at line 140 by `if resolved_team_mode == "bare" and model == "claude-haiku-4-5":`. AC-3 ("grep `pytest.xfail` → zero matches") correctly targets this block. Implementation must remove lines 140-150 (the guard + `pytest.xfail(...)` call).
+
+### Changes written
+
+- Line 5 (frontmatter `source:` value): "209-215" → "219-224 post-#188"
+- Line 20 (body bullet): same line-range update + parenthetical noting the shift
+
+No YAML keys modified. No changes to agents/ or references/. No changes to proposed-approach logic.
+
+### Ideation assessment
+
+Entity is gate-ready. ACs follow #193 entity-level format with explicit `Test method:` clauses. Score 0.7 is appropriate — not >= 0.8 so staff review not triggered, but close enough that careful implementation is warranted. Main residual risk: Path-B's filesystem-based signals could race with FO teardown (entity body written, then status flipped). Implementation stage should verify signal-check order handles partial writes.
