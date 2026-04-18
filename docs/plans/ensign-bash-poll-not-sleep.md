@@ -13,47 +13,86 @@ pr:
 mod-block:
 ---
 
-## Why this matters
+## Problem
 
-When an ensign launches a long-running command via `Bash(run_in_background: true)`, it gets a task ID and the command runs asynchronously. The correct pattern to wait on it is `BashOutput(bash_id=...)` polling — small sleep, check status, repeat until `status == "completed"`, then read the result.
+When an ensign launches a long-running command via `Bash(run_in_background: true)`, the shell returns a `bash_id` and the command runs asynchronously. The correct way to wait on it is `BashOutput(bash_id=...)` polling: sleep briefly between polls, inspect the returned `status`, and proceed once `status == "completed"`.
 
-The observed (anti-)pattern: agents use `sleep 540 && tail -30 /tmp/log` — a single blocking sleep for the worst-case duration, followed by reading the log. This wastes time whenever the underlying task completes faster than the sleep budget. In #182's case, opus-4-7 implementer did this for 5+ test runs at 9-min sleeps each; multiple tests completed in 2-3 min, leaving the agent idle for 6-7 min of unnecessary wallclock per run. Across 6 runs the waste accumulates to roughly 30+ minutes plus the API token cost of staying resident.
+The anti-pattern: issuing a single blocking `sleep N && tail -n … /tmp/log` sized to the worst-case duration. Two concrete costs:
 
-Beyond efficiency, blocking sleeps are uninterruptible — captain SendMessages queue but cannot wake the agent until the sleep returns. In #182 the captain killed an in-flight sleep with Exit 137 to recover control. With BashOutput polling, captain messages are seen between polls.
+1. **Wallclock waste.** Whenever the task finishes before the sleep budget, the agent stays idle for the remainder. On a 9-minute sleep budget with a 3-minute task, 6 minutes per cycle are wasted; across several iterations this dominates total run time and token cost (the agent stays resident in the conversation).
+2. **Uninterruptibility.** A blocking sleep inside the agent process cannot be preempted by captain messages. Incoming SendMessages queue but are not observed until the sleep returns. Recovery requires killing the turn (Exit 137), which is coarse and throws away in-flight context.
 
-## The bug
+`BashOutput` polling avoids both: the agent wakes at each poll interval, so captain messages land promptly, and the loop exits as soon as the task is actually done.
 
-The ensign skill (`agents/ensign.md`) and first-officer skill prose (`skills/first-officer/`) do not document the BashOutput polling pattern for background tasks. Agents fall back to whichever pattern the model has stronger priors for — currently `sleep N && tail` for many opus-4-7 instances.
+## Root cause of the anti-pattern
 
-## Proposed fix
+The ensign skill prose does not mention `BashOutput` or name the polling pattern. With no guidance, the model falls back to whatever priors it has; for some model versions that prior is `sleep N && tail`. This is a documentation gap in the skill, not a tool-shape problem — both `Bash(run_in_background: true)` and `BashOutput` already exist and work.
 
-Add a "Background Bash Discipline" subsection to the ensign skill (and possibly to the first-officer runtime adapters for FO use) that:
+## Proposed approach
 
-1. **States the rule explicitly:** "When you launch `Bash(run_in_background: true)`, wait on it using `BashOutput(bash_id=...)` polling, NOT a blocking `sleep N`."
-2. **Specifies the polling shape:** "Sleep ~30s between polls. Read `BashOutput`'s `status` field. When `status == 'completed'`, read the final output and proceed. Cap total wait at the originally-budgeted timeout."
-3. **Explains why:** "Blocking sleeps waste time when the task completes early, and they make the agent uninterruptible by captain messages."
-4. **Cites the failure pattern:** cross-reference #182 / #183 for the observed waste.
+Add a **"Background Bash Discipline"** subsection to `skills/ensign/references/ensign-shared-core.md` (the shared-core file, so both Claude and Codex ensigns see it). Evaluate in implementation whether `skills/first-officer/references/first-officer-shared-core.md` needs the same subsection for first-officer-launched background commands; if yes, mirror the wording.
+
+The subsection must be evergreen: no model-version names, no "observed in #NNN", no temporal phrasing. It describes the pattern as steady-state operational discipline.
+
+### Before (current state)
+
+`ensign-shared-core.md` has no guidance about `run_in_background: true` or `BashOutput`. The "## Working" section covers assignment reading, worktree ownership, and committing before signaling completion; it says nothing about waiting on asynchronous commands.
+
+### After (proposed wording)
+
+Insert a new subsection in `ensign-shared-core.md`, placed after the existing `## Rules` section and before `## Stage Report Protocol`:
+
+```markdown
+## Background Bash Discipline
+
+When you launch a command with `Bash(run_in_background: true)`, wait on it with `BashOutput` polling, not a blocking `sleep`:
+
+1. Capture the returned `bash_id`.
+2. Sleep briefly between polls — roughly 30s is a reasonable default; longer for tasks expected to run many minutes, shorter for tasks expected in under a minute.
+3. Call `BashOutput(bash_id=...)` and read the `status` field.
+4. If `status == "completed"`, read the final output and proceed.
+5. Otherwise, repeat from step 2. Cap total wait at the task's budgeted timeout; if the cap is reached, report the timeout rather than waiting indefinitely.
+
+Do not wait on a background task with a single blocking `sleep N && tail …`. A blocking sleep sized for the worst case wastes wallclock whenever the task finishes early, and it prevents the agent from observing incoming messages until the sleep returns. Polling avoids both problems.
+```
+
+The wording does not reference any specific task, model, or incident. It states the rule, the shape, and the reason an agent reading the skill cold would need.
 
 ## Acceptance criteria
 
-1. **Prose addition is surgical** to the ensign skill (and optionally first-officer runtime adapter), defining the BashOutput polling pattern with explicit anti-pattern note.
-2. **Static suite stays green** (no test regression from the prose addition).
-3. **Local verification on a target test that uses background bash** — pick any one of #182's test runs (e.g., `test_feedback_keepalive` on opus-4-7), instrument the implementer's behavior, confirm the agent uses BashOutput polling instead of `sleep N && tail`. Verify wallclock per run is reduced from the sleep-budget worst case to actual-test-duration + small polling overhead.
-4. **No regression on the discipline already shipped in #182's Variant A** — the Ensign Completion Signal Discipline subsection added there must remain intact and effective.
+Each criterion below names its verification method.
 
-## Out of Scope
+**AC-1 — Subsection present and well-formed.**
+Test method: grep `ensign-shared-core.md` for the literal heading `## Background Bash Discipline`; confirm it exists exactly once, and the body contains both the `BashOutput` polling rule and the explicit anti-pattern statement ("Do not wait on a background task with a single blocking `sleep`…"). Static check only.
 
-- Changing the BashOutput tool itself (this is a skill-prose-discipline task, not a tool change).
-- Replacing all blocking sleeps everywhere in the codebase (only the agent-orchestration patterns matter; one-off shell scripts that genuinely need a fixed wait are fine).
-- Investigating why opus-4-7 specifically defaults to the wrong pattern (possible model-preference drift; out of scope here, can inform a follow-up).
+**AC-2 — Wording is evergreen.**
+Test method: grep the new subsection for forbidden tokens: `opus-`, `sonnet-`, `haiku-`, `#182`, `#183`, `(see #`, `observed`, `recently`, `new`, `legacy`, `improved`. Each must return zero hits inside the subsection. Static check.
 
-## Cross-references
+**AC-3 — Static suite stays green.**
+Test method: run the existing repo-level lint/test suite (`make test` or whatever the project currently defines as the default pre-commit check). Confirm no regressions introduced by the prose addition.
 
-- #182 — the cycle where this pattern was observed (test_feedback_keepalive iteration, R1-R6, sleep-540-then-tail anti-pattern, captain interrupt on R7)
-- The Ensign Completion Signal Discipline subsection added to `claude-first-officer-runtime.md` in #182's Variant A — same skill file is the candidate location for the new subsection
+**AC-4 — Live behavioral verification on a background-bash consumer.**
+Test method: pick one ensign dispatch that exercises `Bash(run_in_background: true)` with a task lasting several minutes (a local `tests/test_feedback_keepalive.py` invocation is one candidate). Run once with the new shared-core prose loaded. From the parent `fo-log.jsonl` or the session transcript, confirm the ensign called `BashOutput` at least once with a `bash_id` returned from a background `Bash`, and did **not** call `Bash` with a `sleep` command whose argument exceeds 60 seconds. Wallclock should be close to actual task duration + one poll interval, not the worst-case budget. One run is sufficient for ideation-stage validation; a larger sample can be gathered later if needed.
+
+**AC-5 — First-officer runtime evaluation documented.**
+Test method: implementation stage must include a short explicit decision in the stage report: either "FO shared-core also updated with the same subsection, rationale X" or "FO shared-core left unchanged, rationale X". Either outcome is acceptable; the requirement is that the decision is explicit, not absent.
+
+## Out of scope
+
+- Changing the `Bash` or `BashOutput` tools themselves. This is a skill-prose task.
+- Sweeping the codebase for every blocking `sleep`. Many one-off shell scripts genuinely need a fixed wait and are fine as-is. This task only targets agent orchestration prose.
+- Investigating why particular model versions default to the wrong pattern. Possible model-preference drift; can inform a follow-up if it becomes load-bearing.
+- Adding an automated lint that forbids `sleep N && tail` in agent output. Prose first; mechanical enforcement is a separable follow-up.
 
 ## Test plan
 
-- Static: confirm the prose additions parse cleanly (no markdown errors, no broken cross-references).
-- Behavioral: re-run a `test_feedback_keepalive` cycle on opus-4-7 with the new prose loaded; verify ensign uses BashOutput polling. Compare wallclock vs the pre-prose sleep-540 pattern.
-- Cost: ~5 min of local pytest + a few minutes of prose drafting. No CI dispatch needed.
+- **Static checks (AC-1, AC-2, AC-3):** grep-based and existing suite. Cheap, deterministic; run as part of the implementer's pre-commit. Cost: seconds.
+- **Behavioral check (AC-4):** one local ensign dispatch against a background-bash test, inspecting the session transcript for the call pattern. Cost: a single pytest invocation plus a few minutes of transcript review, roughly 5–10 minutes and well under $1 in live-agent budget.
+- **Evaluation note (AC-5):** text-only, no test infrastructure.
+- **No CI dispatch required.** The change is prose only; its effect is observable with a single local run.
+- **Total estimated cost:** ~15 minutes implementer wallclock, under $1 live-agent budget.
+
+## Cross-references (audit trail — not for inclusion in skill prose)
+
+- **#182** — the diagnostic-workflow entity whose implementer iteration surfaced this anti-pattern. #182 itself is being rejected for scope drift (it added a "Completion Signal Discipline" Variant A prose block to `claude-first-officer-runtime.md` that exceeded #182's scope); that Variant A has been removed and #183 does not depend on it.
+- **Earlier AC-4 dependency removed:** a prior draft of this entity required "no regression on #182's Variant A discipline." That clause is obsolete — Variant A no longer exists in the runtime file — and has been dropped. The current AC-4 is scoped to the new subsection alone.

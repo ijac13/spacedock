@@ -1,9 +1,9 @@
 ---
 id: 184
 title: "Cherry-pick claude-team find_subagent_jsonl narrowing from #182 branch"
-status: backlog
+status: ideation
 source: "carved out of #182 — the find_subagent_jsonl narrowing change is independently valuable and passed independent review; unbundling it from #182's rejected prose mitigations to land on its own."
-started:
+started: 2026-04-18T00:12:20Z
 completed:
 verdict:
 score: 0.6
