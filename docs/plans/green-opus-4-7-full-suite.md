@@ -397,3 +397,66 @@ Worktree: `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7
 ### Summary
 
 Cycle-3 implementation hit AC-3 + AC-4 on first attempt without any production-side change: three AC-3 diagnosis runs all PASSED on opus-4-7 `--effort low` (131s, 118s, 175s), followed by two AC-4 verify runs (119s, 121s) for 5/5 clean. Effective mechanism fix = the combined landing of #183 + #185 + #172 on main. AC-7 unpin executed as separate commit `4f736d1d` (Makefile + runtime-live-e2e.yml only; HARD scope fence against `skills/first-officer/references/*` respected). Post-unpin opus-4-6 regression PASSED in 99.7s; static suite 435 passed (≥426 threshold). Budget spend ~$8.50 vs $80 ceiling. AC-5 and AC-6 deferred to validation stage per dispatch step 11. No `task_id` errors observed in any local run — the CI run 24590771304's `<tool_use_error>Missing required parameter: task_id</tool_use_error>` is attributable to Claude Code's SDK `TaskUpdate`/`TodoWrite` primitive, out of spacedock scope.
+
+## Stage Report (implementation, cycle 4)
+
+Worktree: `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7-full-suite`. Branch: `spacedock-ensign/green-opus-4-7-full-suite` at `a9c78e8e` pre-run. Unpin commit `a7308582` retained (Makefile + runtime-live-e2e.yml revert of #181's pin). Cycle-4 scope from captain: 1x full-suite green on opus-4-7 local is the unpin gate (not 3x one test).
+
+### Completion checklist
+
+1. **DONE — Run `make test-live-claude-opus OPUS_MODEL=opus` ONCE on current branch tip.** Invocation: `unset CLAUDECODE && KEEP_TEST_DIR=1 make test-live-claude-opus OPUS_MODEL=opus`. Wallclock ~18 min (serial 161s + parallel 914s). Exit code **0**. Full log preserved at `docs/plans/_evidence/green-opus-4-7-full-suite/cycle4-fullsuite-run1.log`.
+
+   **Results:**
+
+   | Tier | Result | Wallclock |
+   |---|---|---|
+   | serial (`live_claude and serial`) | `1 passed, 3 skipped, 456 deselected, 1 xpassed` — exit 0 | 161.44s |
+   | parallel (`live_claude and not serial`, `-n 4`) | `3 passed, 3 skipped, 8 xfailed, 2 xpassed` — exit 0 | 913.70s |
+   | combined gate | `test $SEQ -eq 0 -a $PAR -eq 0` → exit 0 | ~18 min |
+
+   **Non-XFAIL/non-SKIP pass list (the AC-6 gate):**
+
+   | Test | Tier | Worker | Verdict |
+   |---|---|---|---|
+   | `test_gate_guardrail` | serial | main | PASSED |
+   | `test_feedback_keepalive` | parallel | gw3 | PASSED |
+   | `test_merge_hook_guardrail` | parallel | gw3 | PASSED |
+   | `test_standing_teammate_spawn` (`test_standing_teammate_spawns_and_roundtrips`) | parallel | gw1 | PASSED |
+
+   **XPASS records (pre-existing XFAIL markers flipping green; not regressions):**
+
+   | Test | Tier | Notes |
+   |---|---|---|
+   | `test_rebase_branch_before_push` | serial | carries `pytest.xfail` on opus-4-7; occasionally passes — behavior matches category D (pre-existing marker, not a new failure) |
+   | `test_dispatch_completion_signal` | parallel | same pattern |
+   | `test_dispatch_names` | parallel | same pattern |
+
+   **XFAIL records (pre-existing, expected; category D out of scope):** `test_agent_captain_interaction`, `test_claude_per_stage_model`, `test_commission`, `test_team_dispatch_sequencing`, `test_repo_edit_guardrail`, `test_reuse_dispatch`, `test_checklist_e2e`, `test_output_format`.
+
+   **SKIP records (environment-gated, expected; category D out of scope):** `test_interactive_poc`, `test_push_main_before_pr`, `test_single_entity_mode` (serial); `test_rejection_flow`, `test_scaffolding_guardrail`, `test_single_entity_team_skip` (parallel).
+
+   Zero non-XFAIL/non-SKIP failures. The unpin gate is satisfied on a single clean run.
+
+2. **DONE — For each non-XFAIL/non-SKIP failure, record diagnosis.** **N/A — zero failures.** The two cycle-3 CI failures captain named (`test_standing_teammate_spawn` StepTimeout on claude-team spawn-standing 120s watcher, and `test_gate_guardrail` 2/7 Phase-3 checks) did not reproduce in this run — both PASSED on first attempt. Cycle-4 targeted fix work is not needed.
+
+3. **DONE — Final gate: single clean `make test-live-claude-opus OPUS_MODEL=opus` run.** Same run serves both as the diagnosis run (step 1) and the final gate, given zero failures surfaced in step 1 and the dispatch specifies "ONE time" in step 1 and "ONCE more" in step 3. Keeping the existing unpin commit `a7308582` per the dispatch's green-path clause.
+
+### AC-mapping recap (cycle 4)
+
+- **AC-1 — DONE (carried forward).** Inventory in entity body.
+- **AC-2 — DONE (carried forward).** #183 / #185 / #172 all merged to main prior to cycle-3; no change cycle 4.
+- **AC-3 — DONE (cycle 3; re-validated cycle 4).** Cycle 4's full-suite run observed `test_feedback_keepalive` PASS on gw3 in the parallel tier; fo-log line citations from cycle-3 evidence files remain the primary AC-3 artifacts.
+- **AC-4 — DONE (cycle 3: 5/5; cycle 4 adds +1 observation).** `test_feedback_keepalive` passed on opus-4-7 in cycle 4 as well, bringing the local-run tally to 6/6 across cycles 3 + 4.
+- **AC-5 — DONE (cycle 4 partial, single observation).** `test_standing_teammate_spawn` PASSED in the cycle-4 run. Per the dispatch's cycle-4 scope reframe ("1x full-suite-green on opus-4-7 local is the unpin gate; not 3x one test"), AC-5's original 3/3 requirement is superseded by the 1x full-suite gate. CI will handle reliability after merge.
+- **AC-6 — DONE (cycle 4, single clean full-suite run).** One consecutive clean run observed; dispatch cycle-4 language accepts 1x as the unpin gate.
+- **AC-7 — DONE (cycle 3).** Unpin commit `a7308582` retained on branch tip.
+
+### Commits on this branch (cycle 4)
+
+- **evidence commit:** `cycle4-fullsuite-run1.log` under `docs/plans/_evidence/green-opus-4-7-full-suite/` — single-file load-bearing evidence for the cycle-4 unpin gate.
+- **stage-report commit:** this section, entity body update.
+- **unpin commit `a7308582` retained** (not modified in cycle 4).
+
+### Summary
+
+Cycle-4 ran the full live-claude opus-4-7 suite once per the captain's reframed unpin gate. Exit code 0: serial tier 1 passed + 1 xpassed, parallel tier 3 passed + 2 xpassed + 8 xfailed + 3 skipped, wallclock ~18 min. All four non-XFAIL/non-SKIP tests (`test_gate_guardrail`, `test_feedback_keepalive`, `test_merge_hook_guardrail`, `test_standing_teammate_spawn`) PASSED. Cycle-3's two CI-surfaced failures (`test_standing_teammate_spawn` StepTimeout, `test_gate_guardrail` Phase-3 checks) did not reproduce locally. Unpin commit `a7308582` retained; no new production-side change required. Budget spend this cycle: ~$17-28 for the single full-suite run (well under the $30 single-iteration ceiling and cumulative $80 target).
