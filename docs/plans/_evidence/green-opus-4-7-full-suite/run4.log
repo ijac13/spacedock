@@ -1,0 +1,68 @@
+No entry for terminal type "xterm-ghostty";
+using dumb terminal settings.
+============================= test session starts ==============================
+platform darwin -- Python 3.12.9, pytest-9.0.3, pluggy-1.6.0 -- /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7-full-suite/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7-full-suite
+configfile: pyproject.toml
+plugins: xdist-3.8.0
+collecting ... collected 1 item
+
+tests/test_feedback_keepalive.py::test_feedback_keepalive === test_feedback_keepalive ===
+Repo root:  /Users/clkao/git/spacedock/.worktrees/spacedock-ensign-green-opus-4-7-full-suite
+Test dir:   /var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmpli6onvmq
+
+--- Phase 1: Set up test project from fixture ---
+  PASS: status script runs without errors
+  PASS: status --next detects dispatchable entity
+
+--- Phase 2: Run first officer (claude, this takes ~60-180s) ---
+[OK] implementation data-flow signal observed (greeting file, feedback cycle section, or ensign Agent dispatch)
+[OK] validation ensign dispatched — implementation agent survived the transition
+[OK] feedback-cycle data-flow signal observed (Feedback Cycles section, validation-expected greeting, or second ensign dispatch)
+WARNING: first officer exited with code 143
+=== Stats: fo ===
+  Wallclock:        115s
+  Messages:         28 assistant, 0 tool_result
+  Model delegation: claude-opus-4-7: 28
+  Input tokens:     88
+  Output tokens:    895
+  Cache read:       916,260
+  Cache write:      174,326
+--- Phase 3: Validation ---
+
+[Agent Dispatch Overview]
+  Total ensign dispatches: 2
+  Implementation dispatches: 1
+  Validation dispatches: 1
+  PASS: FO dispatched Agent() for implementation stage
+  PASS: FO dispatched Agent() for validation stage
+
+[Keepalive Event Scan]
+  Implementation dispatch seen: True
+  Implementation completion seen: True
+  Validation dispatch seen: True
+  Shutdown before validation: 0
+  Rejection seen: False
+  Feedback via SendMessage: False
+  Feedback via fresh Agent: False
+
+[Tier 1 — Keepalive at Transition]
+  PASS: no shutdown SendMessage targets implementation agent between completion and validation dispatch
+
+[Tier 2 — Feedback Routing via SendMessage]
+  SKIP: rejection not observed — pipeline may not have completed validation within budget
+
+[Static Template Checks]
+  PASS: shared-core contains feedback-to keepalive rule for fresh dispatch
+  PASS: shared-core contains auto-bounce rule for REJECTED feedback gates
+  PASS: shared-core documents feedback rejection flow with feedback-to routing
+
+=== Results ===
+  8 passed, 0 failed (out of 8 checks)
+
+RESULT: PASS
+PASSED
+
+======================== 1 passed in 119.87s (0:01:59) =========================
+Test dir preserved at: /var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmpli6onvmq
