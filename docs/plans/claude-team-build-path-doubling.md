@@ -10,6 +10,7 @@ score: 0.40
 worktree: .worktrees/spacedock-ensign-claude-team-build-path-doubling
 issue:
 pr:
+mod-block: merge:pr-merge
 ---
 
 When the FO passes `entity_path` to `claude-team build` as a worktree-absolute path (e.g. `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-{slug}/docs/plans/{slug}.md`), the helper emits a prompt whose "Read the entity file at..." references a doubled path: `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-{slug}/.worktrees/spacedock-ensign-{slug}/docs/plans/{slug}.md`. The dispatched ensign follows the instruction and fails at the first Read.
