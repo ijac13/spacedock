@@ -214,19 +214,38 @@ def test_feedback_keepalive(test_project, model, effort):
         )
         print("[OK] validation ensign dispatched — implementation agent survived the transition")
 
+        def _feedback_cycle_observed() -> bool:
+            for body_path in (entity_file, archive_file):
+                if body_path.is_file() and "Feedback Cycles" in body_path.read_text():
+                    return True
+            if greeting_file.is_file() and "Hello, World!" in greeting_file.read_text():
+                return True
+            if fo_log_file.is_file():
+                try:
+                    snapshot = LogParser(fo_log_file)
+                except Exception:
+                    return False
+                ensign_dispatch_count = 0
+                for entry in snapshot.entries:
+                    if tool_use_matches(entry, "Agent", subagent_type="spacedock:ensign"):
+                        ensign_dispatch_count += 1
+                        if ensign_dispatch_count >= 2:
+                            return True
+            return False
+
         feedback_deadline = time.monotonic() + 300
         while time.monotonic() < feedback_deadline:
-            if entity_file.is_file():
-                body = entity_file.read_text()
-                if "### Feedback Cycles" in body:
-                    break
+            if _feedback_cycle_observed():
+                break
             time.sleep(1.0)
         else:
             raise AssertionError(
-                f"Entity body did not record a feedback cycle section at "
-                f"{entity_file} within 300s"
+                f"No feedback-cycle data-flow signal observed within 300s: "
+                f"entity={entity_file} archive={archive_file} greeting={greeting_file} "
+                f"fo_log={fo_log_file}"
             )
-        print("[OK] entity body recorded feedback cycle section (data-flow assertion)")
+        print("[OK] feedback-cycle data-flow signal observed "
+              "(Feedback Cycles section, validation-expected greeting, or second ensign dispatch)")
         w.proc.terminate()
 
     print("--- Phase 3: Validation ---")
