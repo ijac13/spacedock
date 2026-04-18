@@ -70,15 +70,19 @@ def test_runtime_live_e2e_workflow_supports_pr_and_manual_triggers():
 
 
 def test_runtime_live_e2e_workflow_checks_out_pr_head_with_persist_credentials_false():
-    """Security-critical: every live-e2e checkout must target the PR head SHA
-    and MUST set persist-credentials: false so GITHUB_TOKEN is not persisted
-    into .git/config where post-checkout steps could use it."""
+    """Security-critical: every checkout in this workflow must target the PR head
+    SHA and MUST set persist-credentials: false so GITHUB_TOKEN is not persisted
+    into .git/config where post-checkout steps could use it.
+
+    Five checkouts in current shape: 4 live-e2e jobs (claude-live, claude-live-bare,
+    claude-live-opus, codex-live) + 1 static-offline gate job. All five must
+    satisfy the head-SHA + persist-credentials invariant."""
     text = read_workflow()
 
     checkout_count = text.count("actions/checkout@v4")
     head_ref_count = text.count("ref: ${{ github.event.pull_request.head.sha }}")
     # Each checkout must have a matching head-SHA ref.
-    assert checkout_count == 4
+    assert checkout_count == 5
     assert head_ref_count == checkout_count, (
         f"Every checkout@v4 must pin to the PR head SHA "
         f"(found {checkout_count} checkouts, {head_ref_count} head-SHA refs)"
@@ -89,6 +93,23 @@ def test_runtime_live_e2e_workflow_checks_out_pr_head_with_persist_credentials_f
     assert persist_false_count == checkout_count + 1, (
         f"Expected persist-credentials: false on all {checkout_count} checkouts "
         f"+ 1 reference in the security comment, got {persist_false_count}"
+    )
+
+
+def test_runtime_live_e2e_workflow_gates_live_jobs_on_static_offline():
+    """Live-e2e jobs MUST NOT run if static-offline fails. Captain env-approval
+    is expensive; gating on static-offline prevents wasted approvals on runs
+    that would fail on static checks anyway."""
+    text = read_workflow()
+
+    # The gate job must exist inline (not only in the standalone ci-static.yml).
+    assert "  static-offline:\n" in text, (
+        "Expected a static-offline job in runtime-live-e2e.yml as the needs: target"
+    )
+    # All 4 live jobs must declare needs: static-offline.
+    needs_count = text.count("needs: static-offline")
+    assert needs_count == 4, (
+        f"Expected all 4 live-e2e jobs to declare 'needs: static-offline', got {needs_count}"
     )
 
 
