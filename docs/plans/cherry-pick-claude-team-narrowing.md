@@ -10,7 +10,7 @@ score: 0.6
 worktree: .worktrees/spacedock-ensign-cherry-pick-claude-team-narrowing
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Problem statement
