@@ -10,7 +10,7 @@ score: 0.6
 worktree: .worktrees/spacedock-ensign-limit-fo-checklist-to-three-items
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Why this matters
