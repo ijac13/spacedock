@@ -72,14 +72,14 @@ def test_standing_teammate_spawns_and_roundtrips(test_project, model, effort):
     ) as w:
         w.expect(
             lambda e: tool_use_matches(e, "Bash", command="spawn-standing"),
-            timeout_s=120,
+            timeout_s=60,
             label="claude-team spawn-standing invoked",
         )
         print("[OK] claude-team spawn-standing invoked")
 
         w.expect(
             lambda e: tool_use_matches(e, "Agent", name="echo-agent"),
-            timeout_s=120,
+            timeout_s=60,
             label="echo-agent Agent() dispatched",
         )
         print("[OK] echo-agent Agent() dispatched")
@@ -87,7 +87,7 @@ def test_standing_teammate_spawns_and_roundtrips(test_project, model, effort):
         ensign_dispatch = w.expect(
             lambda e: tool_use_matches(e, "Agent")
             and "echo-agent" not in _agent_input(e).get("name", ""),
-            timeout_s=240,
+            timeout_s=90,
             label="ensign Agent() dispatched",
         )
         ensign_prompt = _agent_input(ensign_dispatch).get("prompt", "")

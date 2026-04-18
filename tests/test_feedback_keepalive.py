@@ -210,7 +210,7 @@ def test_feedback_keepalive(test_project, model, effort, request):
 
         w.expect(
             _impl_signal_in_event,
-            timeout_s=240,
+            timeout_s=120,
             label="implementation data-flow signal",
         )
         print("[OK] implementation data-flow signal observed "
