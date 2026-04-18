@@ -1,9 +1,9 @@
 ---
 id: 188
 title: "Convert test filesystem-polling loops to FOStreamWatcher event-driven predicates"
-status: backlog
+status: ideation
 source: "captain observation during #185 CI triage — the 300s polling loops cherry-picked from #182's e40ff353 are a regression from the event-driven FOStreamWatcher pattern. Same work should be expressible as stream predicates on FO-emitted tool_use events."
-started:
+started: 2026-04-18T03:50:49Z
 completed:
 verdict:
 score: 0.5
