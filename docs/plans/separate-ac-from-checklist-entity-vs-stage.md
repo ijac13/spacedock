@@ -146,13 +146,29 @@ If at a later date the divergence across workflows proves real, a follow-up task
 
 ### Edit 1 — `skills/first-officer/references/first-officer-shared-core.md`
 
-**Current (line 60, in `## Dispatch` numbered list):**
+This edit operates on the two-part structure #192 landed in the `## Dispatch` numbered list: the single sentence at line 60 and the linchpin-discipline paragraph at line 62. #193 MUST preserve every piece of #192's linchpin framing (`at most 3 items`, `0, 1, 2, or 3 items are all valid; do not pad to reach 3`, `Name what separates a good outcome from a ceremonial one`) and add the AC-vs-checklist distinction in the same neighborhood.
+
+**Current (verbatim from shared-core):**
+
+Line 60:
 
 > 2. Build a numbered checklist from stage outputs and entity acceptance criteria.
 
-**New:**
+Line 62 (the linchpin-discipline paragraph #192 landed):
 
-> 2. Build a numbered checklist of dispatch-specific linchpins (≤ 3 items per #192) from the target stage's `Outputs:` bullets and any entity-level acceptance criteria this stage is the natural place to advance. **Entity-level acceptance criteria (AC) are properties of the finished entity, not stage actions.** Checklist items are the per-dispatch signals that this stage's contribution is sound; they are not the AC list and are not a work-breakdown.
+>    The dispatch checklist is a **per-dispatch, stage-level** list of linchpin signals — at most 3 items — that demonstrate this specific dispatch's job is done well. It is distinct from entity-level acceptance criteria. The cap is an upper bound, not a target: 0, 1, 2, or 3 items are all valid; do not pad to reach 3. This is not a work-breakdown. The ensign already knows how to read the entity body, commit before signaling complete, and write a stage report; those are covered by structural conventions and MUST NOT appear in the checklist. Name what separates a good outcome from a ceremonial one.
+
+**New (merged rewrite of lines 60 and 62 — retains every piece of #192's linchpin framing, adds the AC distinction):**
+
+Line 60 (item 2 of the numbered list):
+
+> 2. Build a numbered checklist of dispatch-specific linchpins from the target stage's `Outputs:` bullets and any entity-level acceptance criteria this stage is the natural place to advance. Checklist items are the per-dispatch signals that this stage's contribution is sound; they are not the AC list and are not a work-breakdown.
+
+Line 62 (the paragraph directly below, preserving #192's linchpin discipline verbatim and appending the AC distinction):
+
+>    The dispatch checklist is a **per-dispatch, stage-level** list of linchpin signals — at most 3 items — that demonstrate this specific dispatch's job is done well. It is distinct from entity-level acceptance criteria. The cap is an upper bound, not a target: 0, 1, 2, or 3 items are all valid; do not pad to reach 3. This is not a work-breakdown. The ensign already knows how to read the entity body, commit before signaling complete, and write a stage report; those are covered by structural conventions and MUST NOT appear in the checklist. Name what separates a good outcome from a ceremonial one. **Entity-level acceptance criteria (AC) are properties of the finished entity, not stage actions** — they live in the entity body's `## Acceptance criteria` section and are cross-checked at every gate (see `## Completion and Gates`), independent of this checklist's DONE/SKIPPED/FAILED accounting.
+
+The #192 paragraph is preserved verbatim; the AC-vs-checklist sentence is appended as the final sentence. The single-line item 2 is rewritten to drop `from stage outputs and entity acceptance criteria` (which conflated the two concepts #193 separates) and to frame the checklist as dispatch-specific linchpins whose source is stage `Outputs:` plus stage-appropriate AC advancement, not AC enumeration.
 
 **And in `## Completion and Gates`, after the existing "`{N} done, {N} skipped, {N} failed`" line, add:**
 
@@ -222,7 +238,7 @@ Verified by: reading the Task Template block in `docs/plans/README.md` shows a `
 Verified by: `grep -n "## Acceptance criteria" skills/commission/SKILL.md` returns at least one match inside the template block; `grep -n "Each AC names a property" skills/commission/SKILL.md` also returns one match. Commission test harness (`scripts/test-harness.md` or the existing static test covering generated-workflow shape) passes unchanged.
 
 **AC-7 — #193's own AC list is self-consistent with the distinction.**
-Verified by: reading this AC list. Every item above is an end-state property of the post-merge repo (grep output / file contents). No item reads as "implementer runs X" or "ideation produces Y." Gate review confirms self-consistency.
+Verified by: captain judgment at ideation gate. AC-7 is a meta-AC on the entity's own AC list shape; it is not mechanically grep-testable and cannot be reproduced from a future repo state. The captain confirms at gate that every other AC above reads as an end-state property (grep output / file contents / suite status), with no item phrased as "implementer runs X" or "ideation produces Y." The `## Self-consistency check (pre-gate)` section below records the author's walk-through as evidence supporting captain review.
 
 **AC-8 — Static suite green post-merge.**
 Verified by: `make test-static` passes on main after the PR merges. No new test added unless AC-6's commission-harness test needs extension; if added, it appears in the static suite.
@@ -230,9 +246,9 @@ Verified by: `make test-static` passes on main after the PR merges. No new test 
 ## Test plan
 
 - **Static, primary:** five grep-based assertions (AC-1 through AC-5) against the two edited files. Add one static test case to the existing commission-harness or scaffolding-guardrail test suite that asserts the commission-generated README contains the `## Acceptance criteria` template block (AC-6). Roughly one new test file or ~20 lines added to an existing one. `make test-static` covers AC-8.
-- **Behavioral, spot-check:** one live FO dispatch on any trivial task in `docs/plans/` (or a throwaway fixture) that follows the new template. Confirm (a) the FO-built checklist is distinct from the AC list in the entity body, (b) the FO's gate-review output names AC-coverage separately from checklist DONE/SKIPPED/FAILED. One run sufficient — mechanism path is prose + template, not executable code.
-- **E2E not required.** No code or test plumbing changes; the only behavioral surface is FO prose discipline, which the grep tests guard and #192's gate review will cross-check.
-- **Cost estimate:** ~$1-3 (one optional spot-check dispatch; static tests are free). No multi-run budget.
+- **Behavioral, required (before merge):** one live FO dispatch on any trivial task in `docs/plans/` (or a throwaway fixture) that follows the new template. Confirm (a) the FO-built checklist is distinct from the AC list in the entity body, (b) the FO's gate-review output names AC-coverage separately from checklist DONE/SKIPPED/FAILED. One run sufficient — but the run is required, not optional. Rationale: the payload of this change is FO behavioral discipline (checklist-building and gate-review prose). Static grep tests confirm the prose landed; they cannot confirm the prose changes FO behavior in practice. A single ~$1 dispatch closes that gap cheaply relative to the risk of prose that reads right but doesn't bite at runtime.
+- **E2E not required.** No code or test plumbing changes beyond the required behavioral spot-check above.
+- **Cost estimate:** ~$1-3 (one required spot-check dispatch; static tests are free). No multi-run budget.
 
 ## Self-consistency check (pre-gate)
 
@@ -243,7 +259,7 @@ Walking each of this entity's own ACs against the stage-action rewrite rule:
 - AC-3, AC-4 name end-state grep results. ✓ entity-level.
 - AC-5 names an end-state file content property. ✓ entity-level.
 - AC-6 names end-state grep results + test suite status. ✓ entity-level.
-- AC-7 is a meta-AC on the entity's own AC list shape; it is verified by reading the list, which is a property of the final entity body. Arguably meta, but the property ("AC list is self-consistent") is entity-level. ✓ entity-level.
+- AC-7 is a meta-AC on the entity's own AC list shape. Its `Verified by:` clause is `captain judgment at ideation gate` — the property is entity-level (the AC list's self-consistency as a property of the final entity body), but verification is not grep-reproducible, so captain review stands in for mechanical test. ✓ entity-level; meta-verified.
 - AC-8 names an end-state test-suite status. ✓ entity-level.
 
 No AC reads as an imperative verb directed at an implementer. The distinction #193 proposes holds for #193 itself.
@@ -279,3 +295,16 @@ Audited 20 recent entity bodies (125 ACs total): ~82% entity-level, ~17% stage-l
 
 3. **Produce refined entity-level ACs, template-update spec, shared-core prose change, test plan — DONE.** 8 ACs written (AC-1 through AC-8) each with a "Verified by" grep/suite-status clause. Template-update spec in Edit 2 (`docs/plans/README.md` stage prose + task template). Shared-core prose change in Edit 1 (dispatch line 60 + gate cross-check paragraph). Commission-skill edit in Edit 3. Test plan specifies 5 grep assertions + 1 commission-harness extension + `make test-static`, with one optional behavioral spot-check. Self-consistency check walks #193's own ACs against the stage-action rewrite rule and confirms zero violations.
 
+### Cycle 2 — staff-review amendments landed
+
+Three blocking amendments from staff review applied in-place on main (non-worktree stage); no implementation stage work dispatched.
+
+1. **Edit 1 respec against post-#192 shared-core — DONE.** Opened `skills/first-officer/references/first-officer-shared-core.md`; captured both line 60 (`Build a numbered checklist from stage outputs and entity acceptance criteria.`) and line 62 (the linchpin-discipline paragraph landed by #192 — `at most 3 items`, `0, 1, 2, or 3 items are all valid; do not pad to reach 3`, `Name what separates a good outcome from a ceremonial one`). Edit 1 now presents a merged rewrite: line 62's #192 paragraph preserved verbatim with the AC-vs-checklist sentence appended as its final sentence; line 60 rewritten to frame the checklist as dispatch-specific linchpins sourced from stage `Outputs:` plus stage-appropriate AC advancement (dropping the conflated `from stage outputs and entity acceptance criteria`). The silent #192 regression flagged by staff review is now impossible — every piece of #192's linchpin framing appears verbatim in the new Edit 1 block.
+
+2. **AC-7 Verified-by clause corrected — DONE.** Changed from `reading this AC list` to `captain judgment at ideation gate`. Prose now explicitly names AC-7 as a non-grep-testable meta-AC and points to `## Self-consistency check (pre-gate)` as the author's walk-through evidence supporting captain review. The Self-consistency bullet for AC-7 is updated to match.
+
+3. **Test plan behavioral spot-check promoted to required — DONE.** The bullet formerly labeled `Behavioral, spot-check:` with `One run sufficient` is now `Behavioral, required (before merge):` with explicit rationale: payload is FO behavioral discipline, static grep tests confirm prose landed but cannot confirm behavior changed, one ~$1 dispatch closes that gap cheaply. Cost estimate updated to label the spot-check required (not optional). No new AC added; the test plan's own prose carries the requirement.
+
+### Summary
+
+Staff-review blockers landed. Edit 1 now merges lines 60 and 62 verbatim + append, preserving #192's linchpin framing while adding the AC-vs-checklist distinction. AC-7's `Verified by:` clause is now internally consistent (captain judgment for a meta-AC). Behavioral spot-check is required, not optional. Non-blocking nice-to-haves from the staff review (diagnostic-class exemplar, legacy-entities note, evidence-reproduction cost cap) were captain-deferred and remain out of scope.
