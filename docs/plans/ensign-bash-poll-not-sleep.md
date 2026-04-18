@@ -121,3 +121,43 @@ Test method: implementation stage must include a short explicit decision in the 
 ### Summary
 
 Rewrote #183 for ideation stage: sharpened the problem statement, specified the target file (`ensign-shared-core.md`) and exact insertion point for the new `## Background Bash Discipline` subsection, supplied the full fenced-markdown body, and re-scoped AC-4 so it no longer depends on #182's removed Variant A prose. Acceptance criteria now include an evergreen-tone grep (AC-2) to enforce global-CLAUDE.md discipline, and the `#182` audit trail is isolated from content that would ship into the skill. Test plan is static + one live behavioral run; no CI dispatch.
+
+## Stage Report: implementation
+
+- DONE: Stay inside worktree `.worktrees/spacedock-ensign-ensign-bash-poll-not-sleep` on branch `spacedock-ensign/ensign-bash-poll-not-sleep`.
+  All file reads/writes under the worktree; no branch switches.
+- DONE: Apply the ideation-specified `## Background Bash Discipline` subsection into `skills/ensign/references/ensign-shared-core.md` verbatim, inserted after `## Rules` and before `## Stage Report Protocol`.
+  Edit placed the five-step polling rule plus the explicit anti-pattern paragraph.
+- DONE: AC-2 forbidden-token grep on the new subsection body.
+  Extracted subsection into `/tmp/bg-subsection.md` (13 lines). Grep results: `opus-` 0, `sonnet-` 0, `haiku-` 0, `#182` 0, `#183` 0, `(see #` 0, `observed` 0, `recently` 0, ` new ` 0, ` legacy ` 0, `improved` 0.
+- DONE: AC-5 evaluation — FO shared-core left unchanged.
+  Rationale: grep of `skills/first-officer/references/` for `run_in_background|BashOutput|background bash|sleep` returned no files, and first officers dispatch work through `SendMessage`/Task tools rather than launching multi-minute background shell commands. The anti-pattern surfaced in an ensign implementer loop, not in FO orchestration. If FOs later start launching long-running background shells themselves, the same subsection can be mirrored into `first-officer-shared-core.md` at that time; adding it preemptively violates YAGNI.
+- DONE: Run the static suite with `unset CLAUDECODE && make test-static`.
+  `426 passed, 22 deselected, 10 subtests passed in 20.40s` — meets the ≥ 426 threshold.
+- DONE: Commit changes on the worktree branch.
+  See commit SHA below (appended by the commit step).
+- DONE: Write this Stage Report section.
+  This section.
+
+### Summary
+
+Inserted the `## Background Bash Discipline` subsection into `skills/ensign/references/ensign-shared-core.md` between `## Rules` and `## Stage Report Protocol`, using the ideation body's fenced-markdown content verbatim. AC-2 evergreen-tone grep passes with zero forbidden-token hits; `make test-static` holds at 426 passed. FO shared-core left unchanged per AC-5 — FOs don't run multi-minute background bash, so mirroring the subsection would be speculative. AC-4 live behavioral verification is deferred to validation stage per the dispatch brief.
+
+## Stage Report: validation
+
+- [x] DONE: Read implementation Stage Report first.
+  Confirmed implementer's claims: subsection inserted at `ensign-shared-core.md:34`, AC-2 tokens zero, `make test-static` 426 passed, FO shared-core left unchanged per YAGNI.
+- [x] DONE: Verify AC-1 — subsection present and well-formed.
+  Grep `^## Background Bash Discipline` on worktree copy of `skills/ensign/references/ensign-shared-core.md` returns exactly one hit at line 34. Body (lines 34-44) contains both the five-step `BashOutput` polling rule and the explicit anti-pattern paragraph ("Do not wait on a background task with a single blocking `sleep N && tail …`…").
+- [x] DONE: Verify AC-2 — wording is evergreen (independent grep).
+  Extracted subsection body (lines 34-44) into `/tmp/ac2-subsection.md` (11 lines). Case-insensitive grep for `opus-|sonnet-|haiku-|#182|#183|\(see #|observed|recently|\bnew\b|\blegacy\b|improved`: **no matches**. All forbidden tokens return zero hits.
+- [x] DONE: Verify AC-3 — static suite stays green.
+  `unset CLAUDECODE && make test-static` in this worktree: `426 passed, 22 deselected, 10 subtests passed in 20.48s`. Meets ≥ 426 threshold.
+- [x] SKIPPED: Verify AC-4 — live behavioral verification on a background-bash consumer.
+  Ran the suggested test: `unset CLAUDECODE && KEEP_TEST_DIR=1 uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --model claude-opus-4-6 --effort low -v -s`. Result: `1 passed in 201.99s` (preserved dir `/var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmpsdlkana9`). However, the test scenario does **not** exercise `Bash(run_in_background=true)` — the work items are creating/validating a `greeting.txt` file, all synchronous. Inspection of `tool-calls.json` (41 calls): 15 `Bash` calls (all `run_in_background=None`), 0 `BashOutput`, 0 `bash_id` references. The only `BashOutput`/`run_in_background`/`bash_id` tokens in `fo-log.jsonl` (line 82) are the FO reading the new skill-prose file content — not an actual polling call. Additionally, ensign-internal tool-calls (the ensign runs as an `Agent()` subprocess) are not captured in this harness's top-level `tool-calls.json` or `fo-log.jsonl`. AC-4's evidence requirement (bash_ids from background Bash paired with BashOutput polls) cannot be produced via this test path. Rationale for SKIP: (a) the suggested test doesn't exercise the scenario under evaluation; (b) the harness doesn't capture ensign-subprocess tool calls needed for the evidence shape AC-4 specifies; (c) the implementation is pure documentation — AC-1/AC-2/AC-3 are the load-bearing checks for a prose addition, and all three pass. Flagging this as a gap in the validation plan itself, not in the deliverable. Budget used: ~$0.20 for the 3m21s live run.
+- [x] DONE: Verify AC-5 — FO shared-core decision documented.
+  Implementation Stage Report line 133-134 explicitly states "FO shared-core left unchanged" with rationale (FOs dispatch via `SendMessage`/Task tools rather than launching multi-minute background shells; YAGNI). Decision is explicit and either-outcome-acceptable per AC-5.
+
+### Summary
+
+AC-1, AC-2, AC-3, AC-5 all pass with concrete evidence (grep results, 426 test pass, explicit FO decision documented). AC-4 skipped — the suggested `test_feedback_keepalive.py` does not exercise `Bash(run_in_background=true)` and the harness doesn't capture ensign-subprocess tool-calls, so the required evidence shape (bash_ids paired with BashOutput polls) cannot be produced from this test path. Since the deliverable is a prose-only addition to a skill file, the static checks (AC-1/2/3) are the load-bearing verification; AC-4 was an aspirational live confirmation that would need a different test scenario and/or ensign-subprocess logging to satisfy. **Recommendation: PASSED** — static ACs verified, FO decision explicit, AC-4 unverifiable via the suggested path but not blocking for a prose deliverable.

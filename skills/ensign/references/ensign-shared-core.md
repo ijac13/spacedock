@@ -31,6 +31,18 @@ Read the assignment context provided by the first officer. It defines:
 - Do NOT modify files under `agents/` or `references/` — these are plugin scaffolding.
 - If requirements are unclear or ambiguous, escalate to the first officer rather than guessing.
 
+## Background Bash Discipline
+
+When you launch a command with `Bash(run_in_background: true)`, wait on it with `BashOutput` polling, not a blocking `sleep`:
+
+1. Capture the returned `bash_id`.
+2. Sleep briefly between polls — roughly 30s is a reasonable default; longer for tasks expected to run many minutes, shorter for tasks expected in under a minute.
+3. Call `BashOutput(bash_id=...)` and read the `status` field.
+4. If `status == "completed"`, read the final output and proceed.
+5. Otherwise, repeat from step 2. Cap total wait at the task's budgeted timeout; if the cap is reached, report the timeout rather than waiting indefinitely.
+
+Do not wait on a background task with a single blocking `sleep N && tail …`. A blocking sleep sized for the worst case wastes wallclock whenever the task finishes early, and it prevents the agent from observing incoming messages until the sleep returns. Polling avoids both problems.
+
 ## Stage Report Protocol
 
 Append a `## Stage Report: {stage_name}` section at the end of the entity file using this exact structure:
