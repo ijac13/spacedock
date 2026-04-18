@@ -235,6 +235,6 @@ Re-audited the three sites on post-#185 main, restructured the spec around the a
 
 9. **Test plan cost + wallclock — DONE.** Refined to ~$20-35, ~1.5-2hrs (up from $20-30 to cover AC-5 opus-4-7 regression check). Broken down per AC.
 
-10. **Commit updated body on main — PENDING at this write; will run after stage report is written and comm-officer polish step.**
+10. **Commit updated body on main — DONE.** Committed as `38e7dd76` on main.
 
 11. **Append Stage Report — DONE (this section).**
