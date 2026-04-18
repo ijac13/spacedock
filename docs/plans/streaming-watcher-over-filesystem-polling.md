@@ -353,3 +353,74 @@ Captain-requested audit of timeouts >30s. Scoped to the two converted test files
 1. **Helper factoring — `tool_use_writes_content`.** Any future conversion of a filesystem check to a stream predicate will face the same "which tool did the FO use?" problem. A single helper consolidating Edit/Write/Bash(heredoc)/SendMessage shapes would halve the predicate size and prevent each caller from re-discovering the same pattern. Not urgent; file as "test-lib helper factoring" entity when the fleet is quiet.
 2. **Standing-teammate reliability on opus-4-7.** 0/3 at opus-4-7 low effort across fresh runs, even with the predicate conversion proven correct. Root cause is upstream — likely the echo-agent roundtrip itself taking >300s or stalling at various points (observed: FO stalling before ensign dispatch, ensign not getting ECHO reply, etc.). A dedicated opus-4-7 reliability investigation for this specific test shape is warranted if opus-4-7 becomes the CI pin.
 3. **300s polling-loop pattern in general.** #188 removed the filesystem-polling loops but preserved their 240s/300s timeout values. Those values were set for filesystem-sync jitter + FO completion; the event-driven shape can probably halve them once we have enough data from multiple runs to bound the p95 latency. This is the natural next step after #188 — a calibration entity.
+
+## Stage Report (implementation — fresh-dispatch tail)
+
+### Summary
+Fresh-dispatch ensign at context-limit handoff. Three deliverables: (1) tightened five timeouts on fast FO/ensign actions, preserving multi-hop/end-to-end/reject-loop gates; (2) added `entry_contains_text(e, "ECHO: ping")` arm to site-1 predicate to cover the opus-4-6 delegation path where the ECHO roundtrip is carried in ensign-subagent tool_result text / FO final assistant text rather than Edit/Write/Bash tool_use; (3) verified AC-3 1x on opus-4-6 low effort for both converted tests — both PASS.
+
+### Checklist
+
+1. **Timeout audit + tighten FIRST — DONE.** Committed as `35456eb0` "impl: #188 tighten stream-predicate timeouts on fast FO/ensign actions". Table below. AC-3 opus-4-6 run confirmed the tightened values are all feasible (standing-teammate wallclock 121s end-to-end against 60/60/90/240/300s budgets; keepalive wallclock 190s against 120/240/300s budgets).
+
+   | Test file | Line | Watcher role | Before | After | Rationale |
+   |-----------|------|--------------|--------|-------|-----------|
+   | test_standing_teammate_spawn.py | 75 | `spawn-standing` Bash | 120s | **60s** | Fast FO action (bash launch). Observed <=10s in practice. 6x headroom. |
+   | test_standing_teammate_spawn.py | 82 | `echo-agent` Agent() dispatch | 120s | **60s** | FO follows spawn-standing; AC-3 run observed both within ~30s of phase-2 start. |
+   | test_standing_teammate_spawn.py | 90 | ensign Agent() dispatch | 240s | **90s** | FO boot + TeamCreate + fixture re-read + dispatch. AC-3 run fired inside 60s. Upper 90s justified by opus-4-7 slower-boot observed in prior runs. |
+   | test_standing_teammate_spawn.py | 106 | SendMessage to echo-agent | 240s | KEEP 240s | Multi-hop (ensign subagent -> FO parent stream). Subagent turn time unpredictable. |
+   | test_standing_teammate_spawn.py | 130 | archived entity captured ECHO | 300s | KEEP 300s | End-to-end task-completion gate. Prior stage-report flagged 0/3 on opus-4-7 low effort — tightening risks false negatives. |
+   | test_feedback_keepalive.py | 213 | impl data-flow signal | 240s | **120s** | First ensign Agent() dispatch. Prior stage report: 3/3 keepalive green runs observed 60-90s. 2x headroom. |
+   | test_feedback_keepalive.py | 222 | validation ensign dispatched | 240s | OUT OF SCOPE | Scope fence preserved (captain-flagged, inline-processing interaction). |
+   | test_feedback_keepalive.py | 249 | feedback-cycle signal | 300s | KEEP 300s | Depends on validation -> rejection -> feedback-loop dispatch. Full second round. |
+
+2. **Add `entry_contains_text` branch to site 1 predicate — DONE.** Committed as `91bd6301` "impl: #188 add entry_contains_text arm to site 1 _echo_captured_in_event". Diff:
+
+   ```python
+   # in _echo_captured_in_event, after the Bash arm:
+   if entry_contains_text(e, r"ECHO: ping"):
+       return True
+   ```
+
+   Plus `entry_contains_text` added to the `from test_lib import (...)` block.
+
+   **Predicate-change evidence:** AC-3 opus-4-6 1x run PASSED with the new arm in place. The signal `[OK] archived entity body captured 'ECHO: ping' (data-flow assertion)` fired, proving the arm matched. Without this arm (as observed in the prior ensign's AC-3 run 1), the test hung until the 300s timeout because opus-4-6 FO delegates the ECHO roundtrip entirely to the ensign subagent; the subagent's ECHO-containing tool_result bubbles through the parent stream as a `user` tool_result text block, which `tool_use_matches` (assistant-only, tool_use-only) never matches, but `entry_contains_text` (assistant text + user tool_result text) does.
+
+3. **Verify 1x each on opus-4-6 low effort — DONE. BOTH PASS.**
+
+   | Test | Command | Wallclock | Result |
+   |------|---------|-----------|--------|
+   | `tests/test_standing_teammate_spawn.py` | `unset CLAUDECODE && uv run pytest -m live_claude --runtime claude --model claude-opus-4-6 --effort low -v -s` | 121.50s | **PASS** |
+   | `tests/test_feedback_keepalive.py` | `unset CLAUDECODE && uv run pytest -m live_claude --runtime claude --model claude-opus-4-6 --effort low -v -s` | 190.01s | **PASS** |
+
+   Standing-teammate last-phase output:
+   ```
+   [OK] claude-team spawn-standing invoked
+   [OK] echo-agent Agent() dispatched
+   [OK] ensign dispatch prompt includes standing-teammates section with echo-agent
+   [OK] SendMessage to echo-agent observed
+   [OK] archived entity body captured 'ECHO: ping' (data-flow assertion)
+   [OK] aggregate: echo-agent Agent() dispatched 1 time(s)
+   PASSED
+   ```
+
+   Keepalive last-phase output: Tier 1 PASS (no shutdown SendMessage before validation); Tier 2 SKIP (rejection not observed within budget — not a regression; Tier 2 is opportunistic on the current fixture); Static Template Checks PASS; final `RESULT: PASS`, 8/8 checks.
+
+4. **Static suite — DONE.** `make test-static` green twice: once after the timeout commit (439 passed), once after the entry_contains_text commit (439 passed).
+
+### Scope-deviation flags
+None this dispatch. All work stayed inside the team-lead-defined HARD scope: timeout tightening + site-1 arm + 1x opus-4-6 per test. Sites 2/3 predicates were NOT touched beyond their feedback-keepalive L213 timeout tightening. No skill prose / references / agents edits. No watcher (scripts/test_lib.py) edits.
+
+### Recommendation
+
+**merge.**
+
+- All three dispatch deliverables landed: timeouts tightened with justification, site-1 predicate covers the opus-4-6 delegation path, AC-3 opus-4-6 1x green on both converted tests.
+- Prior stage-report's AC-5 opus-4-7 keepalive 3/3 remains valid (commit history `11223abf`, `3a1b88a2`, `802eb444` preserved). Prior AC-5 standing-teammate 0/3 is upstream FO flakiness (tracked in #194) — this dispatch's entry_contains_text arm does NOT re-run opus-4-7 per team-lead instruction, but it logically strengthens opus-4-7's match surface too.
+- AC-1, AC-2, AC-6 remain met from prior stage report. AC-3 now verified 1x on current-pin opus-4-6.
+- No unresolved predicate regressions. Ready for validation + merge.
+
+### Commits this dispatch
+- `35456eb0` impl: #188 tighten stream-predicate timeouts on fast FO/ensign actions
+- `91bd6301` impl: #188 add entry_contains_text arm to site 1 _echo_captured_in_event
+- (this stage-report commit forthcoming)
