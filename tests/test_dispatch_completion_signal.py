@@ -21,7 +21,10 @@ from test_lib import (  # noqa: E402
 )
 
 
-@pytest.mark.xfail(reason="pending #154 — test assertions target `agents/first-officer.md` but post-#085 skill-preload the content lives in the skill/references layer", strict=False)
+# #154 reclassification: this test has no static FO content reads — its 1/5 inner failure is
+# runtime entity-advancement / SendMessage signaling, not the post-#085 content-home drift #154
+# targets. The xfail was misattributed by the #148 cycle-6 blanket marker pass; if the test fails
+# at validation, surface it under a fresh task id.
 @pytest.mark.live_claude
 def test_dispatch_completion_signal(test_project, model, effort):
     """Team-mode dispatch: ensign SendMessage(team-lead, "Done: ..."); FO advances status."""

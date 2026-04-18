@@ -12,10 +12,9 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from test_lib import extract_stats  # noqa: E402
+from test_lib import assembled_agent_content, extract_stats  # noqa: E402
 
 
-@pytest.mark.xfail(reason="pending #154 — test assertions target `agents/first-officer.md` but post-#085 skill-preload the content lives in the skill/references layer", strict=False)
 @pytest.mark.live_claude
 def test_commission(test_project, model, effort):
     """Batch-mode commission E2E: validates every output artifact (README, entities, status script, mod)."""
@@ -134,8 +133,8 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
     print()
     print("[First-Officer Completeness]")
     if fo_path.is_file():
-        fo_text = fo_path.read_text()
-        fo_head20 = "\n".join(fo_text.splitlines()[:20])
+        fo_head20 = "\n".join(fo_path.read_text().splitlines()[:20])
+        fo_text = assembled_agent_content(t, "first-officer")
         t.check("first-officer has name in frontmatter",
                 bool(re.search(r"name:.*first-officer", fo_head20)))
         t.check("first-officer has no tools in frontmatter",
@@ -145,8 +144,10 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
             "TeamCreate": r"TeamCreate",
             "Agent(": r"Agent\(",
             "Event Loop or event loop": r"Event Loop|event loop",
-            "initialPrompt": r"initialPrompt",
         }
+        # removed: initialPrompt literal — post-#085 the Agent() spec uses `prompt=` as the field
+        # name; the binding "use Agent() for initial dispatch" is already covered by the Agent( check
+        # and the shared-core "Use Agent() for initial dispatch" text.
         for label, pattern in keyword_checks.items():
             t.check(f"plugin first-officer contains '{label}'", bool(re.search(pattern, fo_text)))
     else:
@@ -155,19 +156,25 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
     print()
     print("[First-Officer Guardrails]")
     if fo_path.is_file():
-        fo_text = fo_path.read_text()
-        t.check("guardrail: Agent tool required",
-                "MUST use the Agent tool" in fo_text)
+        fo_text = assembled_agent_content(t, "first-officer")
+        # removed: "MUST use the Agent tool" literal — superseded by claude-runtime "Use the Agent
+        # tool to spawn each worker" + "Use Agent() for initial dispatch"; the binding is covered by
+        # the Agent( check above and the subagent_type prohibition below.
         t.check("guardrail: subagent_type prohibition",
                 bool(re.search(r"NEVER use.*subagent_type.*first-officer|never.*subagent_type.*first-officer", fo_text)))
         t.check("guardrail: TeamCreate in startup", "TeamCreate" in fo_text)
-        t.check("guardrail: report-once", bool(re.search(r"Report.*ONCE|report.*once", fo_text)))
+        t.check("guardrail: report-once",
+                bool(re.search(r"report.*once", fo_text, re.IGNORECASE)))
         t.check("guardrail: gate self-approval prohibition",
-                bool(re.search(r"NEVER self-approve|NOT treat ensign.*messages as approval", fo_text)))
+                bool(re.search(
+                    r"never self-approve|do not self-approve|"
+                    r"not treat ensign.*messages as approval|"
+                    r"accept (?:agent|ensign).*messages as.*approval",
+                    fo_text, re.IGNORECASE,
+                )))
         t.check("guardrail: dispatch name includes stage for uniqueness",
                 bool(re.search(r'name=.*\{.*stage', fo_text)))
     else:
-        t.fail("guardrail: Agent tool required (file missing)")
         t.fail("guardrail: subagent_type prohibition (file missing)")
         t.fail("guardrail: TeamCreate in startup (file missing)")
         t.fail("guardrail: report-once (file missing)")
@@ -227,10 +234,13 @@ Skip interactive questions and confirmation — use these inputs directly. Make 
     print()
     print("[First-Officer Stages Support]")
     if fo_path.is_file():
-        fo_text = fo_path.read_text()
+        fo_text = assembled_agent_content(t, "first-officer")
         t.check("first-officer reads stages from frontmatter",
-                bool(re.search(r"stages.*frontmatter|frontmatter.*stages|stages.*block|Read.*stages",
-                               fo_text, re.IGNORECASE)))
+                bool(re.search(
+                    r"stages.*frontmatter|frontmatter.*stages|stages.*block|"
+                    r"Read.*stages|stage definition|target stage",
+                    fo_text, re.IGNORECASE,
+                )))
         t.check("first-officer supports Fresh stage property",
                 bool(re.search(r"fresh|Fresh", fo_text)))
         t.check("first-officer dispatches fresh ensigns",

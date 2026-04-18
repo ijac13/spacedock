@@ -20,7 +20,6 @@ from test_lib import (  # noqa: E402
 )
 
 
-@pytest.mark.xfail(reason="pending #154 — test assertions target `agents/first-officer.md` but post-#085 skill-preload the content lives in the skill/references layer", strict=False)
 @pytest.mark.live_claude
 def test_repo_edit_guardrail(test_project, model, effort):
     """FO refuses to directly edit code/tests/mods on main before dispatch."""

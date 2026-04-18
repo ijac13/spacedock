@@ -73,7 +73,10 @@ SHUTDOWN_PATTERN = re.compile(
 )
 
 
-@pytest.mark.xfail(reason="pending #154 — test assertions target `agents/first-officer.md` but post-#085 skill-preload the content lives in the skill/references layer", strict=False)
+# #154 reclassification: this test has no static FO content reads — its 1/4 inner failure is
+# runtime-behavior drift in FO SendMessage / shutdown-pattern detection, not the post-#085
+# content-home drift #154 targets. The xfail was misattributed to #154 by the #148 cycle-6
+# blanket marker pass; if the test fails at validation, surface it under a fresh task id.
 @pytest.mark.live_claude
 def test_agent_captain_interaction(test_project, model, effort):
     """FO uses direct text to captain and does not prematurely shut down agents (AC6, AC7)."""
