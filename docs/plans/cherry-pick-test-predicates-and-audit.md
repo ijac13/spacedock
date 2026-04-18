@@ -398,3 +398,39 @@ Two live runs consumed:
 ### Cycle 2 Validation Summary
 
 Independent re-verification of cycle-2 scope-expansion ACs. All green. AC-8 (mid-run narration watcher removed) and AC-10 (both polling loops are three-signal data-flow OR-gates with no narration or single-signal shape remaining) confirmed by grep + direct inspection. AC-9 bare-mode haiku and AC-11/AC-4 opus-4-6 both PASS on independent live re-runs, with all three data-flow `[OK]` markers firing in each. Static suite at 426 passes. `skills/` diff remains empty. Recommendation: **PASSED**.
+
+## Stage Report (implementation, cycle 3)
+
+Cycle-3 scope per dispatch: add an early `pytest.xfail` for the `--team-mode=bare` + `--model=claude-haiku-4-5` combination in `tests/test_feedback_keepalive.py`. Do NOT touch the three watcher sites. Do NOT edit `skills/first-officer/*`. Single opus-4-6 live regression check authorized.
+
+1. **Stay in worktree / branch** — DONE. All edits and the single commit (`8300f7f8`) landed on `spacedock-ensign/cherry-pick-test-predicates-and-audit`. No branch switch. `skills/` untouched (diff still empty).
+
+2. **Read entity body for cycle-3 scope + AC-12/13/14** — DONE. The entity body itself did not carry a formalized cycle-3 Feedback Cycles subsection at dispatch time; the authoritative scope + AC list + evergreen-reason template came from the dispatch prompt. Followed dispatch verbatim: single early `pytest.xfail`, fires only when the combination holds, evergreen reason text.
+
+3. **Insert conditional `pytest.xfail` near the top of the test body** — DONE. Insertion point is immediately after fixture resolution (`t = test_project`) and before any fixture-setup calls / `w.expect` / `run_first_officer_streaming` invocation. Resolution logic reads `--team-mode` via `request.config.getoption("--team-mode")` and mirrors `conftest.py`'s `_resolve_team_mode` inline (auto → `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` env check; explicit `teams`/`bare` passes through). Guard condition: `resolved_team_mode == "bare" and model == "claude-haiku-4-5"`. Location: `tests/test_feedback_keepalive.py:130-148` post-edit. The test signature grew to include `request` (`def test_feedback_keepalive(test_project, model, effort, request)`).
+
+4. **Evergreen reason text** — DONE. Reason names the combination factually (`bare-mode claude-haiku-4-5`) and explains the structural shortcut (FO applies feedback via inline Bash+Edit without a fresh ensign dispatch, so the test's data-flow artifacts are not emitted). No temporal tokens (`observed`, `recently`, `(see #...)`, `#185`), no mention of specific opus/sonnet/haiku version-qualifiers beyond the factual model-name reference that the guard targets, no reference to the CI run or the session that prompted the fix. Closing clause names the re-enable condition (uniform feedback-dispatch contract across team-mode and model) rather than a date or issue reference.
+
+5. **Verify AC-12 (grep + inspection)** — DONE. `grep -n pytest.xfail tests/test_feedback_keepalive.py` returns `142:        pytest.xfail(`. Inspection confirms the call is nested inside the `if resolved_team_mode == "bare" and model == "claude-haiku-4-5":` conditional, and the reason text above the call passes the evergreen-token audit.
+
+6. **Static suite** — DONE. `unset CLAUDECODE && make test-static` reports `426 passed, 22 deselected, 10 subtests passed in 19.78s`. Threshold (≥426) met; no regression from cycle-2 baseline.
+
+7. **Verify AC-13 (bare+haiku short-circuits to XFAIL)** — DONE. Invocation: `unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --team-mode=bare --model claude-haiku-4-5 --effort low -v -s`. Result: `1 xfailed in 0.06s`. Pytest printed `XFAIL (bar...)` — no FO subprocess spawned, no fixture setup beyond `test_project` creation, no live cost. Structural short-circuit confirmed.
+
+8. **Verify AC-14 (opus-4-6 teams-mode regression)** — DONE, PASS. Invocation: `unset CLAUDECODE && uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --model claude-opus-4-6 --effort low -v -s`. Result: `1 passed in 130.24s`. Evidence:
+   - All three data-flow `[OK]` markers fire: implementation signal, validation ensign dispatch, feedback-cycle signal.
+   - `[Tier 1 — Keepalive at Transition] PASS: no shutdown SendMessage targets implementation agent between completion and validation dispatch`.
+   - `[Agent Dispatch Overview]`: 1 implementation dispatch, 1 validation dispatch, 2 total ensign dispatches.
+   - `8 passed, 0 failed (out of 8 checks)`. Cycle-2's data-flow OR-gates still fire; the xfail guard does NOT regress the teams-mode path.
+
+9. **Commit on branch** — DONE. Commit `8300f7f8`: `fix: #185 xfail test_feedback_keepalive on bare-mode haiku shortcut-path combination`. Single-file change (`tests/test_feedback_keepalive.py`, +20/-1).
+
+10. **Write Stage Report (implementation, cycle 3)** — DONE (this section).
+
+### Cycle 3 budget consumption
+
+One live opus-4-6 run (AC-14): 130.24s wallclock, opus tokens — estimate ~$0.75-1.00. AC-13 consumed 0.06s of local CPU and zero live API cost (structural xfail before any subprocess). Combined cycle-3 cost: ~$0.75-1.00, within the ~$1-2 guidance.
+
+### Summary
+
+Cycle-3 scope (single early `pytest.xfail` guard for `--team-mode=bare` + `--model=claude-haiku-4-5`) applied to `tests/test_feedback_keepalive.py` at line 142, guarded by a conditional that resolves `--team-mode` exactly as `conftest.py` does. AC-12 grep match confirmed; AC-13 bare-mode-haiku short-circuits to XFAIL in 0.06s with no live subprocess; AC-14 opus-4-6 teams-mode regression run passes in 130.24s with all three data-flow `[OK]` signals and `8/8 checks` green. `skills/` diff still empty. Single commit `8300f7f8` on branch. Ready for merge per captain's pre-approval (xfail is statically verifiable, opus-4-6 live evidence attached).
