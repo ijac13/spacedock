@@ -26,7 +26,7 @@ from test_lib import (  # noqa: E402
 @pytest.mark.live_claude
 @pytest.mark.live_codex
 @pytest.mark.serial
-def test_gate_guardrail(test_project, runtime):
+def test_gate_guardrail(test_project, runtime, model, effort):
     """FO halts at a gate and does not self-approve (claude + codex)."""
     t = test_project
     agent_id = "spacedock:first-officer"
@@ -48,7 +48,7 @@ def test_gate_guardrail(test_project, runtime):
             t,
             "Process all tasks through the workflow.",
             agent_id=agent_id,
-            extra_args=["--max-budget-usd", "1.00"],
+            extra_args=["--model", model, "--effort", effort, "--max-budget-usd", "1.00"],
         ) as w:
             fo_exit = w.expect_exit(timeout_s=420)
         if fo_exit != 0:
