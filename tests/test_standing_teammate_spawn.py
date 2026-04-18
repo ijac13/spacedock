@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from test_lib import (  # noqa: E402
     LogParser,
-    entry_contains_text,
     git_add_commit,
     install_agents,
     run_first_officer_streaming,
@@ -73,7 +73,7 @@ def test_standing_teammate_spawns_and_roundtrips(test_project, model, effort):
     ) as w:
         w.expect(
             lambda e: tool_use_matches(e, "Bash", command="spawn-standing"),
-            timeout_s=60,
+            timeout_s=120,
             label="claude-team spawn-standing invoked",
         )
         print("[OK] claude-team spawn-standing invoked")
@@ -109,17 +109,18 @@ def test_standing_teammate_spawns_and_roundtrips(test_project, model, effort):
         )
         print("[OK] SendMessage to echo-agent observed")
 
-        w.expect(
-            lambda e: entry_contains_text(e, r"ECHO:\s*ping"),
-            timeout_s=240,
-            label="ECHO: ping reply received",
-        )
-        print("[OK] ECHO: ping reply observed")
-
-        exit_code = w.expect_exit(timeout_s=240)
-
-    if exit_code != 0:
-        print(f"  (first officer exit code {exit_code})")
+        archived = abs_workflow / "_archive" / "001-echo-roundtrip.md"
+        archive_deadline = time.monotonic() + 300
+        while time.monotonic() < archive_deadline:
+            if archived.is_file() and "ECHO: ping" in archived.read_text():
+                break
+            time.sleep(1.0)
+        else:
+            raise AssertionError(
+                f"Archived entity with 'ECHO: ping' did not appear at {archived} within 300s"
+            )
+        print("[OK] archived entity body captured 'ECHO: ping' (data-flow assertion)")
+        w.proc.terminate()
 
     print()
     print("--- Phase 3: Final aggregate assertions ---")

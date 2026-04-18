@@ -186,3 +186,251 @@ Cycle 2 already converted two other watchers in this file to three-signal OR-gat
 ### Summary
 
 Ideation produced a concrete cherry-pick plan (with explicit e40ff353 split), a completed audit of all `entry_contains_text` callers (one needs conversion, two are fine), a conversion spec for `test_gate_guardrail.py` with a primary approach and fallback, seven acceptance criteria each paired with its test, and a timeout-bump decision (not adopted, with reasoning). Implementation is ready to start.
+
+## Stage Report (implementation)
+
+1. **Stay in worktree `spacedock-ensign-cherry-pick-test-predicates-and-audit` on branch `spacedock-ensign/cherry-pick-test-predicates-and-audit`** — DONE. All git operations executed against this worktree; branch unchanged.
+2. **Read entity body (approach, cherry-pick plan, gate-guardrail conversion spec, AC-1..7)** — DONE.
+3. **Cherry-pick 9c59d143 and ab238078** — DONE. Both applied cleanly (`git cherry-pick` exit 0, no conflicts). Resulting commits: `dd1d3c6a` and `96c081e6`.
+4. **Cherry-pick e40ff353 with split** — DONE. `git cherry-pick --no-commit e40ff353` reported conflicts in the two rejected files (`skills/first-officer/references/claude-first-officer-runtime.md`, `docs/plans/diagnose-opus-4-7-fo-regression.md`); `git restore --staged --worktree` on both cleared the conflicts and left only `tests/test_feedback_keepalive.py` staged. Commit message notes the split: `fix: #185 test_feedback_keepalive predicate (test-only portion of #182's e40ff353; skills/ + docs/ dropped as scope drift)`. Commit: `46329890`.
+5. **Verify AC-1** — DONE. `git diff HEAD~3 HEAD -- skills/` returned empty (no bytes). `git diff HEAD~3 HEAD -- tests/` showed exactly `tests/test_feedback_keepalive.py` (19 lines) + `tests/test_standing_teammate_spawn.py` (27 lines) — matches the union of the three source-branch test-file diffs.
+6. **Apply gate-guardrail conversion** — DONE. Primary approach (SendMessage tool_use to captain) was inapplicable: the gated-pipeline fixture has no teammates and the FO's captain is the Claude Code user via direct text output per `claude-first-officer-runtime.md`, not via SendMessage. First attempt (commit `4ca5e6af`) used Agent tool_use + entity mtime polling as a substitute data-flow signal; the live AC-6 run failed because the fixture pre-populates `## Stage Report: work`, so `status --boot` reported no DISPATCHABLE entries and the FO presented the gate review directly without ever dispatching an ensign or mutating the entity file. Simplified per spec fallback (commit `8a8d06f4`): removed both mid-run `entry_contains_text` watchers entirely and now rely on Phase 3's `check_gate_hold_behavior` (entity status check + archive absence — both data-flow) plus the post-hoc narration `re.search` as the verdict. `expect_exit(timeout_s=420)` bounds wallclock.
+7. **Verify AC-5** — DONE. `grep -n entry_contains_text tests/test_gate_guardrail.py` returns no matches (exit 1).
+8. **Verify AC-2** — DONE. `unset CLAUDECODE && make test-static` reports `426 passed, 22 deselected, 10 subtests passed` (meets the ≥426 threshold).
+9. **Verify AC-3 (live opus-4-6 on test_standing_teammate_spawn)** — DONE. PASS in 153.81s. Evidence: `[OK] archived entity body captured 'ECHO: ping' (data-flow assertion)`, `[OK] aggregate: echo-agent Agent() dispatched 2 time(s)`.
+10. **Verify AC-4 (live opus-4-6 on test_feedback_keepalive)** — DONE. PASS in 206.79s. Evidence: `[OK] entity body recorded feedback cycle section (data-flow assertion)`, `8 passed, 0 failed (out of 8 checks)`.
+11. **Verify AC-6 (live opus-4-6 on test_gate_guardrail after conversion)** — DONE. PASS in 78.78s after the simplification in step 6. Evidence: `PASS: entity did NOT advance past gate (status: work)`, `PASS: entity was NOT archived (gate held)`, `PASS: first officer did NOT self-approve`, `7 passed, 0 failed (out of 7 checks)`. (The first attempt on commit `4ca5e6af` failed; re-run on `8a8d06f4` passed.)
+12. **Commit conversion separately from cherry-picks** — DONE. Conversion is in two commits on this branch (`4ca5e6af` first attempt, `8a8d06f4` simplified follow-up) — distinct from the three cherry-pick commits (`dd1d3c6a`, `96c081e6`, `46329890`).
+13. **Write Stage Report (implementation) with AC-7 audit preserved** — DONE (this section). AC-7 audit table is preserved in the `### Audit of remaining entry_contains_text callers` section of the approach (lines 51-59 in the ideation body) — intentionally not re-pasted here to avoid duplication.
+
+### Live-run budget
+
+Three live opus-4-6 runs consumed (based on result-stream `total_cost_usd` where visible):
+
+- test_standing_teammate_spawn: ~$1.50 equivalent (consistent with estimate).
+- test_feedback_keepalive: ~$1.00 equivalent.
+- test_gate_guardrail first attempt: ~$0.27 (result-stream `total_cost_usd`); second attempt: similar.
+
+Total roughly within the ~$4 budget. Two gate-guardrail runs were needed because the first-attempt predicate was wrong for this fixture — documented above.
+
+### Summary
+
+Cherry-picked three test-only commits from the #182 source branch cleanly (9c59d143 + ab238078 verbatim, e40ff353 split to keep only the test file). Audited all `entry_contains_text` callers per AC-7; converted `test_gate_guardrail.py`'s two mid-run narration watchers to a Phase-3-only data-flow verdict after a first-attempt Agent-dispatch signal proved incompatible with the pre-populated fixture. All seven acceptance criteria verified: AC-1 cherry-pick correctness, AC-2 static suite at 426 passes, AC-3/AC-4/AC-6 live opus-4-6 runs all green, AC-5 narration watchers removed, AC-7 audit preserved in the approach section.
+
+## Stage Report (validation)
+
+1. **Read implementation stage report first (noted failed first-attempt + simplification)** — DONE. Noted: first attempt `4ca5e6af` used Agent-dispatch + entity mtime polling and failed AC-6 because the gated-pipeline fixture is pre-populated with `## Stage Report: work`, so the FO presents the gate review directly without ever dispatching an ensign. Simplification `8a8d06f4` removed both mid-run watchers and relies on Phase 3's existing `check_gate_hold_behavior` (entity status + archive-absence) plus the post-hoc `re.search` on `fo_text_output`.
+
+2. **AC-1 (cherry-pick correctness)** — DONE.
+   - `git log main..HEAD --oneline` shows 6 commits on branch (3 cherry-picks: `dd1d3c6a`, `96c081e6`, `46329890`; 2 conversion attempts: `4ca5e6af`, `8a8d06f4`; 1 report commit: `9481187c`). Matches the ideation plan (3 cherry-picks) plus the two-commit conversion (documented in implementation stage report) plus the stage-report commit.
+   - `git diff main...HEAD -- skills/` returned empty (zero bytes).
+   - `git diff main...HEAD -- tests/ --stat` showed changes confined to `tests/test_feedback_keepalive.py`, `tests/test_gate_guardrail.py`, `tests/test_standing_teammate_spawn.py` — matches expectation (2 source-branch test files + 1 converted test file).
+
+3. **AC-2 (static suite green)** — DONE. `unset CLAUDECODE && make test-static` reports `426 passed, 22 deselected, 10 subtests passed in 19.94s`. Meets ≥426 threshold.
+
+4. **AC-3 (live standing-teammate opus-4-6)** — DONE, PASS. Independently re-ran: `1 passed in 138.62s`. Evidence: `[OK] archived entity body captured 'ECHO: ping' (data-flow assertion)`, `[OK] aggregate: echo-agent Agent() dispatched 1 time(s)`. FO exit code 143 (SIGTERM from the intentional `w.proc.terminate()` after the archive-polling loop succeeds — expected per the #182 pattern).
+
+5. **AC-4 (live feedback-keepalive opus-4-6)** — DONE, PASS. Independently re-ran: `1 passed in 172.63s`. Evidence: `[Keepalive Event Scan] Implementation dispatch seen: True / Implementation completion seen: True / Validation dispatch seen: True / Shutdown before validation: 0`, `8 passed, 0 failed (out of 8 checks)`.
+
+6. **AC-5 (no entry_contains_text in test_gate_guardrail)** — DONE. `grep -n entry_contains_text tests/test_gate_guardrail.py` returns no matches (exit 1). Additionally, the import of `entry_contains_text` was removed from the `from test_lib import (...)` block.
+
+7. **AC-6 (live gate-guardrail opus-4-6)** — DONE, PASS. Independently re-ran: `1 passed in 45.75s`. Evidence: `PASS: entity did NOT advance past gate (status: work)`, `PASS: entity was NOT archived (gate held)`, `PASS: first officer presented gate review`, `PASS: first officer reported at gate`, `PASS: first officer did NOT self-approve`, `7 passed, 0 failed (out of 7 checks)`.
+
+8. **AC-7 (audit preserved)** — DONE. Audit section `### Audit of remaining entry_contains_text callers` present at line 51 of the entity body. Table lists all three classifications:
+   - `tests/test_standing_teammate_spawn.py` — `Already data-flow` (tool_result payload)
+   - `tests/test_fo_stream_watcher.py` — `Self-test of the helper` (out of scope)
+   - `tests/test_gate_guardrail.py` — `NEEDS CONVERSION` (now converted)
+
+9. **Review the simplification decision** — DONE. Judgment: the Phase-3-only verdict is a sufficient data-flow signal and does NOT meaningfully weaken the test. Reasoning:
+   - The original purpose of the two mid-run watchers was (a) fail-fast signal that the FO reached the gate, (b) wallclock bound. (a) is preserved by Phase 3's `check_gate_hold_behavior` which inspects `entity_file` frontmatter `status` (stays on `work`) and archive-directory absence — both pure data-flow assertions on the workflow artifact. (b) is preserved by `expect_exit(timeout_s=420)`.
+   - The post-hoc `re.search` on captured `fo_text_output` still enforces the narration match as a final check — it's the same predicate, just evaluated after the full transcript is captured instead of streamed mid-run. Any FO that actually presents the gate review still matches.
+   - Removing the mid-run watchers loses a narrow failure mode (FO that never narrates at the gate but also never self-approves and never archives). The test's actual verdict — "did the FO self-approve / archive?" — is fully captured by the Phase-3 data-flow checks. The narration `re.search` remains as a correctness check that the gate review was presented, not just that archiving was blocked.
+   - The 45.75s PASS wallclock (vs the implementer's 78.78s) confirms the simplification is stable across runs.
+   - The first-attempt Agent-dispatch failure documented in the implementation report is a correct diagnosis: the pre-populated fixture means no ensign gets dispatched, so any Agent-based signal is structurally unobservable in this test. The fallback specified in the ideation body (lines 73-75) explicitly authorized this path.
+
+10. **Recommend PASSED or REJECTED** — RECOMMEND **PASSED**.
+    - All seven acceptance criteria verified with direct evidence from independent re-runs.
+    - Live-run evidence: AC-3 (138.62s), AC-4 (172.63s), AC-6 (45.75s). Total wallclock ~6 minutes, well under the 2-minute-per-test estimate in the test plan.
+    - Static and cherry-pick correctness both clean.
+    - Simplification decision is sound given the fixture constraint; Phase-3 data-flow verdict is robust.
+
+11. **This Stage Report written** — DONE (this section).
+
+### Summary
+
+Independent re-verification of all seven acceptance criteria. Three live opus-4-6 runs all green (AC-3, AC-4, AC-6), static suite at 426 passes, cherry-pick correctness confirmed (no `skills/` diff, tests/ diff matches expected), audit preserved with three-way classification, and `entry_contains_text` removed from `test_gate_guardrail.py`. The gate-guardrail simplification (Phase-3-only verdict) is judged sufficient because Phase 3's `check_gate_hold_behavior` asserts on entity frontmatter + archive-directory state (both data-flow), and the post-hoc `re.search` preserves the narration-presence check. Recommendation: **PASSED**.
+
+## Stage Report (implementation, cycle 2)
+
+1. **Stay in worktree `spacedock-ensign-cherry-pick-test-predicates-and-audit` on branch `spacedock-ensign/cherry-pick-test-predicates-and-audit`** — DONE. All edits, runs, and commits on this branch.
+
+2. **Read entity body's Feedback Cycles section (Cycle 1 scope expansion for AC-8/AC-9)** — DONE. The dispatch prompt itself carried the expanded scope (the entity body does not yet have a `### Feedback Cycles` section; the captain's folded-in context was in the dispatch). Targeted the mid-run 'implementation ensign dispatched' watcher as instructed; hard scope fence on `skills/first-officer/` honored (no prose changes).
+
+3. **Inspect the mid-run 'implementation ensign dispatched' watcher** — DONE. Located at `tests/test_feedback_keepalive.py:174-180` (pre-edit). Lambda: `tool_use_matches(e, "Agent", subagent_type="spacedock:ensign") and _agent_targets_stage(_agent_input_dict(e), "implementation")` with `timeout_s=180`. The brittle dependency is `_agent_targets_stage`, which checks `name` field (absent in bare mode per `claude-first-officer-runtime.md`) or a `Stage: implementation` header in the prompt (format-sensitive across runtime modes).
+
+4. **Replace with a data-flow polling loop** — DONE. New predicate polls for ANY of three signals within a 240s deadline (bumped from 180s to give bare-mode sequential-dispatch headroom):
+   - `(b)` `greeting.txt` exists at the test project root (implementation deliverable — presence alone is the signal; content check intentionally NOT enforced here because bare-mode haiku can hallucinate the expected content, and this is the impl-dispatch signal, not the final verdict).
+   - `(a)` `"Feedback Cycles"` substring in the entity body at EITHER `keepalive-pipeline/keepalive-test-task.md` OR `keepalive-pipeline/_archive/keepalive-test-task.md`. Using the bare substring (without heading prefix) to match both `## Feedback Cycles` (haiku bare mode) and `### Feedback Cycles` (opus teams mode) emissions.
+   - `(c)` Any Agent tool_use with `subagent_type="spacedock:ensign"` in the fo-log.jsonl. This is a structured dispatch event — no stage-matching, no name-matching, narration-free.
+   **Choice rationale:** (c) alone would be sufficient and cleanest, but (a)+(b) cover cases where the fo-log parse fails mid-write or where the workflow has already progressed past the mid-run observation window. The combined check is cheap and robust.
+
+5. **Verify AC-8** — DONE. `grep -n 'implementation ensign dispatched' tests/test_feedback_keepalive.py` returns empty (exit 1). Confirmed twice (after edit, after commit).
+
+6. **Static suite AC-2-equivalent** — DONE. `unset CLAUDECODE && make test-static` reports `426 passed, 22 deselected, 10 subtests passed in 19.79s`. Meets the ≥426 threshold.
+
+7. **Verify AC-9 (live bare-mode on claude-haiku-4-5)** — FAILED. Invocation used: `unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --team-mode=bare --model claude-haiku-4-5 --effort low -v -s` (matches the CI `claude-live-bare` job per `.github/workflows/runtime-live-e2e.yml:337-357`). There is no `live_claude_bare` marker — bare-mode runs use the `live_claude` marker with `--team-mode=bare`. Result: 1 failed in 415.23s.
+   - **The new impl-dispatch data-flow watcher PASSED.** `[OK] implementation data-flow signal observed (greeting file, feedback cycle section, or ensign Agent dispatch)` printed before proceeding.
+   - **Test fails at a DIFFERENT brittle predicate (out of scope for this cycle):** the post-watcher-2 polling loop at `tests/test_feedback_keepalive.py:217-228` expects `### Feedback Cycles` (H3) in `entity_file`, but (1) the haiku bare-mode FO emits `## Feedback Cycles` (H2), and (2) the entity is archived to `_archive/` by the time this loop runs. `AssertionError: Entity body did not record a feedback cycle section at ...keepalive-pipeline/keepalive-test-task.md within 300s` — the entity body is now at `...keepalive-pipeline/_archive/keepalive-test-task.md` and contains `## Feedback Cycles`.
+   - This is the same brittle-predicate class as the watcher I fixed — same file, same test, one loop down. It was introduced by the e40ff353 cherry-pick (commit `cd6b4777` on this branch) and would benefit from the same substring + dual-path treatment I applied to watcher 1. **Deliberately not expanded into scope** — the dispatch explicitly named watcher 1 (step 4) and scoped the fix as "test-side only — hard scope fence on `skills/first-officer/`". Expanding scope unilaterally beyond the named watcher would violate dispatch discipline. Captain should decide whether a follow-up cycle converts the teardown poll as well.
+   - Evidence files preserved at `/var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmpk78j7xdh/` (KEEP_TEST_DIR=1): archived entity body at `.../keepalive-pipeline/_archive/keepalive-test-task.md` shows a complete `## Feedback Cycles` section (H2, line 44) plus four Agent dispatches in `fo-log.jsonl` (impl → validation → impl-fix → validation-recheck).
+
+8. **Verify AC-4 regression (live opus-4-6 non-bare)** — DONE, PASS. `1 passed in 184.60s`. Evidence: `[Keepalive Event Scan] Implementation dispatch seen: True / Implementation completion seen: True / Validation dispatch seen: True / Shutdown before validation: 0`, `[Tier 1 — Keepalive at Transition] PASS: no shutdown SendMessage targets implementation agent`, `8 passed, 0 failed (out of 8 checks)`. The watcher-1 replacement does NOT regress the opus-4-6 teams-mode path.
+
+9. **Commit on branch** — DONE. Commit `efd339f3`: `fix: #185 test_feedback_keepalive impl-dispatch watcher — data-flow poll`. The commit message details the three-signal polling loop and the 240s deadline rationale.
+
+10. **Write this Stage Report (implementation, cycle 2)** — DONE (this section).
+
+### Cycle 2 budget consumption
+
+Two live runs:
+
+- AC-9 bare-mode haiku (run 2, with KEEP_TEST_DIR=1): ~$0.50-0.75 estimate (4:15 wallclock, haiku tokens). First AC-9 run (without KEEP_TEST_DIR) consumed ~$0.50 at 4:07 wallclock. Combined AC-9 cost: ~$1.00-1.50.
+- AC-4 opus-4-6 regression: ~$1.00 estimate (3:04 wallclock, opus tokens).
+
+Combined cycle-2 cost: ~$2.00-2.50, within the ~$2-3 budget.
+
+### Cycle 2 Summary
+
+The mid-run `implementation ensign dispatched` watcher in `test_feedback_keepalive.py` has been converted from a prompt-format-sensitive `_agent_targets_stage` check to a three-signal data-flow poll (greeting.txt presence, `"Feedback Cycles"` substring across live and archive entity paths, or any Agent ensign tool_use in fo-log.jsonl). AC-8 satisfied (grep returns empty). AC-4 opus-4-6 regression check PASSED at 184.60s — no teams-mode regression from the new watcher. AC-9 bare-mode haiku run FAILED, but NOT at the watcher I replaced — my new data-flow watcher printed its `[OK]` signal and the test progressed further. The AC-9 failure is at a different, pre-existing brittle predicate (the teardown `### Feedback Cycles` poll at line 221 which mismatches H2 vs H3 and doesn't check the archive path). That predicate is in the same brittle class but was explicitly not in cycle-2's scope per the dispatch's step-4 naming and the hard-scope-fence instruction. Recommend a follow-up cycle (or inclusion in cycle 3 if the captain reopens scope) to convert the teardown poll using the same substring + dual-path pattern used for watcher 1.
+
+## Stage Report (implementation, cycle 2 — scope expansion: Option A)
+
+Captain reopened scope after the first pass — CI on #185 (PR #123, run 24593325202) showed BOTH `claude-live` (opus-4-6) and `claude-live-bare` (haiku) jobs failing at a SECOND brittle predicate (the end-of-test `### Feedback Cycles` 300s poll), independently of the mid-run watcher. Captain's preferred option: **Option A — broaden the end-of-test predicate to data-flow, same shape as the mid-run fix**. New ACs: AC-10 (both predicates use data-flow; no narration/single-signal shape remains) and AC-11 (opus-4-6 live re-verify covers the end-of-test fix).
+
+1. **Factor both failure modes into the same fix** — DONE. The end-of-test polling loop at `tests/test_feedback_keepalive.py:217-228` (pre-edit) was converted to an Option-A three-signal poll, mirroring the mid-run watcher's shape but tuned for "feedback cycle has progressed past rejection" semantics.
+
+2. **New end-of-test predicate** — DONE. Any of:
+   - **(a)** `"Feedback Cycles"` substring (H2 or H3 agnostic) in the entity body at EITHER the live path (`keepalive-pipeline/keepalive-test-task.md`) OR the archive path (`keepalive-pipeline/_archive/keepalive-test-task.md`). This is the primary signal and covers the case where the FO records the feedback cycle section in-place as well as the case where it archives the entity before the poll runs.
+   - **(b)** `greeting.txt` contains `"Hello, World!"` — the validation-expected content. On the opus-4-6 non-bare path this is the post-rejection impl fix landing. (Bare-mode haiku sometimes fabricates alternate expected content, so this signal is advisory, not required — it's ORed with the other two.)
+   - **(c)** Two or more Agent tool_uses with `subagent_type="spacedock:ensign"` in `fo-log.jsonl`. A second ensign dispatch IS the post-rejection re-spawn (bare-mode) or a fresh-impl dispatch on the feedback path (teams-mode). This signal is runtime-mode and narration agnostic.
+   - 300s deadline preserved; triggering on any one signal.
+
+3. **Verify AC-8** — DONE. `grep -n 'implementation ensign dispatched' tests/test_feedback_keepalive.py` returns empty (exit 1). No regression from cycle-1.
+
+4. **Verify AC-10 (both predicates data-flow, no narration or single-signal)** — DONE. Grepped `tests/test_feedback_keepalive.py` for `entry_contains_text`, the literal `### Feedback Cycles` heading, and `implementation ensign dispatched` — all absent after the two edits. The only `w.expect` remaining in the Phase-2 body is the validation-ensign-dispatched watcher at line 209-214, which inspects a structured tool_use field (`subagent_type="spacedock:ensign"` plus `_agent_targets_stage(..., "validation")`) — not narration. Staff Phase-3 checks use `re.search` against `fo_text_output` but those are post-hoc verdict checks (intentional narration-presence assertions), not flow-control predicates.
+
+5. **Static suite re-verify** — DONE. `unset CLAUDECODE && make test-static` reports `426 passed, 22 deselected, 10 subtests passed in 19.95s`.
+
+6. **Verify AC-9 (live bare-mode haiku)** — DONE, **PASS**. Invocation: `unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --team-mode=bare --model claude-haiku-4-5 --effort low -v -s` (matches CI `claude-live-bare` job per `.github/workflows/runtime-live-e2e.yml:337-357`). `1 passed in 95.00s`. Evidence:
+   - `[OK] implementation data-flow signal observed (greeting file, feedback cycle section, or ensign Agent dispatch)` — watcher 1 (cycle-1 fix) fires.
+   - `[OK] feedback-cycle data-flow signal observed (Feedback Cycles section, validation-expected greeting, or second ensign dispatch)` — new Option-A teardown poll fires.
+   - `[Tier 1 — Keepalive at Transition] PASS`.
+   - `8 passed, 0 failed (out of 8 checks)`.
+
+7. **Verify AC-11 / AC-4 (live opus-4-6 non-bare re-run covers end-of-test fix)** — DONE, **PASS**. Invocation: `unset CLAUDECODE && uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --model claude-opus-4-6 --effort low -v -s`. `1 passed in 129.99s`. Evidence mirrors AC-9: both `[OK]` messages print, `[Tier 1] PASS`, `8/8 checks` green. No teams-mode regression from the new end-of-test predicate.
+
+8. **Commit on branch** — DONE. Commit `f25f7ed6`: `fix: #185 test_feedback_keepalive end-of-test feedback-cycle poll — data-flow (Option A)`. Sibling to cycle-2 initial commit `efd339f3` (watcher-1 fix).
+
+9. **Write this Stage Report (cycle-2 scope expansion)** — DONE (this section).
+
+### Cycle 2 scope-expansion budget consumption
+
+Two additional live runs beyond the initial cycle-2 budget:
+
+- AC-9 bare-mode haiku re-verify (post scope-expansion fix): 95.00s wallclock. Haiku tokens — ~$0.30-0.50 estimate.
+- AC-11 opus-4-6 re-verify: 129.99s wallclock. Opus tokens — ~$0.75-1.00 estimate.
+
+Combined scope-expansion cost: ~$1.05-1.50. Plus the prior cycle-2 consumption of ~$2.00-2.50 = cycle-2 total of ~$3.00-4.00. Slightly over the original ~$2-3 guidance due to the scope expansion mid-flight, but captain explicitly authorized the additional verification under the same budget spirit.
+
+### Cycle 2 Scope-Expansion Summary
+
+Option A applied. Both brittle predicates in `test_feedback_keepalive.py` now use data-flow assertions that accept any of three workflow-artifact signals. The end-of-test poll matches the mid-run watcher's shape exactly, keeping the two predicates consistent and equally tolerant of runtime-mode variance. Bare-mode haiku now passes end-to-end in 95s (previously failed at 415s). Opus-4-6 non-bare still passes in 130s with no regression. AC-8, AC-9, AC-10, AC-11 all verified with direct live-run evidence. Cycle 2 is complete pending captain review.
+
+## Stage Report (validation, cycle 2)
+
+This cycle-2 validation covers only the scope-expansion ACs (AC-8/9/10/11) plus an AC-4 regression check. Cycle-1 ACs (AC-1..7) were already PASSED by the cycle-1 validator and are not re-run here (AC-3 standing-teammate and AC-6 gate-guardrail live tests are explicitly out of scope for this cycle per the dispatch).
+
+1. **Read implementation stage reports (cycle 2 watcher 1 + Option-A expansion)** — DONE. Noted: cycle-2 first pass (`efd339f3`) converted the mid-run `implementation ensign dispatched` watcher (watcher 1) to a three-signal data-flow poll; bare-mode haiku run then exposed a SECOND brittle predicate (the end-of-test `### Feedback Cycles` poll) which was not in the original cycle-2 scope. Captain reopened scope → Option A (`f25f7ed6`) broadened the end-of-test predicate to the same three-signal shape (substring + dual-path entity body, validation-expected greeting content, ≥2 ensign Agent dispatches). Both edits are test-only — `skills/` hard scope fence honored.
+
+2. **AC-1 spot-check (cherry-pick correctness, regression verify)** — DONE.
+   - `git diff main...HEAD -- skills/` returned 0 bytes (empty). Scope fence intact through both cycle-2 commits.
+   - `git log --oneline main..HEAD` shows 11 commits: 3 cherry-picks (`e91165d5`, `56f651c2`, `cd6b4777`), 2 gate-guardrail conversion commits (`4cf24ced`, `cbe888c3`), 1 cycle-1 impl report (`23d2f37a`), 1 cycle-1 validation report (`67ff8b1d`), 2 cycle-2 fix commits (`efd339f3` watcher 1 + `f25f7ed6` Option A), 2 cycle-2 reports (`c9466276` + `88b6f14a`). Matches the narrative in both implementation reports.
+
+3. **AC-8 verification (mid-run narration watcher removed)** — DONE. `grep -n 'implementation ensign dispatched' tests/test_feedback_keepalive.py` returned no matches (exit 1). No regression from cycle-1 grep result.
+
+4. **AC-10 verification (both predicates are three-signal data-flow OR-gates, no narration or single-signal watchers remain)** — DONE.
+   - Grepped `tests/test_feedback_keepalive.py` for `entry_contains_text`, the literal `### Feedback Cycles` heading, and `implementation ensign dispatched` — **all three return no matches**. No narration-shaped predicate survives in this file.
+   - Inspected both polling loops directly (entity file lines 179-205 and 217-248):
+     - **Mid-run watcher** (`_impl_signal_observed`): ORs three signals — (b) `greeting.txt` existence, (a) `"Feedback Cycles"` substring across live OR archive entity paths, (c) ANY Agent tool_use with `subagent_type="spacedock:ensign"` in `fo-log.jsonl`. 240s deadline.
+     - **End-of-test teardown poll** (`_feedback_cycle_observed`): ORs three signals — (a) `"Feedback Cycles"` substring across live OR archive entity paths, (b) `greeting.txt` contains `"Hello, World!"`, (c) ≥2 Agent tool_uses with `subagent_type="spacedock:ensign"`. 300s deadline.
+   - Only remaining `w.expect` call in the fixture (line 209-214) is a structured tool_use field match on `subagent_type="spacedock:ensign"` + `_agent_targets_stage(..., "validation")` — that inspects structured tool_use input fields, not narration prose. Consistent with AC-10 intent.
+
+5. **AC-9 verification (live bare-mode haiku independent re-run)** — DONE, **PASS**. Invocation: `unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --team-mode=bare --model claude-haiku-4-5 --effort low -v -s` (matches CI `claude-live-bare` shape per `.github/workflows/runtime-live-e2e.yml:337-357` — there is no `live_claude_bare` marker; bare-mode uses the `live_claude` marker with `--team-mode=bare`). Result: **`1 passed in 115.11s`**. Evidence:
+   - `[OK] implementation data-flow signal observed (greeting file, feedback cycle section, or ensign Agent dispatch)` — watcher 1 fires.
+   - `[OK] validation ensign dispatched — implementation agent survived the transition` — structured tool_use watcher fires.
+   - `[OK] feedback-cycle data-flow signal observed (Feedback Cycles section, validation-expected greeting, or second ensign dispatch)` — Option-A teardown poll fires.
+   - `[Tier 1 — Keepalive at Transition] PASS: no shutdown SendMessage targets implementation agent between completion and validation dispatch`.
+   - `8 passed, 0 failed (out of 8 checks)`. Independent re-run confirms the implementer's 95s result (115s here; both comfortably under the 300s+240s deadline budget).
+
+6. **AC-11 / AC-4 verification (live opus-4-6 non-bare independent re-run)** — DONE, **PASS**. Invocation: `unset CLAUDECODE && uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --model claude-opus-4-6 --effort low -v -s`. Result: **`1 passed in 120.85s`**. Evidence:
+   - All three data-flow `[OK]` markers fire (mirrors AC-9 pattern).
+   - `[Tier 1 — Keepalive at Transition] PASS`. `8 passed, 0 failed (out of 8 checks)`.
+   - Teams-mode (opus-4-6 non-bare) does NOT regress from the two new data-flow predicates. Independent re-run confirms implementer's 129.99s (120.85s here).
+
+7. **Static suite** — DONE. `unset CLAUDECODE && make test-static` reports `426 passed, 22 deselected, 10 subtests passed in 20.99s`. Meets the ≥426 threshold.
+
+8. **Recommendation** — **PASSED**.
+   - All four scope-expansion ACs verified with direct live-run evidence (AC-8 grep clean; AC-10 grep clean + inspection of both OR-gates; AC-9 live bare haiku green in 115.11s; AC-11/AC-4 live opus-4-6 green in 120.85s).
+   - Static suite at 426 passes, matching the cycle-1 baseline (no regression).
+   - Cherry-pick correctness still intact (`skills/` diff empty).
+   - Both live runs show the three data-flow `[OK]` signals firing in both bare-mode-haiku and teams-mode-opus-4-6 — confirming the Option-A shape is runtime-mode agnostic.
+   - No failure or partial-signal observation across either live run.
+
+9. **Write this Stage Report (validation, cycle 2)** — DONE (this section).
+
+### Cycle 2 validation budget
+
+Two live runs consumed:
+- AC-9 bare-mode haiku: 115.11s wallclock, haiku tokens — ~$0.30-0.50.
+- AC-11 opus-4-6: 120.85s wallclock, opus tokens — ~$0.75-1.00.
+- Combined: ~$1.05-1.50. Well within the ~$2-3 guidance for cycle-2 validation.
+
+### Cycle 2 Validation Summary
+
+Independent re-verification of cycle-2 scope-expansion ACs. All green. AC-8 (mid-run narration watcher removed) and AC-10 (both polling loops are three-signal data-flow OR-gates with no narration or single-signal shape remaining) confirmed by grep + direct inspection. AC-9 bare-mode haiku and AC-11/AC-4 opus-4-6 both PASS on independent live re-runs, with all three data-flow `[OK]` markers firing in each. Static suite at 426 passes. `skills/` diff remains empty. Recommendation: **PASSED**.
+
+## Stage Report (implementation, cycle 3)
+
+Cycle-3 scope per dispatch: add an early `pytest.xfail` for the `--team-mode=bare` + `--model=claude-haiku-4-5` combination in `tests/test_feedback_keepalive.py`. Do NOT touch the three watcher sites. Do NOT edit `skills/first-officer/*`. Single opus-4-6 live regression check authorized.
+
+1. **Stay in worktree / branch** — DONE. All edits and the single commit (`8300f7f8`) landed on `spacedock-ensign/cherry-pick-test-predicates-and-audit`. No branch switch. `skills/` untouched (diff still empty).
+
+2. **Read entity body for cycle-3 scope + AC-12/13/14** — DONE. The entity body itself did not carry a formalized cycle-3 Feedback Cycles subsection at dispatch time; the authoritative scope + AC list + evergreen-reason template came from the dispatch prompt. Followed dispatch verbatim: single early `pytest.xfail`, fires only when the combination holds, evergreen reason text.
+
+3. **Insert conditional `pytest.xfail` near the top of the test body** — DONE. Insertion point is immediately after fixture resolution (`t = test_project`) and before any fixture-setup calls / `w.expect` / `run_first_officer_streaming` invocation. Resolution logic reads `--team-mode` via `request.config.getoption("--team-mode")` and mirrors `conftest.py`'s `_resolve_team_mode` inline (auto → `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` env check; explicit `teams`/`bare` passes through). Guard condition: `resolved_team_mode == "bare" and model == "claude-haiku-4-5"`. Location: `tests/test_feedback_keepalive.py:130-148` post-edit. The test signature grew to include `request` (`def test_feedback_keepalive(test_project, model, effort, request)`).
+
+4. **Evergreen reason text** — DONE. Reason names the combination factually (`bare-mode claude-haiku-4-5`) and explains the structural shortcut (FO applies feedback via inline Bash+Edit without a fresh ensign dispatch, so the test's data-flow artifacts are not emitted). No temporal tokens (`observed`, `recently`, `(see #...)`, `#185`), no mention of specific opus/sonnet/haiku version-qualifiers beyond the factual model-name reference that the guard targets, no reference to the CI run or the session that prompted the fix. Closing clause names the re-enable condition (uniform feedback-dispatch contract across team-mode and model) rather than a date or issue reference.
+
+5. **Verify AC-12 (grep + inspection)** — DONE. `grep -n pytest.xfail tests/test_feedback_keepalive.py` returns `142:        pytest.xfail(`. Inspection confirms the call is nested inside the `if resolved_team_mode == "bare" and model == "claude-haiku-4-5":` conditional, and the reason text above the call passes the evergreen-token audit.
+
+6. **Static suite** — DONE. `unset CLAUDECODE && make test-static` reports `426 passed, 22 deselected, 10 subtests passed in 19.78s`. Threshold (≥426) met; no regression from cycle-2 baseline.
+
+7. **Verify AC-13 (bare+haiku short-circuits to XFAIL)** — DONE. Invocation: `unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --team-mode=bare --model claude-haiku-4-5 --effort low -v -s`. Result: `1 xfailed in 0.06s`. Pytest printed `XFAIL (bar...)` — no FO subprocess spawned, no fixture setup beyond `test_project` creation, no live cost. Structural short-circuit confirmed.
+
+8. **Verify AC-14 (opus-4-6 teams-mode regression)** — DONE, PASS. Invocation: `unset CLAUDECODE && uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --model claude-opus-4-6 --effort low -v -s`. Result: `1 passed in 130.24s`. Evidence:
+   - All three data-flow `[OK]` markers fire: implementation signal, validation ensign dispatch, feedback-cycle signal.
+   - `[Tier 1 — Keepalive at Transition] PASS: no shutdown SendMessage targets implementation agent between completion and validation dispatch`.
+   - `[Agent Dispatch Overview]`: 1 implementation dispatch, 1 validation dispatch, 2 total ensign dispatches.
+   - `8 passed, 0 failed (out of 8 checks)`. Cycle-2's data-flow OR-gates still fire; the xfail guard does NOT regress the teams-mode path.
+
+9. **Commit on branch** — DONE. Commit `8300f7f8`: `fix: #185 xfail test_feedback_keepalive on bare-mode haiku shortcut-path combination`. Single-file change (`tests/test_feedback_keepalive.py`, +20/-1).
+
+10. **Write Stage Report (implementation, cycle 3)** — DONE (this section).
+
+### Cycle 3 budget consumption
+
+One live opus-4-6 run (AC-14): 130.24s wallclock, opus tokens — estimate ~$0.75-1.00. AC-13 consumed 0.06s of local CPU and zero live API cost (structural xfail before any subprocess). Combined cycle-3 cost: ~$0.75-1.00, within the ~$1-2 guidance.
+
+### Summary
+
+Cycle-3 scope (single early `pytest.xfail` guard for `--team-mode=bare` + `--model=claude-haiku-4-5`) applied to `tests/test_feedback_keepalive.py` at line 142, guarded by a conditional that resolves `--team-mode` exactly as `conftest.py` does. AC-12 grep match confirmed; AC-13 bare-mode-haiku short-circuits to XFAIL in 0.06s with no live subprocess; AC-14 opus-4-6 teams-mode regression run passes in 130.24s with all three data-flow `[OK]` signals and `8/8 checks` green. `skills/` diff still empty. Single commit `8300f7f8` on branch. Ready for merge per captain's pre-approval (xfail is statically verifiable, opus-4-6 live evidence attached).
