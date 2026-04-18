@@ -1,13 +1,13 @@
 ---
 id: 154
 title: "Refresh live-test assertions against post-#085 skill-preloading scaffolding (test_commission and peers)"
-status: ideation
+status: implementation
 source: "PR #94 (#148 pytest migration) cycle-5 CI — pytest-parallel surfaced previously-masked content-drift failures across 8 claude live tests + 1 codex live test"
 started: 2026-04-15T05:18:01Z
 completed:
 verdict:
 score: 0.70
-worktree:
+worktree: .worktrees/spacedock-ensign-refresh-live-test-assertions-after-skill-preload
 issue:
 pr:
 ---
