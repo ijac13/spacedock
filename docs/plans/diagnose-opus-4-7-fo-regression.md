@@ -10,8 +10,19 @@ score: 0.8
 worktree: .worktrees/spacedock-ensign-diagnose-opus-4-7-fo-regression
 issue:
 pr: #117
-mod-block: merge:pr-merge
+mod-block: 
 ---
+
+## Rejection Note
+
+This entity is archived REJECTED due to scope drift during iteration. The diagnostic work (AC-1 through AC-5) succeeded and is preserved below as historical reference. Subsequent cycles added prose-mitigation changes to `skills/first-officer/references/claude-first-officer-runtime.md` that the entity's "Out of scope" / "Do NOT" sections explicitly forbade, and those additions violated the global CLAUDE.md rule against temporal context in scaffolding (`(see #182)` markers embedded in runtime prose).
+
+Mergeable portions carved out into sibling tasks:
+- **#184** — `claude-team` `find_subagent_jsonl` narrowing (PR #121)
+- **#185** — test-predicate data-flow fixes + audit of remaining `entry_contains_text` callers (PR #123)
+- **#186** — full opus-4-7 greening task (supersedes the FO-impatience prose-mitigation approach with a proper-mechanism-or-nothing constraint)
+
+Independent review of PR #117 drove the decision.
 
 ## Why this matters
 
