@@ -259,3 +259,46 @@ Cherry-picked three test-only commits from the #182 source branch cleanly (9c59d
 ### Summary
 
 Independent re-verification of all seven acceptance criteria. Three live opus-4-6 runs all green (AC-3, AC-4, AC-6), static suite at 426 passes, cherry-pick correctness confirmed (no `skills/` diff, tests/ diff matches expected), audit preserved with three-way classification, and `entry_contains_text` removed from `test_gate_guardrail.py`. The gate-guardrail simplification (Phase-3-only verdict) is judged sufficient because Phase 3's `check_gate_hold_behavior` asserts on entity frontmatter + archive-directory state (both data-flow), and the post-hoc `re.search` preserves the narration-presence check. Recommendation: **PASSED**.
+
+## Stage Report (implementation, cycle 2)
+
+1. **Stay in worktree `spacedock-ensign-cherry-pick-test-predicates-and-audit` on branch `spacedock-ensign/cherry-pick-test-predicates-and-audit`** — DONE. All edits, runs, and commits on this branch.
+
+2. **Read entity body's Feedback Cycles section (Cycle 1 scope expansion for AC-8/AC-9)** — DONE. The dispatch prompt itself carried the expanded scope (the entity body does not yet have a `### Feedback Cycles` section; the captain's folded-in context was in the dispatch). Targeted the mid-run 'implementation ensign dispatched' watcher as instructed; hard scope fence on `skills/first-officer/` honored (no prose changes).
+
+3. **Inspect the mid-run 'implementation ensign dispatched' watcher** — DONE. Located at `tests/test_feedback_keepalive.py:174-180` (pre-edit). Lambda: `tool_use_matches(e, "Agent", subagent_type="spacedock:ensign") and _agent_targets_stage(_agent_input_dict(e), "implementation")` with `timeout_s=180`. The brittle dependency is `_agent_targets_stage`, which checks `name` field (absent in bare mode per `claude-first-officer-runtime.md`) or a `Stage: implementation` header in the prompt (format-sensitive across runtime modes).
+
+4. **Replace with a data-flow polling loop** — DONE. New predicate polls for ANY of three signals within a 240s deadline (bumped from 180s to give bare-mode sequential-dispatch headroom):
+   - `(b)` `greeting.txt` exists at the test project root (implementation deliverable — presence alone is the signal; content check intentionally NOT enforced here because bare-mode haiku can hallucinate the expected content, and this is the impl-dispatch signal, not the final verdict).
+   - `(a)` `"Feedback Cycles"` substring in the entity body at EITHER `keepalive-pipeline/keepalive-test-task.md` OR `keepalive-pipeline/_archive/keepalive-test-task.md`. Using the bare substring (without heading prefix) to match both `## Feedback Cycles` (haiku bare mode) and `### Feedback Cycles` (opus teams mode) emissions.
+   - `(c)` Any Agent tool_use with `subagent_type="spacedock:ensign"` in the fo-log.jsonl. This is a structured dispatch event — no stage-matching, no name-matching, narration-free.
+   **Choice rationale:** (c) alone would be sufficient and cleanest, but (a)+(b) cover cases where the fo-log parse fails mid-write or where the workflow has already progressed past the mid-run observation window. The combined check is cheap and robust.
+
+5. **Verify AC-8** — DONE. `grep -n 'implementation ensign dispatched' tests/test_feedback_keepalive.py` returns empty (exit 1). Confirmed twice (after edit, after commit).
+
+6. **Static suite AC-2-equivalent** — DONE. `unset CLAUDECODE && make test-static` reports `426 passed, 22 deselected, 10 subtests passed in 19.79s`. Meets the ≥426 threshold.
+
+7. **Verify AC-9 (live bare-mode on claude-haiku-4-5)** — FAILED. Invocation used: `unset CLAUDECODE CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && uv run pytest tests/test_feedback_keepalive.py -m live_claude --runtime claude --team-mode=bare --model claude-haiku-4-5 --effort low -v -s` (matches the CI `claude-live-bare` job per `.github/workflows/runtime-live-e2e.yml:337-357`). There is no `live_claude_bare` marker — bare-mode runs use the `live_claude` marker with `--team-mode=bare`. Result: 1 failed in 415.23s.
+   - **The new impl-dispatch data-flow watcher PASSED.** `[OK] implementation data-flow signal observed (greeting file, feedback cycle section, or ensign Agent dispatch)` printed before proceeding.
+   - **Test fails at a DIFFERENT brittle predicate (out of scope for this cycle):** the post-watcher-2 polling loop at `tests/test_feedback_keepalive.py:217-228` expects `### Feedback Cycles` (H3) in `entity_file`, but (1) the haiku bare-mode FO emits `## Feedback Cycles` (H2), and (2) the entity is archived to `_archive/` by the time this loop runs. `AssertionError: Entity body did not record a feedback cycle section at ...keepalive-pipeline/keepalive-test-task.md within 300s` — the entity body is now at `...keepalive-pipeline/_archive/keepalive-test-task.md` and contains `## Feedback Cycles`.
+   - This is the same brittle-predicate class as the watcher I fixed — same file, same test, one loop down. It was introduced by the e40ff353 cherry-pick (commit `cd6b4777` on this branch) and would benefit from the same substring + dual-path treatment I applied to watcher 1. **Deliberately not expanded into scope** — the dispatch explicitly named watcher 1 (step 4) and scoped the fix as "test-side only — hard scope fence on `skills/first-officer/`". Expanding scope unilaterally beyond the named watcher would violate dispatch discipline. Captain should decide whether a follow-up cycle converts the teardown poll as well.
+   - Evidence files preserved at `/var/folders/h1/vnssm1dj6ks4nzzvx8y29yjm0000gn/T/tmpk78j7xdh/` (KEEP_TEST_DIR=1): archived entity body at `.../keepalive-pipeline/_archive/keepalive-test-task.md` shows a complete `## Feedback Cycles` section (H2, line 44) plus four Agent dispatches in `fo-log.jsonl` (impl → validation → impl-fix → validation-recheck).
+
+8. **Verify AC-4 regression (live opus-4-6 non-bare)** — DONE, PASS. `1 passed in 184.60s`. Evidence: `[Keepalive Event Scan] Implementation dispatch seen: True / Implementation completion seen: True / Validation dispatch seen: True / Shutdown before validation: 0`, `[Tier 1 — Keepalive at Transition] PASS: no shutdown SendMessage targets implementation agent`, `8 passed, 0 failed (out of 8 checks)`. The watcher-1 replacement does NOT regress the opus-4-6 teams-mode path.
+
+9. **Commit on branch** — DONE. Commit `efd339f3`: `fix: #185 test_feedback_keepalive impl-dispatch watcher — data-flow poll`. The commit message details the three-signal polling loop and the 240s deadline rationale.
+
+10. **Write this Stage Report (implementation, cycle 2)** — DONE (this section).
+
+### Cycle 2 budget consumption
+
+Two live runs:
+
+- AC-9 bare-mode haiku (run 2, with KEEP_TEST_DIR=1): ~$0.50-0.75 estimate (4:15 wallclock, haiku tokens). First AC-9 run (without KEEP_TEST_DIR) consumed ~$0.50 at 4:07 wallclock. Combined AC-9 cost: ~$1.00-1.50.
+- AC-4 opus-4-6 regression: ~$1.00 estimate (3:04 wallclock, opus tokens).
+
+Combined cycle-2 cost: ~$2.00-2.50, within the ~$2-3 budget.
+
+### Cycle 2 Summary
+
+The mid-run `implementation ensign dispatched` watcher in `test_feedback_keepalive.py` has been converted from a prompt-format-sensitive `_agent_targets_stage` check to a three-signal data-flow poll (greeting.txt presence, `"Feedback Cycles"` substring across live and archive entity paths, or any Agent ensign tool_use in fo-log.jsonl). AC-8 satisfied (grep returns empty). AC-4 opus-4-6 regression check PASSED at 184.60s — no teams-mode regression from the new watcher. AC-9 bare-mode haiku run FAILED, but NOT at the watcher I replaced — my new data-flow watcher printed its `[OK]` signal and the test progressed further. The AC-9 failure is at a different, pre-existing brittle predicate (the teardown `### Feedback Cycles` poll at line 221 which mismatches H2 vs H3 and doesn't check the archive path). That predicate is in the same brittle class but was explicitly not in cycle-2's scope per the dispatch's step-4 naming and the hard-scope-fence instruction. Recommend a follow-up cycle (or inclusion in cycle 3 if the captain reopens scope) to convert the teardown poll using the same substring + dual-path pattern used for watcher 1.
