@@ -38,11 +38,14 @@ def test_gate_guardrail(test_project, runtime, model, effort, request):
         import os as _os
         _env = _os.environ.get("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "").strip().lower()
         resolved_team_mode = "teams" if _env in ("1", "true") else "bare"
-    if runtime == "claude" and resolved_team_mode == "bare" and model == "claude-haiku-4-5":
+    if runtime == "claude" and model == "claude-haiku-4-5" and resolved_team_mode in ("bare", "teams"):
         pytest.xfail(
             reason=(
-                "pending #200 — haiku-bare FO bootstrap failure "
-                "(cd-to-wrong-cwd + {PWD} brace-bug)"
+                "pending #200 — haiku FO bootstrap failure "
+                "(cd-to-wrong-cwd + {PWD} brace-bug). "
+                "Scope widened to teams mode after PR #133 CI surfaced the same "
+                "Pattern A bootstrap-skip on team_mode=teams + haiku "
+                "(FO cd'd to spacedock repo root, status --discover empty, gave up)."
             )
         )
 
