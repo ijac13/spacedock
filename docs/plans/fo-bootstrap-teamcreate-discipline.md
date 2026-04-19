@@ -1,13 +1,13 @@
 ---
 id: 201
 title: "FO bootstrap discipline — skipped TeamCreate in teams-mode sessions (multi-layer ergonomics)"
-status: ideation
+status: implementation
 source: "session 2026-04-18 — three observations. (1) PR #132 CI haiku-teams job FO invoked `spawn-standing --team none` + `build` with `team_name: null, bare_mode: true`. (2) Separate captain-documented case: commissioned session FO skipped the team probe entirely at boot, defaulted to bare. (3) Research-pipeline session FO dispatched 10 parallel Agent() calls without ever invoking TeamCreate, paying a real entity-file collision cost. All three defaulted to bare by omission, not by design."
 started: 2026-04-19T01:33:07Z
 completed:
 verdict:
 score: 0.6
-worktree:
+worktree: .worktrees/spacedock-ensign-fo-bootstrap-teamcreate-discipline
 issue:
 pr:
 mod-block:
