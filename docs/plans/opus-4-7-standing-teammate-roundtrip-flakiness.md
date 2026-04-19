@@ -83,3 +83,20 @@ Failure signature is the same CLASS as the one #194 already tracks: zero `ECHO: 
 Local `make test-live-claude-opus` on the rebased #188 branch PASSED the same test (same claude-opus-4-6 pin). Confirms the flake is non-deterministic, not deterministic.
 
 **Scope widening implication:** the title and frontmatter currently say "opus-4-7 FO flakiness." The flake manifests on opus-4-6 too. The underlying issue appears to be FO-side standing-teammate-spawn completion, not model-specific. Future ideation should consider whether to rename/re-scope the entity to "multi-model FO-side standing-teammate-spawn flake" or similar.
+
+## 2026-04-19 session observation — #203 cycle-3-fix routing
+
+During #203 (green main for opus-4-7), the standing-teammate failure was diagnosed and routed here. Key new evidence separating this defect from the related budget-cap bug that #204 partially addressed:
+
+**Budget-cap failure mode (distinct from ECHO-capture):** pre-shutdown-response-fix, every standing-teammate FO run burned the full $2 budget while waiting on an un-responded `shutdown_request`. Cycle-2 N=5 at opus-low pre-#204: 4/5 runs hit `error_max_budget_usd` at $2.02-$2.28. That failure mode is fixed by `#203`'s cycle-3-fix commit `a898216a` (new `## Shutdown Response Protocol` section in `ensign-shared-core.md`). Post-fix, FO cleanup exits cleanly — one cycle-3 N=2 run logged `subtype:success` at $1.71 and 3 turns. **That failure mode is closed; this entity is no longer about it.**
+
+**ECHO-capture failure mode (remaining, #194's actual scope):** even with the shutdown-response fix in place, the `ECHO: ping` string never lands in the ensign's captured stream / entity body. Four of five watcher steps still PASS: spawn-standing invoked, echo-agent Agent() dispatched, ensign Agent() dispatched, SendMessage-to-echo-agent observed. The final step `archived entity body captured 'ECHO: ping'` fails — ensign receives the echo-agent SendMessage reply but does not write it to the entity. Across ~8 sampled runs post-#204 (cycle-2 + cycle-3 + validator), zero `ECHO: ping` occurrences in any fo-log. This narrows the defect to: **the ensign's handling of the echo-agent SendMessage reply → capture-into-entity-body path**, independent of budget/timeout/shutdown.
+
+**Evidence preserved:**
+- `/tmp/203-postfix-low-evidence/standing_teammate-run{1,2}-fo-log.jsonl` — cycle-2 post-#204 N=2 runs (run2 post-shutdown-fix at $1.71 is the cleanest isolation of "ECHO capture bug alone").
+- `/tmp/203-cycle3-evidence/` — cycle-3-fix did not run this test (routed per brief), but earlier cycle fo-logs live here.
+- `/tmp/203-local-low-evidence/standing_teammate-run{1..5}-fo-log.jsonl` — cycle-2 N=5 pre-#204 (contains the dominant budget-cap-then-no-ECHO pattern that #204 separated out).
+
+**Scope implication for #194's ideation:** with the budget-cap path closed by `a898216a`, the remaining surface is narrow — echo-agent reply capture. The four candidate paths named in this entity's original Scope-for-ideation section (Claude Code SDK issue / FO discipline gap / mechanism fix / accept-flake-with-CI-retries) should now be evaluated against **that specific narrower failure mode**, not the composite that included budget burn.
+
+**xfail plan** (executed on #203 branch, cycle-4-cleanup): `test_standing_teammate_spawns_and_roundtrips` gets `@pytest.mark.xfail(reason="#194 — ensign doesn't capture echo-agent reply to entity body on opus-4-7 at low effort", strict=False)` so CI doesn't stay red on this test while #194's investigation proceeds. Remove the xfail when #194 lands a fix.
