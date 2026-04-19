@@ -38,6 +38,35 @@ NAME_PATTERN = re.compile(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$')
 NAME_MAX_LEN = 200
 MODEL_ENUM = ('sonnet', 'opus', 'haiku')
 MODEL_ENUM_LIST = 'must be one of: sonnet, opus, haiku'
+TEAM_EVIDENCE_WINDOW_SECS = 30 * 60
+
+
+def _recent_team_evidence():
+    """Return True if any ~/.claude/teams/*/config.json was modified within the window.
+
+    Ambient-mtime heuristic: Claude Code does not pass a session id to helpers,
+    so we cannot know whether THIS session called TeamCreate. A recent mtime on
+    any team config is the cheapest plausible proxy.
+    """
+    import time
+    home = os.path.expanduser('~')
+    teams_dir = os.path.join(home, '.claude', 'teams')
+    if not os.path.isdir(teams_dir):
+        return False
+    cutoff = time.time() - TEAM_EVIDENCE_WINDOW_SECS
+    try:
+        for entry in os.listdir(teams_dir):
+            cfg = os.path.join(teams_dir, entry, 'config.json')
+            if not os.path.isfile(cfg):
+                continue
+            try:
+                if os.path.getmtime(cfg) >= cutoff:
+                    return True
+            except OSError:
+                continue
+    except OSError:
+        return False
+    return False
 
 
 def extract_stage_subsection(readme_path, stage_name):
@@ -110,6 +139,18 @@ def cmd_build(args):
     scope_notes = inp.get('scope_notes')
     bare_mode = inp.get('bare_mode', False)
     is_feedback_reflow = inp.get('is_feedback_reflow', False)
+
+    # FO bootstrap discipline: when dispatching bare_mode AND no recent
+    # TeamCreate evidence exists on disk, warn (stderr). This converts a silent
+    # TeamCreate-skip into a visible signal. Stays advisory (exit 0) — see #201.
+    if bare_mode and not _recent_team_evidence():
+        print(
+            'WARN: bare_mode dispatch with no recent TeamCreate evidence '
+            '(no ~/.claude/teams/*/config.json modified in the last 30 minutes). '
+            'If you intend teams mode, run ToolSearch select:TeamCreate and TeamCreate first. '
+            'If bare is intentional, this warning can be ignored.',
+            file=sys.stderr,
+        )
 
     # Rule 12: entity_path must be project-root, not worktree-absolute.
     # The helper derives the worktree read target internally; passing a worktree
@@ -692,6 +733,14 @@ def cmd_spawn_standing(args: argparse.Namespace) -> int:
     """
     mod_path = args.mod
     team_name = args.team
+
+    if team_name in (None, '', 'none', 'None'):
+        print(
+            f"error: spawn-standing requires a real team name; got {team_name!r}. "
+            f"Call TeamCreate first and pass the returned team_name via --team.",
+            file=sys.stderr,
+        )
+        return 1
 
     if not os.path.isfile(mod_path):
         print(f"error: mod file not found: {mod_path}", file=sys.stderr)

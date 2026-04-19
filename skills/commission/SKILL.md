@@ -430,7 +430,17 @@ Do not spawn a subagent. Instead, the commission skill itself takes on the first
 
 Execute the first-officer startup procedure directly. You are now the first officer for the remainder of this session.
 
-### Step 3 — Monitor and Report
+### Step 3 — Team Probe
+
+Before any dispatch:
+
+1. Run `ToolSearch(query="select:TeamCreate", max_results=1)`.
+2. If the result contains a TeamCreate definition, run `TeamCreate(...)` per the Claude Code runtime adapter's Team Creation section, and record the returned `team_name`. Forward that `team_name` into every subsequent dispatch input JSON.
+3. If ToolSearch returns no match, enter bare mode explicitly (`team_name: null, bare_mode: true` on dispatch inputs) and report the mode to {captain}.
+
+This step is mandatory. Skipping it and defaulting to bare is the failure mode #201 addresses — a commissioned FO that silently omits TeamCreate loses access to team-mode primitives (spawn-standing, concurrent dispatch, SendMessage coordination).
+
+### Step 4 — Monitor and Report
 
 Process entities following the first-officer event loop. When the workflow reaches an idle state or pauses at an approval gate, report the results to {captain}:
 
@@ -438,7 +448,7 @@ Process entities following the first-officer event loop. When the workflow reach
 >
 > {Summary of what happened: which entities were processed, what stages they moved through, any approval gates hit}
 
-### Step 4 — Handle Failures
+### Step 5 — Handle Failures
 
 If the pilot run fails (agent errors, YAML gets mangled, dispatch issues):
 
@@ -448,9 +458,9 @@ If the pilot run fails (agent errors, YAML gets mangled, dispatch issues):
 
 This is v0. Either it works or we learn why it didn't.
 
-### Step 5 — Post-Completion Guidance
+### Step 6 — Post-Completion Guidance
 
-After Step 3 or Step 4 (whether the pilot run succeeded or failed), always conclude with:
+After Step 4 or Step 5 (whether the pilot run succeeded or failed), always conclude with:
 
 > **What's next?** To continue working this workflow in a future session, start Claude Code with:
 >
