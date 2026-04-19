@@ -318,3 +318,106 @@ The audit is accurate, the line references check out, and the hybrid design (opt
 ### Summary
 
 Revision pass addressed all three required items (R1 test-remediation clause for `test_checklist_e2e.py:119` via re-pointing to shared-core, R2 AC2 softening to "before any non-Skill tool use" + mandatory jsonl path recording, R3 #205 citation) and all six advisory items (A1 plain-language "safe to call more than once" replacing "idempotent" in both directive and AC6; A2 softened preload-resumption phrasing in §2; A3-A6 named in a new §4 Risks subsection with concrete mitigations where applicable and explicit deferrals where not). Added a comprehensive tests/ sweep table to §3 dispositioning every grep hit of the four AC3 substrings plus `## Stage Report` and `tool_uses[0]` / `first tool_use` patterns across `scripts/` and `tests/` — net finding is one real breakage (already handled by R1) and zero hidden consumers of "first tool use in jsonl" semantics. Test plan now cites a Pre-implementation sweep via `gh pr list --state open --search "claude-team"` to catch PR #128 or later conflicts with AC3's removals.
+
+## Stage Report: implementation
+
+- DONE: Checklist item 1 — Pre-implementation PR sweep. Ran `gh pr list --state open --search "claude-team"` (2 hits: #106, #119) and `gh pr list --state open --search "prompt_parts"` (0 hits). Inspected each diff: **#106** touches only `skills/first-officer/references/*` (runtime-adapter split — no `cmd_build` touch). **#119** inserts a new `1.5. Skill loading instruction (conditional)` block AFTER `1. Header` in `cmd_build` for per-stage plugin skill loading (`stage_meta.get('skill')`), semantically orthogonal to this task's operating-contract directive and at a different insertion point (my change prepends at index 0, #119 inserts at index 1.5). No conflict. Sweep date 2026-04-18; 2 hits; 0 conflicts.
+- DONE: Checklist item 2 — Implementation. `skills/commission/bin/claude-team` `cmd_build` now prepends the Skill-invoke directive (plain-language wording per ideation §2, no `idempotent` jargon) at `prompt_parts[0]`. Removed P5 duplicative block ("Do NOT modify YAML frontmatter…" / "Do NOT modify files under agents/…") and the duplicative P8a/P8b/P8d checklist-framing strings (`## Stage Report`, `Mark each: DONE, SKIPPED…`, `Every checklist item must appear…`). Updated `tests/test_checklist_e2e.py:119` per R1 option (a): assertion now greps `skills/ensign/references/ensign-shared-core.md` content with `re.search(r"DONE:.*SKIPPED:.*FAILED:", ..., re.DOTALL)`. Added 5 unit tests in `tests/test_claude_team.py::TestBuildSkillInvokeDirective` covering AC1 (both team and bare mode), AC3, AC5, AC6. Commit: `804a6bbd`. `make test-static`: **454 passed, 22 deselected, 10 subtests passed in 20.98s**. No `tool_uses[0]` / `first tool_use` code paths were touched in the implementation (A5 sweep not re-run this stage per captain charter point 6).
+- DONE: Checklist item 3 — End-to-end smoke test.
+  - **AC1/AC3/AC5/AC6 unit verification:** 5/5 tests in `TestBuildSkillInvokeDirective` PASS (see commit `804a6bbd`).
+  - **Direct cmd_build render check:** ran `claude-team build` via test helpers against a synthetic fixture; prompt length 1746 chars; first 500 chars is the `## First action` block followed by `Skill(skill="spacedock:ensign")` then the plain-language explanation; `You are working on:` appears at char ~500; all 9 substring checks (directive present, Skill < header, `safe to call more than once` present, `idempotent` absent, four AC3 substrings absent, `## Stage Report` absent) PASS.
+  - **AC2 live-dispatch evidence (bootstrap case):** This implementation ensign itself is the live smoke test — the FO manually prepended the same Skill-invoke directive to this dispatch (per the teammate-message at dispatch time, since the fix was not yet live). Jsonl path: `/Users/clkao/.claude/projects/-Users-clkao-git-spacedock/9d5ad752-f519-4097-b260-345dc47c149a/subagents/agent-a0687300d24393a2b.jsonl` (103 lines). First 10 tool_use names in order: (1) `Skill(skill="spacedock:ensign")` — caller: direct, succeeded; (2) Read; (3) Read; (4) Read; (5) Read; (6) Read; (7) Bash; (8) ToolSearch; (9) Bash; (10) Bash. Confirms the Skill call appears before any non-Skill tool_use. AC2 verified.
+  - **AC4 static mapping:** confirmed in ideation §3 mapping table; shared-core lines 30-31 cover the two YAML/agents bullets verbatim; shared-core `## Stage Report Protocol` lines 67-71 cover the DONE/SKIPPED/FAILED/`every checklist item must appear` semantics. Re-verified by reading shared-core at implementation start.
+
+### Summary
+
+Prepended `Skill(skill="spacedock:ensign")` as a first-action directive in `claude-team build` prompt assembly so every dispatched ensign loads its operating contract regardless of whether the agent-definition preload fires under Claude Code team mode. Removed 5 duplicative shared-core fragments from the spawner (two do-not-modify bullets, the Mark-each DONE/SKIPPED/FAILED line, the `Every checklist item must appear` tail, the `## Stage Report` heading directive) so shared-core becomes the single source of truth. Re-pointed the one breaking e2e assertion (`tests/test_checklist_e2e.py:119`) to grep shared-core content instead of the live agent prompt. Full static suite passes 454/454; new `TestBuildSkillInvokeDirective` class adds 5 passing unit tests. Bootstrap self-evidence from this dispatch's own jsonl confirms AC2 behavior (first tool_use is the Skill call; subsequent tool_uses begin after the skill content loads).
+
+## Stage Report: validation
+
+**Framing (captain directive §3):** The three live tests (`test_feedback_keepalive`, `test_merge_hook_guardrail`, `test_standing_teammate_spawns_and_roundtrips`) are the exact tests #203 is failing on CI. Their local pass/fail under the fix is the empirical test of whether #204 alone collapses #203.
+
+### Checklist item 1 — Independent AC verification: DONE
+
+Read `git log main..HEAD` (2 commits: `804a6bbd` impl + `2ba43258` stage-report doc) and full diff (16/10 lines in `skills/commission/bin/claude-team`, 4/2 in `tests/test_checklist_e2e.py`, 97/0 in `tests/test_claude_team.py`). Cross-checked each AC against the actual diff.
+
+| AC | Verdict | Evidence |
+|---|---|---|
+| AC1 (Skill directive before header in both team/bare modes) | PASS | Diff `skills/commission/bin/claude-team:272-286` prepends `prompt_parts[0]` with the directive before `## 1. Header`. Unit tests `test_build_prepends_skill_invoke_directive` and `test_build_prepends_skill_invoke_directive_bare_mode` PASS. Smoke dispatch recorded `skill_idx=76` vs `header_idx=460`. |
+| AC2 (ensign's first non-Skill tool_use preceded by Skill call; jsonl path recorded) | PASS | Implementation stage report records jsonl path `~/.claude/projects/-Users-clkao-git-spacedock/9d5ad752-.../subagents/agent-a0687300d24393a2b.jsonl`. This validator's own jsonl `agent-a30e9c8b826b32c68.jsonl` independently confirms: first 4 tool_uses in order = `Skill(skill="spacedock:ensign")`, Read(claude-ensign-runtime.md), Read(entity spec), ToolSearch. |
+| AC3 (four duplicative substrings absent) | PASS | Diff deletes P5 do-not-modify block (`claude-team:302-305`) and P8a/P8b/P8d checklist framing (`claude-team:318-332`). Unit test `test_build_omits_duplicative_shared_core_prose` PASS. Smoke dispatch confirms all four substrings absent. |
+| AC4 (removed substrings covered by shared-core) | PASS | Static mapping table in ideation §3 shared-core `## Rules` bullets 1-2 cover YAML/agents bullets; `## Stage Report Protocol` covers DONE/SKIPPED/FAILED semantics and `every checklist item must appear`. Verified by re-reading `skills/ensign/references/ensign-shared-core.md`. |
+| AC5 (`## Stage Report` heading absent from spawner prompt) | PASS | Diff removes `Write a ## Stage Report section` line from P8a. Unit test `test_build_omits_stage_report_heading` PASS. Smoke dispatch confirms string absent. |
+| AC6 (plain-language `safe to call more than once` present; `idempotent` absent) | PASS | Diff `claude-team:277-285` directive text contains `safe to call more than once`; no `idempotent` in directive. Unit test `test_build_directive_uses_plain_language_safety_phrasing` PASS. |
+
+**Static suite:** `make test-static` → **454 passed, 22 deselected, 10 subtests passed in 20.87s**. Matches implementation-stage count (454/454). Exit 0.
+
+**Targeted unit tests:** `pytest tests/test_claude_team.py::TestBuildSkillInvokeDirective -v` → **5 passed in 0.15s**. All five AC1/AC3/AC5/AC6 unit assertions green.
+
+### Checklist item 2 — Targeted live tests LOCALLY: PARTIAL
+
+All three tests at `--effort low`, `--model opus`, runtime `claude`, N=1, `KEEP_TEST_DIR=1`. `--plugin-dir $(pwd)` from the captain directive is not a recognized pytest option (confirmed; pytest errored immediately); ran without it — this matches the default path in the test's own invocation under `run_first_officer` helper which already points `--plugin-dir` internally.
+
+| Test | Verdict | Wallclock | Key signal |
+|---|---|---|---|
+| `test_feedback_keepalive` | **PASS** | 186.41s | Clean single-pass. Exit code 0. |
+| `test_merge_hook_guardrail` | **FAIL** | 391.41s (over 5-min wallclock budget) | Step `[OK] ensign Agent() dispatched` and `[OK] merge hook fired` both PASSED. Failure is `StepTimeout` on the subsequent `expect_exit(timeout_s=300)` — FO process did not exit within 300s after the merge hook fired. fo-log at `/tmp/204-val-evidence/test_merge_hook_guardrail-fo-log.jsonl` (212KB). Not an operating-contract/Skill-invoke failure: the ensign dispatch prompt contained `## First action ... Skill(skill="spacedock:ensign")` (confirmed by grepping fo-log: 4 occurrences of `First action` across 4 ensign dispatches). |
+| `test_standing_teammate_spawns_and_roundtrips` | **FAIL** | 118.14s | All four watcher steps PASSED: `[OK] claude-team spawn-standing invoked`, `[OK] echo-agent Agent() dispatched`, `[OK] ensign dispatch prompt includes standing-teammates section with echo-agent`, `[OK] SendMessage to echo-agent observed`. Failure is `StepFailure` on next step `archived entity body captured 'ECHO: ping'` — FO subprocess exited (code=0) before the echo roundtrip reached the entity body. Grep of fo-log at `/tmp/204-val-evidence/test_standing_teammate_spawns_and_roundtrips-fo-log.jsonl` (206KB): zero matches for `ECHO: ping` — the echo-agent standing teammate never produced a visible reply that the ensign captured into the entity. Not an operating-contract/Skill-invoke failure: the ensign dispatch prompt contained `## First action ... Skill(skill="spacedock:ensign")` (4 occurrences of `First action` in fo-log). |
+
+**Evidence preservation:** `/tmp/204-val-evidence/` contains 4 artifacts totaling ~460KB:
+- `test_merge_hook_guardrail-pytest.log` (14KB)
+- `test_merge_hook_guardrail-fo-log.jsonl` (212KB)
+- `test_standing_teammate_spawns_and_roundtrips-pytest.log` (16KB)
+- `test_standing_teammate_spawns_and_roundtrips-fo-log.jsonl` (206KB)
+
+`test_feedback_keepalive` preserved at `/var/folders/.../tmpuchj4rxv` by pytest (PASS — no copy needed).
+
+**Empirical answer to the `#203 collapses into #204` hypothesis:** NOT supported by this data. 1/3 PASS, 2/3 FAIL at opus-low post-fix. The two failures are real post-fix failures and are **not** caused by ensigns lacking the operating contract — fo-log grep confirms the Skill-invoke directive is successfully reaching every ensign dispatch through the fixed `claude-team build`. The failure modes (merge-hook FO post-exit timeout; echo-agent data-roundtrip absence) are behavioral/timing issues in the FO's exit path and the standing-teammate echo-and-capture loop respectively, orthogonal to contract loading. #204's fix is necessary but not sufficient to turn #203's three reds green; at least two additional defects exist downstream.
+
+**Budget report:** test_feedback_keepalive 186s + test_standing_teammate 118s + test_merge_hook 391s ≈ 11.6min wallclock. merge_hook exceeded the per-test 5-min soft cap in the captain directive; per directive I did not thrash — reported partial results and stopped (no re-runs).
+
+### Checklist item 3 — End-to-end smoke-dispatch through the WORKTREE's fixed cmd_build: DONE
+
+Ran a direct `claude-team build` invocation (via `sys.executable skills/commission/bin/claude-team build --workflow-dir ...`) with a synthetic stdin payload (minimal workflow README + entity). Full emitted prompt captured; assertions:
+
+| Check | Result |
+|---|---|
+| (a) `Skill(skill="spacedock:ensign")` substring present | PASS |
+| (b) Appears BEFORE `You are working on:` (skill idx=76, header idx=460) | PASS |
+| (c) Four AC3 removed substrings ABSENT | PASS (all four) |
+| (d) `## Stage Report` ABSENT | PASS |
+| (e) `idempotent` ABSENT | PASS |
+| (bonus) `safe to call more than once` PRESENT | PASS |
+
+Relevant prompt excerpt (first ~500 chars, before the per-dispatch header):
+
+```
+## First action
+
+Before anything else, invoke your operating contract:
+
+    Skill(skill="spacedock:ensign")
+
+This loads the shared ensign discipline (stage-report format, BashOutput polling, worktree ownership, completion signal protocol). The call is safe to call more than once; if the agent-definition preload ever starts working, calling it again is a no-op (the skill content is re-loaded but has no behavioral effect). Do not paraphrase; call the tool.
+
+You are working on: Smoke task
+...
+```
+
+### Recommendation: PASSED
+
+All six acceptance criteria verified with direct evidence from diff, unit tests, smoke dispatch, and fo-log grep. #204's scope is "inject the Skill-invoke directive and remove duplicative prose" — that scope is fully and correctly delivered. The implementation is complete and correct per its own acceptance criteria.
+
+The two live-test failures surfaced during validation (`test_merge_hook_guardrail` post-exit timeout, `test_standing_teammate_spawn` echo-roundtrip absence) are OUT OF SCOPE for #204. Evidence: fo-log greps show the Skill-invoke directive is present in every ensign dispatch through the fixed spawner; the failures are in downstream behaviors (FO exit path; echo-agent roundtrip) that #204 was never scoped to fix. These should be filed as separate defects and handled by #203 (or successor tasks), consistent with the ideation risk A3/A6 framing that #204 is necessary but not claimed to be sufficient for the three-test suite.
+
+Per captain directive constraint (1), validator is NOT authorized to fix these defects. Routing guidance: the two downstream failures warrant new issues (or reassignment into #203's scope) rather than `feedback-to: implementation` for #204, because #204's deliverable meets its own spec. If the FO chooses to route back regardless (e.g., widening #204's scope), that is the FO's call; from the validator's seat the correct recommendation on #204 as currently scoped is **PASSED**.
+
+### Per-item status
+
+- DONE: Checklist item 1 — Independent AC verification. All six ACs cross-checked against `git diff main..HEAD` with line citations; static suite 454/454 PASS; TestBuildSkillInvokeDirective 5/5 PASS. Per-AC verification table above.
+- DONE: Checklist item 2 — Targeted live tests LOCALLY (partial, per 5-min-wallclock cap). 1/3 PASS (`test_feedback_keepalive`, 186s), 2/3 FAIL (`test_merge_hook_guardrail` StepTimeout on expect_exit 300s after `[OK] merge hook fired` at 391s; `test_standing_teammate_spawns_and_roundtrips` StepFailure on `archived entity body captured 'ECHO: ping'` at 118s). fo-logs preserved under `/tmp/204-val-evidence/`. fo-log grep confirms Skill-invoke directive reached all ensign dispatches — failures are not contract-loading failures.
+- DONE: Checklist item 3 — End-to-end smoke-dispatch via worktree's fixed `cmd_build`. All five AC assertions (directive present + before header, AC3 absent, Stage Report absent, idempotent absent) and bonus plain-language check PASS.
+
+### Summary
+
+PASSED — #204's scope (Skill-invoke directive injected at `prompt_parts[0]`; four duplicative shared-core fragments removed; `## Stage Report` heading moved to shared-core as sole owner; plain-language safety phrasing) is fully delivered. All 6 ACs verified with direct evidence. Static suite 454/454 green; 5/5 new unit tests green; smoke dispatch confirms the emitted prompt contains the directive before the header and omits every AC3 substring. Live-test matrix (1/3 PASS at opus-low) does NOT support the `#203 collapses into #204` hypothesis: two downstream defects persist after the fix (merge-hook FO post-exit timeout; echo-agent roundtrip absence in standing-teammate test). Both failures are orthogonal to contract loading — fo-log greps confirm the Skill-invoke directive reaches every ensign dispatch under the fixed spawner. Recommendation: merge #204 as PASSED; file the two downstream failures as separate defects (or hand them back to #203's cycle-2 matrix-fill experiment, which is already running in parallel).
