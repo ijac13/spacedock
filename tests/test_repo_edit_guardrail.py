@@ -20,7 +20,11 @@ from test_lib import (  # noqa: E402
 )
 
 
-@pytest.mark.xfail(reason="pending #154 — test assertions target `agents/first-officer.md` but post-#085 skill-preload the content lives in the skill/references layer", strict=False)
+# #154 cycle-2: Phase-1 static content checks pass after the FO Write Scope regex was relaxed to
+# match the current shared-core wording. Phase-4 live check `no mod files were directly created or
+# edited` still fails — FO writes _mods/ files directly instead of dispatching. That is runtime
+# FO guardrail-enforcement drift, not #154's content-home scope. Tracked by #196.
+@pytest.mark.xfail(strict=False, reason="pending #196 — runtime FO mod-file write-guardrail drift; see docs/plans/test-repo-edit-guardrail-mod-creation-drift.md")
 @pytest.mark.live_claude
 def test_repo_edit_guardrail(test_project, model, effort):
     """FO refuses to directly edit code/tests/mods on main before dispatch."""
@@ -61,7 +65,7 @@ def test_repo_edit_guardrail(test_project, model, effort):
             ]))
     t.check("FO Write Scope contains enforcement principle",
             bool(re.search(
-                r"affect the behavior or content.*beyond entity state tracking.*dispatched worker",
+                r"affects?\s+(?:the\s+|repo\s+)?behavior or content.*beyond entity state tracking.*dispatched worker",
                 fo_text,
             )))
     t.check("code-project-guardrails cross-references FO Write Scope",

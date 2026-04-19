@@ -73,7 +73,10 @@ SHUTDOWN_PATTERN = re.compile(
 )
 
 
-@pytest.mark.xfail(reason="pending #154 — test assertions target `agents/first-officer.md` but post-#085 skill-preload the content lives in the skill/references layer", strict=False)
+# #154 reclassified the original `pending #154` xfail here: this test reads no static FO content,
+# so the content-home refresh is irrelevant. The 1/4 live failure is runtime-behavior drift
+# (subagent-log discovery under ~/.claude/projects/<slug>/subagents/ returns empty) tracked by #198.
+@pytest.mark.xfail(strict=False, reason="pending #198 — runtime subagent-log discovery drift; see docs/plans/fo-runtime-test-failures-post-154.md")
 @pytest.mark.live_claude
 def test_agent_captain_interaction(test_project, model, effort):
     """FO uses direct text to captain and does not prematurely shut down agents (AC6, AC7)."""

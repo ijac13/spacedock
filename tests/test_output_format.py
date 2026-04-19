@@ -23,7 +23,11 @@ from test_lib import (  # noqa: E402
 )
 
 
-@pytest.mark.xfail(reason="pending #154 — test assertions target `agents/first-officer.md` but post-#085 skill-preload the content lives in the skill/references layer", strict=False)
+# #154 cycle-2: Phase-1 static content checks pass (assembled_agent_content tokens present); Phase-3
+# live checks on default-path FO output fail 2/11 (`default output mentions entity ID (001)` +
+# `default output mentions verdict`). That is runtime FO default-output-format drift, not #154's
+# content-home scope. Tracked by #195.
+@pytest.mark.xfail(strict=False, reason="pending #195 — test_output_format default-path runtime output drift; see docs/plans/test-output-format-default-path-runtime-drift.md")
 @pytest.mark.live_claude
 def test_output_format(test_project):
     """FO obeys README Output Format section, falls back to default when absent."""
