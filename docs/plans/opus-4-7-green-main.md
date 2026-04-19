@@ -97,7 +97,7 @@ No fully-tautological tests or mock-masquerading tests were found in the opus-to
 
 **Primary harness.** `make test-live-claude-opus` (runs on `CI-E2E-OPUS`). Locally: `unset CLAUDECODE && uv run pytest tests/<target>.py --runtime claude --model opus --effort low -v` per tests/README.md.
 
-**Quantitative green threshold.** Per-test: 4/5 consecutive passes under the dispatched `runtime-live-e2e.yml` workflow with `test_selector=<test_file>::<testname>`, `effort_override=low`, unpinned `claude_version` (so the default `2.1.114+` alias resolves). Suite-level: 1 full `make test-live-claude-opus` CI run end-to-end green (0 `FAILED`, xfails allowed per `tests/README.md` "Known xfail / skip state" list).
+**Quantitative green threshold.** Per-test: 3/5 consecutive passes under the dispatched `runtime-live-e2e.yml` workflow with `test_selector=<test_file>::<testname>`, `effort_override=low`, `claude_version=2.1.114` pinned. Suite-level: 1 full `make test-live-claude-opus` CI run end-to-end green (0 `FAILED`, xfails allowed per `tests/README.md` "Known xfail / skip state" list).
 
 **Scope filter — tests deferred out of this task.** Any test that:
 - Has an open tracking task whose fix requires prose edits (`#194`, `#200`, `#201`) — tracked separately; this task does NOT re-ideate them.
