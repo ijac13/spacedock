@@ -9,7 +9,7 @@ verdict:
 score: 0.95
 worktree: .worktrees/spacedock-ensign-claude-team-inject-skill-invoke
 issue:
-pr:
+pr: #136
 mod-block: merge:pr-merge
 ---
 
