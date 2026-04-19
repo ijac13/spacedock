@@ -656,8 +656,44 @@ def check_pr_states(entities, stages):
     return 'ok', results
 
 
+TEAM_STATE_MTIME_WINDOW_SECS = 30 * 60
+
+
+def probe_team_state():
+    """Ambient-mtime heuristic for a recent TeamCreate on ~/.claude/teams/*/config.json.
+
+    Returns (present: bool, detail: str). Present when any config.json was modified
+    within the last TEAM_STATE_MTIME_WINDOW_SECS. Detail names the directory when present.
+    """
+    import time
+    home = os.path.expanduser('~')
+    teams_dir = os.path.join(home, '.claude', 'teams')
+    if not os.path.isdir(teams_dir):
+        return False, ''
+    cutoff = time.time() - TEAM_STATE_MTIME_WINDOW_SECS
+    newest = None
+    newest_mtime = 0
+    try:
+        for entry in os.listdir(teams_dir):
+            cfg = os.path.join(teams_dir, entry, 'config.json')
+            if not os.path.isfile(cfg):
+                continue
+            try:
+                mtime = os.path.getmtime(cfg)
+            except OSError:
+                continue
+            if mtime > newest_mtime:
+                newest_mtime = mtime
+                newest = entry
+    except OSError:
+        return False, ''
+    if newest is not None and newest_mtime >= cutoff:
+        return True, 'recent team directory: %s' % newest
+    return False, ''
+
+
 def print_boot(entities, stages, workflow_dir, git_root):
-    """Print all boot sections: MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE."""
+    """Print all boot sections: MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE, TEAM_STATE."""
     # MODS
     hooks = scan_mods(workflow_dir)
     if not hooks:
@@ -700,6 +736,15 @@ def print_boot(entities, stages, workflow_dir, git_root):
     # DISPATCHABLE
     print('DISPATCHABLE')
     print_next_table(entities, stages)
+
+    # TEAM_STATE
+    print('TEAM_STATE')
+    present, detail = probe_team_state()
+    print('present: %s' % ('true' if present else 'false'))
+    if present:
+        print('hint: %s' % detail)
+    else:
+        print('hint: run TeamCreate before first team-mode dispatch (claude runtime supports it)')
 
 
 WHERE_SYNTAX_HELP = (
