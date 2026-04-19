@@ -58,6 +58,38 @@ Three independent fresh-commissioned sessions defaulted to bare by omission (not
 
 This isn't a prose-only problem. It's a multi-layer ergonomics gap: FO prose + harness tool-loading defaults + helper binary behavior + commission skill Phase 3 prose.
 
+## Feedback Cycles
+
+### Cycle 1 — 2026-04-19 light-verify rejected as insufficient
+
+Cycle 1 ideation did anchor verification + sanity-checked L1-L6 layers + confirmed AC↔layer 1:1 mapping. Useful but incomplete.
+
+**Captain rejection rationale:** ideation must do an actual spike (reproduce the targeted TeamCreate-skip failure) AND incorporate the failure mode into tests **before** contemplating fixes. The cycle-1 output jumped straight to describing fix layers without a deterministic reproducer or a failing-test-first discipline. Fixes without failing tests risk shipping prose/code that reads sensible but doesn't demonstrably close the observed behavior.
+
+**Cycle 2 scope:** execute the `## Spike and test-first plan` section — reproduce the skip, land failing tests for L1-L5, then the fix surface becomes well-grounded (tests are the gate).
+
+## Spike and test-first plan (pre-fix)
+
+Before contemplating fixes, ideation must (a) reproduce the FO TeamCreate-skip pattern deterministically in a local or CI-reachable setup, and (b) capture the failure modes as tests that fail against current code. Only after failing tests are in place should fix surfaces be finalized.
+
+**Spike — reproduce the skip pattern:**
+
+- Smallest reproducer: invoke the FO (via `make test-live-claude` selector or a standalone harness) against a fixture that contains a standing-teammate mod, with `--runtime claude --model claude-haiku-4-5 --team-mode=teams`. Observe fo-log.jsonl for the TeamCreate sequence.
+- Secondary target: confirm the `claude-team spawn-standing --team none` shape exits successfully today (silent empty). The PR #132 CI artifact is evidence of the failure; a local invocation deterministically reproduces the boundary behavior.
+- Acceptable evidence: one fresh-session fo-log dump showing Agent dispatch without preceding TeamCreate, OR a direct `claude-team spawn-standing --team none` invocation returning with code 0.
+
+**Failing tests to land with this PR (before fixes):**
+
+Each test must FAIL against `main` at the cycle-2 branch base, and PASS after the corresponding fix ships. This is the AC bar.
+
+1. **L1 test — `status --boot` TEAM_STATE section.** Test parses `status --boot` output and asserts a `TEAM_STATE` header line exists. Today: no such line → test fails.
+2. **L2 test — `claude-team build` signals on bare-without-evidence.** Test pipes a `bare_mode: true, team_name: null` input into `claude-team build` and asserts either (a) non-zero exit + specific stderr OR (b) stderr warning + zero exit. Today: silent zero → test fails.
+3. **L3 test — runtime adapter prose asserts TeamCreate-first.** Grep test for the stronger imperative + `spawn-standing` named in the sequencing rule. Today's prose at `claude-first-officer-runtime.md:10-12` presents TeamCreate as step 2-3 and doesn't name spawn-standing → test fails (verifies the delta cycle-1 worker found).
+4. **L4 test — commission Phase 3 has explicit Team Probe step.** Grep `skills/commission/SKILL.md` for `Team Probe` or `ToolSearch.*TeamCreate` inside Phase 3. Today: absent → test fails.
+5. **L5 test — `spawn-standing` rejects empty/none team.** CLI-level test: invoke with `--team none` and `--team ""`; assert non-zero exit + specific stderr. Today: exits 0 with empty output → test fails.
+
+**Behavioral spike test (optional but recommended):** one live haiku-teams invocation asserting fo-log shows `TeamCreate` tool_use before any `claude-team spawn-standing` invocation. Covers the end-to-end FO discipline, not just helper boundaries.
+
 ## Proposed approach
 
 **Diagnosis candidates:**
