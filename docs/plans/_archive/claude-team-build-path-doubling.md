@@ -1,16 +1,17 @@
 ---
 id: 164
 title: "`claude-team build` path-doubles when entity_path is passed as a worktree-absolute path"
-status: validation
+status: done
 source: "FO observation during 2026-04-16 session while dispatching #162 implementation — initial build invocation produced entity paths with `.worktrees/` prefix duplicated twice"
 started: 2026-04-18T07:59:13Z
-completed:
-verdict:
+completed: 2026-04-19T01:23:01Z
+verdict: PASSED
 score: 0.40
-worktree: .worktrees/spacedock-ensign-claude-team-build-path-doubling
+worktree: 
 issue:
 pr: #129
-mod-block: merge:pr-merge
+mod-block: 
+archived: 2026-04-19T01:23:01Z
 ---
 
 When the FO passes `entity_path` to `claude-team build` as a worktree-absolute path (e.g. `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-{slug}/docs/plans/{slug}.md`), the helper emits a prompt whose "Read the entity file at..." references a doubled path: `/Users/clkao/git/spacedock/.worktrees/spacedock-ensign-{slug}/.worktrees/spacedock-ensign-{slug}/docs/plans/{slug}.md`. The dispatched ensign follows the instruction and fails at the first Read.
