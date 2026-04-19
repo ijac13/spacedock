@@ -1,16 +1,17 @@
 ---
 id: 154
 title: "Refresh live-test assertions against post-#085 skill-preloading scaffolding (test_commission and peers)"
-status: implementation
+status: done
 source: "PR #94 (#148 pytest migration) cycle-5 CI — pytest-parallel surfaced previously-masked content-drift failures across 8 claude live tests + 1 codex live test"
 started: 2026-04-15T05:18:01Z
-completed:
-verdict:
+completed: 2026-04-19T01:30:35Z
+verdict: PASSED
 score: 0.70
-worktree: .worktrees/spacedock-ensign-refresh-live-test-assertions-after-skill-preload
+worktree: 
 issue:
 pr: #131
 mod-block: 
+archived: 2026-04-19T01:30:35Z
 ---
 
 The #148 pytest migration surfaced a class of test failures that had been masked by the pre-migration Makefile's `&&` short-circuit. The failures are deterministic (identical counts across concurrency modes and models — 19/65 on `test_commission` on claude-live, claude-live-bare, and claude-live-opus), not concurrency-induced, and not caused by #148's harness. They are **pre-existing test-content drift**: the tests assert that `agents/first-officer.md` contains tokens like `TeamCreate`, `Agent(`, `Event Loop`, `initialPrompt`, `Fresh stage property`, `feedback protocol instructions`, `_archive convention`, `discovers plugin-shipped mods`, etc.
