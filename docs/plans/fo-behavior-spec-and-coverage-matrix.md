@@ -261,6 +261,226 @@ Estimated cost: low. Implementation stage ~$10-20 including the 30+ requirement 
 
 These are all unblocked by #202 shipping but are not part of its acceptance. Filing them as separate tasks keeps #202's blast radius contained.
 
+## L1 draft — requirement enumeration
+
+This is a first-pass enumeration extracted from the current FO contract (`SKILL.md`, `first-officer-shared-core.md`, `claude-first-officer-runtime.md`, `codex-first-officer-runtime.md`, `code-project-guardrails.md`). **It is a draft for captain review, not a finished spec.** The goal is to validate the L1 schema against real content: does the area taxonomy hold? Does the level enum cover what the prose expresses? Do any requirements resist the format?
+
+### Area taxonomy (draft)
+
+- `startup` — workflow discovery, boot-time reads, status `--boot` contract
+- `team-lifecycle` — TeamCreate, TeamDelete, Degraded Mode, recovery ladder (Claude-specific)
+- `dispatch` — worker assembly, `claude-team build`, break-glass rules, Codex `spawn_agent`
+- `worker-reuse` — reuse conditions, model-match, context budget, SendMessage advancement
+- `gate-review` — gate presentation, AC cross-check, no self-approve
+- `feedback-flow` — rejection routing, feedback cycles, 3-cycle escalation
+- `merge-cleanup` — merge hooks, mod-block, terminal transitions, archive/worktree cleanup
+- `state-writes` — FO Write Scope, frontmatter ownership, main vs worktree
+- `standing-teammate` — discovery, lazy-spawn, routing contract, team-scope lifecycle
+- `captain-interaction` — gate approval, clarification, idle-hallucination guardrail
+- `probe-discipline` — Grep-over-Read, no full-file Read as probe
+- `single-entity-mode` — bounded runs, auto-resolve gates, stop conditions
+
+### Level enum (draft)
+
+RFC 2119: `MUST`, `MUST_NOT`, `SHOULD`, `SHOULD_NOT`, `MAY`. No extensions — keep the vocabulary small.
+
+### Requirements
+
+**Format note:** each entry below is the **human-readable rendering** of the planned `requirement` YAML block. In the final spec, the YAML carries the structured fields and the prose below it carries rationale. Here, for review density, the two are collapsed into a single bullet per requirement. Anchor lines cite the current governing prose — they are **discovery hints**, not the L3 anchor itself (L3 is declared in the prose file via HTML comment).
+
+#### `startup`
+
+- **FO-R-001** (MUST) — FO discovers the workflow directory via explicit operator path, else `status --discover` with ambiguity-stops-on-multiple.
+  *Prose:* `first-officer-shared-core.md` §Startup step 2.
+- **FO-R-002** (MUST) — FO runs `status --boot` at startup to obtain MODS, NEXT_ID, ORPHANS, PR_STATE, DISPATCHABLE in one call.
+  *Prose:* `first-officer-shared-core.md` §Startup step 4.
+- **FO-R-003** (MUST) — FO runs startup mod hooks before any normal dispatch.
+  *Prose:* `first-officer-shared-core.md` §Startup step 4 MODS bullet.
+- **FO-R-004** (MUST) — Orphan worktree detection reports anomalies without auto-redispatch.
+  *Prose:* `first-officer-shared-core.md` §Startup ORPHANS bullet.
+
+#### `team-lifecycle` (Claude-only)
+
+- **FO-R-005** (MUST) — `TeamCreate` is the first team-mode tool call in every Claude session; no `spawn-standing`, `Agent`, or `SendMessage` precedes it.
+  *Prose:* `claude-first-officer-runtime.md` §Team Creation step 1.
+- **FO-R-006** (MUST) — Team name format: `{project}-{dir_basename}-{YYYYMMDD-HHMM}-{shortuuid}`, lowercase, hyphen-separated.
+  *Prose:* `claude-first-officer-runtime.md` §Team Creation step 1.
+- **FO-R-007** (MUST) — FO stores the `team_name` returned by `TeamCreate` (which may differ from requested) and uses it for all subsequent calls.
+  *Prose:* `claude-first-officer-runtime.md` §Team Creation step 1 note.
+- **FO-R-008** (MUST_NOT) — FO MUST NOT delete existing team directories (`rm -rf ~/.claude/teams/...`).
+  *Prose:* `claude-first-officer-runtime.md` §Team Creation step 1 note.
+- **FO-R-009** (MUST_NOT) — FO MUST NOT combine `TeamDelete`, `TeamCreate`, or `Agent` dispatch in the same message — they race under parallel tool execution.
+  *Prose:* `claude-first-officer-runtime.md` §Team Creation recovery procedure.
+- **FO-R-010** (MUST) — On "Team does not exist" mid-session: one fresh-suffixed `TeamCreate` attempt (tier 1), else Degraded Mode (tier 2), else surface to captain (tier 3). No retries within a tier.
+  *Prose:* `claude-first-officer-runtime.md` §Team Creation failure recovery ladder.
+- **FO-R-011** (MUST) — FO blocks all `Agent` dispatch while team setup is unresolved.
+  *Prose:* `claude-first-officer-runtime.md` §Team Creation, "Block all Agent dispatch".
+- **FO-R-012** (MUST) — On Degraded Mode entry, FO emits the captain-report paragraph verbatim to direct text output (not SendMessage).
+  *Prose:* `claude-first-officer-runtime.md` §Degraded Mode → Captain Report Template.
+- **FO-R-013** (MUST) — Once Degraded Mode is active, no `team_name` parameter appears on any subsequent `Agent` dispatch for the remainder of the session.
+  *Prose:* `claude-first-officer-runtime.md` §Degraded Mode → Effects.
+- **FO-R-014** (MUST_NOT) — SendMessage to pre-degrade agent names is forbidden once Degraded Mode is active.
+  *Prose:* `claude-first-officer-runtime.md` §Degraded Mode → Effects.
+- **FO-R-015** (MUST) — On Degraded Mode entry, FO performs a single-pass cooperative shutdown sweep (one SendMessage `shutdown_request` per known agent name, best-effort, non-blocking), exempting agents in active feedback cycles.
+  *Prose:* `claude-first-officer-runtime.md` §Degraded Mode → Cooperative Shutdown Sweep.
+
+#### `dispatch`
+
+- **FO-R-016** (MUST) — FO assembles `Agent()` prompts via `claude-team build`, forwarding `subagent_type`, `name`, `team_name`, `model`, `prompt` verbatim on zero-exit.
+  *Prose:* `claude-first-officer-runtime.md` §Dispatch Adapter → MANDATORY.
+- **FO-R-017** (MUST_NOT) — FO MUST NOT manually assemble `Agent()` prompts or invent `name` values when `claude-team build` is available.
+  *Prose:* `claude-first-officer-runtime.md` §Dispatch Adapter → MANDATORY.
+- **FO-R-018** (MUST_NOT) — FO MUST NOT use `subagent_type="first-officer"` for worker dispatch — that clones the FO.
+  *Prose:* `claude-first-officer-runtime.md` §Dispatch Adapter.
+- **FO-R-019** (MUST) — Break-glass manual dispatch template is used ONLY on `claude-team build` non-zero exit or unavailability. Zero-exit is never a break-glass trigger.
+  *Prose:* `claude-first-officer-runtime.md` §Dispatch Adapter step 4, Break-Glass block.
+- **FO-R-020** (MUST_NOT) — FO MUST NOT probe `~/.claude/teams/{team_name}/` filesystem state before `Agent()` in the normal dispatch path (guaranteed false positive under registry-desync).
+  *Prose:* `claude-first-officer-runtime.md` §Dispatch Adapter → No pre-dispatch filesystem probe.
+- **FO-R-021** (MUST) — Dispatch checklist is per-dispatch, stage-level, at most 3 items, naming what separates a good outcome from a ceremonial one. It is NOT the AC list and NOT a work-breakdown.
+  *Prose:* `first-officer-shared-core.md` §Dispatch step 2.
+- **FO-R-022** (MUST) — Dispatch commits the state transition on main with message `dispatch: {slug} entering {next_stage}` before spawning the worker.
+  *Prose:* `first-officer-shared-core.md` §Dispatch step 6.
+- **FO-R-023** (MUST) — On Codex, worker spawn uses `spawn_agent(..., fork_context=false)`; `fork_context=false` is never omitted.
+  *Prose:* `codex-first-officer-runtime.md` §Dispatch Adapter.
+- **FO-R-024** (MUST) — Codex worker prompts are fully self-contained (no inherited thread context).
+  *Prose:* `codex-first-officer-runtime.md` §Dispatch Adapter.
+
+#### `worker-reuse`
+
+- **FO-R-025** (MUST) — Before reuse, FO runs `claude-team context-budget --name {ensign-name}`; `reuse_ok == false` forces fresh dispatch.
+  *Prose:* `first-officer-shared-core.md` §Reuse conditions 0; `claude-first-officer-runtime.md` §Context Budget.
+- **FO-R-026** (MUST) — Reuse requires ALL conditions: not bare mode, next stage not `fresh: true`, same worktree mode, `lookup_model(worker) == next_stage.effective_model`.
+  *Prose:* `first-officer-shared-core.md` §Reuse conditions 1-4.
+- **FO-R-027** (MUST) — When model-mismatch forces fresh dispatch, FO emits the diagnostic anchor phrase `does not match next stage effective_model` verbatim.
+  *Prose:* `first-officer-shared-core.md` §Completion and Gates, model-mismatch paragraph.
+- **FO-R-028** (MUST) — Reuse advancement uses `SendMessage(to="{ensign_name}")` on Claude, `send_input(handle)` on Codex — NEVER `claude-team build` (helper serves only initial dispatch).
+  *Prose:* `claude-first-officer-runtime.md` §Dispatch Adapter → Reuse dispatch; `codex-first-officer-runtime.md` §Dispatch Adapter reuse flow.
+- **FO-R-029** (MUST_NOT) — FO MUST NOT send `SendMessage(shutdown_request)` to dead/unresponsive ensigns; dead ensigns are tracked in session memory.
+  *Prose:* `claude-first-officer-runtime.md` §Dead ensign handling.
+- **FO-R-030** (MUST) — On Codex reuse, `send_input` is NOT completion evidence; FO calls `wait_agent` on the same handle before advancing when the result is on the entity's critical path.
+  *Prose:* `codex-first-officer-runtime.md` §Dispatch Adapter reuse flow.
+
+#### `gate-review`
+
+- **FO-R-031** (MUST_NOT) — FO MUST NOT self-approve gates, infer approval from silence, or accept agent messages as gate approval.
+  *Prose:* `first-officer-shared-core.md` §Completion and Gates "never self-approve"; `claude-first-officer-runtime.md` §Captain Interaction.
+- **FO-R-032** (MUST) — FO keeps the dispatched agent alive while waiting at a gate.
+  *Prose:* `first-officer-shared-core.md` §Completion and Gates.
+- **FO-R-033** (MUST) — At every gate, FO cross-checks the entity's `## Acceptance criteria` section — every `**AC-N**` must have at least one evidence citation from this or a prior stage report.
+  *Prose:* `first-officer-shared-core.md` §Completion and Gates, AC coverage cross-check paragraph.
+- **FO-R-034** (MUST) — Gate presentation uses the exact template: `Gate review: {title} — {stage}` + verbatim Stage Report + `Assessment: {N} done, {N} skipped, {N} failed. [Recommend approve / Recommend reject: {reason}]`.
+  *Prose:* `claude-first-officer-runtime.md` §Gate Presentation.
+- **FO-R-035** (MUST) — Checklist review emits the explicit count summary `{N} done, {N} skipped, {N} failed`.
+  *Prose:* `first-officer-shared-core.md` §Completion and Gates.
+
+#### `feedback-flow`
+
+- **FO-R-036** (MUST) — Feedback-gate REJECTED recommendations auto-bounce into the feedback rejection flow instead of waiting for manual review.
+  *Prose:* `first-officer-shared-core.md` §Completion and Gates, gated-stage bullets.
+- **FO-R-037** (MUST) — Feedback cycles are tracked in a `### Feedback Cycles` section of the entity body; 3 cycles escalates to the human.
+  *Prose:* `first-officer-shared-core.md` §Feedback Rejection Flow step 2-3.
+- **FO-R-038** (MUST) — Routed rejection messages carry concrete next-stage assignment and fix work — NOT an acknowledgment-only ping.
+  *Prose:* `first-officer-shared-core.md` §Feedback Rejection Flow step 5; `codex-first-officer-runtime.md` §Dispatch Adapter reuse flow.
+
+#### `merge-cleanup`
+
+- **FO-R-039** (MUST) — When merge hooks exist, FO sets `mod-block=merge:{mod_name}` BEFORE invoking the first hook, in its own `--set` call.
+  *Prose:* `first-officer-shared-core.md` §Merge and Cleanup step 1.
+- **FO-R-040** (MUST) — Clearing `mod-block` runs in a standalone `--set` call separate from terminal-field updates; `status --set` refuses the combined form unless `--force` is passed.
+  *Prose:* `first-officer-shared-core.md` §Merge and Cleanup step 5.
+- **FO-R-041** (MUST) — `status --set` and `status --archive` mechanism-level enforcement refuses terminal transitions when merge hooks are registered AND `pr` is empty AND `mod-block` is empty (unless `--force`). The mechanism catches FO amnesia.
+  *Prose:* `first-officer-shared-core.md` §Mod Hook Convention → Mod-Block Enforcement; `claude-first-officer-runtime.md` §Mod-Block Enforcement.
+- **FO-R-042** (MUST) — Worktree removal uses `git worktree remove`, not `rm -rf` (filesystem deletion leaves stale tracking entries).
+  *Prose:* `code-project-guardrails.md` §Git and Worktrees.
+- **FO-R-043** (MUST_NOT) — FO MUST NOT delete the remote branch while a PR is still pending — remote-branch cleanup belongs to PR merge.
+  *Prose:* `first-officer-shared-core.md` §Merge and Cleanup step 9.
+
+#### `state-writes`
+
+- **FO-R-044** (MUST) — FO's writable scope on main is exactly: entity frontmatter (via `status --set`), new entity files, `### Feedback Cycles` section, archive moves, state-transition commits. Nothing else.
+  *Prose:* `first-officer-shared-core.md` §FO Write Scope.
+- **FO-R-045** (MUST_NOT) — FO MUST NOT directly edit code files, test files, mod files, scaffolding, or entity body beyond `### Feedback Cycles` on main.
+  *Prose:* `first-officer-shared-core.md` §FO Write Scope off-limits list.
+- **FO-R-046** (MUST) — For worktree-backed entities, active stage/status/report/body state lives in the worktree copy; `pr:` is the mirrored exception on main.
+  *Prose:* `first-officer-shared-core.md` §Worktree Ownership.
+
+#### `standing-teammate`
+
+- **FO-R-047** (MUST) — Standing-teammate discovery runs via `claude-team list-standing --workflow-dir {wd}` after TeamCreate resolves and BEFORE entering the normal dispatch event loop.
+  *Prose:* `claude-first-officer-runtime.md` §Standing teammate discovery pass.
+- **FO-R-048** (MUST) — Standing-teammate spawn is deferred to first team-mode dispatch (lazy-spawn), not at boot.
+  *Prose:* `claude-first-officer-runtime.md` §Standing teammate lazy-spawn; `first-officer-shared-core.md` §Standing Teammates first-boot-wins.
+- **FO-R-049** (MUST) — `claude-team spawn-standing` emits an Agent() call spec; FO forwards `subagent_type`, `name`, `team_name`, `model`, `prompt` verbatim to Agent.
+  *Prose:* `claude-first-officer-runtime.md` §Standing teammate lazy-spawn step 1c.
+- **FO-R-050** (MUST) — Standing-teammate routing uses SendMessage by the declared `name`, best-effort, non-blocking, 2-minute timeout; senders never wait synchronously.
+  *Prose:* `first-officer-shared-core.md` §Standing Teammates routing contract.
+- **FO-R-051** (MUST) — Discovery runs in single-entity/bare/Degraded Mode (it is cheap), but lazy-spawn is skipped in those modes.
+  *Prose:* `claude-first-officer-runtime.md` §Standing teammate discovery pass, bare/Degraded note.
+
+#### `captain-interaction`
+
+- **FO-R-052** (MUST) — Captain communication uses direct text output, not SendMessage. SendMessage is for agent-to-agent only.
+  *Prose:* `claude-first-officer-runtime.md` §Captain Interaction.
+- **FO-R-053** (MUST) — After acknowledging idle notifications once, FO produces ZERO output for subsequent idle notifications until a real human message arrives (idle-hallucination guardrail).
+  *Prose:* `claude-first-officer-runtime.md` §Agent Back-off, IDLE HALLUCINATION GUARDRAIL.
+- **FO-R-054** (MUST_NOT) — FO MUST NOT interpret idle notifications as "stuck" or "unresponsive"; idle is normal between-turn state.
+  *Prose:* `claude-first-officer-runtime.md` §Agent Back-off, DISPATCH IDLE GUARDRAIL.
+- **FO-R-055** (MUST) — FO reports workflow state once when reaching idle or a gate; no status-spam while waiting.
+  *Prose:* `first-officer-shared-core.md` §Clarification and Communication.
+- **FO-R-056** (MUST_NOT) — FO MUST NOT file GitHub issues without explicit human approval.
+  *Prose:* `first-officer-shared-core.md` §Issue Filing.
+
+#### `probe-discipline`
+
+- **FO-R-057** (SHOULD) — FO prefers Grep over Read for targeted entity-body inspection; full-file Read should not be used as a probe.
+  *Prose:* `first-officer-shared-core.md` §Probe and Ideation Discipline.
+- **FO-R-058** (MUST) — On Claude Code, FO trusts `status --set` stdout (`field: old -> new`) for mutation narration instead of re-Reading the file (avoids staleness-echo cache-write penalty).
+  *Prose:* `first-officer-shared-core.md` §Probe and Ideation Discipline; `claude-first-officer-runtime.md` §Entity-Body Inspection.
+- **FO-R-059** (MUST) — When checking tool-X supports-Y, FO reads X's schema via ToolSearch before greping for callers — usage presence is not existence evidence.
+  *Prose:* `first-officer-shared-core.md` §Probe and Ideation Discipline first bullet.
+
+#### `single-entity-mode`
+
+- **FO-R-060** (MUST) — Single-entity mode activates on non-interactive sessions (`claude -p`, `codex exec`) when the prompt names a specific entity; does NOT activate in interactive sessions.
+  *Prose:* `first-officer-shared-core.md` §Single-Entity Mode.
+- **FO-R-061** (MUST) — In single-entity mode, FO skips team creation and uses bare-mode dispatch (the Agent tool without `team_name` blocks until completion, preventing premature `-p` session termination).
+  *Prose:* `claude-first-officer-runtime.md` §Team Creation.
+- **FO-R-062** (MUST) — In single-entity mode, gates auto-resolve from the stage report recommendation (PASSED → approve; REJECTED with `feedback-to` → auto-bounce; REJECTED without `feedback-to` → report failure and exit).
+  *Prose:* `claude-first-officer-runtime.md` §Captain Interaction single-entity exception.
+- **FO-R-063** (MUST) — The single-entity gate auto-resolve exception applies ONLY in single-entity mode; in interactive sessions the no-self-approve guardrail is absolute (see FO-R-031).
+  *Prose:* `claude-first-officer-runtime.md` §Captain Interaction.
+
+### Enumeration notes (observations that shaped the schema)
+
+- **Count:** 63 requirements drafted, above the ≥30 floor. Captain may want to consolidate or split during review.
+- **Coverage:** the four FO files plus guardrails. Workflow-level mechanics (status binary semantics, mod convention details) are covered at the FO-facing surface (FO-R-039/040/041); the status binary's own contract is arguably a separate `STATUS-R-NNN` spec — out of scope for v1.
+- **Level distribution:** MUST ≈ 50, MUST_NOT ≈ 12, SHOULD ≈ 1, MAY ≈ 0. Heavy MUST skew reflects that most FO prose is imperative; SHOULD/MAY are rare. Expected for a safety-critical orchestrator.
+- **Schema pressure points identified during enumeration:**
+  - **Runtime scoping.** Some requirements are Claude-only (FO-R-005 through FO-R-015), some Codex-only (FO-R-023, FO-R-024, FO-R-030), most cross-runtime. Schema adds optional `runtime: [claude|codex|both]` — `both` is the default when absent. This replaces the ad-hoc "(Claude-only)" header prefix.
+  - **Level extensions.** None needed. RFC 2119 core (5 levels) covered every observed imperative.
+  - **Cross-reference within L1.** FO-R-063 references FO-R-031. Schema adds optional `refines: [ID, ...]` so exception-style requirements that sit atop a base requirement are machine-discoverable, not just prose.
+  - **`known_flaky` usage so far:** none of the 63 populate it. That field activates when #202's follow-up re-evaluates open flake tasks against the coverage matrix. Keeping it optional (omit-when-empty) keeps v1 clean.
+  - **Anchor-phrase requirements.** FO-R-012 (captain-report verbatim), FO-R-027 (diagnostic anchor phrase), FO-R-034 (gate presentation template) assert LITERAL string presence. Schema adds optional `anchor_phrase: "..."` so tooling/tests can grep for the exact phrase.
+
+### Revised `requirement` YAML schema (with observations folded in)
+
+```yaml
+id: FO-R-013
+level: MUST  # MUST | MUST_NOT | SHOULD | SHOULD_NOT | MAY
+area: dispatch  # from the 12-entry taxonomy above
+runtime: [claude]  # optional; [both] when omitted; values: claude | codex | both
+summary: "FO emits completion-signal literal when forwarding a dispatch prompt."
+anchor_phrase: "does not match next stage effective_model"  # optional; verbatim string that tests can grep
+refines: [FO-R-031]  # optional; for exception-style reqs that sit atop a base req
+known_flaky:  # optional; omit entirely when empty
+  - model: haiku-4-5
+    mode: claude-live
+    reason: "Haiku paraphrases parenthesis-equals syntax to English."
+    tracking_task: 197
+```
+
+Deliberately still absent: test list, prose-location list, coverage cells, flake rates. All derived.
+
 ## Stage Report: ideation
 
 - DONE: Disentangled spec design.
@@ -269,7 +489,9 @@ These are all unblocked by #202 shipping but are not part of its acceptance. Fil
   L1 = hybrid aggregate markdown with per-requirement YAML block (rejected per-file for directory churn, pure table for loss of rationale). L2 = `@pytest.mark.requirement("FO-R-NNN")` with `--strict-markers` (rejected docstring headers for refactor fragility). L3 = `<!-- FO-R-NNN -->` HTML comments (rejected inline citations for reader-facing leakage, separate xref file for third-source-of-truth drift). Blast radius on rename analyzed; `fo-spec rename` subcommand flagged as tooling requirement.
 - DONE: Acceptance criteria + test plan under disentangled design.
   AC-1 through AC-8 rewritten; v0 AC-4 (per-cell flake stamps) removed; v0 AC-5 (static uncovered list) converted to tooling query; AC-7 (tooling) elevated to load-bearing. Test plan: static format check, unit tests per subcommand, one integration drift test, `make test-static` wire-in. No live LLM tests. Bulk prose/test refactor explicitly deferred to follow-ups to contain #202 blast radius.
+- DONE: L1 enumeration drafted against real FO contract.
+  63 requirements extracted from SKILL.md + shared-core + both runtime adapters + guardrails, organized across a 12-area taxonomy. Enumeration surfaced three schema additions (`runtime`, `anchor_phrase`, `refines`) and validated that RFC 2119's 5 levels suffice. Draft lives in entity body under "L1 draft — requirement enumeration" for captain review before implementation.
 
 ### Summary
 
-Redesigned #202 per captain critique: separated stable requirements (L1, owned by spec) from test mapping (L2, owned by test files via pytest markers), prose mapping (L3, owned by prose via HTML comments), and coverage/flake status (L4, tooling-derived, never committed). One coupling retained with justification: `known_flaky` as a slow-changing semantic fact on L1. Tooling is now load-bearing since coverage is no longer stamped. Acceptance criteria tightened to an MVP that ships the plumbing + one-marker/one-anchor proof-of-life; bulk adoption deferred to follow-ups. No code written this stage — design lives in entity body.
+Redesigned #202 per captain critique: separated stable requirements (L1, spec) from test mapping (L2, pytest markers), prose mapping (L3, HTML comments), and coverage (L4, tooling-derived). Drafted 63 real L1 entries against the current FO contract — the enumeration drove three concrete schema additions (`runtime`, `anchor_phrase`, `refines`) that weren't visible in the abstract. Tooling elevated to load-bearing since coverage is no longer stamped. ACs tightened to ship plumbing + proof-of-life; bulk prose/test adoption deferred to follow-ups. No code written — design lives in entity body.
