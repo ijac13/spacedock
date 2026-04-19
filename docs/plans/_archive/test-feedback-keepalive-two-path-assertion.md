@@ -1,16 +1,17 @@
 ---
 id: 190
 title: "Rewrite test_feedback_keepalive core assertion to cover both dispatch and inline-process FO paths"
-status: validation
+status: done
 source: "PR #118 CI surfaced the third brittle watcher (tests/test_feedback_keepalive.py:219-224 post-#188) failing on non-bare claude-live opus-4-6, not just bare-mode haiku. #185 cycle 3 xfailed only the bare-mode haiku combination — the scope was too narrow. The underlying issue is architectural: the test's core assertion presumes per-stage fresh Agent dispatch, which some FO model/mode combinations don't consistently produce even when the workflow completes correctly."
 started: 2026-04-18T16:56:26Z
-completed:
-verdict:
+completed: 2026-04-19T01:21:20Z
+verdict: PASSED
 score: 0.7
-worktree: .worktrees/spacedock-ensign-test-feedback-keepalive-two-path-assertion
+worktree: 
 issue:
 pr: #132
-mod-block: merge:pr-merge
+mod-block: 
+archived: 2026-04-19T01:21:20Z
 ---
 
 ## Why this matters
