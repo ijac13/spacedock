@@ -10,7 +10,7 @@ score: 0.95
 worktree: .worktrees/spacedock-ensign-claude-team-inject-skill-invoke
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 Ensign subagents dispatched via `Agent(subagent_type="spacedock:ensign", team_name=...)` never load their operating contract. The agent-definition skill preload in `agents/ensign.md` frontmatter does not fire under Claude Code team mode, and the fallback prose ("If your operating contract was not already loaded via skill preloading, invoke the `spacedock:ensign` skill now to load it") is not being executed either. Every dispatched ensign runs without the shared-core discipline in context: no BashOutput polling discipline (#183), no stage-report format spec, no scaffolding-change guards, no completion-signal protocol, no evidence-before-knob-turn convention.
