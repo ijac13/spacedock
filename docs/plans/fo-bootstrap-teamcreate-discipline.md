@@ -10,7 +10,7 @@ score: 0.6
 worktree: .worktrees/spacedock-ensign-fo-bootstrap-teamcreate-discipline
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 ## Why this matters
