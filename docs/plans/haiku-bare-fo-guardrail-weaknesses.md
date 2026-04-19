@@ -60,6 +60,11 @@ Verified by: either a concrete before/after diff proposed for `skills/first-offi
 **AC-5 — Static suite green post-merge.**
 Verified by: `make test-static` passes on main after implementation.
 
+**AC-6 — Opus extended-thinking text does NOT bypass `test_gate_guardrail`'s self-approval scrub regex.**
+Verified by: the self-approval-scrub logic in `tests/test_gate_guardrail.py` (around lines 100-108, the regex matching past-tense "approved.*advancing") handles opus extended-thinking content that may contain strings like `<thinking>approved ... advancing</thinking>`. Either the regex is updated to strip `<thinking>` blocks before matching, OR the `fo_text_output` capture strips thinking content upstream, OR an opus-specific xfail is added with a reason citing this AC.
+
+**Evidence motivating AC-6:** PR #132 re-run (CI run `24612094887`) claude-live-opus showed `test_gate_guardrail` failing 2/6 checks. Entity state was correct (held at `status: work`, no archive, gate review text present), but two checks failed — most plausibly the self-approval-scrub false-positive on opus extended-thinking text. Different check count from bare (2/6 vs 1/7) indicates distinct failure paths per model/context. Artifact: `spacedock-test-zxuaa3uo/fo-log.jsonl` (opus); compare with `spacedock-test-2izdmkjp/fo-log.jsonl` (haiku-bare Pattern A).
+
 ## Test plan
 
 - **Static, primary:** AC-1 is static grep + test-marker inspection. AC-5 is `make test-static`.
