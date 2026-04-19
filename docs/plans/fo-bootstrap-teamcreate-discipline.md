@@ -41,46 +41,19 @@ This is a **FO bootstrap-discipline failure on the standing-teammate pipeline** 
 
 Cross-reference #194 but keep scope distinct.
 
-## Observed skipping behaviors (session 2026-04-18 captain-documented)
+## Observed skipping behaviors
 
-Beyond the PR #132 CI evidence, the captain documented two additional observed cases of FOs defaulting to bare mode by omission this week, with self-diagnosed root causes. Both were fresh-commissioned sessions (opus-4-7 operating as first-officer at session start, not inheriting team state from a prior chair).
+Three independent fresh-commissioned sessions defaulted to bare by omission (not design):
 
-### Case A — commissioned session, single-entity pilot
+1. **PR #132 CI haiku-teams** — FO invoked `spawn-standing --team none` and `build` with `team_name: null, bare_mode: true`. Failed `test_standing_teammate_spawn` with a missing standing-teammates prompt section.
+2. **Commissioned single-entity pilot** — FO skipped the team probe at boot; built first dispatch with `bare_mode: true, team_name: null`. Single-entity path, so no failure forced course-correction.
+3. **Multi-worker research-pipeline session** — FO dispatched ~10 parallel `Agent(background)` calls without invoking `TeamCreate` once. Paid a real cost: two ensigns edited the same entity file concurrently and produced duplicated sections requiring post-hoc deduplication.
 
-FO self-report (edited for brevity):
-
-> I skipped the team probe entirely at session start, then drifted into bare mode by default. The commission skill's Phase 3 ("Pilot Run") says "execute the first-officer startup procedure directly." I half-did that — followed entity discovery, but never ran `ToolSearch(query="select:TeamCreate")`. I'd read the runtime adapter once at boot and it didn't reactivate when I shifted from commission to dispatch.
->
-> When I built the first dispatch via `claude-team build`, I just set `bare_mode: true, team_name: null` without thinking. Bare is functionally adequate for one entity, so no failure forced me to course-correct.
->
-> **Root causes (mine):**
-> - Commission-to-FO handoff is a context switch I underweighted.
-> - Cost asymmetry favored skipping. TeamCreate is one tool call. Shortest path to "ensign is running" was bare.
-> - The team probe is buried prose, not a forcing function. It's in the FO runtime adapter, but there's no checklist that surfaces it as the very first thing before Agent().
-
-### Case B — research-pipeline session, multi-worker dispatch
-
-FO dispatched 10 parallel `Agent(background)` calls across a session (literature triage + VIX1D experiment cycles) without invoking TeamCreate once. Paid a real collision cost: two ensigns edited `docs/research/experiments/vix1d-regime-filter.md` concurrently, producing duplicated `## Smoke Verdict` / `## Lessons` / `## Stage Report` sections that required post-hoc deduplication.
-
-FO self-report (edited):
-
-> Three reinforcing reasons, by blame:
->
-> **1. Tool loading friction (biggest factor).** `SendMessage`, `TeamCreate`, `TeamDelete` were DEFERRED tools — not in my active tool set at session boot. Schemas had to be loaded via `ToolSearch` before invocation. Agent was always loaded. The path of least resistance for dispatch was `Agent(background)`. Team setup required two extra tool loads plus schema digestion.
->
-> **2. No forcing function in the Spacedock first-officer skill.** Explains team concepts, ships TeamCreate, but no decision rule like "for N≥2 coordinated workers, create a team first." The pre-Spacedock `.claude/agents/orchestrator.md` had "Create team" as Step 3 of its startup sequence, unconditional. The new Spacedock first-officer lost that forcing function.
->
-> **3. My own habit.** Agent(background) worked for earlier batches; I carried the habit into workflows where coordination mattered.
->
-> **What we actually paid: the VIX1D Cycle 1 / Cycle 2 collision.** Two ensigns edited the same entity file concurrently. Process paid real reconciliation cost; verdict happened to agree on REJECTED so the outcome wasn't worse, but the pattern is dangerous.
-
-### Shared pattern
-
-All three cases (PR #132 CI haiku-teams, Case A commissioned single-entity, Case B research pipeline multi-worker) share:
+**Shared pattern:**
 
 - FO started without an explicit team state.
 - No forcing function at dispatch time asked "did you set up a team?"
-- Bare mode was functional for the immediate task, so no feedback signal corrected the omission.
+- Bare mode was functional for the immediate task; no feedback signal corrected the omission.
 - The skip compounded: once bare, downstream team-dependent primitives (`spawn-standing`, `SendMessage` coordination) were silently unavailable or malformed.
 
 This isn't a prose-only problem. It's a multi-layer ergonomics gap: FO prose + harness tool-loading defaults + helper binary behavior + commission skill Phase 3 prose.
