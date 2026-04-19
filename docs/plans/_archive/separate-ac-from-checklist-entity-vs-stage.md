@@ -1,16 +1,17 @@
 ---
 id: 193
 title: "Separate acceptance criteria (entity-level) from checklist (stage-level)"
-status: validation
+status: done
 source: "captain observation during #186 gate-review triage — current practice conflates 'acceptance criteria' (when the task is done) with 'checklist' (what this dispatch does). Ensigns treat AC items as stage-level todos, making 'defer to validation' feel legitimate even when the AC belongs to the overall entity. Cleaner separation: AC lives at entity level (properties of the final outcome), checklist lives at stage level (mechanical steps for this dispatch)."
 started: 2026-04-18T05:50:46Z
-completed:
-verdict:
+completed: 2026-04-19T03:32:05Z
+verdict: PASSED
 score: 0.7
-worktree: .worktrees/spacedock-ensign-separate-ac-from-checklist-entity-vs-stage
+worktree: 
 issue:
 pr: #128
-mod-block: merge:pr-merge
+mod-block: 
+archived: 2026-04-19T03:32:05Z
 ---
 
 ## Why this matters
