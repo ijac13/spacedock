@@ -9,7 +9,7 @@ verdict:
 score: 0.6
 worktree: .worktrees/spacedock-ensign-fo-bootstrap-teamcreate-discipline
 issue:
-pr:
+pr: #133
 mod-block: merge:pr-merge
 ---
 
