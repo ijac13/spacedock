@@ -1,13 +1,13 @@
 ---
 id: 203
 title: "Green main for opus-4-7 — close the loop on test suite flakes"
-status: ideation
+status: implementation
 source: "captain directive 2026-04-18: after multiple sessions chasing flake after flake, focus on one thing — green main for opus-4-7. Reference CI run: https://github.com/clkao/spacedock/actions/runs/24619609861/job/71987768307"
 started: 2026-04-19T03:45:52Z
 completed:
 verdict:
 score: 0.9
-worktree:
+worktree: .worktrees/spacedock-ensign-opus-4-7-green-main
 issue:
 pr:
 mod-block:
