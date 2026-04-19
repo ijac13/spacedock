@@ -809,6 +809,62 @@ class TestBuildEntityPathTranslation:
         assert ".worktrees" not in out["prompt"]
 
 
+class TestBuildEntityPathContract:
+    """#164: entity_path must be project-root absolute, not worktree-absolute."""
+
+    def test_build_rejects_worktree_entity_path(self, tmp_path):
+        """AC-1: worktree-absolute entity_path is rejected with non-zero exit + stderr message."""
+        wf_dir, entity = _make_workflow_fixture(tmp_path)
+        worktree_entity = (
+            f"{tmp_path}/.worktrees/spacedock-ensign-my-task/workflow/my-task.md"
+        )
+        inp = {
+            "schema_version": 1,
+            "entity_path": worktree_entity,
+            "workflow_dir": str(wf_dir),
+            "stage": "ideation",
+            "checklist": ["1. Think"],
+            "team_name": "t",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp)
+        assert result.returncode != 0
+        assert "must be a project-root absolute path" in result.stderr
+        assert worktree_entity in result.stderr
+
+    def test_build_prompt_entity_path_not_doubled(self, tmp_path):
+        """AC-2: project-root entity_path produces a prompt with exactly one /.worktrees/ segment on the Read line."""
+        wf_dir, _ = _make_workflow_fixture(tmp_path)
+        entity = _make_worktree_entity(tmp_path, wf_dir)
+        inp = {
+            "schema_version": 1,
+            "entity_path": str(entity),
+            "workflow_dir": str(wf_dir),
+            "stage": "implementation",
+            "checklist": ["1. Build"],
+            "team_name": "t",
+            "bare_mode": False,
+        }
+        result = run_build(wf_dir, inp, cwd=tmp_path)
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        out = json.loads(result.stdout)
+        read_lines = [
+            line for line in out["prompt"].splitlines()
+            if "Read the entity file at" in line
+        ]
+        assert len(read_lines) == 1, f"expected one Read-entity line; got {read_lines}"
+        assert read_lines[0].count("/.worktrees/") == 1
+
+    def test_build_help_documents_entity_path_contract(self):
+        """AC-3: build --help text names the entity_path project-root requirement."""
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "build", "--help"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        assert "entity_path must be a project-root absolute path" in result.stdout
+
+
 class TestBuildFeedbackDispatch:
     """AC-6: Feedback dispatch includes feedback context."""
 

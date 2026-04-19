@@ -111,6 +111,16 @@ def cmd_build(args):
     bare_mode = inp.get('bare_mode', False)
     is_feedback_reflow = inp.get('is_feedback_reflow', False)
 
+    # Rule 12: entity_path must be project-root, not worktree-absolute.
+    # The helper derives the worktree read target internally; passing a worktree
+    # path doubles the .worktrees/ prefix in the emitted prompt.
+    if '/.worktrees/' in entity_path or entity_path.startswith('.worktrees/'):
+        return _build_error(
+            f"entity_path must be a project-root absolute path; got worktree path '{entity_path}'. "
+            f"Pass the project-root location (e.g. '/repo/docs/plans/{{slug}}.md'), not the worktree copy. "
+            f"The helper derives the worktree read target internally."
+        )
+
     # Rule 9: Checklist non-empty
     if not isinstance(checklist, list) or len(checklist) == 0:
         return _build_error('checklist must not be empty')
@@ -906,7 +916,18 @@ def main():
     budget_parser = subparsers.add_parser("context-budget", help="Check agent context budget")
     budget_parser.add_argument("--name", required=True, help="Agent name to look up")
 
-    build_parser = subparsers.add_parser("build", help="Assemble structured dispatch JSON")
+    build_parser = subparsers.add_parser(
+        "build",
+        help="Assemble structured dispatch JSON",
+        description=(
+            "Assemble structured dispatch JSON from stdin.\n"
+            "\n"
+            "entity_path must be a project-root absolute path\n"
+            "(e.g. /repo/docs/plans/slug.md), not a worktree-absolute path;\n"
+            "the helper derives the worktree read target internally."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     build_parser.add_argument("--workflow-dir", required=True, help="Absolute path to workflow directory")
 
     spawn_parser = subparsers.add_parser(
