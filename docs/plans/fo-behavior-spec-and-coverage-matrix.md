@@ -1,9 +1,9 @@
 ---
 id: 202
 title: "FO behavior spec + coverage matrix as source of truth"
-status: backlog
+status: ideation
 source: "session 2026-04-18 — reflecting on the flake-task backlog (13 open tasks, mostly class-A/B LLM-output-brittleness). Captain observation: without a structured inventory of desired FO behaviors mapped to tests and model coverage, every flake triage is ad-hoc and every fix risks deflecting ambient flakes to new tasks without addressing the root class. Spec-as-source-of-truth: prose (FO SKILL + runtime adapters) and code (tests) should conform to the spec, not vice versa."
-started:
+started: 2026-04-19T16:58:51Z
 completed:
 verdict:
 score: 0.85
