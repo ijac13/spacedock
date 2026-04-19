@@ -55,3 +55,189 @@ The three failing tests under investigation in #203 (`test_feedback_keepalive`, 
 The **CI-vs-local divergence** observed in #203's ideation (local 3/3 PASS vs CI 3/3 FAIL on the same HEAD) fits this hypothesis: fast local hardware absorbs the no-contract floundering under the step-timeouts; slow CI runners don't. After #204 ships, re-running the three failing tests on CI with zero test-code changes should clarify how much of #203 is really #204 in disguise.
 
 Acceptance criteria and a test plan will be defined during ideation per the workflow README.
+
+## Ideation
+
+### 1. Alignment audit: spawner prompt vs shared-core
+
+The `claude-team build` subcommand assembles the ensign dispatch prompt in `skills/commission/bin/claude-team` at lines 269-378 (the 10 numbered `prompt_parts` sections). The audit below walks each prose fragment the spawner emits and maps it against `skills/ensign/references/ensign-shared-core.md` (shared-core) and `skills/ensign/SKILL.md` (entry point). Alignment verdict codes: **aligned** (same content, same intent), **divergent** (both cover same topic but with conflicting detail), **duplicative** (spawner repeats shared-core verbatim or near-verbatim), **missing-in-spawner** (shared-core has it, spawner doesn't), **missing-in-core** (spawner has it, shared-core doesn't), **per-dispatch** (legitimately belongs in spawner — cannot live in shared-core because it varies per dispatch).
+
+| # | Spawner fragment (from `claude-team build` output) | Matching shared-core / SKILL.md content | Verdict |
+|---|---|---|---|
+| P1 | Header: `You are working on: {title}\n\nStage: {stage}` (claude-team:273) | None — shared-core references "the entity" / "the stage" abstractly in `## Assignment` | **per-dispatch** (title and stage name are per-dispatch values) |
+| P2 | Stage definition block: `### Stage definition:\n\n{stage_subsection}` extracted from workflow README (claude-team:276) | Shared-core `## Assignment` bullet: "the stage definition" (listed as expected input) | **per-dispatch** (stage definition varies per workflow and per stage) |
+| P3 | Worktree instructions: "Your working directory is {path}. All file reads and writes MUST use paths under {path}. Your git branch is {branch}. All commits MUST be on this branch. Do NOT switch branches or commit to main." (claude-team:279-286) | Shared-core `## Working` step 2: "If you were given a worktree path, keep all reads, writes, and commits under that worktree." + `code-project-guardrails.md` `## Git and Worktrees` and `## Paths and File Scope` | **divergent** — spawner says "Do NOT switch branches or commit to main" (imperative, absolute), shared-core says "keep all reads, writes, and commits under that worktree" (scoping-based). Spawner is narrower and stricter; shared-core's guidance that body-edits "belong to the worker" (guardrails) implicitly permits worker commits. Both are compatible but the spawner adds the "no branch switching" rule not present in shared-core. |
+| P4 | Entity read instruction: "Read the entity file at {path} for the current spec" / "…for the full spec. It contains:" (claude-team:288-299) | Shared-core `## Working` step 1: "Read the entity file before making changes." | **aligned** (spawner specifies the path; shared-core states the rule) — per-dispatch path + shared rule |
+| P5 | Do-not-modify block: "Do NOT modify YAML frontmatter in entity files.\nDo NOT modify files under agents/ or references/ — these are plugin scaffolding." (claude-team:302-305) | Shared-core `## Rules` first two bullets: identical language including the em-dash phrase "— these are plugin scaffolding" | **duplicative** — spawner repeats shared-core verbatim. If shared-core is loaded, this block is pure duplication. |
+| P6 | Feedback context block: `### Feedback from prior review\n\n{feedback_context}` (claude-team:309) | None in shared-core. Runtime adapter `claude-ensign-runtime.md` `## Feedback Interaction` covers behavioral expectations (re-check, update stage report, resend completion) but not the block itself | **per-dispatch** (feedback text is per-dispatch) — but note the shared-core lacks any guidance on how to consume a feedback block |
+| P7 | Scope notes block (captain charter / staff-review note / etc.): raw passthrough (claude-team:313) | None | **per-dispatch** (varies per dispatch by design — FO-authored per-task guidance) |
+| P8a | Completion-checklist header: "Write a ## Stage Report section into the entity file when done." (claude-team:318-320) | Shared-core `## Stage Report Protocol`: "Append a `## Stage Report: {stage_name}` section at the end of the entity file…" | **divergent** — spawner says `## Stage Report` (no stage_name); shared-core says `## Stage Report: {stage_name}`. Shared-core is the more specific/correct form. |
+| P8b | Mark directive: "Mark each: DONE, SKIPPED (with rationale), or FAILED (with details)." | Shared-core `## Stage Report Protocol` bullet: "`DONE:` means complete / `SKIPPED:` means intentionally skipped with rationale / `FAILED:` means attempted and failed with concrete details" | **aligned** (same three states, same semantics) |
+| P8c | Summary slot: `### Summary\n{brief description of what was accomplished}` | Shared-core `## Stage Report Protocol` template includes `### Summary\n{2-3 sentences…}` | **aligned** (compatible; shared-core is more specific) |
+| P8d | Tail imperative: "Every checklist item must appear in your report. Do not omit items." | Shared-core `## Stage Report Protocol` bullet: "every checklist item must appear" | **duplicative** (same rule, different phrasing) |
+| P8e | Per-item checklist text (derived from FO-supplied `checklist` list) | None | **per-dispatch** (the checklist items are per-dispatch) |
+| P9 | Standing teammates block: names, descriptions, routing usage per mod (claude-team:330-359) | None — shared-core doesn't describe standing teammates at all; final officer's `first-officer-shared-core.md` `## Standing Teammates` does, and the spawner points there in its last line | **per-dispatch** — but the SendMessage routing mechanics could be shared-core material if ensigns are ever expected to route to teammates outside this block |
+| P10a | Completion-signal instruction: `SendMessage(to="team-lead", message="Done: {title} completed {stage}. Report written to {entity_file_path}.")` (claude-team:365-369) | Claude-ensign-runtime `## Completion Signal` has identical template; shared-core `## Completion` says "send a minimal completion signal that points the first officer back to the entity file, then stop" (abstract form) | **duplicative with runtime adapter**, **aligned with shared-core abstract rule** — the spawner inlines the exact runtime-adapter template. If the ensign loads the skill, it transitively loads the runtime adapter via the `## Runtime adapter` conditional-read. |
+| P10b | Signal format: "Plain text only. No JSON. Until you send this message, the first officer keeps waiting…" | Claude-ensign-runtime `## Completion Signal`: "Plain text only. Never send JSON." | **duplicative** (same rule, spawner adds the "FO keeps waiting" explanation) |
+| P10c | FO-to-Agent forwarding footnote: "**If you are the first officer forwarding this prompt to Agent():** copy the entire block above into `Agent(prompt=...)` character-for-character. Do NOT paraphrase…" (claude-team:373-378) | None | **missing-in-core** — this is a meta-instruction to the forwarding orchestrator, not to the ensign. It is arguably mis-placed (it is rendered inside the ensign's prompt but its audience is the FO that is about to forward it). Keep it in the spawner. |
+| — | Shared-core `## Background Bash Discipline` (BashOutput polling vs blocking sleep; #183) | NOT emitted by spawner at all | **missing-in-spawner** — this is exactly the discipline #204 is trying to reach ensigns with. Under the broken preload, ensigns never see it. |
+| — | Shared-core `## Worktree Ownership` (main vs worktree state, `pr:` mirror exception) | NOT emitted by spawner; partially covered by P3's worktree imperatives | **missing-in-spawner** (partial) — spawner enforces "stay in the worktree" but does not mention `pr:` field exception or main-vs-worktree state rules |
+| — | Shared-core `## Working` step 4 ("Update the entity file body, not the frontmatter") | Covered by spawner P5 | **duplicative** (P5 is the stronger form) |
+| — | Shared-core `## Working` step 5 ("Commit your work before signaling completion") | NOT emitted by spawner | **missing-in-spawner** — not enforced in the spawner prompt at all. The spawner's P10 completion signal presumes commits are done but does not state the rule. |
+| — | Shared-core `## Rules` third bullet ("If requirements are unclear or ambiguous, escalate to the first officer rather than guessing") | NOT emitted by spawner (the runtime adapter's `## Clarification` section covers it) | **missing-in-spawner** — covered by the runtime adapter if loaded. If preload is broken, ensigns never see it. |
+| — | Shared-core `## Stage Report Protocol` size guideline (30-50 lines max), no-checkbox-markers rule, `(cycle N)` redispatch rule | NOT emitted by spawner | **missing-in-spawner** — ensigns without the skill loaded can and do write arbitrarily long stage reports without the `(cycle N)` convention. This drift is visible in recent entity files. |
+| — | `code-project-guardrails.md` (all sections: git worktrees, paths/file scope, scaffolding protection, commits/evidence) | Partially emitted: P3 covers worktree/branch, P5 covers scaffolding protection | **missing-in-spawner** (partial) — commits/evidence discipline and commit-before-signaling not emitted |
+
+**Summary of audit:**
+- **5 topics are duplicative** (P5, P8a-partial, P8b, P8d, P10a, P10b) — the spawner has evolved to inline shared-core content as a band-aid for the broken preload.
+- **1 topic is divergent** (P8a: `## Stage Report` vs `## Stage Report: {stage_name}`) — the spawner's form is less specific and would cause shared-core-loaded ensigns to produce a different heading than spawner-only ensigns produce. This is a real drift.
+- **5 topics are missing-in-spawner** (Background Bash Discipline / #183, Worktree Ownership / `pr:` exception, commit-before-signaling, escalation rule, stage-report size and `(cycle N)` discipline) — these are the gaps that explain the #203 CI failures (timeout-budget floundering, arbitrary stage-report format, improvised completion signals).
+- **Per-dispatch content** (P1, P2, P6, P7, P8e, P9 — stage definition, entity path, feedback, scope notes, checklist items, standing teammates): legitimately belongs only in the spawner.
+
+### 2. Design choice
+
+**Recommended: option (d) hybrid — inject Skill-invoke first-action directive AND keep a trimmed spawner prose that covers only per-dispatch content.**
+
+The spawner keeps P1, P2, P3 (path-specific worktree assignment), P4, P6, P7, P8c, P8e, P9, P10a (this dispatch's completion-signal literal), P10c (FO-forwarding note). The spawner **removes** P5 (duplicative rules), P8a-tail (duplicative stage-report imperatives — shared-core's protocol is the authoritative spec), P8b (DONE/SKIPPED/FAILED semantics), P8d (checklist-completeness rule), P10b-tail (plain-text-no-JSON phrasing). The spawner **prepends** a first-action directive: `Skill(skill="spacedock:ensign")` as the first `prompt_parts` entry before the header, with a short preamble so the LLM treats it as a user instruction rather than embedded prose.
+
+**Concrete directive text to prepend** (single prompt_parts insert at index 0):
+
+```
+## First action
+
+Before anything else, invoke your operating contract:
+
+    Skill(skill="spacedock:ensign")
+
+This loads the shared ensign discipline (stage-report format, BashOutput polling, worktree ownership, completion signal protocol). The call is idempotent — if the agent-definition preload ever starts working, invoking it again is a no-op. Do not paraphrase; call the tool.
+```
+
+**Why (d) over (a):** Option (a) would delete the P8a/b/d checklist framing entirely. But some of that framing (e.g., the per-dispatch checklist items in P8e and the `### Summary` slot) is legitimately per-dispatch and belongs in the spawner. Option (d) lets the spawner keep the scaffolding it needs while delegating the rules to shared-core.
+
+**Why (d) over (b):** Option (b) keeps the full duplicated prose as belt-and-suspenders. That perpetuates the drift already visible in the audit (P8a `## Stage Report` vs shared-core `## Stage Report: {stage_name}`). Once there are two sources of truth, edits to one will desync the other. A consistency-check CI job is possible but expensive relative to just removing the duplication.
+
+**Why not (c):** The audit shows the spawner prose is materially incomplete (5 missing-in-spawner topics, including the BashOutput discipline directly implicated in #203 and #183). Keeping the current spawner and not injecting Skill would leave the root cause in place.
+
+**Tradeoff named:** option (d) means ensigns that invoke `Skill(skill="spacedock:ensign")` pay a small context-window cost (the shared-core + guardrails + runtime-adapter contents enter context). Measured sizes: shared-core 79 lines, guardrails 33 lines, claude-ensign-runtime 32 lines — roughly 150 lines of prose, far below the #177 hallucination threshold. This cost is offset by removing ~15 lines of duplicated prose from the spawner.
+
+**Out of scope for this task (explicitly):** the standing-teammate spawn path (`cmd_spawn_standing`, claude-team:717-817). That path emits a mod's `## Agent Prompt` section verbatim as the spawn prompt — it does not go through `cmd_build`. A separate audit of standing-teammate mods would need to check each mod for analogous preload/prose drift. Filing that as a follow-up is appropriate; it is not a blocker for #203.
+
+### 3. Acceptance criteria and test plan
+
+AC1. Every ensign dispatch emitted by `claude-team build` (team mode and bare mode) contains the literal string `Skill(skill="spacedock:ensign")` in the assembled `prompt` field, positioned before the `You are working on:` header.
+  - **Verified by:** a unit test in `tests/test_claude_team.py` that invokes `cmd_build` with a minimal valid stdin payload and asserts the substring appears at `prompt.index("You are working on:") > prompt.index('Skill(skill="spacedock:ensign")')`. Run in both bare_mode and team-mode variants.
+
+AC2. Following a dispatch through the fixed `claude-team build`, the resulting ensign subagent's jsonl contains a `Skill` tool call with input `{"skill": "spacedock:ensign"}` as its first tool_use entry.
+  - **Verified by:** a post-implementation smoke test — dispatch a throwaway ensign for any ideation stage (e.g. a no-op task seed), locate the jsonl via `claude-team context-budget --name {derived_name}` path logic or direct glob, filter for `type == "assistant"` entries with `message.content[*].type == "tool_use"`, and assert the first such tool_use has `name == "Skill"` and `input.skill == "spacedock:ensign"`. Record the smoke-test jsonl path in the implementation stage report.
+
+AC3. The `skills/commission/bin/claude-team` file no longer emits prose that duplicates content already present in `skills/ensign/references/ensign-shared-core.md`. Specifically, the following substrings are absent from the spawner's `prompt_parts` assembly (after the fix):
+  - `Do NOT modify YAML frontmatter in entity files.`
+  - `Do NOT modify files under agents/ or references/`
+  - `Every checklist item must appear in your report. Do not omit items.`
+  - `Mark each: DONE, SKIPPED (with rationale), or FAILED (with details).`
+  - **Verified by:** a grep target in the same unit test — assert each string is NOT substring-present in the assembled `prompt` field.
+
+AC4. Every fragment removed from the spawner in AC3 is covered by existing content in `skills/ensign/references/ensign-shared-core.md`. This is a mapping invariant, not a dynamic property.
+  - **Verified by:** a static cross-reference table in this stage report (below), mapping each removed substring → shared-core heading + line range. Reviewer checks the table by opening shared-core and confirming each cited range exists.
+
+AC5. The one divergent naming (P8a: spawner `## Stage Report` vs shared-core `## Stage Report: {stage_name}`) is resolved in favor of shared-core. After the fix, the spawner does not emit the string `## Stage Report` at all (the rule lives in shared-core only).
+  - **Verified by:** grep target in the unit test — assert `"## Stage Report"` is NOT a substring of the assembled `prompt` field.
+
+AC6. The Skill-invoke directive text itself is idempotent and survives the case where agent-definition preload starts working. The directive's preamble must include language instructing the ensign that re-invoking the skill is a no-op.
+  - **Verified by:** static inspection — the prepended directive contains the phrase "idempotent" or equivalent ("no-op") in the explanation text. Asserted as a substring check in the unit test.
+
+**Mapping table for AC4 (removed-substring → shared-core coverage):**
+
+| Removed spawner substring | Shared-core section | Shared-core content |
+|---|---|---|
+| `Do NOT modify YAML frontmatter in entity files.` | `## Rules` bullet 1 | Identical wording |
+| `Do NOT modify files under agents/ or references/ — these are plugin scaffolding.` | `## Rules` bullet 2 | Identical wording |
+| `Every checklist item must appear in your report. Do not omit items.` | `## Stage Report Protocol` rules list | "every checklist item must appear" |
+| `Mark each: DONE, SKIPPED (with rationale), or FAILED (with details).` | `## Stage Report Protocol` rules list | "`DONE:` means complete / `SKIPPED:` means intentionally skipped with rationale / `FAILED:` means attempted and failed with concrete details" |
+
+**Test plan:**
+
+- **Static (unit) tests** — new `tests/test_claude_team.py::test_build_emits_skill_invoke_directive` and sibling cases. Cost: ~10 minutes to write. Run locally + CI. Verifies AC1, AC3, AC5, AC6.
+- **Smoke test (one-shot)** — after implementation commits land, run `claude-team build` via the FO for one throwaway ensign dispatch, inspect the resulting jsonl, and confirm AC2. Cost: ~5 minutes of dispatch + grep. No need for a permanent E2E test — once AC1/AC3/AC5 pass statically, AC2 can only fail if Claude Code's Skill tool itself breaks, which is outside this task's scope.
+- **No E2E suite change needed.** #203's three failing tests (`test_feedback_keepalive`, `test_merge_hook_guardrail`, `test_standing_teammate_spawn`) become the downstream verification: after #204 ships, re-run those tests on CI and observe whether the hypothesized improvement materializes. That is #203's task, not #204's.
+- **AC4 is a static mapping** verified once by reviewer inspection. No automated check needed (the mapping table is small and stable; if shared-core changes, a future task that changes shared-core would update the mapping).
+
+**Estimated implementation cost:** 20-30 lines of diff in `claude-team`, ~60 lines of test code. Under an hour of ensign time at the implementation stage. No scaffolding refactor. No behavioral E2E tests.
+
+## Stage Report: ideation
+
+- DONE: Audit alignment — produced exhaustive 20-row audit table covering all 10 numbered prompt_parts sections in `claude-team build` (lines 269-378), mapping each spawner fragment to shared-core and SKILL.md content with verdict codes (aligned / divergent / duplicative / missing-in-spawner / missing-in-core / per-dispatch).
+  Audit table is the "Ideation §1" subsection above.
+- DONE: Design choice — recommended option (d) hybrid (inject Skill-invoke + trim spawner to per-dispatch content only) over (a), (b), (c). Tradeoffs for each alternative named with concrete citations back to the audit table. Concrete directive text drafted (6-line block).
+  Design rationale is the "Ideation §2" subsection above.
+- DONE: Acceptance criteria + test plan — produced 6 ACs (AC1-AC6), each with a `Verified by` clause. AC1/AC3/AC5/AC6 are unit-testable substring invariants on `cmd_build` output; AC2 is a one-shot smoke test against a live dispatch's jsonl; AC4 is a static mapping invariant with the mapping table inline. Test plan estimates ~10min unit-test authoring + ~5min smoke test, no E2E changes, #203 re-run is the downstream verification not this task's scope.
+  AC list and test plan are the "Ideation §3" subsection above.
+
+### Summary
+
+Audited `claude-team build` prompt assembly against `ensign-shared-core.md` and found 5 duplicative fragments (the spawner has inlined shared-core content as a band-aid for the broken preload), 1 divergent naming (`## Stage Report` vs `## Stage Report: {stage_name}`), and 5 shared-core topics missing from the spawner entirely (including the BashOutput polling discipline that #203 and #183 are symptomatic of). Recommended hybrid fix: prepend a `Skill(skill="spacedock:ensign")` first-action directive AND trim the four duplicated fragments from the spawner so shared-core becomes the single source of truth for cross-dispatch discipline, while the spawner retains only per-dispatch content (header, stage definition, entity path, feedback, scope notes, checklist items, standing teammates, completion signal literal, FO-forwarding note). Flagged the standing-teammate spawn path (`cmd_spawn_standing`) as out of scope — a follow-up task should audit standing-teammate mod prompts for analogous drift.
+
+## Staff Review
+
+**Reviewer:** independent staff-review pass for #204 ideation gate
+**Verdict:** CONCUR WITH REVISIONS
+
+### A. Audit table accuracy
+
+Spot-checked three rows against the source:
+- **P5 (duplicative):** spawner `claude-team:303-304` emits `'Do NOT modify YAML frontmatter in entity files.\nDo NOT modify files under agents/ or references/ — these are plugin scaffolding.\n'`; shared-core lines 30-31 contain the same two sentences verbatim (including the em-dash and "— these are plugin scaffolding" phrase). Verdict correct.
+- **P8a (divergent):** spawner `claude-team:319` emits `'Write a ## Stage Report section into the entity file when done.'`; shared-core line 48 says `'Append a `## Stage Report: {stage_name}` section at the end of the entity file…'`. The divergence is real and material (heading form differs, and "append" vs "write" implies append-vs-overwrite semantics the audit didn't call out). Verdict correct; if anything, under-stated — this is not just naming drift but also a semantic drift (append-only vs write-anywhere).
+- **P10a (duplicative with runtime adapter):** spawner `claude-team:364-369` emits the `SendMessage(to="team-lead", message="Done: ...")` template; `claude-ensign-runtime.md` lines 19-25 contain the same template in a fenced block. Verdict correct.
+
+Line-range claim "269-378" matches the source exactly (assembly starts at the `prompt_parts = []` at line 270 and the final `prompt_parts.append(...)` closes at line 378). No disagreements.
+
+### B. Completeness
+
+Two gaps in the audit:
+1. **Captain Communication (claude-ensign-runtime.md §2, lines 13-15)** — runtime-adapter content covering Shift+Up/Down captain visibility and direct-text-vs-SendMessage rules. The audit's "missing-in-spawner" list doesn't flag this, though it IS loaded transitively via Skill; I'd count it as "covered by Skill, so not spawner's job" rather than a miss, but it's worth a one-line note in the audit since it governs the same captain-facing behavior the spawner is silent on.
+2. **Agent Surface (claude-ensign-runtime.md §1, lines 5-7)** — the "dispatch prompt is authoritative for all assignment fields" sentence is not mirrored in the spawner, and that's deliberate (Skill-loaded), but the audit doesn't enumerate it. Minor.
+
+Otherwise the 20 rows cover all 10 `prompt_parts` appends in `cmd_build`. No spawner fragment is missed.
+
+### C. Design choice soundness
+
+**(i) Context-window cost:** Actual transitive load measured: shared-core 78 lines, code-project-guardrails 32 lines, claude-ensign-runtime 31 lines, SKILL.md 17 lines → **~158 lines**. Ideation's "~150 lines" estimate is accurate. Well below any hallucination threshold. Concur.
+
+**(ii) Idempotency claim:** The "survives preload resuming" claim is weaker than stated. Claude Code's Skill tool call is idempotent at the tool-result level (re-invocation re-emits the content), but the ensign's attention budget isn't — a double-load shows the operating contract twice in-context, which is wasteful but not incorrect. No risk of behavior divergence; just mild redundancy. Fine as stated, but the ideation should soften "is idempotent" to "is safe to re-invoke; content may appear twice in-context but has no behavioral effect."
+
+**(iii) Standing-teammate exclusion:** Partially justified. `cmd_spawn_standing` emits a mod's `## Agent Prompt` section verbatim (claude-team:814), bypassing `cmd_build` entirely. The one live standing teammate (comm-officer.md:77) already does an explicit ToolSearch for `elements-of-style:writing-clearly-and-concisely` in its spawn prompt — so the comm-officer case is not analogous to the ensign-preload bug (comm-officer isn't trying to load its OWN operating contract, just checking tool availability for a specialty skill). **However**, comm-officer does NOT call `Skill(skill="spacedock:ensign")` or any equivalent first-officer/ensign contract loader; it relies on its mod's `## Agent Prompt` section to be self-contained. If future standing mods are added that need shared-core discipline, the same preload bug would bite them. Exclusion is defensible for #204's scope but should be filed as an explicit follow-up task (not just a note) before closing #204.
+
+### D. AC rigor
+
+- **AC1** — CONCUR. The substring + index assertion is robust; `prompt_parts` can change structure without breaking the test as long as the assembled `prompt` string contains both substrings in order.
+- **AC2** — FLAG. "First tool_use entry" is fragile. Claude Code may emit internal/system tool uses (e.g., cached read of agent definition) before the user-prompt-directed action. Recommend: weaken to "within the first 3 tool_use entries" or "before any non-Skill tool use". Also AC2 depends on jsonl path discovery (`claude-team context-budget --name` logic) — flaky if the derived_name collides. Make the smoke test document the exact jsonl path it inspected.
+- **AC3** — CONCUR on substring absence; the substrings listed are stable spawner literals. **But see section E below:** AC3 must be paired with updates to `tests/test_checklist_e2e.py:119` which currently asserts `DONE.*SKIPPED.*FAILED|Mark each.*DONE` MUST be substring-present in the live agent prompt — that test will break when AC3 removes "Mark each: DONE, SKIPPED (with rationale), or FAILED (with details)." The ideation misses this.
+- **AC4** — CONCUR. Static mapping table is clear and the reviewer can verify in <5 minutes.
+- **AC5** — CONCUR, but same test-plan gap: removing `## Stage Report` from the spawner means the existing e2e checklist test and any other test that greps for it need updating.
+- **AC6** — FLAG. The word "idempotent" is jargon. Recommend the directive use plain language ("safe to call more than once; calling it again is a no-op") and assert THAT phrasing, not "idempotent". Otherwise the directive reads as self-referentially technical.
+
+### E. Test-plan gap check
+
+**Silent gap found.** Two existing tests assert on to-be-removed spawner content:
+- `tests/test_checklist_e2e.py:119` — `re.search(r"DONE.*SKIPPED.*FAILED|Mark each.*DONE", agent_prompt, re.IGNORECASE)` will fail when AC3 removes both patterns from the spawner. This is a live e2e test, not a unit test. Plan must update this assertion to grep shared-core instead of the agent_prompt, OR must acknowledge that shared-core's `DONE:`/`SKIPPED:`/`FAILED:` bullets (which load via Skill) will satisfy the regex once the Skill tool-result is part of the prompt log — but that depends on the test's log parser.
+- `tests/test_agent_content.py:116` — this one asserts the string exists in `ensign-shared-core.md`, NOT in the spawner prompt, so it's safe. No change needed, but the ideation doesn't explicitly call out that it checked.
+
+Also: `test_claude_team.py` has ~8 existing assertions on spawner prompt content (lines 656-886, 1628-1708). None of them assert on the four to-be-removed substrings, so they're safe, but the ideation should state this explicitly to close the loop.
+
+### F. Out-of-scope items
+
+Standing-teammate exclusion is justified for #204's scope (the comm-officer spawn prompt at `docs/plans/_mods/comm-officer.md:77` already does explicit skill-availability checks and does not share the ensign-preload bug). But "a separate audit of standing-teammate mods" should be filed as a concrete follow-up issue number before #204 closes — leaving it as a prose aside risks the drift going unaudited. One sentence in the ideation committing to file a follow-up would close this.
+
+### G. Risks not named
+
+1. **The #204 implementer-ensign itself needs the fix.** If #204 is dispatched through the same broken `claude-team build` pipeline before the fix lands, the implementing ensign will lack the operating contract that specifies (e.g.) stage-report format and commit-before-signal — exactly the disciplines the fix is trying to codify. Recommend the FO either (a) manually prepend the Skill-invoke directive to #204's implementation dispatch, or (b) implement #204 without dispatching an ensign (captain-direct edit, given it's ~20 lines of code).
+
+2. **In-flight PRs touching `claude-team` prose.** Any open PR that touches the `prompt_parts` section of `cmd_build` (especially `#128`, the most recent merge) will conflict with AC3's removals. The ideation doesn't list what's in flight. Need to grep open PRs for `cmd_build` / `prompt_parts` touches before implementation starts.
+
+3. **Debuggability of ensign jsonl.** Prepending `Skill(skill="spacedock:ensign")` as the first action means every ensign jsonl now begins with a Skill tool-use entry followed by its result. Tools and scripts that scan for "first meaningful ensign action" (e.g., completion-signal watchers, step-timeout detectors, the `context-budget` extractor) may now misclassify the Skill call as the user-visible first action. Worth a one-line check that no existing tool skips the first tool_use entry or inspects `tool_uses[0]` for specific names.
+
+4. **Shared-core drift regression risk.** Once shared-core is the sole source of truth for the four trimmed fragments, future edits to shared-core that change those bullets' phrasing will immediately reach every ensign — there is no intermediate spawner copy to catch a bad edit at CI time. The trade is correct (single source of truth beats two), but a shared-core change checklist (e.g., a pre-merge grep for the four canonical phrases) is cheap to add.
+
+### Bottom line
+
+The audit is accurate, the line references check out, and the hybrid design (option d) is the right call. Before this passes the ideation gate, three concrete revisions are required: **(R1)** add an explicit test-plan step for updating `tests/test_checklist_e2e.py:119` (and a sweep for any other test that greps agent_prompt for the removed substrings) — this is a concrete silent-breakage, not a theoretical one; **(R2)** soften AC2's "first tool_use entry" to "before any non-Skill tool use" and require the smoke test to record the exact jsonl path inspected; **(R3)** commit to filing a follow-up task number for the standing-teammate prose audit rather than leaving it as a prose note. The remaining flags (AC6 jargon, idempotency phrasing, risks 1-4) are advisory — worth addressing before implementation dispatch but not ideation-gate blockers.
