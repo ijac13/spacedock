@@ -254,3 +254,100 @@ No un-ACd layer, no orphan AC. Mapping is clean.
 ### Summary
 
 All L1-L6 anchor files and edit sites exist and are resolvable. L1, L3, L4, L5, L6 have clean, bounded fix surfaces. **L2 has a material cost concern** — `claude-team build` is stateless and Claude Code does not pass a session ID to helper binaries, so "recorded TeamCreate attempt this session" requires either (a) an ambient-mtime heuristic on `~/.claude/teams/*/config.json` (cheap, warn-only, slight false-negative risk — recommended), (b) an env-var sentinel (cheap but doesn't catch the observed skip pattern), or (c) new marker-file infrastructure (rejected as new infrastructure). Also noted: L3's runtime adapter already presents TeamCreate as step 2 of startup — L3's useful delta is promoting it to Step 1 and naming `spawn-standing` in the existing sequencing rule at line 69, rather than adding a net-new imperative. AC↔L mapping is 1:1 with no orphans. Score 0.6 is appropriate if L2 lands warn-only; captain should confirm L2 shape before implementation.
+
+## Stage Report — Cycle 2 (spike + failing tests)
+
+Captain rejected cycle-1's light-verify as insufficient. Cycle 2 executes the `## Spike and test-first plan` section: deterministic local repro of the skip boundary, then 5 failing tests landed against main HEAD BEFORE any fix. Tests must be RED post-commit; fixes land in implementation stage.
+
+### 1. Spike — reproduce the skip pattern — DONE (Target A chosen)
+
+Chose Target A (2-second shell repro) over Target B (~$1 haiku-teams live). Target A reproduces the exact PR #132 CI failure shape at the helper boundary.
+
+**Invocation:**
+
+```
+$ ./skills/commission/bin/claude-team spawn-standing \
+    --team none \
+    --mod /Users/clkao/git/spacedock/tests/fixtures/standing-teammate/_mods/echo-agent.md
+```
+
+**Output (verbatim, stdout):**
+
+```json
+{
+  "subagent_type": "general-purpose",
+  "name": "echo-agent",
+  "team_name": "none",
+  "model": "sonnet",
+  "prompt": "\nYou are `echo-agent`, a standing teammate. ..."
+}
+```
+
+**Exit code:** 0. **stderr:** empty.
+
+This is the literal PR #132 CI failure: `claude-team spawn-standing --team none` exits 0 with `"team_name": "none"` (the literal string `none`) in the emitted Agent() spec. The helper accepts the argument, emits a well-formed spec with the garbage team name, and the downstream Agent() dispatch produces a subagent in "team none" which does not exist in the registry.
+
+**Also verified:**
+- `--team ""` exit 0 with `"team_name": ""` (same failure shape).
+- `--team None` exit 0 with `"team_name": "None"` (python-style literal).
+- `status --boot` output shape confirmed: sections are MODS / NEXT_ID / ORPHANS / PR_STATE / DISPATCHABLE. No TEAM_STATE.
+- `claude-team build` with `bare_mode: true, team_name: null` on a minimal workflow fixture: exits 0 silently, emits valid dispatch JSON (verified via the new L2 test fixture).
+
+**No need for Target B.** Target A deterministically reproduces the boundary behavior. Live haiku-teams FO spike (Target B) would confirm the upstream FO-level skip but adds no signal for L1-L5 that Target A hasn't already provided.
+
+### 2. Failing tests landed — DONE
+
+New test file: `/Users/clkao/git/spacedock/tests/test_fo_bootstrap_teamcreate_discipline.py` (5 test classes covering L1-L5). Pattern follows existing `tests/test_claude_team.py` and `tests/test_claude_team_spawn_standing.py` — same subprocess-invocation style, fixture conventions, and `HOME` env isolation.
+
+**Tests:**
+
+| # | Test class → method | Layer | Asserts (post-fix) |
+|---|---|---|---|
+| 1 | `TestStatusBootTeamState::test_status_boot_has_team_state_section` | L1 | `status --boot` output contains a `TEAM_STATE` header followed by `present:` line |
+| 2 | `TestBuildWarnsOnBareWithoutTeamEvidence::test_build_signals_on_bare_without_team_evidence` | L2 | `claude-team build` with `bare_mode: true, team_name: null` either exits non-zero OR emits stderr naming TeamCreate/bare/intentional-bare |
+| 3 | `TestRuntimeProseTeamCreateFirst::test_prose_names_teamcreate_as_step_1` | L3 | First numbered item under `## Team Creation` names TeamCreate (today: Step 1 is "Derive project name") |
+| 4 | `TestRuntimeProseTeamCreateFirst::test_sequencing_rule_names_spawn_standing` | L3 | `Sequencing rule` block names `spawn-standing` alongside TeamCreate/TeamDelete/Agent |
+| 5 | `TestCommissionPhase3TeamProbe::test_phase3_has_team_probe` | L4 | Phase 3 contains literal `Team Probe` OR `ToolSearch` + `TeamCreate` |
+| 6-8 | `TestSpawnStandingRejectsEmptyTeam::test_rejects_bad_team_name[none, "", None]` | L5 | `spawn-standing --team {none|""|None}` exits non-zero with stderr naming team-name requirement |
+
+L5 is parametrized over three bad values (`none`, `""`, `None`) — each is an observed failure shape. Counted as one logical test with three parametrizations, yielding 8 distinct failure cases.
+
+**Local run — new file only:**
+
+```
+$ unset CLAUDECODE && uv run pytest tests/test_fo_bootstrap_teamcreate_discipline.py -v
+...
+8 failed in 0.35s
+```
+
+**Local run — full static suite (cycle 2 HEAD):**
+
+```
+$ unset CLAUDECODE && uv run pytest tests/ --ignore=tests/fixtures \
+    -m "not live_claude and not live_codex" -q --tb=no
+...
+8 failed, 440 passed, 22 deselected, 10 subtests passed in 20.67s
+```
+
+**Ratio verified:** pre-cycle-2 baseline suite status was "N passed" (cycle-1 did not touch tests). Cycle-2 HEAD is `440 passed + 8 failed`. The 8 failures are ALL in `test_fo_bootstrap_teamcreate_discipline.py`, ALL the L1-L5 bar. Zero pre-existing failures regressed. `make test-static` will be RED at cycle-2 commit — this is the required TDD red-bar state. Fixes land in implementation stage, at which point all 8 turn green.
+
+**Commit message:** `ideation: #201 cycle 2 — spike + failing tests for L1-L5 (8 red, 0 regressions)`.
+
+### 3. Fix surface confirmation — DONE
+
+The spike confirms the existing L1-L6 fix surface. No root-cause surprises surfaced:
+
+- **L1** anchor (`status --boot` output shape) empirically matches entity's description — MODS / NEXT_ID / ORPHANS / PR_STATE / DISPATCHABLE, no TEAM_STATE. Insertion clean.
+- **L2** anchor confirmed — `bare_mode: true, team_name: null` accepted silently. The test's warn-OR-refuse disjunction leaves captain-choice open (per cycle-1 item 2 concern re: stateless helper). Either satisfies the test.
+- **L3** anchor confirmed with cycle-1 amendment: Team Creation Step 1 is "Derive project name" (not TeamCreate), sequencing rule doesn't name `spawn-standing`. Both gaps testable. Both the "promote to Step 1" and "add spawn-standing to sequencing rule" edits from the cycle-1 finding are now locked by tests #3 and #4.
+- **L4** anchor confirmed — Phase 3 Step 2 says "Execute the first-officer startup procedure directly." with no Team Probe step. Test #5 allows either a `Team Probe` heading or a `ToolSearch.*TeamCreate` line — captain-choice of phrasing.
+- **L5** anchor confirmed — `none`, `""`, and `None` all pass through silently. Guard insertion at `skills/commission/bin/claude-team:694` covers all three.
+- **L6** (static test lock) is now partially satisfied in-advance by `test_fo_bootstrap_teamcreate_discipline.py` itself — specifically tests #3 and #4 serve as the L6 prose-lock. Post-fix, they flip green and then lock the prose against regression. L6 may be downgraded to "verify test file survives the fix" rather than "write a new test" (the new test file IS the lock). Captain may simplify AC-6 accordingly.
+
+No amendments to L1-L5 needed. No new Ls surfaced. Fix surface stands.
+
+**Behavioral spot-check (AC-8 / behavioral spike in plan):** deferred per cycle-2 scope. Target B (live haiku-teams invocation) costs ~$1 and ~3 minutes; not needed for ideation gate. Implementation stage can run AC-8 as part of its verification.
+
+### Summary
+
+Cycle 2 complete. Target A spike deterministically reproduces the PR #132 failure boundary (`spawn-standing --team none` exits 0 with garbage team name in spec). 5 new test classes landed at `tests/test_fo_bootstrap_teamcreate_discipline.py` covering L1-L5; each fails against cycle-2 HEAD and will flip green after the corresponding fix. Static suite result: `440 passed + 8 failed` — exactly 8 expected reds in the new file, zero pre-existing regressions. Fix surface confirmed unchanged; cycle-1 amendments (L3 prose delta = promote TeamCreate to Step 1 + name spawn-standing in sequencing rule; L2 stateless-helper concern requires captain decision on warn-vs-refuse) both hold. L6 is now partially pre-satisfied by the new test file. Ready for ideation gate.
