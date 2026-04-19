@@ -109,7 +109,7 @@ Before anything else, invoke your operating contract:
 
     Skill(skill="spacedock:ensign")
 
-This loads the shared ensign discipline (stage-report format, BashOutput polling, worktree ownership, completion signal protocol). The call is idempotent — if the agent-definition preload ever starts working, invoking it again is a no-op. Do not paraphrase; call the tool.
+This loads the shared ensign discipline (stage-report format, BashOutput polling, worktree ownership, completion signal protocol). The call is safe to call more than once; if the agent-definition preload ever starts working, calling it again is a no-op (the skill content is re-loaded but has no behavioral effect). Do not paraphrase; call the tool.
 ```
 
 **Why (d) over (a):** Option (a) would delete the P8a/b/d checklist framing entirely. But some of that framing (e.g., the per-dispatch checklist items in P8e and the `### Summary` slot) is legitimately per-dispatch and belongs in the spawner. Option (d) lets the spawner keep the scaffolding it needs while delegating the rules to shared-core.
@@ -120,15 +120,17 @@ This loads the shared ensign discipline (stage-report format, BashOutput polling
 
 **Tradeoff named:** option (d) means ensigns that invoke `Skill(skill="spacedock:ensign")` pay a small context-window cost (the shared-core + guardrails + runtime-adapter contents enter context). Measured sizes: shared-core 79 lines, guardrails 33 lines, claude-ensign-runtime 32 lines — roughly 150 lines of prose, far below the #177 hallucination threshold. This cost is offset by removing ~15 lines of duplicated prose from the spawner.
 
-**Out of scope for this task (explicitly):** the standing-teammate spawn path (`cmd_spawn_standing`, claude-team:717-817). That path emits a mod's `## Agent Prompt` section verbatim as the spawn prompt — it does not go through `cmd_build`. A separate audit of standing-teammate mods would need to check each mod for analogous preload/prose drift. Filing that as a follow-up is appropriate; it is not a blocker for #203.
+**On preload-resumption safety:** if the agent-definition preload path is ever fixed upstream, both paths would load shared-core. That is safe to re-invoke; the content may appear twice in-context but has no behavioral effect (the shared-core rules are declarative, not imperative actions to run). Mild redundancy, not a bug — and not worth gating on.
+
+**Out of scope for this task (explicitly):** the standing-teammate spawn path (`cmd_spawn_standing`, claude-team:717-817). That path emits a mod's `## Agent Prompt` section verbatim as the spawn prompt — it does not go through `cmd_build`. A separate audit of standing-teammate mods would need to check each mod for analogous preload/prose drift. Tracked as **#205** (Audit standing-teammate spawn prompts for Skill-invoke / contract drift). It is not a blocker for #203 or for closing #204.
 
 ### 3. Acceptance criteria and test plan
 
 AC1. Every ensign dispatch emitted by `claude-team build` (team mode and bare mode) contains the literal string `Skill(skill="spacedock:ensign")` in the assembled `prompt` field, positioned before the `You are working on:` header.
   - **Verified by:** a unit test in `tests/test_claude_team.py` that invokes `cmd_build` with a minimal valid stdin payload and asserts the substring appears at `prompt.index("You are working on:") > prompt.index('Skill(skill="spacedock:ensign")')`. Run in both bare_mode and team-mode variants.
 
-AC2. Following a dispatch through the fixed `claude-team build`, the resulting ensign subagent's jsonl contains a `Skill` tool call with input `{"skill": "spacedock:ensign"}` as its first tool_use entry.
-  - **Verified by:** a post-implementation smoke test — dispatch a throwaway ensign for any ideation stage (e.g. a no-op task seed), locate the jsonl via `claude-team context-budget --name {derived_name}` path logic or direct glob, filter for `type == "assistant"` entries with `message.content[*].type == "tool_use"`, and assert the first such tool_use has `name == "Skill"` and `input.skill == "spacedock:ensign"`. Record the smoke-test jsonl path in the implementation stage report.
+AC2. Following a dispatch through the fixed `claude-team build`, the resulting ensign subagent's jsonl contains a `Skill` tool call with input `{"skill": "spacedock:ensign"}` before any non-Skill tool use. (Claude Code may emit internal/system tool uses — e.g. cached agent-definition reads — ahead of the user-prompt-directed action; the AC is only that the first tool use targeting a non-Skill tool is preceded by a matching Skill call.)
+  - **Verified by:** a post-implementation smoke test — dispatch a throwaway ensign for any ideation stage (e.g. a no-op task seed), locate the jsonl via `claude-team context-budget --name {derived_name}` path logic or direct glob, filter for `type == "assistant"` entries with `message.content[*].type == "tool_use"`, walk the sequence of tool_use blocks in order, and assert that the first non-`Skill` block is preceded somewhere earlier by a `Skill` block with `input.skill == "spacedock:ensign"`. The smoke test must record the exact jsonl path it inspected (absolute path under `~/.claude/projects/.../subagents/agent-*.jsonl`) in the implementation stage report so a reviewer can independently re-run the check.
 
 AC3. The `skills/commission/bin/claude-team` file no longer emits prose that duplicates content already present in `skills/ensign/references/ensign-shared-core.md`. Specifically, the following substrings are absent from the spawner's `prompt_parts` assembly (after the fix):
   - `Do NOT modify YAML frontmatter in entity files.`
@@ -136,6 +138,7 @@ AC3. The `skills/commission/bin/claude-team` file no longer emits prose that dup
   - `Every checklist item must appear in your report. Do not omit items.`
   - `Mark each: DONE, SKIPPED (with rationale), or FAILED (with details).`
   - **Verified by:** a grep target in the same unit test — assert each string is NOT substring-present in the assembled `prompt` field.
+  - **Test-remediation clause:** removing these substrings from the spawner breaks the live e2e assertion at `tests/test_checklist_e2e.py:119` (`re.search(r"DONE.*SKIPPED.*FAILED|Mark each.*DONE", agent_prompt, ...)`). Implementation must update that assertion to grep `skills/ensign/references/ensign-shared-core.md` for the equivalent pattern (`re.search(r"DONE:.*SKIPPED:.*FAILED:", shared_core_text, re.DOTALL)`) instead of the live agent prompt. Rationale: the pattern now lives authoritatively in shared-core, not in the per-dispatch prompt. This is the single cleanest remediation — option (a) from the reviewer's two candidates — because inspecting the Skill tool-result in the jsonl log (option b) would require parser changes to the test's `LogParser.agent_prompt()` helper and is not worth the complexity for one regex match. (Secondary note: `test_checklist_e2e.py` is already `@pytest.mark.xfail(strict=False, reason="pending #198 ...")` at line 26-27, so a transient mis-match during implementation would not actually fail CI; still fix the assertion in the same PR to avoid leaving a broken test.)
 
 AC4. Every fragment removed from the spawner in AC3 is covered by existing content in `skills/ensign/references/ensign-shared-core.md`. This is a mapping invariant, not a dynamic property.
   - **Verified by:** a static cross-reference table in this stage report (below), mapping each removed substring → shared-core heading + line range. Reviewer checks the table by opening shared-core and confirming each cited range exists.
@@ -143,8 +146,8 @@ AC4. Every fragment removed from the spawner in AC3 is covered by existing conte
 AC5. The one divergent naming (P8a: spawner `## Stage Report` vs shared-core `## Stage Report: {stage_name}`) is resolved in favor of shared-core. After the fix, the spawner does not emit the string `## Stage Report` at all (the rule lives in shared-core only).
   - **Verified by:** grep target in the unit test — assert `"## Stage Report"` is NOT a substring of the assembled `prompt` field.
 
-AC6. The Skill-invoke directive text itself is idempotent and survives the case where agent-definition preload starts working. The directive's preamble must include language instructing the ensign that re-invoking the skill is a no-op.
-  - **Verified by:** static inspection — the prepended directive contains the phrase "idempotent" or equivalent ("no-op") in the explanation text. Asserted as a substring check in the unit test.
+AC6. The Skill-invoke directive text explains in plain language that re-invoking the skill is safe. The directive's preamble must include language along the lines of "safe to call more than once; calling it again is a no-op (the skill content is re-loaded but has no behavioral effect)." Plain language — the word "idempotent" is jargon and should not appear in the directive text.
+  - **Verified by:** static inspection — the prepended directive contains the substring `safe to call more than once` (or equivalent plain-language phrasing) in the explanation text. Asserted as a substring check in the unit test. The test also asserts the word `idempotent` does NOT appear in the directive.
 
 **Mapping table for AC4 (removed-substring → shared-core coverage):**
 
@@ -157,12 +160,47 @@ AC6. The Skill-invoke directive text itself is idempotent and survives the case 
 
 **Test plan:**
 
-- **Static (unit) tests** — new `tests/test_claude_team.py::test_build_emits_skill_invoke_directive` and sibling cases. Cost: ~10 minutes to write. Run locally + CI. Verifies AC1, AC3, AC5, AC6.
-- **Smoke test (one-shot)** — after implementation commits land, run `claude-team build` via the FO for one throwaway ensign dispatch, inspect the resulting jsonl, and confirm AC2. Cost: ~5 minutes of dispatch + grep. No need for a permanent E2E test — once AC1/AC3/AC5 pass statically, AC2 can only fail if Claude Code's Skill tool itself breaks, which is outside this task's scope.
-- **No E2E suite change needed.** #203's three failing tests (`test_feedback_keepalive`, `test_merge_hook_guardrail`, `test_standing_teammate_spawn`) become the downstream verification: after #204 ships, re-run those tests on CI and observe whether the hypothesized improvement materializes. That is #203's task, not #204's.
-- **AC4 is a static mapping** verified once by reviewer inspection. No automated check needed (the mapping table is small and stable; if shared-core changes, a future task that changes shared-core would update the mapping).
+- **Static (unit) tests** — new `tests/test_claude_team.py::test_build_emits_skill_invoke_directive` and sibling cases. Cost: ~10 minutes to write. Run locally + CI. Verifies AC1, AC3, AC5, AC6. Substring assertions: `Skill(skill="spacedock:ensign")` present and positioned before `You are working on:`; each AC3 substring absent from assembled `prompt`; `## Stage Report` substring absent; directive contains `safe to call more than once` and does NOT contain `idempotent`.
+- **Existing-test remediation (R1)** — update `tests/test_checklist_e2e.py:119` in the same implementation PR. The current assertion `re.search(r"DONE.*SKIPPED.*FAILED|Mark each.*DONE", agent_prompt, re.IGNORECASE)` becomes an assertion against shared-core file content: read `skills/ensign/references/ensign-shared-core.md` and assert `re.search(r"DONE:.*SKIPPED:.*FAILED:", shared_core_text, re.DOTALL)` matches. Rationale: once the spawner no longer inlines the phrase, the pattern lives only in shared-core; the test's intent (verify the DONE/SKIPPED/FAILED discipline is documented somewhere the ensign will see) is preserved.
+- **Sweep of `tests/` for adjacent breakage** — ran greps during ideation for the four to-be-removed substrings and for `## Stage Report`. Results, with dispositions:
 
-**Estimated implementation cost:** 20-30 lines of diff in `claude-team`, ~60 lines of test code. Under an hour of ensign time at the implementation stage. No scaffolding refactor. No behavioral E2E tests.
+  | File:line | Match | Disposition |
+  |---|---|---|
+  | `tests/test_checklist_e2e.py:119` | `DONE.*SKIPPED.*FAILED\|Mark each.*DONE` on `agent_prompt` | **MUST UPDATE** (R1 remediation above) |
+  | `tests/test_checklist_e2e.py:131` | `DONE\|SKIPPED\|FAILED` on `fo_text` (not agent_prompt) | **safe, no change** — matches FO's own review text, not the spawner prompt |
+  | `tests/test_agent_content.py:113` | `assert "## Stage Report: {stage_name}" in text` | **safe, no change** — asserts shared-core file content, not the spawner prompt |
+  | `tests/test_agent_content.py:116` | `assert "Do NOT modify YAML frontmatter" in text` | **safe, no change** — asserts shared-core file content (confirms staff-review's note) |
+  | `tests/test_agent_content.py:248,459,467` | `section_text(text, "## Stage Report Protocol", ...)` | **safe, no change** — shared-core section extraction, not spawner content |
+  | `tests/fixtures/*/*-entity.md` (4 files) | `## Stage Report: ...` in fixture entity files | **safe, no change** — fixture content, not assertions |
+  | `tests/test_claude_team.py` ~8 existing assertions on spawner prompt content (lines 656-886, 1628-1708 per staff review) | none match the four AC3 substrings | **safe, no change** — confirmed none of them assert on the four to-be-removed substrings |
+
+- **Sweep of `scripts/` and `tests/` for `tool_uses[0]` / first-tool-use patterns (A5 risk check)** — greps produced:
+
+  | File:line | Match | Disposition |
+  |---|---|---|
+  | `scripts/test_lib.py:991-1001` | `_tool_use_block(entry: dict)` returns first `tool_use` block **within a single assistant entry**, not the first tool use in the whole jsonl | **safe, no change** — callers pass a specific assistant entry they've already selected, so the Skill prepend (which is in its OWN assistant entry) does not affect their result |
+  | Callers of `tool_use_matches` across 9 test files (`test_rebase_branch_before_push.py`, `test_merge_hook_guardrail.py`, `test_feedback_keepalive.py`, `test_standing_teammate_spawn.py`, `test_dispatch_names.py`, `test_fo_stream_watcher.py`, `test_claude_per_stage_model.py`, `test_team_dispatch_sequencing.py`) | match specific tool names on specific entries | **safe, no change** — they don't assume "first tool use in jsonl is X", only "this particular entry's tool_use block matches X" |
+  | `scripts/` — no matches for `tool_uses\[0\]` / `first_tool_use` beyond the helper above | — | **safe** |
+
+  Net: the prepend does not silently break any existing tool-use-inspection logic. If implementation discovers any new-to-the-repo consumer of "first jsonl tool_use" semantics, it should document the assumption change inline.
+
+- **Smoke test (one-shot)** — after implementation commits land, run `claude-team build` via the FO for one throwaway ensign dispatch, inspect the resulting jsonl, and confirm AC2. Cost: ~5 minutes of dispatch + grep. The smoke test records the exact jsonl path in the implementation stage report (per AC2's `Verified by` clause). No need for a permanent E2E test — once AC1/AC3/AC5 pass statically, AC2 can only fail if Claude Code's Skill tool itself breaks, which is outside this task's scope.
+- **No additional E2E suite change needed beyond R1.** #203's three failing tests (`test_feedback_keepalive`, `test_merge_hook_guardrail`, `test_standing_teammate_spawn`) become the downstream verification: after #204 ships, re-run those tests on CI and observe whether the hypothesized improvement materializes. That is #203's task, not #204's.
+- **AC4 is a static mapping** verified once by reviewer inspection. No automated check needed (the mapping table is small and stable; if shared-core changes, a future task that changes shared-core would update the mapping). See also Risk A6 below for a lightweight future defense.
+
+**Pre-implementation sweep (A4):** before dispatching the implementation ensign, the FO must grep open PRs for touches to `cmd_build` / `prompt_parts` that would conflict with AC3's removals — especially anything touching the recently-merged PR #128's territory. Specific command: `gh pr list --state open --search "claude-team" --json number,title,files` and inspect each hit's diff for `prompt_parts` or `claude-team build` changes. If conflicts exist, reconcile (rebase / resequence / coordinate with author) before implementation dispatch.
+
+**Estimated implementation cost:** 20-30 lines of diff in `skills/commission/bin/claude-team` + 1 line change in `tests/test_checklist_e2e.py:119` (R1) + ~60 lines of new unit-test code in `tests/test_claude_team.py`. Under an hour of ensign time at the implementation stage. No scaffolding refactor. No new behavioral E2E tests.
+
+### 4. Risks
+
+**A3 — #204 implementer-ensign bootstrap.** When #204 enters implementation, the implementing ensign itself dispatches through the broken `cmd_build` path and will lack the operating contract — the exact condition this task is trying to eliminate. The FO will manually prepend the Skill-invoke directive to #204's implementation dispatch (same workaround used for this ideation dispatch). Once the fix lands, the workaround is no longer needed. Alternative considered: captain-direct edit (since the change is ~20 lines). Either path works; FO's call at dispatch time.
+
+**A4 — In-flight PR conflicts.** Any open PR that touches the `prompt_parts` section of `cmd_build` (especially recently-merged PR #128) will conflict with AC3's removals. Before implementation dispatches, the FO should grep open PRs: `gh pr list --state open --search "claude-team" --json number,title` plus a diff check on any hits. See the pre-implementation sweep clause in §3.
+
+**A5 — jsonl debuggability.** Tools and scripts that inspect specific tool-use positions (e.g., completion-signal watchers, step-timeout detectors, the `context-budget` extractor) may need updating since every ensign's first tool_use becomes `Skill` after this fix. The ideation sweep (§3 above) verified no existing consumer of that assumption is affected: `scripts/test_lib.py::_tool_use_block` extracts the first tool_use **within a single assistant entry**, not the first tool_use in the jsonl stream, so all 104 call sites remain correct. Implementation must re-run this grep (`rg 'tool_uses\[0\]|first tool_use|first_tool_use'` across `scripts/` and `tests/`) just before landing and document any new-to-the-repo hits. This is informational — no AC required — but skipping the grep risks a silent regression.
+
+**A6 — Shared-core drift regression.** Once shared-core is the sole source of truth for the trimmed fragments, edits to shared-core reach every ensign instantly with no intermediate catch. Mitigation suggestion (do not require in this task's scope): add a pre-merge grep target for PRs that touch `skills/ensign/references/ensign-shared-core.md` that checks the four canonical phrases (the AC3 removed-substring list) are still present. Filing this as a separate follow-up when shared-core authorship is next under review is preferable to bolting it onto #204.
 
 ## Stage Report: ideation
 
@@ -241,3 +279,42 @@ Standing-teammate exclusion is justified for #204's scope (the comm-officer spaw
 ### Bottom line
 
 The audit is accurate, the line references check out, and the hybrid design (option d) is the right call. Before this passes the ideation gate, three concrete revisions are required: **(R1)** add an explicit test-plan step for updating `tests/test_checklist_e2e.py:119` (and a sweep for any other test that greps agent_prompt for the removed substrings) — this is a concrete silent-breakage, not a theoretical one; **(R2)** soften AC2's "first tool_use entry" to "before any non-Skill tool use" and require the smoke test to record the exact jsonl path inspected; **(R3)** commit to filing a follow-up task number for the standing-teammate prose audit rather than leaving it as a prose note. The remaining flags (AC6 jargon, idempotency phrasing, risks 1-4) are advisory — worth addressing before implementation dispatch but not ideation-gate blockers.
+
+## Stage Report: ideation (revision pass)
+
+### Revision summary (R1/R2/R3 + A1-A6)
+
+- **R1 (required)** — DONE. AC3 now carries a `Test-remediation clause` specifying the exact fix for `tests/test_checklist_e2e.py:119` (option (a): re-point the assertion to `skills/ensign/references/ensign-shared-core.md` file content with `re.search(r"DONE:.*SKIPPED:.*FAILED:", ..., re.DOTALL)`). Rationale picks option (a) over option (b) because (b) requires parser-level changes to `LogParser.agent_prompt()`. Test plan §3 now includes a sweep table listing every `tests/` grep hit for the four AC3 substrings + `## Stage Report`, each dispositioned (`MUST UPDATE` for the one real breakage, `safe, no change` for every other hit with reason). Files/lines explicitly checked: `tests/test_checklist_e2e.py:119`, `tests/test_checklist_e2e.py:131`, `tests/test_agent_content.py:113,116,248,459,467`, `tests/fixtures/*` entity files, and the `test_claude_team.py` lines 656-886 & 1628-1708 range that staff review flagged.
+- **R2 (required)** — DONE. AC2 rewritten from "first tool_use entry" to "before any non-Skill tool use" with explicit acknowledgement of internal/system tool-use entries preceding the user-prompt-directed action. `Verified by` clause now mandates recording the exact jsonl path (absolute, under `~/.claude/projects/.../subagents/agent-*.jsonl`) in the implementation stage report.
+- **R3 (required)** — DONE. Out-of-scope paragraph now cites **#205** by number, replacing the prose "Filing that as a follow-up is appropriate" with "Tracked as #205 (Audit standing-teammate spawn prompts for Skill-invoke / contract drift)." No change to the scope decision itself.
+- **A1 (advisory)** — DONE. The word "idempotent" is removed from both the prepended directive text (§2) and AC6. Directive now reads "safe to call more than once; if the agent-definition preload ever starts working, calling it again is a no-op (the skill content is re-loaded but has no behavioral effect)." AC6 substring assertion now checks for `safe to call more than once` AND asserts `idempotent` does NOT appear.
+- **A2 (advisory)** — DONE. §2 design rationale carries a new paragraph `**On preload-resumption safety:**` that explicitly phrases the claim as "safe to re-invoke; content may appear twice in-context but has no behavioral effect" — exactly the softening the staff review requested.
+- **A3 (advisory)** — DONE. New `### 4. Risks` subsection under the test plan names the #204 implementer-ensign bootstrap risk and proposes the FO workaround (manually prepend Skill-invoke directive, same as this ideation dispatch) plus the alternative (captain-direct edit).
+- **A4 (advisory)** — DONE. Named in the new Risks subsection AND a **Pre-implementation sweep** paragraph added at the end of §3 specifying the exact `gh pr list` command the FO must run before dispatching implementation.
+- **A5 (advisory)** — DONE. New Risks subsection names the jsonl-debuggability risk. §3 test plan now includes a sweep table of `tool_uses[0]` / `first tool_use` / `first_tool_use` matches across `scripts/` and `tests/`, showing the one concrete hit (`scripts/test_lib.py::_tool_use_block`) is **safe by construction** because it operates per-assistant-entry, not per-jsonl-stream. All 104 call sites of `tool_use_matches` across 9 test files verified safe. Implementation must re-run the grep before landing.
+- **A6 (advisory)** — DONE. Named in the new Risks subsection as an informational item. Explicitly not required in this task's scope; recommended mitigation (pre-merge grep target for shared-core PRs) flagged as a separate future follow-up rather than bolted onto #204.
+
+### Per-item status
+
+- DONE: R1 — AC3 test-remediation clause + tests/ sweep table with dispositions for every hit of the four removed substrings and `## Stage Report`. Files/lines explicitly listed.
+  See AC3 (new "Test-remediation clause" paragraph) and §3 test plan sweep table.
+- DONE: R2 — AC2 rewritten to use "before any non-Skill tool use"; Verified-by clause mandates recording the exact jsonl path.
+  See AC2.
+- DONE: R3 — Out-of-scope paragraph cites #205 by number.
+  See §2 "Out of scope" paragraph.
+- DONE: A1 — Directive text and AC6 purged of "idempotent" jargon; substring assertion updated.
+  See §2 directive block and AC6.
+- DONE: A2 — §2 design rationale carries "safe to re-invoke; content may appear twice in-context but has no behavioral effect" paragraph.
+  See §2 "On preload-resumption safety" paragraph.
+- DONE: A3 — New §4 Risks subsection names implementer-ensign bootstrap risk with workaround + alternative.
+  See §4 Risks item A3.
+- DONE: A4 — Risks subsection names in-flight PR conflict risk; §3 adds a Pre-implementation sweep paragraph with the exact `gh pr list` command.
+  See §4 Risks item A4 and §3 Pre-implementation sweep paragraph.
+- DONE: A5 — Risks subsection names jsonl-debuggability risk; §3 adds a sweep table showing `scripts/test_lib.py::_tool_use_block` is safe by construction (per-entry, not per-stream) and all 104 `tool_use_matches` call sites across 9 test files are safe.
+  See §4 Risks item A5 and §3 "Sweep of `scripts/` and `tests/`" table.
+- DONE: A6 — Risks subsection names shared-core drift regression risk as informational; mitigation suggestion flagged as separate future follow-up.
+  See §4 Risks item A6.
+
+### Summary
+
+Revision pass addressed all three required items (R1 test-remediation clause for `test_checklist_e2e.py:119` via re-pointing to shared-core, R2 AC2 softening to "before any non-Skill tool use" + mandatory jsonl path recording, R3 #205 citation) and all six advisory items (A1 plain-language "safe to call more than once" replacing "idempotent" in both directive and AC6; A2 softened preload-resumption phrasing in §2; A3-A6 named in a new §4 Risks subsection with concrete mitigations where applicable and explicit deferrals where not). Added a comprehensive tests/ sweep table to §3 dispositioning every grep hit of the four AC3 substrings plus `## Stage Report` and `tool_uses[0]` / `first tool_use` patterns across `scripts/` and `tests/` — net finding is one real breakage (already handled by R1) and zero hidden consumers of "first tool use in jsonl" semantics. Test plan now cites a Pre-implementation sweep via `gh pr list --state open --search "claude-team"` to catch PR #128 or later conflicts with AC3's removals.
