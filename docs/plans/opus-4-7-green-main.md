@@ -10,7 +10,7 @@ score: 0.9
 worktree: .worktrees/spacedock-ensign-opus-4-7-green-main
 issue:
 pr:
-mod-block:
+mod-block: merge:pr-merge
 ---
 
 Drive the opus-4-7 test suite to green on main. Previous sessions have chased flake after flake without converging; this task is the captain-designated campaign to finish the job.
