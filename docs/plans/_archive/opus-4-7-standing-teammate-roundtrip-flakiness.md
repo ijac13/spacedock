@@ -1,11 +1,11 @@
 ---
 id: 194
 title: "Investigate opus-4-7 FO flakiness on test_standing_teammate_spawn ECHO roundtrip"
-status: backlog
+status: done
 source: "#188 cycle-1 AC-5 runs on opus-4-7 --effort low: test_standing_teammate_spawn 0/3 pass; test_feedback_keepalive 3/3 pass. Direct fo-log inspection shows the failures are NOT predicate-related (converted predicate is correct) — the FO simply fails to complete the ECHO roundtrip. Zero `ECHO: ping` occurrences in the fo-log; the FO stalls at various points: one run never reached ensign dispatch at all (Agent tool_use count = 0 in a run where it should be ≥1); two runs dispatched the ensign + SendMessage to echo-agent but echo-agent's reply never landed back in the stream within 300s."
 started:
-completed:
-verdict:
+completed: 2026-04-20T06:46:00Z
+verdict: PASSED
 score: 0.6
 worktree:
 issue:
