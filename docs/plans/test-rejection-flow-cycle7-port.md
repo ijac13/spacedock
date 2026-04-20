@@ -1,13 +1,13 @@
 ---
 id: "210"
 title: "Port test_rejection_flow (claude branch) to cycle-7 pattern — split codex branch into sibling test, un-skip #141"
-status: backlog
+status: implementation
 source: "tests/README.md Tier-A hygiene list; current @pytest.mark.skip reason='pending #141 — reviewer keepalive across feedback cycles'; 297-line dual-runtime test with ensign_count>=3 milestone-counting anti-pattern flagged explicitly in README"
-started:
+started: 2026-04-20T06:47:24Z
 completed:
 verdict:
 score: 0.50
-worktree:
+worktree: .worktrees/spacedock-ensign-test-rejection-flow-cycle7-port
 issue:
 pr:
 mod-block:

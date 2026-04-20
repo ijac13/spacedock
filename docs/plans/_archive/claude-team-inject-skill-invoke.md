@@ -1,13 +1,13 @@
 ---
 id: 204
 title: "Inject Skill(skill='spacedock:ensign') first-action directive in claude-team build prompt output"
-status: validation
+status: done
 source: "2026-04-19 session — discovered during #203 implementation stage. Ensign committed timeout/budget knob-turns with no fo-log evidence of budget exhaustion; jsonl census of current session's subagents showed zero Skill tool invocations across 133 tool calls (ideation ensign 44, implementation ensign 74, staff-reviewer-203 15). Smoke test agent `ensign-skill-smoketest` dispatched with explicit user-message `Skill(skill=\"spacedock:ensign\")` directive → Skill call fires as `caller: direct`, content loads, ## Operating contract + ## Runtime adapter headings enter context, @references/ files load transitively."
 started: 2026-04-19T04:55:06Z
-completed:
-verdict:
+completed: 2026-04-19T07:38:26Z
+verdict: PASSED
 score: 0.95
-worktree: .worktrees/spacedock-ensign-claude-team-inject-skill-invoke
+worktree: 
 issue:
 pr: #136
 mod-block: 

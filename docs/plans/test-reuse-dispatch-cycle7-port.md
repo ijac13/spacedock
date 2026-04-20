@@ -1,13 +1,13 @@
 ---
 id: "208"
 title: "Port test_reuse_dispatch to cycle-7 pattern — streaming watcher + inbox-poll keep-alive + teams-mode-pinned contract"
-status: backlog
+status: implementation
 source: "cycle-7 deferred-scope list (opus-4-7-green-main.md:1079 — Tier-A hygiene port); existing xfail on #154 + #160; cycle-4/cycle-6 full-suite runs show XFAIL on opus (not XPASS)"
-started:
+started: 2026-04-20T06:47:23Z
 completed:
 verdict:
 score: 0.70
-worktree:
+worktree: .worktrees/spacedock-ensign-test-reuse-dispatch-cycle7-port
 issue:
 pr:
 mod-block:

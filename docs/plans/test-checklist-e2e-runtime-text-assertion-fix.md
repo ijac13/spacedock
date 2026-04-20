@@ -1,13 +1,13 @@
 ---
 id: "211"
 title: "Fix test_checklist_e2e — FO no longer emits checklist-review text as free-form prose (not a cycle-7 port)"
-status: backlog
+status: implementation
 source: "entity #198 — test_checklist_e2e 1/9 live check fails because the FO's post-dispatch review no longer matches `r\"checklist review|checklist.*complete|all.*items.*DONE|items reported\"`; different failure class from cycle-7 (#26426 inbox polling) and reuse-port siblings"
-started:
+started: 2026-04-20T06:47:24Z
 completed:
 verdict:
 score: 0.55
-worktree:
+worktree: .worktrees/spacedock-ensign-test-checklist-e2e-runtime-text-assertion-fix
 issue:
 pr:
 mod-block:
