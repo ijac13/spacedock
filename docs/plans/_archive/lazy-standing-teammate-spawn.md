@@ -1,13 +1,13 @@
 ---
 id: 172
 title: "Lazy-spawn standing teammates on first routing, not at boot"
-status: validation
+status: done
 source: "CL directive during 2026-04-16 session — eager comm-officer spawn adds a sonnet Agent() cold-start to every boot even when no polish is requested"
 started: 2026-04-16T20:27:03Z
-completed:
-verdict:
+completed: 2026-04-29T03:50:47Z
+verdict: PASSED
 score: 0.65
-worktree: .worktrees/spacedock-ensign-lazy-standing-teammate-spawn
+worktree: 
 issue:
 pr: #107
 mod-block: 

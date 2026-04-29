@@ -1,9 +1,9 @@
 ---
 id: 180
 title: Decouple workflow timeline from the code repository
-status: backlog
+status: ideation
 source: "CL directive during 2026-04-29 session — every entity state change (dispatch / advance / mod-block / complete) commits directly to main without a PR, violating the hygiene rule that every commit on main should be reviewed via a PR. The workflow timeline lives in the same repo as the code it tracks, so timeline writes pollute the protected branch."
-started:
+started: 2026-04-29T04:07:14Z
 completed:
 verdict:
 score:
